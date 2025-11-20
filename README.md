@@ -167,15 +167,31 @@ se3_matrix = xyzrpy_to_se3(xyzrpy)  # 4x4 numpy array
 
 ## Examples
 
-The package includes 7 comprehensive examples in `script/examples/`:
+The package includes comprehensive examples demonstrating different manipulation tasks and backends:
+
+### Task-Specific Examples
+
+#### Spacelab Multi-Robot Manipulation (`script/spacelab/`)
+- **spacelab_corba_example.py** - Complete Spacelab scene with CORBA (200 lines)
+- **spacelab_pyhpp_example.py** - Complete Spacelab scene with PyHPP (230 lines)
+- Multi-robot coordination (UR10 + VISPA)
+- Multiple objects (RS1, ScrewDriver, FrameGripper, CleatGripper)
+- Complex constraint graphs with grasp/placement rules
+
+#### Grasp Ball Manipulation (`script/graspball/`)
+- **graspball_corba_example.py** - UR5 ball grasping with CORBA (465 lines)
+- **graspball_pyhpp_example.py** - UR5 ball grasping with PyHPP (345 lines)
+- Single-arm manipulation with free-flying object
+- 8-step manipulation sequence (approach → grasp → lift → transfer → place → release)
+- Placement and grasp constraints
+
+### Generic Examples (`script/examples/`)
 
 1. **unified_api_example.py** - Backend-agnostic API demonstration
-2. **spacelab_corba_example.py** - Complete Spacelab scene with CORBA (200 lines)
-3. **spacelab_pyhpp_example.py** - Complete Spacelab scene with PyHPP (230 lines)
-4. **visualization_example.py** - 4 visualization demos (400 lines)
-5. **pick_place_example.py** - Simple pick-and-place task (120 lines)
-6. **dual_arm_example.py** - Two-robot coordination (170 lines)
-7. **assembly_example.py** - Multi-part assembly task (220 lines)
+2. **visualization_example.py** - 4 visualization demos (400 lines)
+3. **pick_place_example.py** - Simple pick-and-place task (120 lines)
+4. **dual_arm_example.py** - Two-robot coordination (170 lines)
+5. **assembly_example.py** - Multi-part assembly task (220 lines)
 
 Run any example:
 ```bash
