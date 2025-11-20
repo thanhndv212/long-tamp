@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agimus-spacelab"
+version = "0.1.0"
+description = "Agimus Spacelab - Manipulation Planning Framework"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "LGPL-3.0"}
+authors = [
+    {name = "Thanh Nguyen", email = "dvtnguyen@laas.fr"}
+]
+maintainers = [
+    {name = "Thanh Nguyen", email = "dvtnguyen@laas.fr"}
+]
+keywords = ["robotics", "manipulation", "motion-planning", "hpp", "agimus"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Robotics",
+]
+
+dependencies = [
+    "numpy>=1.19.0",
+]
+
+[project.optional-dependencies]
+corba = [
+    # Note: These are typically installed via system packages
+    # Listed here for documentation purposes
+]
+pyhpp = [
+    # Note: hpp-python typically installed via system packages
+]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov",
+    "black",
+    "ruff",
+    "sphinx",
+    "sphinx-rtd-theme",
+]
+all = [
+    "agimus-spacelab[dev]",
+]
+
+[project.urls]
+Homepage = "https://gitlab.laas.fr/agimus-project/agimus_spacelab"
+Documentation = "https://agimus-spacelab.readthedocs.io"
+Repository = "https://gitlab.laas.fr/agimus-project/agimus_spacelab"
+Issues = "https://gitlab.laas.fr/agimus-project/agimus_spacelab/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+agimus_spacelab = ["py.typed"]
+
+[tool.ruff]
+extend-exclude = ["cmake"]
+line-length = 88
+
+[tool.ruff.lint]
+extend-select = ["I", "NPY", "RUF", "UP", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "-v --cov=agimus_spacelab --cov-report=html --cov-report=term"
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+extend-exclude = '''
+/(
+  | cmake
+)/
+'''

@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>agimus_spacelab</name>
+  <version>0.1.0</version>
+  <description>
+    Agimus Spacelab - A generalized manipulation planning framework
+    supporting both CORBA and PyHPP backends for HPP-based manipulation tasks.
+  </description>
+  
+  <author email="dvtnguyen@laas.fr">Thanh Nguyen</author>
+  <maintainer email="dvtnguyen@laas.fr">Thanh Nguyen</maintainer>
+  
+  <license>LGPL-3.0</license>
+  
+  <url type="website">https://gitlab.laas.fr/agimus-project/agimus_spacelab</url>
+  <url type="repository">https://gitlab.laas.fr/agimus-project/agimus_spacelab</url>
+  <url type="bugtracker">https://gitlab.laas.fr/agimus-project/agimus_spacelab/issues</url>
+  
+  <!-- Build tool dependencies -->
+  <buildtool_depend>cmake</buildtool_depend>
+  
+  <!-- Core dependencies -->
+  <depend>pinocchio</depend>
+  <depend>hpp-pinocchio</depend>
+  <depend>python3-numpy</depend>
+  
+  <!-- Optional CORBA dependencies -->
+  <depend condition="$WITH_CORBA">hpp-manipulation-corba</depend>
+  <depend condition="$WITH_CORBA">hpp-gepetto-viewer</depend>
+  
+  <!-- Optional PyHPP dependencies -->
+  <depend condition="$WITH_PYHPP">hpp-python</depend>
+  
+  <!-- Test dependencies -->
+  <test_depend>python3-pytest</test_depend>
+  
+  <export>
+    <build_type>cmake</build_type>
+  </export>
+</package>
