@@ -74,8 +74,8 @@ def demo_static_visualization(backend="corba"):
     # Build configuration
     q_robot = np.array(
         InitialConfigurations.UR10 + 
-        InitialConfigurations.VISPA2 + 
-        InitialConfigurations.VISPA
+        InitialConfigurations.VISPA_BASE + 
+        InitialConfigurations.VISPA_ARM
     )
     
     q_rs1 = xyzrpy_to_xyzquat(InitialConfigurations.RS1)
@@ -138,8 +138,8 @@ def demo_animated_visualization(backend="corba"):
     # Create start and goal configurations
     q_robot = np.array(
         InitialConfigurations.UR10 + 
-        InitialConfigurations.VISPA2 + 
-        InitialConfigurations.VISPA
+        InitialConfigurations.VISPA_BASE + 
+        InitialConfigurations.VISPA_ARM
     )
     
     q_start = q_robot.copy()
@@ -198,8 +198,8 @@ def demo_path_visualization(backend="corba"):
     # Build configurations
     q_robot = np.array(
         InitialConfigurations.UR10 + 
-        InitialConfigurations.VISPA2 + 
-        InitialConfigurations.VISPA
+        InitialConfigurations.VISPA_BASE + 
+        InitialConfigurations.VISPA_ARM
     )
     q_rs1 = xyzrpy_to_xyzquat(InitialConfigurations.RS1)
     q_init = np.concatenate([q_robot, q_rs1])
@@ -269,8 +269,8 @@ def demo_multiple_views(backend="corba"):
     # Build configuration
     q_robot = np.array(
         InitialConfigurations.UR10 + 
-        InitialConfigurations.VISPA2 + 
-        InitialConfigurations.VISPA
+        InitialConfigurations.VISPA_BASE + 
+        InitialConfigurations.VISPA_ARM
     )
     q_rs1 = xyzrpy_to_xyzquat(InitialConfigurations.RS1)
     q = np.concatenate([q_robot, q_rs1])
