@@ -135,11 +135,11 @@ class ManipulationConfig:
     PLACEMENT_COMPLEMENT_MASK = [True, True, False, False, False, True]
     
     # URDF/SRDF paths
-    ROBOT_URDF = "package://example-robot-data/robots/ur_description/urdf/ur5_gripper.urdf"
-    ROBOT_SRDF = "package://example-robot-data/robots/ur_description/srdf/ur5_gripper.srdf"
+    ROBOT_URDF = "package://hpp_practicals/urdf/ur5_gripper.urdf"
+    ROBOT_SRDF = ""
     
-    BALL_URDF = "package://hpp_environments/urdf/ur_benchmark/pokeball.urdf"
-    BALL_SRDF = "package://hpp_environments/srdf/ur_benchmark/pokeball.srdf"
+    BALL_URDF = "package://hpp_practicals/urdf/ur_benchmark/pokeball.urdf"
+    BALL_SRDF = "package://hpp_practicals/srdf/ur_benchmark/pokeball.srdf"
     
     GROUND_URDF = "package://hpp_practicals/urdf/ur_benchmark/ground.urdf"
     BOX_URDF = "package://hpp_practicals/urdf/ur_benchmark/box.urdf"
@@ -179,7 +179,7 @@ class ManipulationConfig:
     # Path planning parameters
     PATH_VALIDATION_STEP = 0.01
     PATH_PROJECTOR_STEP = 0.1
-    MAX_RANDOM_ATTEMPTS = 100
+    MAX_RANDOM_ATTEMPTS = 1000  # Increased for better success rate
 
 
 __all__ = [
