@@ -27,18 +27,20 @@ import numpy as np
 config_dir = Path(__file__).parent.parent.parent / "config"
 sys.path.insert(0, str(config_dir))
 
-from agimus_spacelab.corba import CorbaManipulationPlanner
-from agimus_spacelab.utils import xyzrpy_to_xyzquat
 from graspball_config import (
     InitialConfigurations,
     JointBounds,
     ManipulationConfig,
 )
 
+from agimus_spacelab.corba import CorbaManipulationPlanner
+
 # CORBA-specific imports
 try:
     from hpp.corbaserver.manipulation import ConstraintGraph, Constraints
     from hpp.corbaserver import Client
+    # Reset problem before starting
+    Client().problem.resetProblem()
     HAS_CORBA = True
 except ImportError:
     HAS_CORBA = False

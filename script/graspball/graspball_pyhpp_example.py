@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 
 # Add config directory to path for task-specific configs
-config_dir = Path(__file__).parent.parent.parent / "config"
+config_dir = Path(__file__).parent.parent / "config"
 sys.path.insert(0, str(config_dir))
 
 from agimus_spacelab.pyhpp import PyHPPManipulationPlanner
