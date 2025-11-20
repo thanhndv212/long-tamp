@@ -3,23 +3,6 @@ Configuration for grasp ball manipulation task.
 
 This configuration defines the UR5 robot with gripper and pokeball
 manipulation scenario for both CORBA and PyHPP backends.
-
-This example demonstrates manipulation planning to:
-1. Approach the ball
-2. Grasp the ball  
-3. Lift and move the ball
-4. Place the ball at a new location
-
-Task sequence:
-1. placement -> approach-ball -> gripper-above-ball
-2. gripper-above-ball -> grasp-ball -> grasp-placement
-3. grasp-placement -> take-ball-up -> ball-above-ground
-4. ball-above-ground -> take-ball-away -> grasp
-5. grasp -> approach-ground -> ball-above-ground
-6. ball-above-ground -> put-ball-down -> grasp-placement
-7. grasp-placement -> move-gripper-up -> gripper-above-ball
-8. gripper-above-ball -> move-gripper-away -> placement
-
 """
 
 from typing import Dict, List
