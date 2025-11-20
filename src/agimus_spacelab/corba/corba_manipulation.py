@@ -4,6 +4,7 @@ CORBA manipulation planner implementation.
 
 from typing import Any, Dict, List, Optional
 import numpy as np
+from ..utils import parse_package_uri
 
 try:
     from hpp.corbaserver import loadServerPlugin
@@ -20,25 +21,6 @@ try:
     HAS_CORBA = True
 except ImportError:
     HAS_CORBA = False
-
-
-if HAS_CORBA:
-    class SpacelabRobot(ParentRobot):
-        """Spacelab composite robot wrapper for CORBA."""
-        
-        packageName = "spacelab_mock_hardware/description"
-        urdfName = "allRobots_spacelab_robot"
-        urdfSuffix = ""
-        srdfSuffix = ""
-
-        def __init__(
-            self,
-            compositeName: str,
-            robotName: str,
-            load: bool = True,
-            rootJointType: str = "anchor"
-        ):
-            super().__init__(compositeName, robotName, rootJointType, load)
 
 
 class CorbaManipulationPlanner:
@@ -66,34 +48,75 @@ class CorbaManipulationPlanner:
         
     def load_robot(
         self,
-        name: str,
+        composite_name: str,
+        robot_name: str,
         urdf_path: str,
         srdf_path: Optional[str] = None,
         root_joint_type: str = "anchor"
     ):
         """Load robot using CORBA."""
-        self.robot = SpacelabRobot(name, name, load=True)
+
+        self.packageName, self.urdfName = parse_package_uri(urdf_path)
+        self.urdfSuffix = ""
+        self.srdfSuffix = ""
+
+        if HAS_CORBA:
+            class Robot(ParentRobot):
+                """Spacelab composite robot wrapper for CORBA."""
+                packageName = self.packageName
+                urdfName = self.urdfName
+                urdfSuffix = self.urdfSuffix
+                srdfSuffix = self.srdfSuffix
+
+                def __init__(
+                    self,
+                    compositeName: str,
+                    robotName: str,
+                    urdf_path: str,
+                    srdf_path: Optional[str] = None,
+                    load: bool = True,
+                    rootJointType: str = "anchor"
+                ):
+                    ParentRobot.__init__(self, compositeName, robotName, rootJointType, load)
+        self.robot = Robot(
+            compositeName=composite_name,
+            robotName=robot_name,
+            urdf_path=urdf_path,
+            srdf_path=srdf_path,
+            load=True,
+            rootJointType=root_joint_type)
+        self._create_problem_solver()
+        return self.robot
+    
+    def _create_problem_solver(self):
         self.ps = ProblemSolver(self.robot)
         self.ps.setErrorThreshold(1e-4)
         self.ps.setMaxIterProjection(40)
-        return self.robot
     
-    def load_environment(self, name: str, urdf_path: str):
+    def load_environment(
+        self,
+        name: str,
+        urdf_path: str,
+        urdf_suffix: str = "",
+        srdf_suffix: str = "",
+        meshpkg_name: Optional[str] = None,
+    ):
         """Load environment model."""
         if self.vf is None:
             self.vf = ViewerFactory(self.ps)
         
+        pkg_name, urdf_name = parse_package_uri(urdf_path)
+        if meshpkg_name is None:
+            meshpkg_name = pkg_name  # Assuming meshes are in the same package
+
         # Create environment config class dynamically
         class EnvConfig:
             rootJointType = "anchor"
-            packageName = "spacelab_mock_hardware/description"
-            meshPackageName = "spacelab_mock_hardware/description"
-            urdfSuffix = ""
-            srdfSuffix = ""
-        
-        # Extract urdf name from path
-        urdf_name = name
-        EnvConfig.urdfName = urdf_name
+            packageName = pkg_name
+            urdfName = urdf_name
+            meshPackageName = meshpkg_name
+            urdfSuffix = urdf_suffix
+            srdfSuffix = srdf_suffix
         
         self.vf.loadEnvironmentModel(EnvConfig, name)
         return EnvConfig
@@ -102,21 +125,27 @@ class CorbaManipulationPlanner:
         self,
         name: str,
         urdf_path: str,
-        root_joint_type: str = "freeflyer"
+        root_joint_type: str = "freeflyer",
+        urdf_suffix: str = "",
+        srdf_suffix: str = "",
+        meshpkg_name: Optional[str] = None,
     ):
         """Load manipulable object."""
         if self.vf is None:
             self.vf = ViewerFactory(self.ps)
         
+        pkg_name, urdf_name = parse_package_uri(urdf_path)
+        if meshpkg_name is None:
+            meshpkg_name = pkg_name  # Assuming meshes are in the same package
+
         # Create object config class dynamically
         class ObjConfig:
-            packageName = "spacelab_mock_hardware/description"
-            meshPackageName = "spacelab_mock_hardware/description"
-            urdfSuffix = ""
-            srdfSuffix = ""
-        
-        ObjConfig.rootJointType = root_joint_type
-        ObjConfig.urdfName = name
+            rootJointType = root_joint_type
+            packageName = pkg_name
+            urdfName = urdf_name
+            meshPackageName = meshpkg_name
+            urdfSuffix = urdf_suffix
+            srdfSuffix = srdf_suffix
         
         self.vf.loadObjectModel(ObjConfig, name)
         return ObjConfig
@@ -281,6 +310,6 @@ class CorbaManipulationPlanner:
 
 __all__ = [
     "CorbaManipulationPlanner",
-    "SpacelabRobot",
+    "Robot",
     "HAS_CORBA",
 ]

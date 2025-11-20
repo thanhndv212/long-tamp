@@ -140,6 +140,55 @@ def split_configuration(q, sizes):
     return parts
 
 
+def parse_package_uri(uri):
+    """
+    Parse a package:// URI to extract package path and file name.
+    
+    Args:
+        uri: Package URI string (e.g., "package://spacelab_mock_hardware/description/urdf/RS.urdf")
+        
+    Returns:
+        tuple: (package_path, file_name) where:
+            - package_path is the package name with subdirectories (e.g., "spacelab_mock_hardware/description")
+            - file_name is the base name without extension (e.g., "RS")
+            
+    Example:
+        >>> parse_package_uri("package://spacelab_mock_hardware/description/urdf/RS.urdf")
+        ('spacelab_mock_hardware/description', 'RS')
+        
+        >>> parse_package_uri("package://example_robot_data/robots/ur5_gripper.urdf")
+        ('example_robot_data/robots', 'ur5_gripper')
+    """
+    if not uri.startswith("package://"):
+        raise ValueError(f"URI must start with 'package://': {uri}")
+    
+    # Remove package:// prefix
+    path = uri[len("package://"):]
+    
+    # Split into parts
+    parts = path.split("/")
+    
+    # Everything after "urdf" or "robots" is considered the file name not including "urdf" or "robots"
+    if "urdf" in parts:
+        urdf_index = parts.index("urdf")
+        file_with_ext = "/".join(parts[urdf_index+1:])
+    elif "robots" in parts:
+        robots_index = parts.index("robots")
+        file_with_ext = "/".join(parts[robots_index+1:])
+    else:
+        file_with_ext = parts[-1]
+    file_name = file_with_ext.rsplit(".", 1)[0]  # Remove extension
+    
+    # Package path is everything except "urdf" or "robots" and the last part (file name)
+    if "urdf" in parts:
+        urdf_index = parts.index("urdf")
+        package_path = "/".join(parts[:urdf_index])
+    else:
+        package_path = "/".join(parts[:-1])
+    
+    return package_path, file_name
+
+
 __all__ = [
     "xyzrpy_to_se3",
     "se3_to_xyzquat",
@@ -148,4 +197,5 @@ __all__ = [
     "normalize_quaternion",
     "merge_configurations",
     "split_configuration",
+    "parse_package_uri",
 ]
