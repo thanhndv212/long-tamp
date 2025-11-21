@@ -24,7 +24,7 @@ from pathlib import Path
 import numpy as np
 
 # Add config directory to path for task-specific configs
-config_dir = Path(__file__).parent.parent.parent / "config"
+config_dir = Path(__file__).parent.parent / "config"
 sys.path.insert(0, str(config_dir))
 
 from graspball_config import (
@@ -49,7 +49,7 @@ except ImportError:
 
 def setup_environment(planner):
     """
-    Load environment objects (ground and box).
+    Load environment objects (ground only).
     
     Args:
         planner: CorbaManipulationPlanner instance
@@ -139,9 +139,18 @@ def create_constraint_graph(robot, ps):
     # Create all nodes
     graph.createNode(ManipulationConfig.GRAPH_NODES)
     
-    # Create all edges
-    for from_node, to_node, edge_name in ManipulationConfig.GRAPH_EDGES:
-        graph.createEdge(from_node, to_node, edge_name, 1, from_node)
+    # Create edges with appropriate waypoint states
+    # The last parameter is the waypoint state for path planning
+    graph.createEdge('placement', 'placement', 'transit', 1, 'placement')
+    graph.createEdge('placement', 'gripper-above-ball', 'approach-ball', 1, 'placement')
+    graph.createEdge('gripper-above-ball', 'placement', 'move-gripper-away', 1, 'placement')
+    graph.createEdge('gripper-above-ball', 'grasp-placement', 'grasp-ball', 1, 'placement')
+    graph.createEdge('grasp-placement', 'gripper-above-ball', 'move-gripper-up', 1, 'placement')
+    graph.createEdge('grasp-placement', 'ball-above-ground', 'take-ball-up', 1, 'grasp')
+    graph.createEdge('ball-above-ground', 'grasp-placement', 'put-ball-down', 1, 'grasp')
+    graph.createEdge('ball-above-ground', 'grasp', 'take-ball-away', 1, 'grasp')
+    graph.createEdge('grasp', 'ball-above-ground', 'approach-ground', 1, 'grasp')
+    graph.createEdge('grasp', 'grasp', 'transfer', 1, 'grasp')
     
     # Assign constraints to nodes
     graph.addConstraints(node="placement", constraints=Constraints(
@@ -183,22 +192,27 @@ def create_constraint_graph(robot, ps):
             numConstraints=["ball_near_table/complement"]
         ))
     
+    # Transfer, take-ball-away, approach-ground use no constraints
+    for edge_name in ["transfer", "take-ball-away", "approach-ground"]:
+        graph.addConstraints(edge=edge_name, constraints=Constraints())
+    
     # Set constant right-hand side
     ps.setConstantRightHandSide("placement", True)
     ps.setConstantRightHandSide("placement/complement", False)
     ps.setConstantRightHandSide("ball_near_table/complement", False)
-    
+    ps.setConstantRightHandSide
     # Initialize graph
     graph.initialize()
     
     return graph
 
 
-def generate_configurations(graph, ps, q_init):
+def generate_configurations(robot, graph, ps, q_init):
     """
     Generate all intermediate configurations for the task.
     
     Args:
+        robot: Robot instance
         graph: ConstraintGraph instance
         ps: ProblemSolver instance
         q_init: Initial configuration
@@ -207,77 +221,211 @@ def generate_configurations(graph, ps, q_init):
         dict: Dictionary of generated configurations
     """
     configs = {}
+    q1 = list(q_init)  # Keep original for reference
     
     # Project initial config on placement node
+    print("  Projecting initial configuration...")
     res, configs["q_init"], err = graph.applyNodeConstraints(
-        "placement", q_init
+        "placement", q1
     )
     if not res:
         print(f"Warning: Failed to project initial config (error: {err})")
-        configs["q_init"] = q_init
+        configs["q_init"] = q1
     
-    # Generate configuration for gripper above ball
-    print("  Generating gripper-above-ball configuration...")
+    # Generate configuration after approach-ball
+    print("  Generating approach-ball configuration...")
     for i in range(ManipulationConfig.MAX_RANDOM_ATTEMPTS):
-        q_rand = ps.shoot()
-        res, q_target, err = graph.generateTargetConfig(
-            "approach-ball", configs["q_init"], q_rand
+        q_rand = robot.shootRandomConfig()
+        res, q_ab, err = graph.generateTargetConfig(
+            "approach-ball", q1, q_rand
         )
-        if res and ps.isConfigValid(q_target)[0]:
-            configs["q_above"] = q_target
-            break
+        if res:
+            valid, _ = robot.isConfigValid(q_ab)
+            if valid:
+                configs["q_ab"] = q_ab
+                break
+        if (i + 1) % 100 == 0:
+            print(f"    Attempt {i + 1}...")
     else:
-        raise RuntimeError("Failed to generate gripper-above-ball config")
+        raise RuntimeError("Failed to generate approach-ball config")
     
-    # Generate configuration for grasp-placement
-    print("  Generating grasp-placement configuration...")
-    for i in range(ManipulationConfig.MAX_RANDOM_ATTEMPTS):
-        q_rand = ps.shoot()
-        res, q_target, err = graph.generateTargetConfig(
-            "grasp-ball", configs["q_above"], q_rand
-        )
-        if res and ps.isConfigValid(q_target)[0]:
-            configs["q_grasp_place"] = q_target
-            break
-    else:
-        raise RuntimeError("Failed to generate grasp-placement config")
-    
-    # Generate configuration for ball above ground
-    print("  Generating ball-above-ground configuration...")
-    for i in range(ManipulationConfig.MAX_RANDOM_ATTEMPTS):
-        q_rand = ps.shoot()
-        res, q_target, err = graph.generateTargetConfig(
-            "take-ball-up", configs["q_grasp_place"], q_rand
-        )
-        if res and ps.isConfigValid(q_target)[0]:
-            configs["q_ball_up"] = q_target
-            break
-    else:
-        raise RuntimeError("Failed to generate ball-above-ground config")
-    
-    # Generate final grasp configuration
-    print("  Generating final grasp configuration...")
-    for i in range(ManipulationConfig.MAX_RANDOM_ATTEMPTS):
-        q_rand = ps.shoot()
-        res, q_target, err = graph.generateTargetConfig(
-            "take-ball-away", configs["q_ball_up"], q_rand
-        )
-        if res and ps.isConfigValid(q_target)[0]:
-            configs["q_final_grasp"] = q_target
-            break
-    else:
-        raise RuntimeError("Failed to generate final grasp config")
-    
-    # Goal: approach ground with ball at different location
-    q_goal = configs["q_init"].copy()
-    q_goal[6] = 0.2  # Move ball in x direction
-    
-    res, configs["q_goal"], err = graph.applyNodeConstraints(
-        "placement", q_goal
+    # Project onto gripper-above-ball node
+    res, configs["q_above"], err = graph.applyNodeConstraints(
+        "gripper-above-ball", configs["q_ab"]
     )
     if not res:
-        print(f"Warning: Failed to project goal config (error: {err})")
-        configs["q_goal"] = q_goal
+        print(f"Warning: Failed to project onto gripper-above-ball")
+        configs["q_above"] = configs["q_ab"]
+    
+    # Generate configuration after grasp-ball
+    print("  Generating grasp-ball configuration...")
+    success = False
+    for i in range(ManipulationConfig.MAX_RANDOM_ATTEMPTS):
+        q_rand = robot.shootRandomConfig()
+        res, q_gb, err = graph.generateTargetConfig(
+            "grasp-ball", configs["q_above"], q_rand
+        )
+        if res:
+            # Check for collisions
+            valid, report = robot.isConfigValid(q_gb)
+            if valid:
+                configs["q_gb"] = q_gb
+                success = True
+                break
+        if (i + 1) % 100 == 0:
+            print(f"    Attempt {i + 1}... (last err: {err})")
+    
+    if not success:
+        print(f"  Warning: Failed after {ManipulationConfig.MAX_RANDOM_ATTEMPTS} attempts")
+        print(f"  Last error: {err}")
+        print("  Edge 'grasp-ball' may have constraints that are hard to satisfy")
+        raise RuntimeError("Failed to generate grasp-ball config")
+    
+    # Project onto grasp-placement node
+    res, configs["q_grasp_place"], err = graph.applyNodeConstraints(
+        "grasp-placement", configs["q_gb"]
+    )
+    if not res:
+        print(f"Warning: Failed to project onto grasp-placement")
+        configs["q_grasp_place"] = configs["q_gb"]
+    
+    # Generate configuration after take-ball-up
+    print("  Generating take-ball-up configuration...")
+    for i in range(ManipulationConfig.MAX_RANDOM_ATTEMPTS):
+        q_rand = robot.shootRandomConfig()
+        res, q_tbu, err = graph.generateTargetConfig(
+            "take-ball-up", configs["q_grasp_place"], q_rand
+        )
+        if res:
+            valid, _ = robot.isConfigValid(q_tbu)
+            if valid:
+                configs["q_tbu"] = q_tbu
+                break
+        if (i + 1) % 100 == 0:
+            print(f"    Attempt {i + 1}...")
+    else:
+        raise RuntimeError("Failed to generate take-ball-up config")
+    
+    # Project onto ball-above-ground node
+    res, configs["q_ball_up"], err = graph.applyNodeConstraints(
+        "ball-above-ground", configs["q_tbu"]
+    )
+    if not res:
+        print(f"Warning: Failed to project onto ball-above-ground")
+        configs["q_ball_up"] = configs["q_tbu"]
+    
+    # Generate configuration after take-ball-away
+    print("  Generating take-ball-away configuration...")
+    for i in range(ManipulationConfig.MAX_RANDOM_ATTEMPTS):
+        q_rand = robot.shootRandomConfig()
+        res, q_tba, err = graph.generateTargetConfig(
+            "take-ball-away", configs["q_ball_up"], q_rand
+        )
+        if res:
+            valid, _ = robot.isConfigValid(q_tba)
+            if valid:
+                configs["q_tba"] = q_tba
+                break
+        if (i + 1) % 100 == 0:
+            print(f"    Attempt {i + 1}...")
+    else:
+        raise RuntimeError("Failed to generate take-ball-away config")
+    
+    # Project onto grasp node
+    res, configs["q_grasp"], err = graph.applyNodeConstraints(
+        "grasp", configs["q_tba"]
+    )
+    if not res:
+        print(f"Warning: Failed to project onto grasp")
+        configs["q_grasp"] = configs["q_tba"]
+    
+    # Goal configuration: move ball to x=0.2
+    q2 = q1[:]
+    q2[7] = 0.2
+    
+    # Generate configuration after approach-ground
+    print("  Generating approach-ground configuration...")
+    res, q_ag, err = graph.generateTargetConfig(
+        "approach-ground", configs["q_grasp"], q2
+    )
+    if not res:
+        print(f"Warning: Failed to generate approach-ground, using q2")
+        q_ag = q2
+    configs["q_ag"] = q_ag
+    
+    # Project onto ball-above-ground node
+    res, configs["q_ball_above_2"], err = graph.applyNodeConstraints(
+        "ball-above-ground", configs["q_ag"]
+    )
+    if not res:
+        print(f"Warning: Failed to project onto ball-above-ground")
+        configs["q_ball_above_2"] = configs["q_ag"]
+    
+    # Generate configuration after put-ball-down
+    print("  Generating put-ball-down configuration...")
+    for i in range(ManipulationConfig.MAX_RANDOM_ATTEMPTS):
+        q_rand = robot.shootRandomConfig()
+        res, q_pbd, err = graph.generateTargetConfig(
+            "put-ball-down", configs["q_ball_up"], q_rand
+        )
+        if res:
+            configs["q_pbd"] = q_pbd
+            break
+    else:
+        raise RuntimeError("Failed to generate put-ball-down config")
+    
+    # Project onto grasp-placement node
+    res, configs["q_grasp_place_2"], err = graph.applyNodeConstraints(
+        "grasp-placement", configs["q_pbd"]
+    )
+    if not res:
+        print(f"Warning: Failed to project onto grasp-placement")
+        configs["q_grasp_place_2"] = configs["q_pbd"]
+    
+    # Generate configuration after move-gripper-up
+    print("  Generating move-gripper-up configuration...")
+    for i in range(ManipulationConfig.MAX_RANDOM_ATTEMPTS):
+        q_rand = robot.shootRandomConfig()
+        res, q_mgu, err = graph.generateTargetConfig(
+            "move-gripper-up", configs["q_grasp_place"], q_rand
+        )
+        if res:
+            configs["q_mgu"] = q_mgu
+            break
+    else:
+        raise RuntimeError("Failed to generate move-gripper-up config")
+    
+    # Project onto gripper-above-ball node
+    res, configs["q_above_2"], err = graph.applyNodeConstraints(
+        "gripper-above-ball", configs["q_mgu"]
+    )
+    if not res:
+        print(f"Warning: Failed to project onto gripper-above-ball")
+        configs["q_above_2"] = configs["q_mgu"]
+    
+    # Generate configuration after move-gripper-away
+    print("  Generating move-gripper-away configuration...")
+    for i in range(ManipulationConfig.MAX_RANDOM_ATTEMPTS):
+        q_rand = robot.shootRandomConfig()
+        res, q_mga, err = graph.generateTargetConfig(
+            "move-gripper-away", configs["q_above"], q_rand
+        )
+        if res:
+            configs["q_mga"] = q_mga
+            break
+    else:
+        raise RuntimeError("Failed to generate move-gripper-away config")
+    
+    q2 = q1[::]
+    q2[7] = .2
+
+    # Final goal: project onto placement with ball at new location
+    res, configs["q_goal"], err = graph.applyNodeConstraints(
+        "placement", q2
+    )
+    if not res:
+        print(f"Warning: Failed to project goal config")
+        configs["q_goal"] = q2
     
     return configs
 
@@ -295,42 +443,51 @@ def solve_manipulation_problem(graph, ps, configs):
         bool: True if successful, False otherwise
     """
     # Define waypoints for the task
-    waypoints = [
-        ("q_init", "q_above", "approach-ball"),
-        ("q_above", "q_grasp_place", "grasp-ball"),
-        ("q_grasp_place", "q_ball_up", "take-ball-up"),
-        ("q_ball_up", "q_final_grasp", "take-ball-away"),
-        ("q_final_grasp", "q_goal", "transfer"),
-    ]
+    # These correspond to the manipulation sequence:
+    # 1. Approach ball (placement -> gripper-above-ball)
+    # 2. Grasp ball (gripper-above-ball -> grasp-placement)
+    # 3. Lift ball (grasp-placement -> ball-above-ground)
+    # 4. Move ball away (ball-above-ground -> grasp)
+    # 5. Transfer to goal (grasp -> placement)
+    # waypoints = [
+    #     ("q_init", "q_above", "approach-ball"),
+    #     ("q_above", "q_grasp_place", "grasp-ball"),
+    #     ("q_grasp_place", "q_ball_up", "take-ball-up"),
+    #     ("q_ball_up", "q_grasp", "take-ball-away"),
+    #     ("q_grasp", "q_goal", "transfer"),
+    # ]
     
-    path_ids = []
+    # path_ids = []
     
-    for i, (q_start_key, q_end_key, edge_name) in enumerate(waypoints):
-        q_start = configs[q_start_key]
-        q_end = configs[q_end_key]
+    # for i, (q_start_key, q_end_key, edge_name) in enumerate(waypoints):
+    #     q_start = configs[q_start_key]
+    #     q_end = configs[q_end_key]
         
-        print(f"\n  Step {i+1}/{len(waypoints)}: {edge_name}")
-        print(f"    Planning from {q_start_key} to {q_end_key}...")
+    #     print(f"\n  Step {i+1}/{len(waypoints)}: {edge_name}")
+    #     print(f"    Planning from {q_start_key} to {q_end_key}...")
         
-        ps.resetGoalConfigs()
-        ps.setInitialConfig(q_start)
-        ps.addGoalConfig(q_end)
+    #     ps.resetGoalConfigs()
+    #     ps.setInitialConfig(q_start)
+    #     ps.addGoalConfig(q_end)
         
-        try:
-            ps.solve()
-            path_ids.append(ps.numberPaths() - 1)
-            print(f"    ✓ Path found (ID: {path_ids[-1]})")
-        except Exception as e:
-            print(f"    ✗ Planning failed: {e}")
-            return False
+    #     try:
+    #         ps.solve()
+    #         path_ids.append(ps.numberPaths() - 1)
+    #         print(f"    ✓ Path found (ID: {path_ids[-1]})")
+    #     except Exception as e:
+    #         print(f"    ✗ Planning failed: {e}")
+    #         return False
     
-    # Concatenate paths
-    if len(path_ids) > 1:
-        print(f"\n  Concatenating {len(path_ids)} path segments...")
-        for i in range(1, len(path_ids)):
-            ps.concatenatePath(path_ids[0], path_ids[i])
-        print(f"  ✓ Final path ID: {path_ids[0]}")
-    
+    # # Concatenate paths
+    # if len(path_ids) > 1:
+    #     print(f"\n  Concatenating {len(path_ids)} path segments...")
+    #     for i in range(1, len(path_ids)):
+    #         ps.concatenatePath(path_ids[0], path_ids[i])
+    #     print(f"  ✓ Final path ID: {path_ids[0]}")
+    # path planning solver
+    ps.setInitialConfig (configs["q_init"])
+    ps.addGoalConfig (configs["q_goal"])
+    ps.solve()
     return True
 
 
@@ -349,18 +506,16 @@ def main(visualize=True, solve=True):
     print("=" * 70)
     print("Grasp Ball Manipulation - CORBA Backend")
     print("=" * 70)
-    
-    # Reset problem before starting
-    Client().problem.resetProblem()
+
     
     # Create planner
     planner = CorbaManipulationPlanner()
-    ps = planner.get_problem_solver()
     
     # Load robot
     print("\n1. Loading robot and objects...")
     robot = planner.load_robot(
-        name="ur5-pokeball",
+        composite_name="ur5-pokeball",
+        robot_name="ur5",
         urdf_path=ManipulationConfig.ROBOT_URDF,
         srdf_path=ManipulationConfig.ROBOT_SRDF
     )
@@ -378,6 +533,9 @@ def main(visualize=True, solve=True):
     
     # Setup environment
     setup_environment(planner)
+    
+    # Get problem solver
+    ps = planner.get_problem_solver()
     
     # Create constraints
     print("\n2. Creating transformation constraints...")
@@ -398,11 +556,7 @@ def main(visualize=True, solve=True):
     # Generate configurations
     print("\n4. Generating intermediate configurations...")
     q_init = InitialConfigurations.FULL_INIT
-    configs = generate_configurations(graph, ps, q_init)
-    
-    print("\n  Configuration summary:")
-    print(f"    Initial: {configs['q_init'][:6]}")
-    print(f"    Goal: {configs['q_goal'][:6]}")
+    configs = generate_configurations(robot, graph, ps, q_init)
     
     # Visualize
     if visualize:
