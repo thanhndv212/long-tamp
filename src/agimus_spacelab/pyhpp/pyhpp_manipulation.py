@@ -351,8 +351,42 @@ class PyHPPManipulationPlanner:
         """Get constraint graph."""
         return self.graph
 
+    def set_dichotomy(self, enabled: bool):
+        """Enable or disable dichotomy path validation.
+        
+        Args:
+            enabled: Whether to use dichotomy for path validation
+        """
+        self._use_dichotomy = enabled
+
+    def set_progressive_projector(self, enabled: bool):
+        """Enable or disable progressive path projector.
+        
+        Args:
+            enabled: Whether to use progressive projector
+        """
+        self._use_progressive_projector = enabled
+
+    def configure_graph_parameters(
+        self,
+        max_iterations: int = 10000,
+        error_threshold: float = 1e-4
+    ):
+        """Configure constraint graph parameters before initialization.
+        
+        Args:
+            max_iterations: Maximum iterations for constraint projection
+            error_threshold: Error threshold for constraint satisfaction
+        """
+        if self.graph is None:
+            raise RuntimeError("Graph not created yet")
+        
+        self.graph.setMaxIterations(max_iterations)
+        self.graph.setErrorThreshold(error_threshold)
+
 
 __all__ = [
     "PyHPPManipulationPlanner",
+    "ConstraintResult",
     "HAS_PYHPP",
 ]
