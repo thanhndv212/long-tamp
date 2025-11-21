@@ -64,7 +64,7 @@ pip install -e ".[all]"     # All backends
 # In HPP workspace
 cd ~/hpp/src/agimus_spacelab
 mkdir build && cd build
-cmake .. -DCMAKE_INSTALL_PREFIX=~/hpp/install
+cmake .. -DCMAKE_INSTALL_PREFIX=path/to/hpp/install
 make install
 ```
 
