@@ -13,11 +13,22 @@ try:
         Graph,
         ManipulationPlanner as HPPManipulationPlanner,
         Problem,
+        createProgressiveProjector,
     )
+    from pyhpp.core import createDichotomy
     from pyhpp.gepetto.viewer import Viewer
     HAS_PYHPP = True
 except ImportError:
     HAS_PYHPP = False
+
+
+class ConstraintResult:
+    """Result from applying state constraints."""
+    
+    def __init__(self, success: bool, configuration: np.ndarray, error: float):
+        self.success = success
+        self.configuration = configuration
+        self.error = error
 
 
 class PyHPPManipulationPlanner:
@@ -140,7 +151,7 @@ class PyHPPManipulationPlanner:
         self.graph = Graph(name, self.device, self.problem)
         
         # Create basic states
-        free_state = self.graph.createState("free", False, 0)
+        _ = self.graph.createState("free", False, 0)  # free_state created but not used
         
         # For each object, create grasp states
         for obj_name in objects:
@@ -156,13 +167,124 @@ class PyHPPManipulationPlanner:
         self.problem.constraintGraph(self.graph)
         
         return self.graph
+
+    def create_state(
+        self,
+        name: str,
+        is_waypoint: bool = False,
+        priority: int = 0
+    ) -> int:
+        """Create a state manually.
+        
+        Args:
+            name: State name
+            is_waypoint: Whether this is a waypoint state
+            priority: State priority (higher = more important)
+            
+        Returns:
+            State ID
+        """
+        if self.graph is None:
+            raise RuntimeError("Graph not initialized")
+        
+        state_id = self.graph.createState(name, is_waypoint, priority)
+        return state_id
+
+    def create_edge(
+        self,
+        from_state: str,
+        to_state: str,
+        name: str,
+        weight: int = 1,
+        containing_state: Optional[str] = None
+    ) -> int:
+        """Create an edge manually.
+        
+        Args:
+            from_state: Source state name
+            to_state: Target state name
+            name: Edge name
+            weight: Edge weight for planning
+            containing_state: State whose constraints apply during edge
+            
+        Returns:
+            Edge ID
+        """
+        if self.graph is None:
+            raise RuntimeError("Graph not initialized")
+        
+        edge_id = self.graph.createEdge(
+            from_state,
+            to_state,
+            name,
+            weight,
+            containing_state or from_state
+        )
+        return edge_id
+
+    def apply_state_constraints(
+        self,
+        state: str,
+        q: np.ndarray,
+        max_iterations: int = 10000,
+        error_threshold: float = 1e-4
+    ) -> ConstraintResult:
+        """Apply state constraints to project configuration.
+        
+        Args:
+            state: State name
+            q: Input configuration
+            max_iterations: Maximum projection iterations
+            error_threshold: Convergence threshold
+            
+        Returns:
+            ConstraintResult with success status, projected config, and error
+        """
+        if self.graph is None:
+            raise RuntimeError("Graph not initialized")
+        
+        # Store current parameters
+        old_max_iter = self.graph.maxIterations()
+        old_error = self.graph.errorThreshold()
+        
+        # Set temporary parameters
+        self.graph.maxIterations(max_iterations)
+        self.graph.errorThreshold(error_threshold)
+        
+        # Apply constraints
+        success, q_proj, error = self.graph.applyConstraints(state, list(q))
+        
+        # Restore parameters
+        self.graph.maxIterations(old_max_iter)
+        self.graph.errorThreshold(old_error)
+        
+        return ConstraintResult(
+            success=success,
+            configuration=np.array(q_proj),
+            error=error
+        )
     
     def solve(self, max_iterations: int = 10000) -> bool:
-        """Solve planning problem."""
+        """Solve planning problem.
+        
+        Args:
+            max_iterations: Maximum planning iterations
+            
+        Returns:
+            True if solution found
+        """
         if self.problem is None:
             raise RuntimeError("Must create problem first")
         
         try:
+            # Configure path validation with dichotomy if enabled
+            if self._use_dichotomy:
+                createDichotomy(self.problem)
+            
+            # Configure path projection if enabled
+            if self._use_progressive_projector:
+                createProgressiveProjector(self.problem)
+            
             self.planner = HPPManipulationPlanner(self.problem)
             self.planner.maxIterations(max_iterations)
             success = self.planner.solve()
