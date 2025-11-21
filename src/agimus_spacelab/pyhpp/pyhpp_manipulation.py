@@ -49,6 +49,48 @@ class PyHPPManipulationPlanner:
         self.viewer = None
         self.path = None
         
+        # Configuration options for path validation and projection
+        self._use_dichotomy = True
+        self._use_progressive_projector = True
+
+    def model(self):
+        """Get the Pinocchio model."""
+        if self.device is None:
+            raise RuntimeError("Robot not loaded yet")
+        return self.device.model()
+
+    def data(self):
+        """Get the Pinocchio data."""
+        if self.device is None:
+            raise RuntimeError("Robot not loaded yet")
+        return self.device.data()
+
+    @property
+    def nq(self) -> int:
+        """Number of configuration variables."""
+        if self.device is None:
+            raise RuntimeError("Robot not loaded yet")
+        return self.device.model().nq
+
+    @property
+    def nv(self) -> int:
+        """Number of velocity variables."""
+        if self.device is None:
+            raise RuntimeError("Robot not loaded yet")
+        return self.device.model().nv
+
+    def neutral_config(self) -> np.ndarray:
+        """Get neutral configuration."""
+        if self.device is None:
+            raise RuntimeError("Robot not loaded yet")
+        return np.array(self.device.neutralConfiguration())
+
+    def random_config(self) -> np.ndarray:
+        """Generate a random configuration."""
+        if self.device is None:
+            raise RuntimeError("Robot not loaded yet")
+        return np.array(self.device.randomConfiguration())
+        
     def load_robot(
         self,
         name: str,
@@ -315,7 +357,7 @@ class PyHPPManipulationPlanner:
             try:
                 q_init = self.problem.initConfig()
                 self.viewer(q_init)
-            except:
+            except Exception:
                 pass
     
     def play_path(self, path_index: int = 0):
