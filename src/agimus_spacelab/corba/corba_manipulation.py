@@ -6,6 +6,16 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 from ..utils import parse_package_uri
 
+
+class ConstraintResult:
+    """Result from applying state constraints."""
+    
+    def __init__(self, success: bool, configuration: np.ndarray, error: float):
+        self.success = success
+        self.configuration = configuration
+        self.error = error
+
+
 try:
     from hpp.corbaserver import loadServerPlugin
     from hpp.corbaserver.manipulation import (
@@ -46,6 +56,48 @@ class CorbaManipulationPlanner:
         self.viewer = None
         self.path_player = None
         
+        # Configuration options for path validation
+        self._use_path_optimization = True
+        self._use_path_projection = True
+
+    def model(self):
+        """Get the Pinocchio model."""
+        if self.robot is None:
+            raise RuntimeError("Robot not loaded yet")
+        return self.robot.client.basic.robot.getModel()
+
+    def data(self):
+        """Get the Pinocchio data."""
+        if self.robot is None:
+            raise RuntimeError("Robot not loaded yet")
+        return self.robot.client.basic.robot.getData()
+
+    @property
+    def nq(self) -> int:
+        """Number of configuration variables."""
+        if self.robot is None:
+            raise RuntimeError("Robot not loaded yet")
+        return self.robot.getConfigSize()
+
+    @property
+    def nv(self) -> int:
+        """Number of velocity variables."""
+        if self.robot is None:
+            raise RuntimeError("Robot not loaded yet")
+        return self.robot.getNumberDof()
+
+    def neutral_config(self) -> np.ndarray:
+        """Get neutral configuration."""
+        if self.robot is None:
+            raise RuntimeError("Robot not loaded yet")
+        return np.array(self.robot.getCurrentConfig())
+
+    def random_config(self) -> np.ndarray:
+        """Generate a random configuration."""
+        if self.robot is None:
+            raise RuntimeError("Robot not loaded yet")
+        return np.array(self.robot.shootRandomConfig())
+        
     def load_robot(
         self,
         composite_name: str,
@@ -77,7 +129,9 @@ class CorbaManipulationPlanner:
                     load: bool = True,
                     rootJointType: str = "anchor"
                 ):
-                    ParentRobot.__init__(self, compositeName, robotName, rootJointType, load)
+                    ParentRobot.__init__(
+                        self, compositeName, robotName, rootJointType, load
+                    )
         self.robot = Robot(
             compositeName=composite_name,
             robotName=robot_name,
@@ -218,13 +272,16 @@ class CorbaManipulationPlanner:
         try:
             import sys
             from pathlib import Path
-            config_dir = Path(__file__).parent.parent.parent.parent.parent / "config"
+            config_dir = (
+                Path(__file__).parent.parent.parent.parent.parent / "config"
+            )
             sys.path.insert(0, str(config_dir))
             from spacelab_config import ManipulationConfig
         except ImportError:
             raise ImportError(
-                "ManipulationConfig not found. Please provide valid_pairs parameter "
-                "or ensure spacelab_config.py is in the config directory."
+                "ManipulationConfig not found. Please provide "
+                "valid_pairs parameter or ensure spacelab_config.py "
+                "is in the config directory."
             )
         
         rules = []
@@ -249,10 +306,153 @@ class CorbaManipulationPlanner:
                     )
         
         return rules
+
+    def create_state(
+        self,
+        name: str,
+        is_waypoint: bool = False,
+        priority: int = 0
+    ) -> int:
+        """Create a state manually.
+        
+        Args:
+            name: State name
+            is_waypoint: Whether this is a waypoint state
+            priority: State priority (higher = more important)
+            
+        Returns:
+            State ID
+        """
+        if self.graph is None:
+            raise RuntimeError("Graph not initialized")
+        
+        # CORBA API uses createNode which returns node ID
+        node_id = self.graph.createNode([name], is_waypoint)
+        return node_id
+
+    def create_edge(
+        self,
+        from_state: str,
+        to_state: str,
+        name: str,
+        weight: int = 1,
+        containing_state: Optional[str] = None
+    ) -> int:
+        """Create an edge manually.
+        
+        Args:
+            from_state: Source state name
+            to_state: Target state name
+            name: Edge name
+            weight: Edge weight for planning
+            containing_state: State whose constraints apply during edge
+            
+        Returns:
+            Edge ID
+        """
+        if self.graph is None:
+            raise RuntimeError("Graph not initialized")
+        
+        # CORBA API uses createEdge
+        edge_id = self.graph.createEdge(
+            from_state,
+            to_state,
+            name,
+            weight,
+            containing_state or from_state
+        )
+        return edge_id
+
+    def apply_state_constraints(
+        self,
+        state: str,
+        q: np.ndarray,
+        max_iterations: int = 10000,
+        error_threshold: float = 1e-4
+    ) -> ConstraintResult:
+        """Apply state constraints to project configuration.
+        
+        Args:
+            state: State name
+            q: Input configuration
+            max_iterations: Maximum projection iterations
+            error_threshold: Convergence threshold
+            
+        Returns:
+            ConstraintResult with success status, projected config, and error
+        """
+        if self.graph is None:
+            raise RuntimeError("Graph not initialized")
+        
+        # Store current parameters
+        old_max_iter = self.ps.getMaxIterProjection()
+        old_error = self.ps.getErrorThreshold()
+        
+        # Set temporary parameters
+        self.ps.setMaxIterProjection(max_iterations)
+        self.ps.setErrorThreshold(error_threshold)
+        
+        # Apply constraints using graph
+        q_list = q.tolist() if isinstance(q, np.ndarray) else list(q)
+        try:
+            success, q_proj, error = self.graph.applyNodeConstraints(
+                state, q_list
+            )
+            result = ConstraintResult(
+                success=success,
+                configuration=np.array(q_proj),
+                error=error
+            )
+        except Exception:
+            # If applyNodeConstraints not available, use generateTargetConfig
+            try:
+                res, q_proj, err = self.graph.generateTargetConfig(
+                    state, q_list, q_list
+                )
+                result = ConstraintResult(
+                    success=res,
+                    configuration=np.array(q_proj),
+                    error=err
+                )
+            except Exception:
+                result = ConstraintResult(
+                    success=False,
+                    configuration=q,
+                    error=float('inf')
+                )
+        
+        # Restore parameters
+        self.ps.setMaxIterProjection(old_max_iter)
+        self.ps.setErrorThreshold(old_error)
+        
+        return result
     
     def solve(self, max_iterations: int = 10000) -> bool:
-        """Solve planning problem."""
+        """Solve planning problem.
+        
+        Args:
+            max_iterations: Maximum planning iterations
+            
+        Returns:
+            True if solution found
+        """
         try:
+            # Configure path validation parameters
+            if self._use_path_optimization:
+                # Enable path optimization in CORBA
+                self.ps.setParameter(
+                    "PathOptimization/RandomShortcut/NumberOfLoops", 50
+                )
+            
+            if self._use_path_projection:
+                # Enable path projection
+                self.ps.setParameter("PathProjection/ProgressBased", True)
+            
+            # Set max iterations for steering method
+            self.ps.setParameter(
+                "SteeringMethod/Kinodynamic/maxIterations", max_iterations
+            )
+            
             self.ps.solve()
             return True
         except Exception as e:
@@ -266,7 +466,7 @@ class CorbaManipulationPlanner:
         
         try:
             return self.ps.client.problem.getPath(index)
-        except:
+        except Exception:
             return None
     
     def visualize(self, q: Optional[np.ndarray] = None):
@@ -283,7 +483,7 @@ class CorbaManipulationPlanner:
             try:
                 q_init = self.ps.getCurrentConfig()
                 self.viewer(q_init)
-            except:
+            except Exception:
                 pass
     
     def play_path(self, path_index: int = 0):
@@ -307,9 +507,46 @@ class CorbaManipulationPlanner:
         """Get problem solver."""
         return self.ps
 
+    def get_graph(self):
+        """Get constraint graph."""
+        return self.graph
+
+    def set_path_optimization(self, enabled: bool):
+        """Enable or disable path optimization.
+        
+        Args:
+            enabled: Whether to use path optimization
+        """
+        self._use_path_optimization = enabled
+
+    def set_path_projection(self, enabled: bool):
+        """Enable or disable path projection.
+        
+        Args:
+            enabled: Whether to use path projection
+        """
+        self._use_path_projection = enabled
+
+    def configure_graph_parameters(
+        self,
+        max_iterations: int = 40,
+        error_threshold: float = 1e-4
+    ):
+        """Configure constraint graph parameters.
+        
+        Args:
+            max_iterations: Maximum iterations for constraint projection
+            error_threshold: Error threshold for constraint satisfaction
+        """
+        if self.ps is None:
+            raise RuntimeError("Problem solver not created yet")
+        
+        self.ps.setMaxIterProjection(max_iterations)
+        self.ps.setErrorThreshold(error_threshold)
+
 
 __all__ = [
     "CorbaManipulationPlanner",
-    "Robot",
+    "ConstraintResult",
     "HAS_CORBA",
 ]
