@@ -694,11 +694,31 @@ def main(visualize=True, solve=True):
     
     print("✓ Robot and objects loaded")
     
-    # 2. Configure path validation and projection
-    print("\n2. Configuring path validation...")
-    planner.set_progressive_projector(True)
-    planner.set_dichotomy(True)
-    print("✓ Path validation configured")
+    # 2. Configure path validation and projection BEFORE graph creation
+    print("\n2. Configuring path validation and projection...")
+    from pyhpp.manipulation import createProgressiveProjector
+    from pyhpp.core import (
+        createDiscretizedCollisionAndJointBound,
+        createDiscretizedCollision,
+        createDiscretizedJointBound,
+        createDiscretized,
+    )
+    
+    
+    problem = planner.get_problem()
+    robot = planner.get_robot()
+    
+    # Path projector (Progressive) - for constraint projection along paths
+    problem.pathProjector = createProgressiveProjector(
+        problem.distance(), problem.steeringMethod(),
+        ManipulationConfig.PATH_PROJECTOR_STEP  # 0.1
+    )
+    
+    # Path validation (Discretized) - for collision checking
+    problem.pathValidation = createDiscretized(
+        robot.asPinDevice(),
+        ManipulationConfig.PATH_VALIDATION_STEP  # 0.01
+    )
     
     # 3. Create constraint graph
     print("\n3. Creating constraint graph...")
@@ -738,8 +758,13 @@ def main(visualize=True, solve=True):
         print("  This may take a while...")
         
         from pyhpp.manipulation import ManipulationPlanner as HPPPlanner
+        
         problem = planner.get_problem()
+        
         hpp_planner = HPPPlanner(problem)
+        hpp_planner.maxIterations(10000)
+        
+        print("  Max iterations: 10000")
         
         try:
             solve_success = hpp_planner.solve()
@@ -831,29 +856,6 @@ if __name__ == "__main__":
             success, planner, graph, states, edges,
             constraints, viewer, path, Q
         ) = result
-        
-        print("\n" + "=" * 70)
-        print("Example Usage:")
-        print("=" * 70)
-        print("""
-# Access objects
-planner     # PyHPPManipulationPlanner
-graph       # Constraint graph
-viewer      # Gepetto viewer
-path        # Solution path
-Q           # Test configurations
-
-# Animate solution
-if path:
-    animate_path(viewer, path)
-
-# Animate test configurations
-animate_configurations(viewer, Q, dt=1.0)
-
-# Display specific configuration
-viewer(Q[0])  # Initial
-viewer(Q[-1]) # Final test config
-""")
         sys.exit(0)
     else:
         sys.exit(1)
