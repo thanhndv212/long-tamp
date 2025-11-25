@@ -116,10 +116,24 @@ class PyHPPManipulationPlanner:
         
         return self.device
     
-    def load_environment(self, name: str, urdf_path: str):
-        """Load environment model."""
+    def load_environment(
+        self,
+        name: str,
+        urdf_path: str,
+        pose: Optional[SE3] = None
+    ):
+        """Load environment model.
+        
+        Args:
+            name: Name for the environment object
+            urdf_path: Path to URDF file
+            pose: Optional SE3 pose (defaults to identity)
+        """
         if self.device is None:
             raise RuntimeError("Must load robot first")
+        
+        if pose is None:
+            pose = SE3.Identity()
         
         urdf.loadModel(
             self.device,
@@ -128,7 +142,7 @@ class PyHPPManipulationPlanner:
             "anchor",
             urdf_path,
             "",
-            SE3.Identity()
+            pose
         )
         
         return name
