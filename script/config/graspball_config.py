@@ -144,13 +144,13 @@ class ManipulationConfig:
     GROUND_URDF = "package://hpp_practicals/urdf/ur_benchmark/ground.urdf"
     BOX_URDF = "package://hpp_practicals/urdf/ur_benchmark/box.urdf"
     
-    # Graph nodes for manipulation
+    # Graph nodes for manipulation (order matters for solver performance!)
     GRAPH_NODES = [
-        "placement",           # Ball on ground, gripper free
-        "gripper-above-ball",  # Gripper aligned above ball
-        "grasp-placement",     # Ball grasped and on ground
-        "ball-above-ground",   # Ball grasped and lifted
         "grasp",              # Ball grasped, no placement constraint
+        "ball-above-ground",   # Ball grasped and lifted
+        "grasp-placement",     # Ball grasped and on ground
+        "gripper-above-ball",  # Gripper aligned above ball
+        "placement",           # Ball on ground, gripper free
     ]
     
     # Graph edges (from, to, name)

@@ -47,20 +47,6 @@ except ImportError:
     print("Warning: CORBA backend not available")
 
 
-def setup_environment(planner):
-    """
-    Load environment objects (ground only).
-    
-    Args:
-        planner: CorbaManipulationPlanner instance
-    """
-    print("  Loading ground...")
-    planner.load_environment("ground", ManipulationConfig.GROUND_URDF)
-    
-    print("  Loading box...")
-    planner.load_environment("box", ManipulationConfig.BOX_URDF)
-
-
 def create_transformation_constraints(ps):
     """
     Define all transformation constraints for the task.
@@ -142,14 +128,23 @@ def create_constraint_graph(robot, ps):
     # Create edges with appropriate waypoint states
     # The last parameter is the waypoint state for path planning
     graph.createEdge('placement', 'placement', 'transit', 1, 'placement')
+
     graph.createEdge('placement', 'gripper-above-ball', 'approach-ball', 1, 'placement')
+
     graph.createEdge('gripper-above-ball', 'placement', 'move-gripper-away', 1, 'placement')
+
     graph.createEdge('gripper-above-ball', 'grasp-placement', 'grasp-ball', 1, 'placement')
+
     graph.createEdge('grasp-placement', 'gripper-above-ball', 'move-gripper-up', 1, 'placement')
+
     graph.createEdge('grasp-placement', 'ball-above-ground', 'take-ball-up', 1, 'grasp')
+
     graph.createEdge('ball-above-ground', 'grasp-placement', 'put-ball-down', 1, 'grasp')
+
     graph.createEdge('ball-above-ground', 'grasp', 'take-ball-away', 1, 'grasp')
+
     graph.createEdge('grasp', 'ball-above-ground', 'approach-ground', 1, 'grasp')
+
     graph.createEdge('grasp', 'grasp', 'transfer', 1, 'grasp')
     
     # Assign constraints to nodes
@@ -200,7 +195,7 @@ def create_constraint_graph(robot, ps):
     ps.setConstantRightHandSide("placement", True)
     ps.setConstantRightHandSide("placement/complement", False)
     ps.setConstantRightHandSide("ball_near_table/complement", False)
-    ps.setConstantRightHandSide
+    
     # Initialize graph
     graph.initialize()
     
@@ -240,10 +235,8 @@ def generate_configurations(robot, graph, ps, q_init):
             "approach-ball", q1, q_rand
         )
         if res:
-            valid, _ = robot.isConfigValid(q_ab)
-            if valid:
-                configs["q_ab"] = q_ab
-                break
+            configs["q_ab"] = q_ab
+            break
         if (i + 1) % 100 == 0:
             print(f"    Attempt {i + 1}...")
     else:
@@ -266,12 +259,9 @@ def generate_configurations(robot, graph, ps, q_init):
             "grasp-ball", configs["q_above"], q_rand
         )
         if res:
-            # Check for collisions
-            valid, report = robot.isConfigValid(q_gb)
-            if valid:
-                configs["q_gb"] = q_gb
-                success = True
-                break
+            configs["q_gb"] = q_gb
+            success = True
+            break
         if (i + 1) % 100 == 0:
             print(f"    Attempt {i + 1}... (last err: {err})")
     
@@ -297,10 +287,8 @@ def generate_configurations(robot, graph, ps, q_init):
             "take-ball-up", configs["q_grasp_place"], q_rand
         )
         if res:
-            valid, _ = robot.isConfigValid(q_tbu)
-            if valid:
-                configs["q_tbu"] = q_tbu
-                break
+            configs["q_tbu"] = q_tbu
+            break
         if (i + 1) % 100 == 0:
             print(f"    Attempt {i + 1}...")
     else:
@@ -322,10 +310,8 @@ def generate_configurations(robot, graph, ps, q_init):
             "take-ball-away", configs["q_ball_up"], q_rand
         )
         if res:
-            valid, _ = robot.isConfigValid(q_tba)
-            if valid:
-                configs["q_tba"] = q_tba
-                break
+            configs["q_tba"] = q_tba
+            break
         if (i + 1) % 100 == 0:
             print(f"    Attempt {i + 1}...")
     else:
@@ -485,8 +471,8 @@ def solve_manipulation_problem(graph, ps, configs):
     #         ps.concatenatePath(path_ids[0], path_ids[i])
     #     print(f"  ✓ Final path ID: {path_ids[0]}")
     # path planning solver
-    ps.setInitialConfig (configs["q_init"])
-    ps.addGoalConfig (configs["q_goal"])
+    ps.setInitialConfig(configs["q_init"])
+    ps.addGoalConfig(configs["q_goal"])
     ps.solve()
     return True
 
@@ -532,10 +518,17 @@ def main(visualize=True, solve=True):
     planner.set_joint_bounds(ManipulationConfig.BALL_NAME, bounds)
     
     # Setup environment
-    setup_environment(planner)
-    
+    planner.load_environment("ground", ManipulationConfig.GROUND_URDF)
+    planner.load_environment("box", ManipulationConfig.BOX_URDF)
+
     # Get problem solver
     ps = planner.get_problem_solver()
+    
+    # Position box walls (must be done after getting ps)
+    ps.moveObstacle('box/base_link_0', [0.3 + 0.04, 0, 0.04, 0, 0, 0, 1])
+    ps.moveObstacle('box/base_link_1', [0.3 - 0.04, 0, 0.04, 0, 0, 0, 1])
+    ps.moveObstacle('box/base_link_2', [0.3, 0.04, 0.04, 0, 0, 0, 1])
+    ps.moveObstacle('box/base_link_3', [0.3, -0.04, 0.04, 0, 0, 0, 1])
     
     # Create constraints
     print("\n2. Creating transformation constraints...")

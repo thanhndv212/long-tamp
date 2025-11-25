@@ -2,7 +2,7 @@
 CORBA manipulation planner implementation.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import numpy as np
 from ..utils import parse_package_uri
 
@@ -31,6 +31,8 @@ try:
     HAS_CORBA = True
 except ImportError:
     HAS_CORBA = False
+    if TYPE_CHECKING:
+        from hpp.corbaserver.manipulation import ConstraintGraph
 
 
 class CorbaManipulationPlanner:
