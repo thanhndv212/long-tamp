@@ -96,18 +96,19 @@ class PyHPPBackend:
         
     def load_robot(
         self,
-        name: str,
+        robot_name: str,
         urdf_path: str,
         srdf_path: Optional[str] = None,
-        root_joint_type: str = "anchor"
+        root_joint_type: str = "anchor",
+        composite_name: str = None,
     ):
         """Load robot using PyHPP."""
-        self.device = Device(name)
+        self.device = Device(robot_name)
         
         urdf.loadModel(
             self.device,
             0,
-            name,
+            robot_name,
             root_joint_type,
             urdf_path,
             srdf_path or "",
@@ -337,12 +338,7 @@ class PyHPPBackend:
         
         try:
             # Configure path validation with dichotomy if enabled
-            if self._use_dichotomy:
-                createDichotomy(self.problem)
-            
-            # Configure path projection if enabled
-            if self._use_progressive_projector:
-                createProgressiveProjector(self.problem)
+            self.configure_path_validation()
             
             self.planner = HPPManipulationPlanner(self.problem)
             self.planner.maxIterations(max_iterations)
@@ -442,6 +438,25 @@ class PyHPPBackend:
         
         self.graph.setMaxIterations(max_iterations)
         self.graph.setErrorThreshold(error_threshold)
+
+    def configure_path_validation(
+        self,
+        validation_step: float = 0.01,
+        projector_step: float = 0.1
+    ):
+        """Configure path validation parameters."""
+        print("   Configuring path validation...")
+        if self.problem is None:
+            raise RuntimeError("Must create problem first")
+
+        # Configure path validation with dichotomy if enabled
+        if self._use_dichotomy:
+            createDichotomy(self.problem)
+        
+        # Configure path projection if enabled
+        if self._use_progressive_projector:
+            createProgressiveProjector(self.problem)
+        return self
 
 
 # Alias for backward compatibility

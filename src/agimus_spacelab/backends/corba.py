@@ -104,11 +104,11 @@ class CorbaBackend:
         
     def load_robot(
         self,
-        composite_name: str,
         robot_name: str,
         urdf_path: str,
         srdf_path: Optional[str] = None,
-        root_joint_type: str = "anchor"
+        root_joint_type: str = "anchor",
+        composite_name: str = None,
     ):
         """Load robot using CORBA."""
 
@@ -136,6 +136,8 @@ class CorbaBackend:
                     ParentRobot.__init__(
                         self, compositeName, robotName, rootJointType, load
                     )
+            if composite_name is None:
+                composite_name = robot_name
         self.robot = Robot(
             compositeName=composite_name,
             robotName=robot_name,
@@ -143,13 +145,11 @@ class CorbaBackend:
             srdf_path=srdf_path,
             load=True,
             rootJointType=root_joint_type)
-        self._create_problem_solver()
-        return self.robot
-    
-    def _create_problem_solver(self):
+        
+        # Initialize problem solver
         self.ps = ProblemSolver(self.robot)
-        self.ps.setErrorThreshold(1e-4)
-        self.ps.setMaxIterProjection(40)
+
+        return self.robot
     
     def load_environment(
         self,
@@ -442,20 +442,8 @@ class CorbaBackend:
         """
         try:
             # Configure path validation parameters
-            if self._use_path_optimization:
-                # Enable path optimization in CORBA
-                self.ps.setParameter(
-                    "PathOptimization/RandomShortcut/NumberOfLoops", 50
-                )
-            
-            if self._use_path_projection:
-                # Enable path projection
-                self.ps.setParameter("PathProjection/ProgressBased", True)
-            
-            # Set max iterations for steering method
-            self.ps.setParameter(
-                "SteeringMethod/Kinodynamic/maxIterations", max_iterations
-            )
+            self.configure_path_optimization(num_loops=50,
+                                             max_iterations=max_iterations)
             
             self.ps.solve()
             return True
@@ -507,7 +495,7 @@ class CorbaBackend:
         """Get robot instance."""
         return self.robot
     
-    def get_problem_solver(self):
+    def get_problem(self):
         """Get problem solver."""
         return self.ps
 
@@ -548,6 +536,41 @@ class CorbaBackend:
         self.ps.setMaxIterProjection(max_iterations)
         self.ps.setErrorThreshold(error_threshold)
 
+    def configure_path_validation(
+        self,
+        validation_step: float = 0.01,
+        projector_step: float = 0.1
+    ):
+        """Configure path validation parameters."""
+        print("   Configuring path validation...")
+        self.ps.selectPathValidation("Discretized", validation_step)
+        self.ps.selectPathProjector("Progressive", projector_step)
+
+    def configure_path_optimization(
+        self,
+        num_loops: int = 50,
+        max_iterations: int = 10000
+    ):
+        """Configure path optimization parameters.
+        
+        Args:
+            enabled: Whether to enable path optimization
+            num_loops: Number of shortcut loops
+        """
+        if self._use_path_optimization:
+            # Enable path optimization in CORBA
+            self.ps.setParameter(
+                "PathOptimization/RandomShortcut/NumberOfLoops", num_loops
+            )
+        
+        if self._use_path_projection:
+            # Enable path projection
+            self.ps.setParameter("PathProjection/ProgressBased", True)
+        
+        # Set max iterations for steering method
+        self.ps.setParameter(
+            "SteeringMethod/Kinodynamic/maxIterations", max_iterations
+        )
 
 # Alias for backward compatibility
 CorbaManipulationPlanner = CorbaBackend

@@ -9,7 +9,7 @@ from typing import Dict, List, Tuple, Optional, Any
 
 # Import from package config
 from agimus_spacelab.config.spacelab_config import JointBounds, DEFAULT_PATHS
-
+from agimus_spacelab.planning import create_planner
 # Import unified backend interfaces
 try:
     from agimus_spacelab.backends import CorbaBackend, HAS_CORBA
@@ -47,11 +47,11 @@ class SceneBuilder:
         if self.backend == "corba":
             if not HAS_CORBA:
                 raise ImportError("CORBA backend not available")
-            self.planner = planner or CorbaBackend()
+            self.planner = planner or create_planner(backend=self.backend)
         elif self.backend == "pyhpp":
             if not HAS_PYHPP:
                 raise ImportError("PyHPP backend not available")
-            self.planner = planner or PyHPPBackend()
+            self.planner = planner or create_planner(backend=self.backend)
         else:
             raise ValueError(f"Unknown backend: {backend}. Use 'corba' or 'pyhpp'")
         
@@ -59,19 +59,13 @@ class SceneBuilder:
                    robot_name: str = "spacelab") -> 'SceneBuilder':
         """Load the composite robot (UR10 + VISPA)."""
         print("   Loading robot...")
-        if self.backend == "corba":
+        if robot_name in self.DEFAULT_PATHS["robot"]:
             self.planner.load_robot(
-                composite_name=composite_name,
                 robot_name=robot_name,
-                urdf_path=self.DEFAULT_PATHS["robot_urdf"],
-                srdf_path=self.DEFAULT_PATHS["robot_srdf"],
-            )
-        else:  # pyhpp
-            self.planner.load_robot(
-                name=robot_name,
-                urdf_path=self.DEFAULT_PATHS["robot_urdf"],
-                srdf_path=self.DEFAULT_PATHS["robot_srdf"],
-                root_joint_type="anchor"
+                urdf_path=self.DEFAULT_PATHS["robot"][robot_name]["urdf"],
+                srdf_path=self.DEFAULT_PATHS["robot"][robot_name]["srdf"],
+                root_joint_type="anchor",
+                composite_name=composite_name
             )
         return self
         
@@ -122,14 +116,10 @@ class SceneBuilder:
                                    projector_step: float = 0.1) -> 'SceneBuilder':
         """Configure path validation parameters."""
         print("   Configuring path validation...")
-        if self.backend == "corba":
-            ps = self.planner.get_problem_solver()
-            ps.selectPathValidation("Discretized", validation_step)
-            ps.selectPathProjector("Progressive", projector_step)
-        else:  # pyhpp
-            # PyHPP uses dichotomy and progressive projector
-            self.planner.set_dichotomy(True)
-            self.planner.set_progressive_projector(True)
+        self.planner.configure_path_validation(
+            validation_step=validation_step,
+            projector_step=projector_step
+        )
         return self
         
     def disable_collision_pair(self,
@@ -148,7 +138,7 @@ class SceneBuilder:
         """
         print(f"   Disabling collision: {obstacle_name} <-> {joint_name}")
         if self.backend == "corba":
-            ps = self.planner.get_problem_solver()
+            ps = self.planner.get_problem()
             ps.removeObstacleFromJoint(
                 obstacle_name,
                 joint_name,
@@ -169,10 +159,7 @@ class SceneBuilder:
             Tuple of (planner, robot, ps/problem)
         """
         robot = self.planner.get_robot()
-        if self.backend == "corba":
-            ps = self.planner.get_problem_solver()
-        else:  # pyhpp
-            ps = self.planner.get_problem()
+        ps = self.planner.get_problem()
         return self.planner, robot, ps
         
     def build(self, 
