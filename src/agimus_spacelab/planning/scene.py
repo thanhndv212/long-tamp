@@ -218,11 +218,6 @@ class SceneBuilder:
         return self.get_instances()
 
 
-# Alias for backward compatibility
-SpaceLabSceneBuilder = SceneBuilder
-
-
 __all__ = [
     "SceneBuilder",
-    "SpaceLabSceneBuilder",
 ]
