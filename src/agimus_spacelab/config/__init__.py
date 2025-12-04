@@ -10,6 +10,7 @@ Usage:
 
 from .rules import RuleGenerator
 from .spacelab_config import (
+    DEFAULT_PATHS,
     RobotJoints,
     InitialConfigurations,
     JointBounds,
@@ -18,6 +19,7 @@ from .spacelab_config import (
 
 __all__ = [
     "RuleGenerator",
+    "DEFAULT_PATHS",
     "RobotJoints",
     "InitialConfigurations",
     "JointBounds",

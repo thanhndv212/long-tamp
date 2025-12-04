@@ -8,7 +8,7 @@ Provides SceneBuilder for loading robots, environment, and objects.
 from typing import Dict, List, Tuple, Optional, Any
 
 # Import from package config
-from agimus_spacelab.config.spacelab_config import JointBounds
+from agimus_spacelab.config.spacelab_config import JointBounds, DEFAULT_PATHS
 
 # Import unified backend interfaces
 try:
@@ -31,24 +31,6 @@ class SceneBuilder:
     Handles loading robots, environment, objects, and configuring collision checking.
     """
     
-    # Default URDF paths
-    DEFAULT_PATHS = {
-        "robot_urdf": "package://spacelab_mock_hardware/description/urdf/allRobots_spacelab_robot.urdf",
-        "robot_srdf": "package://spacelab_mock_hardware/description/srdf/allRobots_spacelab_robot.srdf",
-        "environment": "package://spacelab_mock_hardware/description/urdf/ground_demo.urdf",
-        "objects": {
-            "RS1": "package://spacelab_mock_hardware/description/urdf/RS1.urdf",
-            "RS2": "package://spacelab_mock_hardware/description/urdf/RS2.urdf",
-            "RS3": "package://spacelab_mock_hardware/description/urdf/RS3.urdf",
-            "RS4": "package://spacelab_mock_hardware/description/urdf/RS4.urdf",
-            "RS5": "package://spacelab_mock_hardware/description/urdf/RS5.urdf",
-            "RS6": "package://spacelab_mock_hardware/description/urdf/RS6.urdf",
-            "screw_driver": "package://spacelab_mock_hardware/description/urdf/screw_driver.urdf",
-            "frame_gripper": "package://spacelab_mock_hardware/description/urdf/frame_gripper.urdf",
-            "cleat_gripper": "package://spacelab_mock_hardware/description/urdf/cleat_gripper.urdf",
-        }
-    }
-    
     def __init__(self, planner: Optional[Any] = None,
                  backend: str = "corba"):
         """
@@ -60,6 +42,7 @@ class SceneBuilder:
         """
         self.backend = backend.lower()
         self.loaded_objects = []
+        self.DEFAULT_PATHS = DEFAULT_PATHS
         
         if self.backend == "corba":
             if not HAS_CORBA:
