@@ -3,16 +3,23 @@ Configuration utilities for agimus_spacelab.
 
 This module provides:
 - RuleGenerator: For generating constraint graph rules
-- SpaceLabScenario: Application-specific scenario configuration
 
 Usage:
-    from agimus_spacelab.config import RuleGenerator, SpaceLabScenario
+    from agimus_spacelab.config import RuleGenerator
 """
 
 from .rules import RuleGenerator
-from .spacelab_config import SpaceLabScenario
+from .spacelab_config import (
+    RobotJoints,
+    InitialConfigurations,
+    JointBounds,
+    ManipulationConfig
+)
 
 __all__ = [
     "RuleGenerator",
-    "SpaceLabScenario",
+    "RobotJoints",
+    "InitialConfigurations",
+    "JointBounds",
+    "ManipulationConfig"
 ]
