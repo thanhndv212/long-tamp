@@ -33,7 +33,7 @@ from graspball_config import (
     ManipulationConfig,
 )
 
-from agimus_spacelab.corba import CorbaManipulationPlanner
+from agimus_spacelab.backends import CorbaBackend as CorbaManipulationPlanner
 
 # CORBA-specific imports
 try:

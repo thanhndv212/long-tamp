@@ -30,7 +30,7 @@ import numpy as np
 config_dir = Path(__file__).parent.parent / "config"
 sys.path.insert(0, str(config_dir))
 
-from agimus_spacelab.pyhpp import PyHPPManipulationPlanner  # noqa: E402
+from agimus_spacelab.backends import PyHPPBackend as PyHPPManipulationPlanner  # noqa: E402
 from graspball_config import (  # noqa: E402
     InitialConfigurations,
     JointBounds,
