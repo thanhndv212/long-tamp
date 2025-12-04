@@ -16,13 +16,33 @@ Usage:
 
 from .viz import (
     print_joint_info,
-    visualize_handle_frames,
     visualize_constraint_graph,
+    displayHandleApproach,
+    displayGripperApproach,
+    displayHandle,
+    displayGripper,
+    visualize_all_handles,
+    visualize_all_grippers,
+    print_handle_info,
+    print_gripper_info,
+    clear_handle_visualizations,
+    clear_gripper_visualizations,
+    clear_all_visualizations,
 )
 
 
 __all__ = [
     "print_joint_info",
-    "visualize_handle_frames",
     "visualize_constraint_graph",
+    "displayHandleApproach",
+    "displayGripperApproach",
+    "displayHandle",
+    "displayGripper",
+    "visualize_all_handles",
+    "visualize_all_grippers",
+    "print_handle_info",
+    "print_gripper_info",
+    "clear_handle_visualizations",
+    "clear_gripper_visualizations",
+    "clear_all_visualizations",
 ]
