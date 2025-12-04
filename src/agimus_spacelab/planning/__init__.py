@@ -2,7 +2,7 @@
 Planning module for agimus_spacelab manipulation tasks.
 
 This module provides the core planning functionality:
-- Planner: Unified manipulation planner with backend abstraction
+- create_planner: Factory function for backend-specific planners
 - SceneBuilder: Scene setup utilities for robots, environments, objects
 - GraphBuilder: Constraint graph construction (manual or factory)
 - ConstraintBuilder: Transformation constraint creation
@@ -10,7 +10,7 @@ This module provides the core planning functionality:
 
 Usage:
     from agimus_spacelab.planning import (
-        Planner,
+        create_planner,
         SceneBuilder,
         GraphBuilder,
         ConstraintBuilder,
@@ -18,7 +18,7 @@ Usage:
     )
 """
 
-from .planner import Planner, check_backend
+from .planner import create_planner, check_backend
 from .scene import SceneBuilder
 from .graph import GraphBuilder
 from .constraints import ConstraintBuilder
@@ -26,7 +26,7 @@ from .config import ConfigGenerator
 
 
 __all__ = [
-    "Planner",
+    "create_planner",
     "check_backend",
     "SceneBuilder",
     "GraphBuilder",

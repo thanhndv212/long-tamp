@@ -8,6 +8,7 @@ Provides ManipulationTask base class with common structure.
 from typing import List, Dict, Any
 
 from agimus_spacelab.planning import SceneBuilder, ConfigGenerator
+from agimus_spacelab.planning import create_planner
 
 
 class ManipulationTask:
