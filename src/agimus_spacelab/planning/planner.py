@@ -4,9 +4,6 @@ Unified API for manipulation planning.
 This module provides a backend-agnostic interface for manipulation planning.
 """
 
-from typing import Any, Dict, List, Optional
-import numpy as np
-
 
 def check_backend(backend: str) -> bool:
     """
@@ -23,7 +20,9 @@ def check_backend(backend: str) -> bool:
         ImportError: If backend is not available
     """
     if backend not in ["corba", "pyhpp"]:
-        raise ValueError(f"Invalid backend: {backend}. Must be 'corba' or 'pyhpp'")
+        raise ValueError(
+            f"Invalid backend: {backend}. Must be 'corba' or 'pyhpp'"
+        )
     
     if backend == "corba":
         try:
@@ -45,199 +44,57 @@ def check_backend(backend: str) -> bool:
     return False
 
 
-class Planner:
+def create_planner(backend: str = "pyhpp", **kwargs):
     """
-    Unified manipulation planner supporting multiple backends.
+    Create a manipulation planner with the specified backend.
     
-    This class provides a consistent API regardless of whether
-    you're using CORBA server or PyHPP bindings.
+    This factory function returns an instance that inherits from either
+    CorbaBackend or PyHPPBackend based on the backend choice.
     
+    Args:
+        backend: Backend to use ('corba' or 'pyhpp')
+        **kwargs: Additional arguments passed to backend constructor
+        
+    Returns:
+        Instance of CorbaPlanner or PyHPPPlanner
+        
     Example:
-        >>> planner = Planner(backend="pyhpp")
+        >>> planner = create_planner(backend="pyhpp")
         >>> planner.load_robot(robot_config)
         >>> planner.solve()
     """
-    
-    def __init__(self, backend: str = "pyhpp"):
-        """
-        Initialize manipulation planner.
-        
-        Args:
-            backend: Backend to use ('corba' or 'pyhpp')
-            
-        Raises:
-            ValueError: If backend is invalid or not available
-        """
-        if not check_backend(backend):
-            raise ValueError(
-                f"Backend '{backend}' is not available. "
-                f"Please install the required dependencies."
-            )
-        
-        self.backend = backend
-        self._impl = None
-        
-        # Lazy import to avoid errors if backend not installed
-        if backend == "corba":
-            from agimus_spacelab.backends import CorbaBackend
-            self._impl = CorbaBackend()
-        elif backend == "pyhpp":
-            from agimus_spacelab.backends import PyHPPBackend
-            self._impl = PyHPPBackend()
-    
-    def load_robot(
-        self,
-        name: str,
-        urdf_path: str,
-        srdf_path: Optional[str] = None,
-        root_joint_type: str = "anchor"
-    ):
-        """
-        Load robot model.
-        
-        Args:
-            name: Robot name
-            urdf_path: Path to URDF file
-            srdf_path: Path to SRDF file (optional)
-            root_joint_type: Type of root joint
-        """
-        return self._impl.load_robot(
-            name, urdf_path, srdf_path, root_joint_type
+    if not check_backend(backend):
+        raise ValueError(
+            f"Backend '{backend}' is not available. "
+            f"Please install the required dependencies."
         )
     
-    def load_environment(self, name: str, urdf_path: str):
-        """
-        Load environment model.
+    if backend == "corba":
+        from agimus_spacelab.backends import CorbaBackend
         
-        Args:
-            name: Environment name
-            urdf_path: Path to URDF file
-        """
-        return self._impl.load_environment(name, urdf_path)
-    
-    def load_object(
-        self,
-        name: str,
-        urdf_path: str,
-        root_joint_type: str = "freeflyer"
-    ):
-        """
-        Load manipulable object.
-        
-        Args:
-            name: Object name
-            urdf_path: Path to URDF file
-            root_joint_type: Type of root joint
-        """
-        return self._impl.load_object(name, urdf_path, root_joint_type)
-    
-    def set_joint_bounds(self, joint_name: str, bounds: List[float]):
-        """
-        Set joint bounds.
-        
-        Args:
-            joint_name: Name of the joint
-            bounds: Bounds as flat list [min1, max1, min2, max2, ...]
-        """
-        return self._impl.set_joint_bounds(joint_name, bounds)
-    
-    def set_initial_config(self, q: np.ndarray):
-        """
-        Set initial configuration.
-        
-        Args:
-            q: Initial configuration vector
-        """
-        return self._impl.set_initial_config(q)
-    
-    def add_goal_config(self, q: np.ndarray):
-        """
-        Add goal configuration.
-        
-        Args:
-            q: Goal configuration vector
-        """
-        return self._impl.add_goal_config(q)
-    
-    def create_constraint_graph(
-        self,
-        name: str,
-        grippers: List[str],
-        objects: Dict[str, Dict],
-        rules: str = "auto",
-        **kwargs
-    ) -> Any:
-        """
-        Create constraint graph for manipulation.
-        
-        Args:
-            name: Graph name
-            grippers: List of gripper names
-            objects: Dict of object configs with handles/surfaces
-            rules: Rule strategy ('auto', 'all', 'sequential', etc.)
-            **kwargs: Additional backend-specific parameters
+        class CorbaPlanner(CorbaBackend):
+            """Planner using CORBA backend."""
             
-        Returns:
-            Graph object (backend-specific)
-        """
-        return self._impl.create_constraint_graph(
-            name, grippers, objects, rules, **kwargs
-        )
-    
-    def solve(self, max_iterations: int = 10000) -> bool:
-        """
-        Solve the planning problem.
+            @property
+            def backend(self) -> str:
+                return "corba"
         
-        Args:
-            max_iterations: Maximum iterations
+        return CorbaPlanner(**kwargs)
+    
+    elif backend == "pyhpp":
+        from agimus_spacelab.backends import PyHPPBackend
+        
+        class PyHPPPlanner(PyHPPBackend):
+            """Planner using PyHPP backend."""
             
-        Returns:
-            True if solution found
-        """
-        return self._impl.solve(max_iterations)
-    
-    def get_path(self) -> Optional[Any]:
-        """
-        Get the computed path.
+            @property
+            def backend(self) -> str:
+                return "pyhpp"
         
-        Returns:
-            Path object (backend-specific) or None
-        """
-        return self._impl.get_path()
-    
-    def visualize(self, q: Optional[np.ndarray] = None):
-        """
-        Visualize configuration or initial config.
-        
-        Args:
-            q: Configuration to display (optional)
-        """
-        return self._impl.visualize(q)
-    
-    def play_path(self, path_index: int = 0):
-        """
-        Play the computed path in viewer.
-        
-        Args:
-            path_index: Index of path to play
-        """
-        return self._impl.play_path(path_index)
-    
-    def get_robot(self) -> Any:
-        """Get robot object (backend-specific)."""
-        return self._impl.get_robot()
-    
-    def get_problem(self) -> Any:
-        """Get problem object (backend-specific)."""
-        return self._impl.get_problem()
-
-
-# Alias for backward compatibility
-ManipulationPlanner = Planner
+        return PyHPPPlanner(**kwargs)
 
 
 __all__ = [
-    "Planner",
-    "ManipulationPlanner",
+    "create_planner",
     "check_backend",
 ]
