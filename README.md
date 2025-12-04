@@ -38,7 +38,7 @@ pip install -e .
 
 # Or via CMake in HPP workspace
 mkdir build && cd build
-cmake .. -DCMAKE_INSTALL_PREFIX=$HPP_INSTALL_PREFIX
+cmake .. -DCMAKE_INSTALL_PREFIX=$INSTALL_HPP_DIR
 make install
 ```
 
