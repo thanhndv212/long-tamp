@@ -1,7 +1,8 @@
 """
 Core base classes for agimus_spacelab manipulation planning.
 
-This module defines abstract base classes and interfaces.
+This module defines abstract base classes and interfaces for backend
+implementations.
 """
 
 from abc import ABC, abstractmethod

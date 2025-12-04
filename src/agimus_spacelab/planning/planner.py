@@ -45,7 +45,7 @@ def check_backend(backend: str) -> bool:
     return False
 
 
-class ManipulationPlanner:
+class Planner:
     """
     Unified manipulation planner supporting multiple backends.
     
@@ -53,7 +53,7 @@ class ManipulationPlanner:
     you're using CORBA server or PyHPP bindings.
     
     Example:
-        >>> planner = ManipulationPlanner(backend="pyhpp")
+        >>> planner = Planner(backend="pyhpp")
         >>> planner.load_robot(robot_config)
         >>> planner.solve()
     """
@@ -79,11 +79,11 @@ class ManipulationPlanner:
         
         # Lazy import to avoid errors if backend not installed
         if backend == "corba":
-            from agimus_spacelab.corba import CorbaManipulationPlanner
-            self._impl = CorbaManipulationPlanner()
+            from agimus_spacelab.backends import CorbaBackend
+            self._impl = CorbaBackend()
         elif backend == "pyhpp":
-            from agimus_spacelab.pyhpp import PyHPPManipulationPlanner
-            self._impl = PyHPPManipulationPlanner()
+            from agimus_spacelab.backends import PyHPPBackend
+            self._impl = PyHPPBackend()
     
     def load_robot(
         self,
@@ -232,4 +232,12 @@ class ManipulationPlanner:
         return self._impl.get_problem()
 
 
-__all__ = ["ManipulationPlanner"]
+# Alias for backward compatibility
+ManipulationPlanner = Planner
+
+
+__all__ = [
+    "Planner",
+    "ManipulationPlanner",
+    "check_backend",
+]

@@ -1,10 +1,13 @@
 """
-PyHPP manipulation planner implementation.
+PyHPP backend implementation for manipulation planning.
+
+This backend uses hpp-python for direct Python bindings to HPP.
 """
 
 from typing import Any, Dict, List, Optional
 import numpy as np
 from pinocchio import SE3
+
 
 try:
     from pyhpp.manipulation import (
@@ -31,11 +34,11 @@ class ConstraintResult:
         self.error = error
 
 
-class PyHPPManipulationPlanner:
+class PyHPPBackend:
     """PyHPP backend implementation for manipulation planning."""
     
     def __init__(self):
-        """Initialize PyHPP planner."""
+        """Initialize PyHPP backend."""
         if not HAS_PYHPP:
             raise ImportError(
                 "PyHPP backend not available. "
@@ -197,7 +200,7 @@ class PyHPPManipulationPlanner:
         objects: Dict[str, Dict],
         rules: str = "auto",
         **kwargs
-    ) -> Graph:
+    ) -> "Graph":
         """Create constraint graph using PyHPP."""
         if self.problem is None:
             raise RuntimeError("Must create problem first")
@@ -441,7 +444,12 @@ class PyHPPManipulationPlanner:
         self.graph.setErrorThreshold(error_threshold)
 
 
+# Alias for backward compatibility
+PyHPPManipulationPlanner = PyHPPBackend
+
+
 __all__ = [
+    "PyHPPBackend",
     "PyHPPManipulationPlanner",
     "ConstraintResult",
     "HAS_PYHPP",

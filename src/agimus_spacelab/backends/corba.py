@@ -1,5 +1,7 @@
 """
-CORBA manipulation planner implementation.
+CORBA backend implementation for manipulation planning.
+
+This backend uses hpp-manipulation-corba for communication with HPP.
 """
 
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
@@ -35,11 +37,11 @@ except ImportError:
         from hpp.corbaserver.manipulation import ConstraintGraph
 
 
-class CorbaManipulationPlanner:
+class CorbaBackend:
     """CORBA backend implementation for manipulation planning."""
     
     def __init__(self):
-        """Initialize CORBA planner."""
+        """Initialize CORBA backend."""
         if not HAS_CORBA:
             raise ImportError(
                 "CORBA backend not available. "
@@ -547,7 +549,12 @@ class CorbaManipulationPlanner:
         self.ps.setErrorThreshold(error_threshold)
 
 
+# Alias for backward compatibility
+CorbaManipulationPlanner = CorbaBackend
+
+
 __all__ = [
+    "CorbaBackend",
     "CorbaManipulationPlanner",
     "ConstraintResult",
     "HAS_CORBA",
