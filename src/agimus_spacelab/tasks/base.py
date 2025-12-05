@@ -157,11 +157,11 @@ class ManipulationTask:
         # 6. Solve
         if solve and "q_goal" in configs:
             print("\n6. Solving planning problem...")
-            self.ps.setInitialConfig(configs["q_init"])
-            self.ps.addGoalConfig(configs["q_goal"])
+            self.planner.set_initial_config(configs["q_init"])
+            self.planner.add_goal_config(configs["q_goal"])
             
             try:
-                self.ps.solve()
+                self.planner.solve()
                 print("   ✓ Solution found!")
                 
                 if visualize:
