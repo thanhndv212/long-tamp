@@ -39,7 +39,6 @@ from .backends import (
     get_backend,
     CorbaBackend,
     PyHPPBackend,
-    ManipulationTaskBase,
 )
 
 from .planning import (
@@ -77,7 +76,6 @@ __all__ = [
     "check_backend",
     "CorbaBackend",
     "PyHPPBackend",
-    "ManipulationTaskBase",
     # Planning
     "create_planner",
     "SceneBuilder",

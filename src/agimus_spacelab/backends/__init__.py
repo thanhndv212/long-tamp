@@ -10,14 +10,6 @@ Usage:
     from agimus_spacelab.backends import get_available_backends
 """
 
-from .base import (
-    ManipulationTaskBase,
-    RobotBase,
-    PlannerBase,
-    GraphBase,
-    ViewerBase,
-)
-
 # Import backend implementations
 HAS_CORBA = False
 HAS_PYHPP = False
@@ -89,12 +81,6 @@ def get_backend(name: str = "auto"):
 
 
 __all__ = [
-    # Base classes
-    "ManipulationTaskBase",
-    "RobotBase",
-    "PlannerBase",
-    "GraphBase",
-    "ViewerBase",
     # Backend implementations
     "CorbaBackend",
     "PyHPPBackend",
