@@ -7,6 +7,7 @@ This backend uses hpp-python for direct Python bindings to HPP.
 from typing import Any, Dict, List, Optional
 import numpy as np
 from pinocchio import SE3
+from .base import BackendBase, ConstraintResult
 
 
 try:
@@ -25,16 +26,7 @@ except ImportError:
     HAS_PYHPP = False
 
 
-class ConstraintResult:
-    """Result from applying state constraints."""
-    
-    def __init__(self, success: bool, configuration: np.ndarray, error: float):
-        self.success = success
-        self.configuration = configuration
-        self.error = error
-
-
-class PyHPPBackend:
+class PyHPPBackend(BackendBase):
     """PyHPP backend implementation for manipulation planning."""
     
     def __init__(self):

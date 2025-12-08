@@ -7,15 +7,7 @@ This backend uses hpp-manipulation-corba for communication with HPP.
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import numpy as np
 from ..utils import parse_package_uri
-
-
-class ConstraintResult:
-    """Result from applying state constraints."""
-    
-    def __init__(self, success: bool, configuration: np.ndarray, error: float):
-        self.success = success
-        self.configuration = configuration
-        self.error = error
+from .base import BackendBase, ConstraintResult
 
 
 try:
@@ -37,7 +29,7 @@ except ImportError:
         from hpp.corbaserver.manipulation import ConstraintGraph
 
 
-class CorbaBackend:
+class CorbaBackend(BackendBase):
     """CORBA backend implementation for manipulation planning."""
     
     def __init__(self):

@@ -7,8 +7,10 @@ This module provides unified access to different backend implementations:
 
 Usage:
     from agimus_spacelab.backends import CorbaBackend, PyHPPBackend
-    from agimus_spacelab.backends import get_available_backends
+    from agimus_spacelab.backends import get_available_backends, BackendBase
 """
+
+from .base import BackendBase, ConstraintResult
 
 # Import backend implementations
 HAS_CORBA = False
@@ -81,6 +83,9 @@ def get_backend(name: str = "auto"):
 
 
 __all__ = [
+    # Base class
+    "BackendBase",
+    "ConstraintResult",
     # Backend implementations
     "CorbaBackend",
     "PyHPPBackend",

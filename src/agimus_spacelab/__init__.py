@@ -37,6 +37,8 @@ __license__ = "LGPL-3.0"
 from .backends import (
     get_available_backends,
     get_backend,
+    BackendBase,
+    ConstraintResult,
     CorbaBackend,
     PyHPPBackend,
 )
@@ -74,6 +76,8 @@ __all__ = [
     "get_available_backends",
     "get_backend",
     "check_backend",
+    "BackendBase",
+    "ConstraintResult",
     "CorbaBackend",
     "PyHPPBackend",
     # Planning
@@ -91,4 +95,3 @@ __all__ = [
     "visualize_constraint_graph",
     "print_joint_info",
 ]
-__license__ = "LGPL-3.0"
