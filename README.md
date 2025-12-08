@@ -47,7 +47,8 @@ make install
 ### Create a Manipulation Task
 
 ```python
-from spacelab_tools import ManipulationTask, SpaceLabSceneBuilder
+from agimus_spacelab.tasks import ManipulationTask
+from agimus_spacelab.planning import SceneBuilder
 
 class MyTask(ManipulationTask):
     def get_objects(self):
@@ -74,7 +75,7 @@ task.run(visualize=True, solve=False)
 ### Multi-Arm Orchestration
 
 ```python
-from task_orchestration import TaskOrchestrator, TaskBuilder
+from agimus_spacelab.tasks import TaskOrchestrator, TaskBuilder
 
 orchestrator = TaskOrchestrator(max_concurrent_tasks=2)
 orchestrator.setup_resources(arms=["UR10", "VISPA"], objects=["RS1", "RS2"])
@@ -88,19 +89,39 @@ orchestrator.add_task(t2)
 orchestrator.run()  # Executes in parallel
 ```
 
-## Project Structure
+## Package Structure
 
-See detailed documentation in `script/spacelab/README.md`
+The package is organized into logical modules:
 
 ```
-script/spacelab/
-├── spacelab_config.py              # Robot/object configurations
-├── spacelab_tools.py               # Reusable utilities (~700 lines)
-├── task_orchestration.py           # Multi-arm orchestration
-├── task_grasp_frame_gripper.py     # Example task (refactored)
-├── example_collaborative_assembly.py  # Multi-arm demo
-├── visualize_scene.py              # Scene visualization
-└── README.md                       # Architecture & usage guide
+src/agimus_spacelab/
+├── __init__.py                  # Main exports
+├── backends/                    # Backend implementations
+│   ├── __init__.py
+│   ├── base.py                  # Backend base class
+│   ├── corba.py                 # CORBA backend (hpp-manipulation-corba)
+│   └── pyhpp.py                 # PyHPP backend (hpp-python)
+├── planning/                    # Planning tools
+│   ├── __init__.py
+│   ├── planner.py               # create_planner() factory function
+│   ├── scene.py                 # SceneBuilder
+│   ├── constraints.py           # ConstraintBuilder
+│   ├── graph.py                 # GraphBuilder
+│   └── config_generator.py      # ConfigGenerator
+├── tasks/                       # Task orchestration
+│   ├── __init__.py
+│   ├── base.py                  # ManipulationTask base class
+│   ├── orchestration.py         # TaskOrchestrator, TaskBuilder
+│   └── bridge.py                # PlanningBridge
+├── visualization/               # Visualization tools
+│   ├── __init__.py
+│   └── viz.py                   # Graph visualization, frame display
+├── config/                      # Configuration classes
+│   ├── __init__.py
+│   └── rules.py                 # RuleGenerator, SpaceLabScenario
+└── utils/                       # Utilities
+    ├── __init__.py
+    └── transforms.py            # Transform helpers (xyzrpy_to_se3, etc.)
 ```
 
 ## Architecture
@@ -120,12 +141,12 @@ Motion Planning Layer (HPP)
 ```
 
 **Key Components:**
-- `SpaceLabSceneBuilder`: Fluent API for scene setup
+- `SceneBuilder`: Fluent API for scene setup
 - `ConstraintBuilder`: Helper for constraint creation
-- `ConfigurationGenerator`: Waypoint generation
+- `ConfigGenerator`: Waypoint generation
 - `ManipulationTask`: Base class for tasks
 - `TaskOrchestrator`: Multi-arm coordination
-- `AtomicTask`: Indivisible manipulation actions
+- `create_planner()`: Factory for backend-specific planners
 
 ## Dependencies
 
@@ -153,4 +174,4 @@ Built on [HPP](https://humanoid-path-planner.github.io/hpp-doc/), [Pinocchio](ht
 
 ---
 
-**Version**: 0.1.0 | **Last Updated**: December 2025
+**Version**: 0.2.0 | **Last Updated**: December 2025
