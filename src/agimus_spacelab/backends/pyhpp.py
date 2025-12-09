@@ -19,7 +19,12 @@ try:
         Problem,
         createProgressiveProjector,
     )
-    from pyhpp.core import createDichotomy
+    from pyhpp.core import (
+        createDiscretizedCollisionAndJointBound,
+        createDiscretizedCollision,
+        createDiscretizedJointBound,
+        createDiscretized,
+    )
     from pyhpp.gepetto.viewer import Viewer
     HAS_PYHPP = True
 except ImportError:
@@ -45,7 +50,7 @@ class PyHPPBackend(BackendBase):
         self.path = None
         
         # Configuration options for path validation and projection
-        self._use_dichotomy = True
+        self._use_pathvalidation = True
         self._use_progressive_projector = True
 
     def model(self):
@@ -404,7 +409,7 @@ class PyHPPBackend(BackendBase):
         Args:
             enabled: Whether to use dichotomy for path validation
         """
-        self._use_dichotomy = enabled
+        self._use_pathvalidation = enabled
 
     def set_progressive_projector(self, enabled: bool):
         """Enable or disable progressive path projector.
@@ -441,13 +446,16 @@ class PyHPPBackend(BackendBase):
         if self.problem is None:
             raise RuntimeError("Must create problem first")
 
-        # Configure path validation with dichotomy if enabled
-        if self._use_dichotomy:
-            createDichotomy(self.problem)
-        
+        # Configure path validation if enabled
+        if self._use_pathvalidation:
+            self.problem.pathValidation = createDiscretized(
+                self.device.asPinDevice(), validation_step)
         # Configure path projection if enabled
         if self._use_progressive_projector:
-            createProgressiveProjector(self.problem)
+            self.problem.pathProjector = createProgressiveProjector(
+                self.problem.distance(), self.problem.steeringMethod(),
+                projector_step
+            )
         return self
 
 
