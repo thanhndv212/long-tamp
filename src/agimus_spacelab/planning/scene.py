@@ -66,28 +66,30 @@ class SceneBuilder:
         else:
             raise ValueError(f"Unknown backend: {backend}. Use 'corba' or 'pyhpp'")
         
-    def load_robot(self, composite_name: List[str] = ["spacelab"],
-                   robot_name: List[str] = ["spacelab"]) -> 'SceneBuilder':
+    def load_robot(self, composite_names: List[str],
+                   robot_names: List[str]) -> 'SceneBuilder':
         """Load the composite robot (UR10 + VISPA)."""
-        print(f"   Loading robot ({robot_name})...")
-        for id, rb_name in enumerate(robot_name):
+        print(f"   Loading robot ({robot_names})...")
+        for id, rb_name in enumerate(robot_names):
             if rb_name in self.FILE_PATHS["robot"]:
                 self.planner.load_robot(
                     robot_name=rb_name,
                     urdf_path=self.FILE_PATHS["robot"][rb_name]["urdf"],
                     srdf_path=self.FILE_PATHS["robot"][rb_name]["srdf"],
                     root_joint_type="anchor",
-                    composite_name=composite_name[id]
+                    composite_name=composite_names[id]
             )
             else:
                 print(f"      ⚠ Unknown robot: {rb_name}")
         return self
         
-    def load_environment(self, name: List[str] = ["ground_demo"]) -> 'SceneBuilder':
+    def load_environment(self, environment_names: List[str]) -> 'SceneBuilder':
         """Load the environment (dispenser, ground, etc.)."""
-        print(f"   Loading environment ({name})...")
-        for env_name in name:
+        print(f"   Loading environment ({environment_names})...")
+        for env_name in environment_names:
             if env_name in self.FILE_PATHS["environment"]:
+                print(f"      Loading environment: {env_name}")
+                print(f"         from: {self.FILE_PATHS['environment'][env_name]}")
                 self.planner.load_environment(
                     name=env_name,
                     urdf_path=self.FILE_PATHS["environment"][env_name]
@@ -180,8 +182,11 @@ class SceneBuilder:
         ps = self.planner.get_problem()
         return self.planner, robot, ps
         
-    def build(self, 
-              objects: List[str],
+    def build(self,
+              robot_names: List[str],
+              composite_names: List[str],
+              environment_names: List[str],
+              object_names: List[str],
               validation_step: float = 0.01,
               projector_step: float = 0.1) -> Tuple[Any, Any, Any]:
         """
@@ -196,9 +201,10 @@ class SceneBuilder:
             Tuple of (planner, robot, ps)
         """
         print("\n1. Setting up scene...")
-        (self.load_robot()
-            .load_environment()
-            .load_objects(objects)
+        (self.load_robot(composite_names=composite_names,
+                         robot_names=robot_names)
+            .load_environment(environment_names=environment_names)
+            .load_objects(object_names=object_names)
             .set_joint_bounds()
             .configure_path_validation(validation_step, projector_step))
         

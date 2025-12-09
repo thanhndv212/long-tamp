@@ -35,6 +35,10 @@ class ManipulationTask:
         self.ps = None
         self.graph = None
         self.config_gen = None
+        self.robots_names = []
+        self.composite_names = []
+        self.objects_names = []
+        self.environment_names = []
     
     def get_joint_groups(self) -> List[str]:
         """
@@ -110,7 +114,10 @@ class ManipulationTask:
         
         # 1. Scene setup
         self.planner, self.robot, self.ps = self.scene_builder.build(
-            objects=self.get_objects(),
+            robot_names=self.robots_names,
+            composite_names=self.composite_names,
+            environment_names=self.environment_names,
+            object_names=self.objects_names,
             validation_step=validation_step,
             projector_step=projector_step
         )
