@@ -36,6 +36,7 @@ config_dir = Path(__file__).parent.parent / "config"
 sys.path.insert(0, str(config_dir))
 
 from graspball_config import (
+    PATHS,
     InitialConfigurations,
     JointBounds,
     ManipulationConfig,
@@ -98,7 +99,9 @@ class GraspBallTask(ManipulationTask):
             backend: "corba" or "pyhpp" - which backend to use
         """
         super().__init__(
-            "Grasp Ball Manipulation",
+            joint_bounds=JointBounds,
+            FILE_PATHS=PATHS,
+            task_name="Grasp Ball Manipulation",
             backend=backend
         )
         self.config = ManipulationConfig
@@ -145,8 +148,10 @@ class GraspBallTask(ManipulationTask):
             # Load robot
             print("\n1. Loading robot and objects...")
             self.robot = self.planner.load_robot(
-                composite_name="ur5-pokeball",
-                robot_name="ur5",
+                composite_name=[
+                    "ur5-pokeball",
+                ],
+                robot_name=["ur5"],
                 urdf_path=cfg.ROBOT_URDF,
                 srdf_path=cfg.ROBOT_SRDF
             )
@@ -972,8 +977,12 @@ class GraspBallTask(ManipulationTask):
         Overrides base class to use custom scene setup.
         """
         # 1. Custom scene setup (not using SceneBuilder)
-        self.setup_scene(validation_step, projector_step)
-        
+        # self.setup_scene(validation_step, projector_step)
+        self.planner, self.robot, self.ps = self.scene_builder.build(
+            objects=self.get_objects(),
+            validation_step=validation_step,
+            projector_step=projector_step
+        )
         # 2. Create constraints
         print("\n2. Creating constraints...")
         self.create_constraints()

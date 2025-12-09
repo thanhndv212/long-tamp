@@ -8,7 +8,15 @@ manipulation scenario for both CORBA and PyHPP backends.
 from typing import Dict, List
 import numpy as np
 
-
+PATHS = {
+    "robot": {"UR5": {"urdf": "package://hpp_practicals/urdf/ur5_gripper.urdf",
+        "srdf": ""}},
+    "objects": {
+        "pokeball": "package://hpp_practicals/urdf/ur_benchmark/pokeball.urdf",
+    },
+    "environment": {"ground": "package://hpp_practicals/urdf/ur_benchmark/ground.urdf",
+                    "box": "package://hpp_practicals/urdf/ur_benchmark/box.urdf"},
+}
 class RobotJoints:
     """Joint names for UR5 robot with gripper."""
     
