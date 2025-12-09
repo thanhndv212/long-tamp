@@ -5,7 +5,7 @@ Configuration generation and management for manipulation tasks.
 Provides ConfigGenerator for generating and validating configurations.
 """
 
-from typing import Dict, List, Tuple, Optional
+from typing import List, Tuple, Optional
 import numpy as np
 
 # Import from package config
@@ -25,7 +25,7 @@ class ConfigGenerator:
     Handles projection, random sampling, and waypoint generation.
     """
     
-    def __init__(self, robot, graph, ps, backend: str = "corba",
+    def __init__(self, robot, graph, planner, ps, backend: str = "corba",
                  max_attempts: int = 1000):
         """
         Initialize configuration generator.
@@ -33,12 +33,14 @@ class ConfigGenerator:
         Args:
             robot: Robot instance
             graph: ConstraintGraph or Graph instance
+            planner: Unified Planner instance
             ps: ProblemSolver or Problem instance
             backend: "corba" or "pyhpp"
             max_attempts: Maximum random sampling attempts
         """
         self.robot = robot
         self.graph = graph
+        self.planner = planner
         self.ps = ps
         self.backend = backend.lower()
         self.max_attempts = max_attempts
@@ -122,26 +124,38 @@ class ConfigGenerator:
         return False, None
         
     def build_robot_config(
-        self, ur10_angles: List[float] = None,
-        vispa_base: List[float] = None,
-        vispa_arm: List[float] = None
+        self, joint_groups: Optional[List[str]] = None
     ) -> List[float]:
         """
-        Build robot configuration from joint angles.
+        Build robot configuration from joint group names.
         
         Args:
-            ur10_angles: UR10 joint angles
-            vispa_base: VISPA base config
-            vispa_arm: VISPA arm config
+            joint_groups: List of joint group names to include.
+                          Keys should match InitialConfigurations attributes
+                          (e.g., ["UR10", "VISPA_BASE", "VISPA_ARM"]).
+                          If None, uses default robot joint groups.
             
         Returns:
             Combined robot configuration
+            
+        Examples:
+            # Use all defaults
+            config = gen.build_robot_config()
+            
+            # Use specific groups
+            config = gen.build_robot_config(["UR10", "VISPA_ARM"])
         """
-        ur10 = ur10_angles if ur10_angles else InitialConfigurations.UR10
-        vb = vispa_base if vispa_base else InitialConfigurations.VISPA_BASE
-        va = vispa_arm if vispa_arm else InitialConfigurations.VISPA_ARM
+        if joint_groups is None:
+            joint_groups = ["UR10", "VISPA_BASE", "VISPA_ARM"]
         
-        return list(ur10) + list(vb) + list(va)
+        q_robot = []
+        for group in joint_groups:
+            if hasattr(InitialConfigurations, group):
+                q_robot.extend(list(getattr(InitialConfigurations, group)))
+            else:
+                print(f"       ⚠ No initial config for joint group '{group}'")
+                # Add zero configuration as fallback
+        return q_robot
         
     def build_object_configs(self, object_names: List[str]) -> List[float]:
         """
@@ -169,11 +183,24 @@ class ConfigGenerator:
                 
         return q_objects
         
-    def get_robot_dof(self) -> int:
-        """Get total robot DOF (UR10 + VISPA_BASE + VISPA_ARM)."""
-        return len(InitialConfigurations.UR10 + 
-                   InitialConfigurations.VISPA_BASE + 
-                   InitialConfigurations.VISPA_ARM)
+    def get_robot_dof(self, joint_groups: Optional[List[str]] = None) -> int:
+        """
+        Get total robot DOF for specified joint groups.
+        
+        Args:
+            joint_groups: List of joint group names to include.
+                          If None, uses default ["UR10", "VISPA_BASE", "VISPA_ARM"].
+                          
+        Returns:
+            Total degrees of freedom
+        """
+        if joint_groups is None:
+            joint_groups = ["UR10", "VISPA_BASE", "VISPA_ARM"]
+        total_dof = 0
+        for group in joint_groups:
+            if hasattr(InitialConfigurations, group):
+                total_dof += len(getattr(InitialConfigurations, group))
+        return total_dof
         
     def modify_object_pose(
         self, q: List[float], object_index: int,

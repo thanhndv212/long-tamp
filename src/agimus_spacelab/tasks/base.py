@@ -35,7 +35,14 @@ class ManipulationTask:
         self.ps = None
         self.graph = None
         self.config_gen = None
-        
+    
+    def get_joint_groups(self) -> List[str]:
+        """
+        Define which joint groups to use for the robot.
+        Override in subclass.
+        """
+        raise NotImplementedError("Subclass must implement get_joint_groups()")
+
     def get_objects(self) -> List[str]:
         """
         Define which objects are needed for this task.
@@ -72,7 +79,8 @@ class ManipulationTask:
         Override in subclass if custom logic needed.
         """
         objects = self.get_objects()
-        q_robot = self.config_gen.build_robot_config()
+        joint_groups = self.get_joint_groups()
+        q_robot = self.config_gen.build_robot_config(joint_groups)
         q_objects = self.config_gen.build_object_configs(objects)
         return q_robot + q_objects
         
@@ -120,7 +128,7 @@ class ManipulationTask:
         
         # 5. Initialize configuration generator
         self.config_gen = ConfigGenerator(
-            self.robot, self.graph, self.ps, backend=self.backend
+            self.robot, self.graph, self.planner, self.ps, backend=self.backend
         )
         
         print("\n   ✓ Task setup complete")
