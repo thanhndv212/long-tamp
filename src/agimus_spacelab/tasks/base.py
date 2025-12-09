@@ -170,7 +170,7 @@ class ManipulationTask:
             
             try:
                 self.planner.solve()
-                print("   ✓ Solution found!")
+                # print("   ✓ Solution found!")
                 
                 if visualize:
                     print("\n7. Playing solution path...")

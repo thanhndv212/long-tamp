@@ -54,7 +54,7 @@ class CorbaBackend(BackendBase):
         
         # Configuration options for path validation
         self._use_path_optimization = True
-        self._use_path_projection = True
+        self._use_path_projection = False
 
     def model(self):
         """Get the Pinocchio model."""
@@ -206,11 +206,17 @@ class CorbaBackend(BackendBase):
     
     def set_initial_config(self, q: np.ndarray):
         """Set initial configuration."""
-        self.ps.setInitialConfig(q.tolist())
+        if isinstance(q, list):
+            self.ps.setInitialConfig(q)
+        else:
+            self.ps.setInitialConfig(q.tolist())
     
     def add_goal_config(self, q: np.ndarray):
         """Add goal configuration."""
-        self.ps.addGoalConfig(q.tolist())
+        if isinstance(q, list):
+            self.ps.addGoalConfig(q)
+        else:
+            self.ps.addGoalConfig(q.tolist())
     
     def create_constraint_graph(
         self,
@@ -560,9 +566,9 @@ class CorbaBackend(BackendBase):
             self.ps.setParameter("PathProjection/ProgressBased", True)
         
         # Set max iterations for steering method
-        self.ps.setParameter(
-            "SteeringMethod/Kinodynamic/maxIterations", max_iterations
-        )
+        # self.ps.setParameter(
+        #     "SteeringMethod/Kinodynamic/maxIterations", max_iterations
+        # )
 
 # Alias for backward compatibility
 CorbaManipulationPlanner = CorbaBackend
