@@ -35,10 +35,6 @@ class ManipulationTask:
         self.ps = None
         self.graph = None
         self.config_gen = None
-        self.robots_names = []
-        self.composite_names = []
-        self.objects_names = []
-        self.environment_names = []
     
     def get_joint_groups(self) -> List[str]:
         """
@@ -53,6 +49,34 @@ class ManipulationTask:
         Override in subclass.
         """
         raise NotImplementedError("Subclass must implement get_objects()")
+    
+    def get_robot_names(self) -> List[str]:
+        """
+        Define robot names to load.
+        Override in subclass. Default: empty list.
+        """
+        return []
+    
+    def get_composite_names(self) -> List[str]:
+        """
+        Define composite robot names.
+        Override in subclass. Default: empty list.
+        """
+        return []
+    
+    def get_object_names(self) -> List[str]:
+        """
+        Define object names to load.
+        Override in subclass. Default: uses get_objects().
+        """
+        return self.get_objects()
+    
+    def get_environment_names(self) -> List[str]:
+        """
+        Define environment names to load.
+        Override in subclass. Default: empty list.
+        """
+        return []
         
     def create_constraints(self) -> None:
         """
@@ -114,10 +138,10 @@ class ManipulationTask:
         
         # 1. Scene setup
         self.planner, self.robot, self.ps = self.scene_builder.build(
-            robot_names=self.robots_names,
-            composite_names=self.composite_names,
-            environment_names=self.environment_names,
-            object_names=self.objects_names,
+            robot_names=self.get_robot_names(),
+            environment_names=self.get_environment_names(),
+            composite_names=self.get_composite_names(),
+            object_names=self.get_object_names(),
             validation_step=validation_step,
             projector_step=projector_step
         )
