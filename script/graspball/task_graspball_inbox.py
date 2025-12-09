@@ -30,7 +30,7 @@ import numpy as np
 
 from agimus_spacelab.tasks import ManipulationTask
 from agimus_spacelab.planning import ConstraintBuilder
-
+from agimus_spacelab.visualization import print_joint_info, visualize_constraint_graph, displayHandle, displayGripper
 # Add config directory
 config_dir = Path(__file__).parent.parent / "config"
 sys.path.insert(0, str(config_dir))
@@ -197,7 +197,7 @@ class GraspBallTask(ManipulationTask):
             
             # Load robot
             self.robot = self.planner.load_robot(
-                name="ur5",
+                robot_name="ur5",
                 urdf_path=cfg.ROBOT_URDF,
                 srdf_path=cfg.ROBOT_SRDF,
                 root_joint_type="anchor"
@@ -228,19 +228,20 @@ class GraspBallTask(ManipulationTask):
             
             # Configure path validation
             from pyhpp.manipulation import createProgressiveProjector
-            from pyhpp.core import DiscretizedCollisionChecking
+            from pyhpp.core import createDiscretized
             
             device = self.robot.asPinDevice()
             problem = self.ps
             
             # Set path projector
-            problem.steeringMethod(
-                createProgressiveProjector(device, 0.2, projector_step)
+            problem.pathProjector = createProgressiveProjector(
+                problem.distance(), problem.steeringMethod(),
+                projector_step
             )
             
             # Set path validation
-            problem.pathValidation(
-                DiscretizedCollisionChecking.create(device, validation_step)
+            problem.pathValidation = createDiscretized(
+                device, validation_step
             )
         
         print("   ✓ Robot and objects loaded")
@@ -1045,6 +1046,23 @@ def main(
             print("\nTo replay path:")
             print("  task.planner.play_path(0)")
     
+        # Visualize constraint graph
+    print("\n📊 Generating constraint graph visualization...")
+    # Pass state/edge dicts for PyHPP backend
+    states_dict = getattr(task, 'pyhpp_states', None)
+    edges_dict = getattr(task, 'pyhpp_edges', None)
+    edge_topology = getattr(task, 'pyhpp_edge_topology', None)
+    viz_path = visualize_constraint_graph(
+        task.graph,
+        output_path="constraint_graph",
+        states_dict=states_dict,
+        edges_dict=edges_dict,
+        edge_topology=edge_topology
+    )
+    if viz_path:
+        print(f"✓ Graph visualization saved to: {viz_path}")
+    
+
     return task, result
 
 
