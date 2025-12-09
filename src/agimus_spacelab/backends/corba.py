@@ -140,6 +140,8 @@ class CorbaBackend(BackendBase):
         
         # Initialize problem solver
         self.ps = ProblemSolver(self.robot)
+        if self.ps is None:
+            raise RuntimeError("Failed to create ProblemSolver")
 
         return self.robot
     
@@ -153,7 +155,10 @@ class CorbaBackend(BackendBase):
     ):
         """Load environment model."""
         if self.vf is None:
-            self.vf = ViewerFactory(self.ps)
+            if self.ps is not None:
+                self.vf = ViewerFactory(self.ps)
+            else:
+                raise RuntimeError("Problem solver not created yet")
         
         pkg_name, urdf_name = parse_package_uri(urdf_path)
         if meshpkg_name is None:
