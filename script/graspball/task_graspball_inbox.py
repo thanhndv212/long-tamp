@@ -109,6 +109,10 @@ class GraspBallTask(ManipulationTask):
         self.pyhpp_states = None
         self.pyhpp_edges = None
     
+        self.robot_names = ["ur5"]
+        self.composite_names = ["ur5-pokeball"]
+        self.object_names = ["pokeball"]
+        self.environment_names = ["ground", "box"]
     def get_joint_groups(self) -> List[str]:
         """Return joint groups from configuration."""
         return ["UR5"]  # Only UR5 robot joints
@@ -979,9 +983,29 @@ class GraspBallTask(ManipulationTask):
         # 1. Custom scene setup (not using SceneBuilder)
         # self.setup_scene(validation_step, projector_step)
         self.planner, self.robot, self.ps = self.scene_builder.build(
-            objects=self.get_objects(),
+            robot_names=self.robot_names,
+            environment_names=self.environment_names,
+            composite_names=self.composite_names,
+            object_names=self.object_names,
             validation_step=validation_step,
             projector_step=projector_step
+        )
+        
+        # Position box walls
+        cfg = self.config
+        box_x = cfg.BOX_X
+        box_off = cfg.BOX_OFFSET
+        self.scene_builder.move_obstacle(
+            'box/base_link_0', [box_x + box_off, 0, 0.04], [0, 0, 0, 1]
+        )
+        self.scene_builder.move_obstacle(
+            'box/base_link_1', [box_x - box_off, 0, 0.04], [0, 0, 0, 1]
+        )
+        self.scene_builder.move_obstacle(
+            'box/base_link_2', [box_x, box_off, 0.04], [0, 0, 0, 1]
+        )
+        self.scene_builder.move_obstacle(
+            'box/base_link_3', [box_x, -box_off, 0.04], [0, 0, 0, 1]
         )
         # 2. Create constraints
         print("\n2. Creating constraints...")

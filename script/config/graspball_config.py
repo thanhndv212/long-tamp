@@ -9,7 +9,7 @@ from typing import Dict, List
 import numpy as np
 
 PATHS = {
-    "robot": {"UR5": {"urdf": "package://hpp_practicals/urdf/ur5_gripper.urdf",
+    "robot": {"ur5": {"urdf": "package://hpp_practicals/urdf/ur5_gripper.urdf",
         "srdf": ""}},
     "objects": {
         "pokeball": "package://hpp_practicals/urdf/ur_benchmark/pokeball.urdf",
