@@ -30,7 +30,12 @@ import numpy as np
 
 from agimus_spacelab.tasks import ManipulationTask
 from agimus_spacelab.planning import ConstraintBuilder
-from agimus_spacelab.visualization import print_joint_info, visualize_constraint_graph, displayHandle, displayGripper
+from agimus_spacelab.visualization import (
+    print_joint_info,
+    visualize_constraint_graph,
+    visualize_all_handles,
+    visualize_all_grippers,
+)
 # Add config directory
 config_dir = Path(__file__).parent.parent / "config"
 sys.path.insert(0, str(config_dir))
@@ -1058,6 +1063,54 @@ def main(
     
     # Run task
     result = task.run(visualize=visualize, solve=solve)
+    
+    # Visualize handles and grippers if viewer available
+    if visualize and result.get('viewer'):
+        print("\n" + "=" * 70)
+        print("Visualizing Handles and Grippers")
+        print("=" * 70)
+        viewer = result['viewer']
+        
+        # Collect handle names (pokeball handle)
+        handle_names = ["pokeball/handle"]
+        
+        # Visualize handles with approach arrows
+        print("\n  Handles (green frames, cyan approach arrows):")
+        try:
+            visualize_all_handles(
+                viewer, handle_names,
+                show_approach=True,
+                frame_color=[0, 0.8, 0, 1],   # Green
+                arrow_color=[0, 1, 1, 1],      # Cyan
+                axis_length=0.03,
+                arrow_length=0.08
+            )
+            for handle_name in handle_names:
+                print(f"    ✓ {handle_name}")
+        except Exception as e:
+            print(f"    ⚠ Handle visualization failed: {e}")
+        
+        # Visualize grippers with approach arrows
+        gripper_names = ["ur5/gripper"]
+        print("\n  Grippers (red frames, orange approach arrows):")
+        try:
+            visualize_all_grippers(
+                viewer, gripper_names,
+                show_approach=True,
+                frame_color=[1, 0, 0, 1],      # Red
+                arrow_color=[1, 0.5, 0, 1],    # Orange
+                axis_length=0.03,
+                arrow_length=0.08
+            )
+            for gripper_name in gripper_names:
+                print(f"    ✓ {gripper_name}")
+        except Exception as e:
+            print(f"    ⚠ Gripper visualization failed: {e}")
+        
+        try:
+            viewer.client.gui.refresh()
+        except Exception:
+            pass
     
     # Print summary
     print("\n" + "=" * 70)
