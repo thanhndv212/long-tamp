@@ -66,27 +66,34 @@ class SceneBuilder:
         else:
             raise ValueError(f"Unknown backend: {backend}. Use 'corba' or 'pyhpp'")
         
-    def load_robot(self, composite_name: str = "spacelab",
-                   robot_name: str = "spacelab") -> 'SceneBuilder':
+    def load_robot(self, composite_name: List[str] = ["spacelab"],
+                   robot_name: List[str] = ["spacelab"]) -> 'SceneBuilder':
         """Load the composite robot (UR10 + VISPA)."""
-        print("   Loading robot...")
-        if robot_name in self.FILE_PATHS["robot"]:
-            self.planner.load_robot(
-                robot_name=robot_name,
-                urdf_path=self.FILE_PATHS["robot"][robot_name]["urdf"],
-                srdf_path=self.FILE_PATHS["robot"][robot_name]["srdf"],
-                root_joint_type="anchor",
-                composite_name=composite_name
+        print(f"   Loading robot ({robot_name})...")
+        for id, rb_name in enumerate(robot_name):
+            if rb_name in self.FILE_PATHS["robot"]:
+                self.planner.load_robot(
+                    robot_name=rb_name,
+                    urdf_path=self.FILE_PATHS["robot"][rb_name]["urdf"],
+                    srdf_path=self.FILE_PATHS["robot"][rb_name]["srdf"],
+                    root_joint_type="anchor",
+                    composite_name=composite_name[id]
             )
+            else:
+                print(f"      ⚠ Unknown robot: {rb_name}")
         return self
         
-    def load_environment(self, name: str = "ground_demo") -> 'SceneBuilder':
+    def load_environment(self, name: List[str] = ["ground_demo"]) -> 'SceneBuilder':
         """Load the environment (dispenser, ground, etc.)."""
-        print("   Loading environment...")
-        self.planner.load_environment(
-            name=name,
-            urdf_path=self.FILE_PATHS["environment"]
-        )
+        print(f"   Loading environment ({name})...")
+        for env_name in name:
+            if env_name in self.FILE_PATHS["environment"]:
+                self.planner.load_environment(
+                    name=env_name,
+                    urdf_path=self.FILE_PATHS["environment"][env_name]
+                )
+            else:
+                print(f"      ⚠ Unknown environment: {env_name}")
         return self
         
     def load_objects(self, object_names: List[str]) -> 'SceneBuilder':
