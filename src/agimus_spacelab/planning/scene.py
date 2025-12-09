@@ -31,7 +31,7 @@ class SceneBuilder:
     Handles loading robots, environment, objects, and configuring collision checking.
     """
     
-    def __init__(self, planner: Optional[Any] = None,
+    def __init__(self, joint_bounds=None, FILE_PATHS: Optional[Dict[str, Any]] = None, planner: Optional[Any] = None,
                  backend: str = "corba"):
         """
         Initialize scene builder.
@@ -42,8 +42,19 @@ class SceneBuilder:
         """
         self.backend = backend.lower()
         self.loaded_objects = []
-        self.DEFAULT_PATHS = DEFAULT_PATHS
         
+        if FILE_PATHS is None:
+            self.FILE_PATHS = DEFAULT_PATHS
+        else:
+            self.FILE_PATHS = FILE_PATHS
+
+        if joint_bounds is None:
+            self.joint_bounds = JointBounds
+            print("   Using default joint bounds", type(self.joint_bounds))
+        else:
+            self.joint_bounds = joint_bounds
+        print("   Using custom joint bounds", type(self.joint_bounds))
+
         if self.backend == "corba":
             if not HAS_CORBA:
                 raise ImportError("CORBA backend not available")
@@ -59,11 +70,11 @@ class SceneBuilder:
                    robot_name: str = "spacelab") -> 'SceneBuilder':
         """Load the composite robot (UR10 + VISPA)."""
         print("   Loading robot...")
-        if robot_name in self.DEFAULT_PATHS["robot"]:
+        if robot_name in self.FILE_PATHS["robot"]:
             self.planner.load_robot(
                 robot_name=robot_name,
-                urdf_path=self.DEFAULT_PATHS["robot"][robot_name]["urdf"],
-                srdf_path=self.DEFAULT_PATHS["robot"][robot_name]["srdf"],
+                urdf_path=self.FILE_PATHS["robot"][robot_name]["urdf"],
+                srdf_path=self.FILE_PATHS["robot"][robot_name]["srdf"],
                 root_joint_type="anchor",
                 composite_name=composite_name
             )
@@ -74,7 +85,7 @@ class SceneBuilder:
         print("   Loading environment...")
         self.planner.load_environment(
             name=name,
-            urdf_path=self.DEFAULT_PATHS["environment"]
+            urdf_path=self.FILE_PATHS["environment"]
         )
         return self
         
@@ -87,13 +98,13 @@ class SceneBuilder:
         """
         print(f"   Loading {len(object_names)} object(s)...")
         for obj_name in object_names:
-            if obj_name not in self.DEFAULT_PATHS["objects"]:
+            if obj_name not in self.FILE_PATHS["objects"]:
                 print(f"      ⚠ Unknown object: {obj_name}")
                 continue
             
             self.planner.load_object(
                 name=obj_name,
-                urdf_path=self.DEFAULT_PATHS["objects"][obj_name],
+                urdf_path=self.FILE_PATHS["objects"][obj_name],
                 root_joint_type="freeflyer"
             )
             self.loaded_objects.append(obj_name)
@@ -103,7 +114,7 @@ class SceneBuilder:
     def set_joint_bounds(self) -> 'SceneBuilder':
         """Set joint bounds for all loaded freeflyer objects."""
         print("   Setting joint bounds...")
-        bounds = JointBounds.freeflyer_bounds()
+        bounds = self.joint_bounds.freeflyer_bounds()
         
         for obj_name in self.loaded_objects:
             joint_name = f"{obj_name}/root_joint"

@@ -5,11 +5,9 @@ Base class for manipulation tasks.
 Provides ManipulationTask base class with common structure.
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from agimus_spacelab.planning import SceneBuilder, ConfigGenerator
-from agimus_spacelab.planning import create_planner
-
 
 class ManipulationTask:
     """
@@ -19,7 +17,7 @@ class ManipulationTask:
     graph building, and configuration management.
     """
     
-    def __init__(self, task_name: str, backend: str = "corba"):
+    def __init__(self, joint_bounds=None, FILE_PATHS: Optional[Dict[str, Any]] = None, task_name: str = "Manipulation Task", backend: str = "corba"):
         """
         Initialize manipulation task.
         
@@ -29,7 +27,9 @@ class ManipulationTask:
         """
         self.task_name = task_name
         self.backend = backend.lower()
-        self.scene_builder = SceneBuilder(backend=backend)
+        self.scene_builder = SceneBuilder(joint_bounds=joint_bounds,
+                                          FILE_PATHS=FILE_PATHS,
+                                          backend=backend)
         self.planner = None
         self.robot = None
         self.ps = None
