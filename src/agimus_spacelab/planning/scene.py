@@ -170,7 +170,29 @@ class SceneBuilder:
             # Would need to use device collision pairs API
             print("      (PyHPP: collision management not yet implemented)")
         return self
+
+    def move_obstacle(self,
+                      obstacle_name: str,
+                      position: List[float],
+                      orientation: List[float]) -> 'SceneBuilder':
         
+        """
+        Move an object to a specified position and orientation.
+        Args:
+            object_name: Name of the object to move
+            position: [x, y, z] position
+            orientation: [qx, qy, qz, qw] quaternion orientation
+        """
+        if self.backend == "corba":
+            ps = self.planner.get_problem()
+            ps.moveObstacle(
+                obstacle_name,
+                position + orientation
+            )
+        else:
+            print("      (PyHPP: object movement not yet implemented)")
+        return self
+
     def get_instances(self) -> Tuple[Any, Any, Any]:
         """
         Get planner, robot, and problem solver instances.
