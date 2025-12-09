@@ -181,14 +181,16 @@ class PyHPPBackend(BackendBase):
         """Set initial configuration."""
         if self.problem is None:
             raise RuntimeError("Must create problem first")
-        
+        if isinstance(q, list):
+            q = np.array(q)
         self.problem.initConfig(q)
     
     def add_goal_config(self, q: np.ndarray):
         """Add goal configuration."""
         if self.problem is None:
             raise RuntimeError("Must create problem first")
-        
+        if isinstance(q, list):
+            q = np.array(q)
         self.problem.addGoalConfig(q)
     
     def create_constraint_graph(
@@ -361,6 +363,8 @@ class PyHPPBackend(BackendBase):
             self.viewer = Viewer(self.device)
         
         if q is not None:
+            if isinstance(q, list):
+                q = np.array(q)
             self.viewer(q)
         else:
             # Display current config or initial
