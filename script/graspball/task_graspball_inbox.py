@@ -254,94 +254,35 @@ class GraspBallTask(ManipulationTask):
         print("   ✓ Created transformation constraints")
 
     def create_graph(self):
-        """Create and configure constraint graph."""
-        if self.backend == "corba":
-            return self._create_corba_graph()
+        """Create and configure constraint graph for both backends."""
+        print("    Building constraint graph...")
+        cfg = self.config
+
+        # Get backend-specific references
+        if self.backend == "pyhpp":
+            robot = self.planner.get_robot()
+            problem = self.planner.get_problem()
+            constraints = self.pyhpp_constraints
         else:
-            return self._create_pyhpp_graph()
-    
-    def _create_corba_graph(self):
-        """Create graph for CORBA backend using GraphBuilder."""
-        print("    Building constraint graph...")
-        cfg = self.config
+            robot = self.robot
+            problem = self.ps
+            constraints = None
 
         # Initialize GraphBuilder
         self.graph_builder = GraphBuilder(
-            self.planner, self.robot, self.ps, backend="corba"
+            self.planner, robot, problem, backend=self.backend
         )
 
         # Create empty graph
-        self.graph_builder.create_manual_graph("graph")
+        graph_name = "manipulation_graph" if self.backend == "pyhpp" else "graph"
+        self.graph_builder.create_manual_graph(graph_name)
 
         # Create states (order matters for solver performance)
-        self.graph_builder.add_states(cfg.GRAPH_NODES)
-
-        # Create edges
-        edges_def = self.config.GRASPBALL_GRAPH['edges']
-        for edge_name, edge_info in edges_def.items():
-            self.graph_builder.add_edge(
-                edge_info["from"],
-                edge_info["to"],
-                edge_name,
-                edge_info.get("weight", 1),
-                edge_info["in"]
-            )
-
-        # Assign state constraints
-        states_def = self.config.GRASPBALL_GRAPH['states']
-        for state_name, state_info in states_def.items():
-            constraint_names = state_info.get("constraints", [])
-            if constraint_names:
-                if self.backend == "corba":
-                    self.graph_builder.add_state_constraints(
-                        state_name, [],
-                        constraint_names=constraint_names
-                    )
-
-        # Assign edge constraints
-        edge_constraints_def = self.config.GRASPBALL_GRAPH['edge_constraints']
-        free_edges = self.config.GRASPBALL_GRAPH["free_motion_edges"]
-
-        for constraint_name, edge_list in edge_constraints_def.items():
-            for edge_name in edge_list:
-                if self.backend == "corba":
-                    self.graph_builder.add_edge_constraints(
-                        edge_name, [],
-                        constraint_names=[constraint_name]
-                    )
-        
-        for edge_name in free_edges:
-            if self.backend == "corba":
-                self.graph_builder.add_edge_constraints(edge_name, [],
-                                                        constraint_names=[])
-
-        # Set constant RHS
-        constant_rhs = self.config.GRASPBALL_GRAPH["constant_rhs"]
-        for constraint_name, is_constant in constant_rhs.items():
-            self.ps.setConstantRightHandSide(constraint_name, is_constant)
-        # Finalize graph
-        self.graph_builder.finalize_manual_graph()
-
-        return self.graph_builder.get_graph()
-
-    def _create_pyhpp_graph(self):
-        """Create graph for PyHPP backend using GraphBuilder."""
-        print("    Building constraint graph...")
-        cfg = self.config
-        constraints = self.pyhpp_constraints
-
-        # Initialize GraphBuilder
-        self.graph_builder = GraphBuilder(
-            self.planner, self.planner.get_robot(),
-            self.planner.get_problem(), backend="pyhpp"
-        )
-
-        # Create empty graph
-        self.graph_builder.create_manual_graph("manipulation_graph")
-
-        # Create states (order matters for solver performance)
-        for state_name in cfg.GRAPH_NODES:
-            self.graph_builder.add_state(state_name)
+        if self.backend == "corba":
+            self.graph_builder.add_states(cfg.GRAPH_NODES)
+        else:
+            for state_name in cfg.GRAPH_NODES:
+                self.graph_builder.add_state(state_name)
 
         # Create edges from declarative definition
         edges_def = cfg.GRASPBALL_GRAPH['edges']
@@ -359,35 +300,57 @@ class GraspBallTask(ManipulationTask):
         for state_name, state_info in states_def.items():
             constraint_names = state_info.get("constraints", [])
             if constraint_names:
-                # Get constraint objects for PyHPP
-                constraint_objs = [constraints[n] for n in constraint_names]
-                self.graph_builder.add_state_constraints(
-                    state_name, constraint_objs
-                )
+                if self.backend == "corba":
+                    self.graph_builder.add_state_constraints(
+                        state_name, [],
+                        constraint_names=constraint_names
+                    )
+                else:
+                    constraint_objs = [constraints[n] for n in constraint_names]
+                    self.graph_builder.add_state_constraints(
+                        state_name, constraint_objs
+                    )
 
         # Add constraints to edges from declarative definition
         edge_constraints_def = cfg.GRASPBALL_GRAPH['edge_constraints']
         for constraint_name, edge_list in edge_constraints_def.items():
             for edge_name in edge_list:
-                self.graph_builder.add_edge_constraints(
-                    edge_name, [constraints[constraint_name]]
-                )
+                if self.backend == "corba":
+                    self.graph_builder.add_edge_constraints(
+                        edge_name, [],
+                        constraint_names=[constraint_name]
+                    )
+                else:
+                    self.graph_builder.add_edge_constraints(
+                        edge_name, [constraints[constraint_name]]
+                    )
 
         # Free motion edges (no path constraints)
         free_edges = cfg.GRASPBALL_GRAPH["free_motion_edges"]
         for edge_name in free_edges:
-            self.graph_builder.add_edge_constraints(edge_name, [])
+            if self.backend == "corba":
+                self.graph_builder.add_edge_constraints(
+                    edge_name, [], constraint_names=[]
+                )
+            else:
+                self.graph_builder.add_edge_constraints(edge_name, [])
+
+        # Set constant RHS (CORBA only)
+        if self.backend == "corba":
+            constant_rhs = cfg.GRASPBALL_GRAPH["constant_rhs"]
+            for constraint_name, is_constant in constant_rhs.items():
+                self.ps.setConstantRightHandSide(constraint_name, is_constant)
 
         # Finalize graph
         self.graph_builder.finalize_manual_graph()
 
-        # Store for later use
-        problem = self.planner.get_problem()
+        # Store graph and metadata
         graph = self.graph_builder.get_graph()
-        problem.constraintGraph(graph)
-        self.pyhpp_states = self.graph_builder.get_states()
-        self.pyhpp_edges = self.graph_builder.get_edges()
-        self.pyhpp_edge_topology = self.graph_builder.get_edge_topology()
+        if self.backend == "pyhpp":
+            problem.constraintGraph(graph)
+            self.pyhpp_states = self.graph_builder.get_states()
+            self.pyhpp_edges = self.graph_builder.get_edges()
+            self.pyhpp_edge_topology = self.graph_builder.get_edge_topology()
 
         return graph
         
