@@ -433,131 +433,77 @@ class GraspBallTask(ManipulationTask):
         return cg.configs
     
     def _generate_configs_pyhpp(self, q_init: List[float]) -> Dict:
-        """Generate configurations for PyHPP backend."""
-        configs = {}
+        """Generate configurations for PyHPP backend using ConfigGenerator."""
+        cg = self.config_gen
         states = self.pyhpp_states
         edges = self.pyhpp_edges
-        
-        problem = self.planner.get_problem()
-        shooter = problem.configurationShooter()
-        
-        q1 = np.array(q_init)
-        
-        # 1. Project onto placement
+        q1 = list(q_init)
+
+        # 1. Project initial config on placement
         print("    1. Projecting onto 'placement' state...")
-        result = self.graph.applyStateConstraints(states['placement'], q1)
-        configs["q_init"] = result.configuration.tolist()
-        if result.success:
-            print("       ✓ q_init projected")
-        
-        # 2. Generate approach-ball
+        cg.project_on_node(states['placement'], q1, "q_init")
+
+        # 2. Generate approach-ball config
         print("    2. Generating 'approach-ball' config...")
-        for i in range(100):
-            q_rand = shooter.shoot()
-            result = self.graph.generateTargetConfig(
-                edges['approach-ball'], np.array(configs["q_init"]), q_rand
-            )
-            if result.success:
-                configs["q_ab"] = result.configuration.tolist()
-                print("       ✓ q_ab generated")
-                break
-        else:
-            print("       ⚠ Failed")
-            return configs
-        
+        success, _ = cg.generate_via_edge(
+            edges['approach-ball'], cg.configs["q_init"], "q_ab"
+        )
+        if not success:
+            return cg.configs
+
         # 3. Project onto gripper-above-ball
         print("    3. Projecting onto 'gripper-above-ball' state...")
-        result = self.graph.applyStateConstraints(
-            states['gripper-above-ball'], np.array(configs["q_ab"])
+        cg.project_on_node(
+            states['gripper-above-ball'], cg.configs["q_ab"], "q_above"
         )
-        configs["q_above"] = result.configuration.tolist()
-        if result.success:
-            print("       ✓ q_above projected")
-        
-        # 4. Generate grasp-ball
+
+        # 4. Generate grasp-ball config
         print("    4. Generating 'grasp-ball' config...")
-        for i in range(100):
-            q_rand = shooter.shoot()
-            result = self.graph.generateTargetConfig(
-                edges['grasp-ball'], np.array(configs["q_above"]), q_rand
-            )
-            if result.success:
-                configs["q_gb"] = result.configuration.tolist()
-                print("       ✓ q_gb generated")
-                break
-        else:
-            print("       ⚠ Failed")
-            return configs
-        
+        success, _ = cg.generate_via_edge(
+            edges['grasp-ball'], cg.configs["q_above"], "q_gb"
+        )
+        if not success:
+            return cg.configs
+
         # 5. Project onto grasp-placement
         print("    5. Projecting onto 'grasp-placement' state...")
-        result = self.graph.applyStateConstraints(
-            states['grasp-placement'], np.array(configs["q_gb"])
+        cg.project_on_node(
+            states['grasp-placement'], cg.configs["q_gb"], "q_grasp_place"
         )
-        configs["q_grasp_place"] = result.configuration.tolist()
-        if result.success:
-            print("       ✓ q_grasp_place projected")
-        
-        # 6. Generate take-ball-up
+
+        # 6. Generate take-ball-up config
         print("    6. Generating 'take-ball-up' config...")
-        for i in range(100):
-            q_rand = shooter.shoot()
-            result = self.graph.generateTargetConfig(
-                edges['take-ball-up'], np.array(configs["q_grasp_place"]),
-                q_rand
-            )
-            if result.success:
-                configs["q_tbu"] = result.configuration.tolist()
-                print("       ✓ q_tbu generated")
-                break
-        else:
-            print("       ⚠ Failed")
-            return configs
-        
+        success, _ = cg.generate_via_edge(
+            edges['take-ball-up'], cg.configs["q_grasp_place"], "q_tbu"
+        )
+        if not success:
+            return cg.configs
+
         # 7. Project onto ball-above-ground
         print("    7. Projecting onto 'ball-above-ground' state...")
-        result = self.graph.applyStateConstraints(
-            states['ball-above-ground'], np.array(configs["q_tbu"])
+        cg.project_on_node(
+            states['ball-above-ground'], cg.configs["q_tbu"], "q_ball_up"
         )
-        configs["q_ball_up"] = result.configuration.tolist()
-        if result.success:
-            print("       ✓ q_ball_up projected")
-        
-        # 8. Generate take-ball-away
+
+        # 8. Generate take-ball-away config
         print("    8. Generating 'take-ball-away' config...")
-        for i in range(100):
-            q_rand = shooter.shoot()
-            result = self.graph.generateTargetConfig(
-                edges['take-ball-away'], np.array(configs["q_ball_up"]),
-                q_rand
-            )
-            if result.success:
-                configs["q_tba"] = result.configuration.tolist()
-                print("       ✓ q_tba generated")
-                break
-        else:
-            print("       ⚠ Failed")
-            return configs
-        
+        success, _ = cg.generate_via_edge(
+            edges['take-ball-away'], cg.configs["q_ball_up"], "q_tba"
+        )
+        if not success:
+            return cg.configs
+
         # 9. Project onto grasp
         print("    9. Projecting onto 'grasp' state...")
-        result = self.graph.applyStateConstraints(
-            states['grasp'], np.array(configs["q_tba"])
-        )
-        configs["q_grasp"] = result.configuration.tolist()
-        if result.success:
-            print("       ✓ q_grasp projected")
-        
-        # 10. Generate goal
+        cg.project_on_node(states['grasp'], cg.configs["q_tba"], "q_grasp")
+
+        # 10. Generate goal (move ball to x=0.2)
         print("    10. Generating goal configuration...")
-        q2 = q1.copy()
-        q2[6] = 0.2  # Move ball x
-        result = self.graph.applyStateConstraints(states['placement'], q2)
-        configs["q_goal"] = result.configuration.tolist()
-        if result.success:
-            print("       ✓ q_goal projected")
-        
-        return configs
+        q2 = list(q1)
+        q2[6] = 0.2  # Ball x position (index 6 = first object DOF)
+        cg.project_on_node(states['placement'], q2, "q_goal")
+
+        return cg.configs
     
     def setup(self, validation_step: float = 0.01,
               projector_step: float = 0.1):
