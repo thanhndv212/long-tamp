@@ -27,6 +27,7 @@ import sys
 from pathlib import Path
 from typing import List, Dict
 import numpy as np
+from pinocchio import SE3
 
 from agimus_spacelab.tasks import ManipulationTask
 from agimus_spacelab.planning import ConstraintBuilder, GraphBuilder
@@ -98,79 +99,6 @@ class GraspBallTask(ManipulationTask):
     def build_initial_config(self) -> List[float]:
         """Build the initial configuration for UR5 + pokeball."""
         return InitialConfigurations.FULL_INIT
-    
-    def setup_scene(self, validation_step: float, projector_step: float):
-        """
-        Custom scene setup for graspball (UR5 robot, not SpaceLab).
-        
-        This overrides the default scene builder since we use different
-        robot/environment URDFs.
-        """
-        print("=" * 70)
-        print(f"{self.task_name} - {self.backend.upper()} Backend")
-        print("=" * 70)
-        
-        cfg = self.config
-        
-        if self.backend == "corba":
-            pass
-            
-        else:  # pyhpp
-            from agimus_spacelab.backends import PyHPPBackend
-            self.planner = PyHPPBackend()
-            
-            print("\n1. Loading robot and objects...")
-            
-            # Load robot
-            self.robot = self.planner.load_robot(
-                robot_name="ur5",
-                urdf_path=cfg.ROBOT_URDF,
-                srdf_path=cfg.ROBOT_SRDF,
-                root_joint_type="anchor"
-            )
-            
-            # Load ball
-            self.planner.load_object(
-                name="pokeball",
-                urdf_path=cfg.BALL_URDF,
-                root_joint_type="freeflyer"
-            )
-            
-            # Set joint bounds
-            bounds = JointBounds.freeflyer_bounds()
-            self.planner.set_joint_bounds(cfg.BALL_NAME, bounds)
-            
-            # Load environment
-            self.planner.load_environment("ground", cfg.GROUND_URDF)
-            
-            # Load box at correct position
-            box_pose = SE3(
-                rotation=np.eye(3),
-                translation=np.array([cfg.BOX_X, 0, 0.04])
-            )
-            self.planner.load_environment("box", cfg.BOX_URDF, pose=box_pose)
-            
-            self.ps = self.planner.get_problem()
-            
-            # Configure path validation
-            from pyhpp.manipulation import createProgressiveProjector
-            from pyhpp.core import createDiscretized
-            
-            device = self.robot.asPinDevice()
-            problem = self.ps
-            
-            # Set path projector
-            problem.pathProjector = createProgressiveProjector(
-                problem.distance(), problem.steeringMethod(),
-                projector_step
-            )
-            
-            # Set path validation
-            problem.pathValidation = createDiscretized(
-                device, validation_step
-            )
-        
-        print("   ✓ Robot and objects loaded")
     
     def setup_collision_management(self) -> None:
         """No special collision management needed for this task."""
