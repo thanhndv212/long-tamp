@@ -364,134 +364,73 @@ class GraspBallTask(ManipulationTask):
             return self._generate_configs_corba(q_init)
     
     def _generate_configs_corba(self, q_init: List[float]) -> Dict:
-        """Generate configurations for CORBA backend."""
-        cfg = self.config
-        configs = {}
+        """Generate configurations for CORBA backend using ConfigGenerator."""
+        cg = self.config_gen
         q1 = list(q_init)
-        
+
         # 1. Project initial config on placement
         print("    1. Projecting onto 'placement' state...")
-        res, q_proj, err = self.graph.applyNodeConstraints("placement", q1)
-        configs["q_init"] = q_proj if res else q1
-        if res:
-            print("       ✓ q_init projected")
-        else:
-            print(f"       ⚠ Projection failed (error: {err})")
-        
+        cg.project_on_node("placement", q1, "q_init")
+
         # 2. Generate approach-ball config
         print("    2. Generating 'approach-ball' config...")
-        for i in range(cfg.MAX_RANDOM_ATTEMPTS):
-            q_rand = self.robot.shootRandomConfig()
-            res, q_ab, err = self.graph.generateTargetConfig(
-                "approach-ball", configs["q_init"], q_rand
-            )
-            if res:
-                configs["q_ab"] = q_ab
-                print("       ✓ q_ab generated")
-                break
-            if (i + 1) % 200 == 0:
-                print(f"       Attempt {i + 1}...")
-        else:
-            print("       ⚠ Failed to generate approach-ball config")
-            return configs
-        
+        success, _ = cg.generate_via_edge(
+            "approach-ball", cg.configs["q_init"], "q_ab"
+        )
+        if not success:
+            return cg.configs
+
         # 3. Project onto gripper-above-ball
         print("    3. Projecting onto 'gripper-above-ball' state...")
-        res, q_above, err = self.graph.applyNodeConstraints(
-            "gripper-above-ball", configs["q_ab"]
-        )
-        configs["q_above"] = q_above if res else configs["q_ab"]
-        if res:
-            print("       ✓ q_above projected")
-        
+        cg.project_on_node("gripper-above-ball", cg.configs["q_ab"], "q_above")
+
         # 4. Generate grasp-ball config
         print("    4. Generating 'grasp-ball' config...")
-        for i in range(cfg.MAX_RANDOM_ATTEMPTS):
-            q_rand = self.robot.shootRandomConfig()
-            res, q_gb, err = self.graph.generateTargetConfig(
-                "grasp-ball", configs["q_above"], q_rand
-            )
-            if res:
-                configs["q_gb"] = q_gb
-                print("       ✓ q_gb generated")
-                break
-            if (i + 1) % 200 == 0:
-                print(f"       Attempt {i + 1}...")
-        else:
-            print("       ⚠ Failed to generate grasp-ball config")
-            return configs
-        
+        success, _ = cg.generate_via_edge(
+            "grasp-ball", cg.configs["q_above"], "q_gb"
+        )
+        if not success:
+            return cg.configs
+
         # 5. Project onto grasp-placement
         print("    5. Projecting onto 'grasp-placement' state...")
-        res, q_gp, err = self.graph.applyNodeConstraints(
-            "grasp-placement", configs["q_gb"]
+        cg.project_on_node(
+            "grasp-placement", cg.configs["q_gb"], "q_grasp_place"
         )
-        configs["q_grasp_place"] = q_gp if res else configs["q_gb"]
-        if res:
-            print("       ✓ q_grasp_place projected")
-        
+
         # 6. Generate take-ball-up config
         print("    6. Generating 'take-ball-up' config...")
-        for i in range(cfg.MAX_RANDOM_ATTEMPTS):
-            q_rand = self.robot.shootRandomConfig()
-            res, q_tbu, err = self.graph.generateTargetConfig(
-                "take-ball-up", configs["q_grasp_place"], q_rand
-            )
-            if res:
-                configs["q_tbu"] = q_tbu
-                print("       ✓ q_tbu generated")
-                break
-            if (i + 1) % 200 == 0:
-                print(f"       Attempt {i + 1}...")
-        else:
-            print("       ⚠ Failed to generate take-ball-up config")
-            return configs
-        
+        success, _ = cg.generate_via_edge(
+            "take-ball-up", cg.configs["q_grasp_place"], "q_tbu"
+        )
+        if not success:
+            return cg.configs
+
         # 7. Project onto ball-above-ground
         print("    7. Projecting onto 'ball-above-ground' state...")
-        res, q_bag, err = self.graph.applyNodeConstraints(
-            "ball-above-ground", configs["q_tbu"]
+        cg.project_on_node(
+            "ball-above-ground", cg.configs["q_tbu"], "q_ball_up"
         )
-        configs["q_ball_up"] = q_bag if res else configs["q_tbu"]
-        if res:
-            print("       ✓ q_ball_up projected")
-        
+
         # 8. Generate take-ball-away config
         print("    8. Generating 'take-ball-away' config...")
-        for i in range(cfg.MAX_RANDOM_ATTEMPTS):
-            q_rand = self.robot.shootRandomConfig()
-            res, q_tba, err = self.graph.generateTargetConfig(
-                "take-ball-away", configs["q_ball_up"], q_rand
-            )
-            if res:
-                configs["q_tba"] = q_tba
-                print("       ✓ q_tba generated")
-                break
-            if (i + 1) % 200 == 0:
-                print(f"       Attempt {i + 1}...")
-        else:
-            print("       ⚠ Failed to generate take-ball-away config")
-            return configs
-        
+        success, _ = cg.generate_via_edge(
+            "take-ball-away", cg.configs["q_ball_up"], "q_tba"
+        )
+        if not success:
+            return cg.configs
+
         # 9. Project onto grasp
         print("    9. Projecting onto 'grasp' state...")
-        res, q_g, err = self.graph.applyNodeConstraints(
-            "grasp", configs["q_tba"]
-        )
-        configs["q_grasp"] = q_g if res else configs["q_tba"]
-        if res:
-            print("       ✓ q_grasp projected")
-        
+        cg.project_on_node("grasp", cg.configs["q_tba"], "q_grasp")
+
         # 10. Generate goal (move ball to x=0.2)
         print("    10. Generating goal configuration...")
         q2 = list(q1)
         q2[6] = 0.2  # Ball x position (index 6 = first object DOF)
-        res, q_goal, err = self.graph.applyNodeConstraints("placement", q2)
-        configs["q_goal"] = q_goal if res else q2
-        if res:
-            print("       ✓ q_goal projected")
-        
-        return configs
+        cg.project_on_node("placement", q2, "q_goal")
+
+        return cg.configs
     
     def _generate_configs_pyhpp(self, q_init: List[float]) -> Dict:
         """Generate configurations for PyHPP backend."""
