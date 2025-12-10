@@ -45,6 +45,10 @@ class ConfigGenerator:
         self.backend = backend.lower()
         self.max_attempts = max_attempts
         self.configs = {}
+        # PyHPP shooter for random configurations
+        self._shooter = None
+        if self.backend == "pyhpp":
+            self._shooter = self.ps.configurationShooter()
         
     def project_on_node(
         self, node_name: str, q: List[float],
@@ -65,20 +69,25 @@ class ConfigGenerator:
             res, q_proj, err = self.graph.applyNodeConstraints(
                 node_name, list(q)
             )
+            success = res
+            config = q_proj
         else:  # pyhpp
-            res, q_proj, err = self.graph.applyConstraints(node_name, list(q))
+            # PyHPP uses state objects, get from states dict
+            q_arr = np.array(q) if not isinstance(q, np.ndarray) else q
+            result = self.graph.applyStateConstraints(node_name, q_arr)
+            success = result.success
+            config = result.configuration.tolist()
         
         if config_label:
-            if res:
-                self.configs[config_label] = q_proj
+            if success:
+                self.configs[config_label] = config
                 print(f"       ✓ {config_label} projected onto "
                       f"'{node_name}'")
             else:
                 self.configs[config_label] = list(q)
-                print(f"       ⚠ Projection failed (error: {err:.3f}), "
-                      f"using input")
+                print("       ⚠ Projection failed, using input")
                 
-        return res, q_proj if res else list(q)
+        return success, config if success else list(q)
         
     def generate_via_edge(
         self, edge_name: str, q_from: List[float],
@@ -98,23 +107,30 @@ class ConfigGenerator:
             Tuple of (success, generated_config or None)
         """
         for i in range(self.max_attempts):
-            # Generate random config - API is same for both backends
+            # Generate random config
             if self.backend == "corba":
                 q_rand = self.robot.shootRandomConfig()
+                res, q_target, err = self.graph.generateTargetConfig(
+                    edge_name, q_from, q_rand
+                )
+                success = res
+                config = q_target
             else:  # pyhpp
-                q_rand = self.robot.randomConfiguration()
-                if isinstance(q_rand, np.ndarray):
-                    q_rand = q_rand.tolist()
+                q_rand = self._shooter.shoot()
+                q_from_arr = np.array(q_from) if not isinstance(
+                    q_from, np.ndarray) else q_from
+                result = self.graph.generateTargetConfig(
+                    edge_name, q_from_arr, q_rand
+                )
+                success = result.success
+                config = result.configuration.tolist() if success else None
             
-            res, q_target, err = self.graph.generateTargetConfig(
-                edge_name, q_from, q_rand
-            )
-            if res:
+            if success:
                 if config_label:
-                    self.configs[config_label] = q_target
+                    self.configs[config_label] = config
                     print(f"       ✓ {config_label} generated via "
                           f"'{edge_name}'")
-                return True, q_target
+                return True, config
                 
             if verbose and (i + 1) % 200 == 0:
                 print(f"       Attempt {i + 1}/{self.max_attempts}...")
