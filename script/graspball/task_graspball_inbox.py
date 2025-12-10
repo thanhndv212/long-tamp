@@ -357,96 +357,25 @@ class GraspBallTask(ManipulationTask):
     def generate_configurations(
         self, q_init: List[float]
     ) -> Dict[str, List[float]]:
-        """Generate all waypoint configurations."""
-        if self.backend == "pyhpp":
-            return self._generate_configs_pyhpp(q_init)
-        else:
-            return self._generate_configs_corba(q_init)
-    
-    def _generate_configs_corba(self, q_init: List[float]) -> Dict:
-        """Generate configurations for CORBA backend using ConfigGenerator."""
+        """Generate all waypoint configurations for both backends."""
         cg = self.config_gen
         q1 = list(q_init)
 
+        # Helper to get node/edge identifier based on backend
+        def node(name):
+            return self.pyhpp_states[name] if self.backend == "pyhpp" else name
+
+        def edge(name):
+            return self.pyhpp_edges[name] if self.backend == "pyhpp" else name
+
         # 1. Project initial config on placement
         print("    1. Projecting onto 'placement' state...")
-        cg.project_on_node("placement", q1, "q_init")
+        cg.project_on_node(node("placement"), q1, "q_init")
 
         # 2. Generate approach-ball config
         print("    2. Generating 'approach-ball' config...")
         success, _ = cg.generate_via_edge(
-            "approach-ball", cg.configs["q_init"], "q_ab"
-        )
-        if not success:
-            return cg.configs
-
-        # 3. Project onto gripper-above-ball
-        print("    3. Projecting onto 'gripper-above-ball' state...")
-        cg.project_on_node("gripper-above-ball", cg.configs["q_ab"], "q_above")
-
-        # 4. Generate grasp-ball config
-        print("    4. Generating 'grasp-ball' config...")
-        success, _ = cg.generate_via_edge(
-            "grasp-ball", cg.configs["q_above"], "q_gb"
-        )
-        if not success:
-            return cg.configs
-
-        # 5. Project onto grasp-placement
-        print("    5. Projecting onto 'grasp-placement' state...")
-        cg.project_on_node(
-            "grasp-placement", cg.configs["q_gb"], "q_grasp_place"
-        )
-
-        # 6. Generate take-ball-up config
-        print("    6. Generating 'take-ball-up' config...")
-        success, _ = cg.generate_via_edge(
-            "take-ball-up", cg.configs["q_grasp_place"], "q_tbu"
-        )
-        if not success:
-            return cg.configs
-
-        # 7. Project onto ball-above-ground
-        print("    7. Projecting onto 'ball-above-ground' state...")
-        cg.project_on_node(
-            "ball-above-ground", cg.configs["q_tbu"], "q_ball_up"
-        )
-
-        # 8. Generate take-ball-away config
-        print("    8. Generating 'take-ball-away' config...")
-        success, _ = cg.generate_via_edge(
-            "take-ball-away", cg.configs["q_ball_up"], "q_tba"
-        )
-        if not success:
-            return cg.configs
-
-        # 9. Project onto grasp
-        print("    9. Projecting onto 'grasp' state...")
-        cg.project_on_node("grasp", cg.configs["q_tba"], "q_grasp")
-
-        # 10. Generate goal (move ball to x=0.2)
-        print("    10. Generating goal configuration...")
-        q2 = list(q1)
-        q2[6] = 0.2  # Ball x position (index 6 = first object DOF)
-        cg.project_on_node("placement", q2, "q_goal")
-
-        return cg.configs
-    
-    def _generate_configs_pyhpp(self, q_init: List[float]) -> Dict:
-        """Generate configurations for PyHPP backend using ConfigGenerator."""
-        cg = self.config_gen
-        states = self.pyhpp_states
-        edges = self.pyhpp_edges
-        q1 = list(q_init)
-
-        # 1. Project initial config on placement
-        print("    1. Projecting onto 'placement' state...")
-        cg.project_on_node(states['placement'], q1, "q_init")
-
-        # 2. Generate approach-ball config
-        print("    2. Generating 'approach-ball' config...")
-        success, _ = cg.generate_via_edge(
-            edges['approach-ball'], cg.configs["q_init"], "q_ab"
+            edge("approach-ball"), cg.configs["q_init"], "q_ab"
         )
         if not success:
             return cg.configs
@@ -454,13 +383,13 @@ class GraspBallTask(ManipulationTask):
         # 3. Project onto gripper-above-ball
         print("    3. Projecting onto 'gripper-above-ball' state...")
         cg.project_on_node(
-            states['gripper-above-ball'], cg.configs["q_ab"], "q_above"
+            node("gripper-above-ball"), cg.configs["q_ab"], "q_above"
         )
 
         # 4. Generate grasp-ball config
         print("    4. Generating 'grasp-ball' config...")
         success, _ = cg.generate_via_edge(
-            edges['grasp-ball'], cg.configs["q_above"], "q_gb"
+            edge("grasp-ball"), cg.configs["q_above"], "q_gb"
         )
         if not success:
             return cg.configs
@@ -468,13 +397,13 @@ class GraspBallTask(ManipulationTask):
         # 5. Project onto grasp-placement
         print("    5. Projecting onto 'grasp-placement' state...")
         cg.project_on_node(
-            states['grasp-placement'], cg.configs["q_gb"], "q_grasp_place"
+            node("grasp-placement"), cg.configs["q_gb"], "q_grasp_place"
         )
 
         # 6. Generate take-ball-up config
         print("    6. Generating 'take-ball-up' config...")
         success, _ = cg.generate_via_edge(
-            edges['take-ball-up'], cg.configs["q_grasp_place"], "q_tbu"
+            edge("take-ball-up"), cg.configs["q_grasp_place"], "q_tbu"
         )
         if not success:
             return cg.configs
@@ -482,26 +411,26 @@ class GraspBallTask(ManipulationTask):
         # 7. Project onto ball-above-ground
         print("    7. Projecting onto 'ball-above-ground' state...")
         cg.project_on_node(
-            states['ball-above-ground'], cg.configs["q_tbu"], "q_ball_up"
+            node("ball-above-ground"), cg.configs["q_tbu"], "q_ball_up"
         )
 
         # 8. Generate take-ball-away config
         print("    8. Generating 'take-ball-away' config...")
         success, _ = cg.generate_via_edge(
-            edges['take-ball-away'], cg.configs["q_ball_up"], "q_tba"
+            edge("take-ball-away"), cg.configs["q_ball_up"], "q_tba"
         )
         if not success:
             return cg.configs
 
         # 9. Project onto grasp
         print("    9. Projecting onto 'grasp' state...")
-        cg.project_on_node(states['grasp'], cg.configs["q_tba"], "q_grasp")
+        cg.project_on_node(node("grasp"), cg.configs["q_tba"], "q_grasp")
 
         # 10. Generate goal (move ball to x=0.2)
         print("    10. Generating goal configuration...")
         q2 = list(q1)
         q2[6] = 0.2  # Ball x position (index 6 = first object DOF)
-        cg.project_on_node(states['placement'], q2, "q_goal")
+        cg.project_on_node(node("placement"), q2, "q_goal")
 
         return cg.configs
     
