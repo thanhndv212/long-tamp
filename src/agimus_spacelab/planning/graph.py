@@ -25,11 +25,17 @@ except ImportError:
 
 # Import for PyHPP backend
 try:
-    from pyhpp.manipulation import Graph
+    from pyhpp.manipulation import Graph as PyHPPGraph
+    from pyhpp.manipulation.constraint_graph_factory import (
+        ConstraintGraphFactory as PyHPPConstraintGraphFactory,
+        Rule as PyHPPRule
+    )
     HAS_PYHPP_GRAPH = True
 except ImportError:
     HAS_PYHPP_GRAPH = False
-    Graph = None
+    PyHPPGraph = None
+    PyHPPConstraintGraphFactory = None
+    PyHPPRule = None
 
 
 class GraphBuilder:
@@ -85,7 +91,7 @@ class GraphBuilder:
             if not HAS_PYHPP_GRAPH:
                 raise ImportError("PyHPP backend not available")
             
-            self.graph = Graph(name, self.robot, self.ps)
+            self.graph = PyHPPGraph(name, self.robot, self.ps)
             self.graph.maxIterations(10000)
             self.graph.errorThreshold(1e-4)
             print("   ✓ PyHPP graph initialized (manual mode)")
@@ -324,89 +330,224 @@ class GraphBuilder:
             print("   ✓ PyHPP graph initialized")
         
         return self.graph
-    
+
+    def _generate_rules_from_valid_pairs(
+        self,
+        grippers: List[str],
+        valid_pairs: Dict[str, List[str]],
+        rule_class: Any = None
+    ) -> List:
+        """
+        Generate Rule objects from valid_pairs mapping.
+        
+        Args:
+            grippers: List of gripper names used in the graph
+            valid_pairs: Dict mapping gripper names to list of valid handles
+            rule_class: Rule class to use (auto-detected from backend if None)
+            
+        Returns:
+            List of Rule objects for the factory
+        """
+        # Determine Rule class based on backend
+        if rule_class is None:
+            rule_class = PyHPPRule if self.backend == "pyhpp" else Rule
+        
+        rules = []
+        
+        # Allow specific valid pairs
+        for gripper_name, handles in valid_pairs.items():
+            # Check if this gripper is in our graph
+            if gripper_name not in grippers:
+                continue
+            
+            # Create allow rule for each valid handle
+            for handle in handles:
+                # Use exact match patterns
+                gripper_pattern = f"^{gripper_name}$"
+                handle_pattern = f"^{handle}$"
+                rules.append(
+                    rule_class([gripper_pattern], [handle_pattern], True)
+                )
+        return rules
+
     def create_factory_graph(
         self,
         grippers: List[str],
         objects: List[str],
-        handles: Dict[str, List[str]],
-        rules: Optional[List] = None
+        handles_per_object: List[List[str]],
+        contact_surfaces_per_object: Optional[List[List[str]]] = None,
+        environment_contacts: Optional[List[str]] = None,
+        rules: Optional[List] = None,
+        valid_pairs: Optional[Dict[str, List[str]]] = None
     ) -> Any:
         """
-        Create constraint graph using factory (CORBA only for now).
+        Create constraint graph using factory for both backends.
         
         Args:
             grippers: List of gripper names
             objects: List of object names
-            handles: Dictionary mapping object names to handle lists
+            handles_per_object: List of handle lists, one per object
+            contact_surfaces_per_object: List of contact surface lists per
+                object (defaults to empty lists)
+            environment_contacts: List of environment contact surface names
             rules: Optional list of Rule objects for graph generation
+            valid_pairs: Optional dict mapping gripper names to list of
+                valid handle names. If provided, generates rules to only
+                allow these specific gripper-handle pairs.
             
         Returns:
-            ConstraintGraph instance
+            ConstraintGraph or Graph instance
         """
-        if self.backend != "corba":
-            raise NotImplementedError(
-                "Factory mode currently only supported for CORBA backend"
-            )
+        print("    Using ConstraintGraphFactory for automatic graph "
+              "generation")
         
-        if not HAS_CORBA_GRAPH:
-            raise ImportError("CORBA backend not available")
-        
-        print("   Creating factory-based constraint graph")
-        print(f"     Grippers: {grippers}")
-        print(f"     Objects: {objects}")
-        
-        # Create constraint graph
-        self.graph = ConstraintGraph(self.robot, "graph")
-        
-        # Create factory
-        self.factory = ConstraintGraphFactory(self.graph)
+        # Backend-specific setup
+        if self.backend == "corba":
+            if not HAS_CORBA_GRAPH:
+                raise ImportError("CORBA backend not available")
+            
+            # Create CORBA constraint graph
+            self.graph = ConstraintGraph(self.robot, "graph")
+            self.factory = ConstraintGraphFactory(self.graph)
+            rule_class = Rule
+            
+        else:  # pyhpp
+            if not HAS_PYHPP_GRAPH:
+                raise ImportError("PyHPP backend not available")
+            
+            # Create PyHPP constraint graph
+            self.graph = PyHPPGraph("graph", self.robot, self.ps)
+            self.graph.maxIterations(10000)
+            self.graph.errorThreshold(1e-4)
+            self.factory = PyHPPConstraintGraphFactory(self.graph)
+            rule_class = PyHPPRule
         
         # Set grippers
-        for gripper in grippers:
-            self.factory.setGrippers([gripper])
+        self.factory.setGrippers(grippers)
+        print(f"    \u2713 Set grippers: {grippers}")
         
-        # Set objects with handles
-        for obj_name in objects:
-            if obj_name in handles:
-                obj_handles = handles[obj_name]
-                self.factory.setObjects(
-                    [obj_name],
-                    [obj_handles],
-                    [[]]  # No contact surfaces
-                )
+        # Set objects with handles and contact surfaces
+        if contact_surfaces_per_object is None:
+            contact_surfaces_per_object = [[] for _ in objects]
+        self.factory.setObjects(
+            objects, handles_per_object, contact_surfaces_per_object
+        )
+        print(f"    \u2713 Set objects: {objects}")
         
-        # Generate graph with rules
-        if rules is None:
-            # Default: generate all possible grasps
-            print("     Using default rules (all grasps)")
-            rules = [Rule(grippers, objects, True)]
+        # Set environment contacts if provided
+        if environment_contacts:
+            self.factory.environmentContacts(environment_contacts)
+            print(f"    \u2713 Set environment contacts: "
+                  f"{environment_contacts}")
         
-        self.factory.generate(rules)
+        # Set rules
+        if rules is not None:
+            # Use explicitly provided rules
+            self.factory.setRules(rules)
+            print("    \u2713 Set custom rules")
+        elif valid_pairs is not None:
+            # Generate rules from valid_pairs mapping
+            generated_rules = self._generate_rules_from_valid_pairs(
+                grippers, valid_pairs, rule_class
+            )
+            self.factory.setRules(generated_rules)
+            print(f"    \u2713 Set rules from valid_pairs "
+                  f"({len(generated_rules)} rules)")
+        else:
+            # Default: allow all gripper-handle pairs
+            default_rules = [rule_class([".*"], [".*"], True)]
+            self.factory.setRules(default_rules)
+            print("    \u2713 Set rules: allow all")
+        
+        # Generate graph
+        self.factory.generate()
+        print("    \u2713 Generated graph structure")
         
         # Initialize graph
         self.graph.initialize()
+        print("    \u2713 Graph initialized")
         
         # Store states and edges for tracking
-        try:
-            for node_name in self.graph.nodes.keys():
-                self.states[node_name] = node_name
-            
-            for edge_name in self.graph.edges.keys():
-                self.edges[edge_name] = edge_name
-                # Try to get topology
-                try:
-                    result = self.graph.getNodesConnectedByEdge(edge_name)
-                    from_node, to_node = result[:2]
-                    self.edge_topology[edge_name] = (from_node, to_node)
-                except Exception:
-                    pass
-        except Exception as e:
-            print(f"     ⚠ Could not extract graph structure: {e}")
+        self._extract_factory_graph_structure()
         
-        print(f"   ✓ Factory graph created with {len(self.states)} states "
-              f"and {len(self.edges)} edges")
+        # Print factory-generated nodes for reference
+        print(f"    \u2139 Factory created {len(self.states)} nodes:")
+        for node_name in list(self.states.keys())[:5]:
+            print(f"      - {node_name}")
+        if len(self.states) > 5:
+            print(f"      ... and {len(self.states) - 5} more")
+        
         return self.graph
+
+    def _extract_factory_graph_structure(self) -> None:
+        """
+        Extract states and edges from factory-generated graph.
+        
+        Populates self.states, self.edges, and self.edge_topology.
+        """
+        try:
+            if self.backend == "corba":
+                # CORBA graph has nodes and edges dictionaries
+                for node_name in self.graph.nodes.keys():
+                    self.states[node_name] = node_name
+                
+                for edge_name in self.graph.edges.keys():
+                    self.edges[edge_name] = edge_name
+                    try:
+                        result = self.graph.getNodesConnectedByEdge(edge_name)
+                        from_node, to_node = result[:2]
+                        self.edge_topology[edge_name] = (from_node, to_node)
+                    except Exception:
+                        pass
+            else:  # pyhpp
+                # PyHPP graph - access states and transitions
+                # The factory stores states in its own dict
+                if hasattr(self.factory, 'states'):
+                    for grasps, state_obj in self.factory.states.items():
+                        state_name = state_obj.name
+                        self.states[state_name] = state_obj.state
+                
+                # Extract edges from edge_objects dictionary
+                # edge_objects dict maps edge names to edge objects
+                if hasattr(self.factory, 'edge_objects'):
+                    edge_items = self.factory.edge_objects.items()
+                    for edge_name, edge_obj in edge_items:
+                        self.edges[edge_name] = edge_obj
+                        # Try to extract edge topology from edge object
+                        try:
+                            has_from = hasattr(edge_obj, 'stateFrom')
+                            has_to = hasattr(edge_obj, 'stateTo')
+                            if has_from and has_to:
+                                state_from = edge_obj.stateFrom()
+                                state_to = edge_obj.stateTo()
+                                if hasattr(state_from, 'name'):
+                                    from_state = state_from.name()
+                                else:
+                                    from_state = str(state_from)
+                                if hasattr(state_to, 'name'):
+                                    to_state = state_to.name()
+                                else:
+                                    to_state = str(state_to)
+                                self.edge_topology[edge_name] = (
+                                    from_state, to_state
+                                )
+                        except Exception:
+                            pass
+                
+                # Extract from factory.transitions if edge_objects
+                # not available. Transitions is a set of
+                # (forward_name, backward_name) tuples
+                if not self.edges and hasattr(self.factory, 'transitions'):
+                    for names_tuple in self.factory.transitions:
+                        is_tuple = isinstance(names_tuple, tuple)
+                        if is_tuple and len(names_tuple) >= 2:
+                            forward_name = names_tuple[0]
+                            backward_name = names_tuple[1]
+                            self.edges[forward_name] = forward_name
+                            self.edges[backward_name] = backward_name
+                        
+        except Exception as e:
+            print(f"    \u26a0 Could not extract graph structure: {e}")
     
     def apply_state_constraints(
         self,
