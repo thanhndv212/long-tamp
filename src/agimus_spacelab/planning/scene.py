@@ -50,10 +50,8 @@ class SceneBuilder:
 
         if joint_bounds is None:
             self.joint_bounds = JointBounds
-            print("   Using default joint bounds", type(self.joint_bounds))
         else:
             self.joint_bounds = joint_bounds
-        print("   Using custom joint bounds", type(self.joint_bounds))
 
         if self.backend == "corba":
             if not HAS_CORBA:
