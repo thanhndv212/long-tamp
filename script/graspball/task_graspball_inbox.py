@@ -145,64 +145,7 @@ class GraspBallTask(ManipulationTask):
         cfg = self.config
         
         if self.backend == "corba":
-            # Reset problem first
-            if Client is not None:
-                try:
-                    Client().problem.resetProblem()
-                except Exception:
-                    pass
-            
-            from agimus_spacelab.backends import CorbaBackend
-            self.planner = CorbaBackend()
-            
-            # Load robot
-            print("\n1. Loading robot and objects...")
-            self.robot = self.planner.load_robot(
-                composite_name=[
-                    "ur5-pokeball",
-                ],
-                robot_name=["ur5"],
-                urdf_path=cfg.ROBOT_URDF,
-                srdf_path=cfg.ROBOT_SRDF
-            )
-            
-            # Load ball
-            self.planner.load_object(
-                name="pokeball",
-                urdf_path=cfg.BALL_URDF,
-                root_joint_type="freeflyer"
-            )
-            
-            # Set joint bounds for freeflyer
-            bounds = JointBounds.freeflyer_bounds()
-            self.planner.set_joint_bounds(cfg.BALL_NAME, bounds)
-            
-            # Load environment
-            self.planner.load_environment("ground", cfg.GROUND_URDF)
-            self.planner.load_environment("box", cfg.BOX_URDF)
-            
-            # Get problem solver
-            self.ps = self.planner.get_problem()
-            
-            # Position box walls
-            box_x = cfg.BOX_X
-            box_off = cfg.BOX_OFFSET
-            self.ps.moveObstacle(
-                'box/base_link_0', [box_x + box_off, 0, 0.04, 0, 0, 0, 1]
-            )
-            self.ps.moveObstacle(
-                'box/base_link_1', [box_x - box_off, 0, 0.04, 0, 0, 0, 1]
-            )
-            self.ps.moveObstacle(
-                'box/base_link_2', [box_x, box_off, 0.04, 0, 0, 0, 1]
-            )
-            self.ps.moveObstacle(
-                'box/base_link_3', [box_x, -box_off, 0.04, 0, 0, 0, 1]
-            )
-            
-            # Configure path planning
-            self.ps.selectPathValidation("Discretized", validation_step)
-            self.ps.selectPathProjector("Progressive", projector_step)
+            pass
             
         else:  # pyhpp
             from agimus_spacelab.backends import PyHPPBackend
@@ -465,13 +408,43 @@ class GraspBallTask(ManipulationTask):
         self.graph_builder.add_states(cfg.GRAPH_NODES)
 
         # Create edges
-        self._create_corba_edges_with_builder()
+        edges_def = self.config.GRASPBALL_GRAPH['edges']
+        for edge_name, edge_info in edges_def.items():
+            self.graph_builder.add_edge(
+                edge_info["from"],
+                edge_info["to"],
+                edge_name,
+                edge_info.get("weight", 1),
+                edge_info["in"]
+            )
 
         # Assign state constraints
-        self._assign_corba_state_constraints_with_builder()
+        states_def = self.config.GRASPBALL_GRAPH['states']
+        for state_name, state_info in states_def.items():
+            constraint_names = state_info.get("constraints", [])
+            if constraint_names:
+                if self.backend == "corba":
+                    self.graph_builder.add_state_constraints(
+                        state_name, [],
+                        constraint_names=constraint_names
+                    )
 
         # Assign edge constraints
-        self._assign_corba_edge_constraints_with_builder()
+        edge_constraints_def = self.config.GRASPBALL_GRAPH['edge_constraints']
+        free_edges = self.config.GRASPBALL_GRAPH["free_motion_edges"]
+
+        for constraint_name, edge_list in edge_constraints_def.items():
+            for edge_name in edge_list:
+                if self.backend == "corba":
+                    self.graph_builder.add_edge_constraints(
+                        edge_name, [],
+                        constraint_names=[constraint_name]
+                    )
+        
+        for edge_name in free_edges:
+            if self.backend == "corba":
+                self.graph_builder.add_edge_constraints(edge_name, [],
+                                                        constraint_names=[])
 
         # Set constant RHS
         constant_rhs = self.config.GRASPBALL_GRAPH["constant_rhs"]
@@ -481,56 +454,6 @@ class GraspBallTask(ManipulationTask):
         self.graph_builder.finalize_manual_graph()
 
         return self.graph_builder.get_graph()
-    
-    def _create_corba_edges_with_builder(self):
-        """Create all state transitions for CORBA using GraphBuilder."""
-        gb = self.graph_builder
-
-        # Define edge topology: (from_state, to_state, name, weight, containing)
-        edges_def = self.config.GRASPBALL_GRAPH['edges']
-        for edge_name, edge_info in edges_def.items():
-            gb.add_edge(
-                edge_info["from"],
-                edge_info["to"],
-                edge_name,
-                edge_info.get("weight", 1),
-                edge_info["in"]
-            )
-
-    def _assign_corba_state_constraints_with_builder(self):
-        """Assign constraints to states for CORBA using GraphBuilder."""
-        gb = self.graph_builder
-
-        # Define state constraints: {state_name: [constraint_names]}
-        states_def = self.config.GRASPBALL_GRAPH['states']
-        for state_name, state_info in states_def.items():
-            constraint_names = state_info.get("constraints", [])
-            if constraint_names:
-                if self.backend == "corba":
-                    gb.add_state_constraints(
-                        state_name, [],
-                        constraint_names=constraint_names
-                    )
-
-    def _assign_corba_edge_constraints_with_builder(self):
-        """Assign path constraints to edges for CORBA using GraphBuilder."""
-        gb = self.graph_builder
-
-        # Define edge constraints: {constraint_name: [edge_names]}
-        edge_constraints_def = self.config.GRASPBALL_GRAPH['edge_constraints']
-        free_edges = self.config.GRASPBALL_GRAPH["free_motion_edges"]
-
-        for constraint_name, edge_list in edge_constraints_def.items():
-            for edge_name in edge_list:
-                if self.backend == "corba":
-                    gb.add_edge_constraints(
-                        edge_name, [],
-                        constraint_names=[constraint_name]
-                    )
-        
-        for edge_name in free_edges:
-            if self.backend == "corba":
-                gb.add_edge_constraints(edge_name, [], constraint_names=[])
 
     def _create_pyhpp_graph(self):
         """Create graph for PyHPP backend."""
@@ -953,21 +876,22 @@ class GraspBallTask(ManipulationTask):
         )
         
         # Position box walls
-        cfg = self.config
-        box_x = cfg.BOX_X
-        box_off = cfg.BOX_OFFSET
-        self.scene_builder.move_obstacle(
-            'box/base_link_0', [box_x + box_off, 0, 0.04], [0, 0, 0, 1]
-        )
-        self.scene_builder.move_obstacle(
-            'box/base_link_1', [box_x - box_off, 0, 0.04], [0, 0, 0, 1]
-        )
-        self.scene_builder.move_obstacle(
-            'box/base_link_2', [box_x, box_off, 0.04], [0, 0, 0, 1]
-        )
-        self.scene_builder.move_obstacle(
-            'box/base_link_3', [box_x, -box_off, 0.04], [0, 0, 0, 1]
-        )
+        if self.backend == "corba":
+            cfg = self.config
+            box_x = cfg.BOX_X
+            box_off = cfg.BOX_OFFSET
+            self.scene_builder.move_obstacle(
+                'box/base_link_0', [box_x + box_off, 0, 0.04], [0, 0, 0, 1]
+            )
+            self.scene_builder.move_obstacle(
+                'box/base_link_1', [box_x - box_off, 0, 0.04], [0, 0, 0, 1]
+            )
+            self.scene_builder.move_obstacle(
+                'box/base_link_2', [box_x, box_off, 0.04], [0, 0, 0, 1]
+            )
+            self.scene_builder.move_obstacle(
+                'box/base_link_3', [box_x, -box_off, 0.04], [0, 0, 0, 1]
+            )
         # 2. Create constraints
         print("\n2. Creating constraints...")
         self.create_constraints()
