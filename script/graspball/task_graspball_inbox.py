@@ -325,139 +325,70 @@ class GraspBallTask(ManipulationTask):
         return self.graph_builder.get_graph()
 
     def _create_pyhpp_graph(self):
-        """Create graph for PyHPP backend."""
+        """Create graph for PyHPP backend using GraphBuilder."""
         print("    Building constraint graph...")
-        
-        robot = self.planner.get_robot()
-        problem = self.planner.get_problem()
+        cfg = self.config
         constraints = self.pyhpp_constraints
-        
-        graph = Graph("manipulation_graph", robot, problem)
-        
-        # Create states (order matters!)
-        states = {}
-        states['grasp'] = graph.createState("grasp", False, 0)
-        states['ball-above-ground'] = graph.createState(
-            "ball-above-ground", False, 0
+
+        # Initialize GraphBuilder
+        self.graph_builder = GraphBuilder(
+            self.planner, self.planner.get_robot(),
+            self.planner.get_problem(), backend="pyhpp"
         )
-        states['grasp-placement'] = graph.createState(
-            "grasp-placement", False, 0
-        )
-        states['gripper-above-ball'] = graph.createState(
-            "gripper-above-ball", False, 0
-        )
-        states['placement'] = graph.createState("placement", False, 0)
-        print("    ✓ Created 5 states")
-        
-        # Create edges
-        edges = {}
-        
-        # Self-loops
-        edges['transit'] = graph.createTransition(
-            states['placement'], states['placement'],
-            "transit", 1, states['placement']
-        )
-        edges['transfer'] = graph.createTransition(
-            states['grasp'], states['grasp'],
-            "transfer", 1, states['grasp']
-        )
-        
-        # From placement
-        edges['approach-ball'] = graph.createTransition(
-            states['placement'], states['gripper-above-ball'],
-            "approach-ball", 1, states['placement']
-        )
-        
-        # From gripper-above-ball
-        edges['move-gripper-away'] = graph.createTransition(
-            states['gripper-above-ball'], states['placement'],
-            "move-gripper-away", 1, states['placement']
-        )
-        edges['grasp-ball'] = graph.createTransition(
-            states['gripper-above-ball'], states['grasp-placement'],
-            "grasp-ball", 1, states['placement']
-        )
-        
-        # From grasp-placement
-        edges['move-gripper-up'] = graph.createTransition(
-            states['grasp-placement'], states['gripper-above-ball'],
-            "move-gripper-up", 1, states['placement']
-        )
-        edges['take-ball-up'] = graph.createTransition(
-            states['grasp-placement'], states['ball-above-ground'],
-            "take-ball-up", 1, states['grasp']
-        )
-        
-        # From ball-above-ground
-        edges['put-ball-down'] = graph.createTransition(
-            states['ball-above-ground'], states['grasp-placement'],
-            "put-ball-down", 1, states['grasp']
-        )
-        edges['take-ball-away'] = graph.createTransition(
-            states['ball-above-ground'], states['grasp'],
-            "take-ball-away", 1, states['grasp']
-        )
-        
-        # From grasp
-        edges['approach-ground'] = graph.createTransition(
-            states['grasp'], states['ball-above-ground'],
-            "approach-ground", 1, states['grasp']
-        )
-        print("    ✓ Created transitions")
-        
-        # Add constraints to states
-        graph.addNumericalConstraint(
-            states['placement'], constraints['placement']
-        )
-        graph.addNumericalConstraint(
-            states['gripper-above-ball'], constraints['placement']
-        )
-        graph.addNumericalConstraint(
-            states['gripper-above-ball'], constraints['gripper_ball_aligned']
-        )
-        graph.addNumericalConstraint(
-            states['grasp-placement'], constraints['grasp']
-        )
-        graph.addNumericalConstraint(
-            states['grasp-placement'], constraints['placement']
-        )
-        graph.addNumericalConstraint(
-            states['ball-above-ground'], constraints['grasp']
-        )
-        graph.addNumericalConstraint(
-            states['ball-above-ground'], constraints['ball_near_table']
-        )
-        graph.addNumericalConstraint(states['grasp'], constraints['grasp'])
-        print("    ✓ Added constraints to states")
-        
-        # Add constraints to edges
-        for edge in ['transit', 'approach-ball', 'move-gripper-away']:
-            graph.addNumericalConstraintsToTransition(
-                edges[edge], [constraints['placement/complement']]
+
+        # Create empty graph
+        self.graph_builder.create_manual_graph("manipulation_graph")
+
+        # Create states (order matters for solver performance)
+        for state_name in cfg.GRAPH_NODES:
+            self.graph_builder.add_state(state_name)
+
+        # Create edges from declarative definition
+        edges_def = cfg.GRASPBALL_GRAPH['edges']
+        for edge_name, edge_info in edges_def.items():
+            self.graph_builder.add_edge(
+                edge_info["from"],
+                edge_info["to"],
+                edge_name,
+                edge_info.get("weight", 1),
+                edge_info["in"]
             )
-        for edge in ['grasp-ball', 'move-gripper-up']:
-            graph.addNumericalConstraintsToTransition(
-                edges[edge], [constraints['placement/complement']]
-            )
-        for edge in ['take-ball-up', 'put-ball-down']:
-            graph.addNumericalConstraintsToTransition(
-                edges[edge], [constraints['ball_near_table/complement']]
-            )
-        print("    ✓ Added constraints to edges")
-        
-        # Configure graph
-        graph.maxIterations(100)
-        graph.errorThreshold(0.00001)
-        
-        # Initialize graph
-        graph.initialize()
-        print("    ✓ Graph initialized")
-        
+
+        # Add constraints to states from declarative definition
+        states_def = cfg.GRASPBALL_GRAPH['states']
+        for state_name, state_info in states_def.items():
+            constraint_names = state_info.get("constraints", [])
+            if constraint_names:
+                # Get constraint objects for PyHPP
+                constraint_objs = [constraints[n] for n in constraint_names]
+                self.graph_builder.add_state_constraints(
+                    state_name, constraint_objs
+                )
+
+        # Add constraints to edges from declarative definition
+        edge_constraints_def = cfg.GRASPBALL_GRAPH['edge_constraints']
+        for constraint_name, edge_list in edge_constraints_def.items():
+            for edge_name in edge_list:
+                self.graph_builder.add_edge_constraints(
+                    edge_name, [constraints[constraint_name]]
+                )
+
+        # Free motion edges (no path constraints)
+        free_edges = cfg.GRASPBALL_GRAPH["free_motion_edges"]
+        for edge_name in free_edges:
+            self.graph_builder.add_edge_constraints(edge_name, [])
+
+        # Finalize graph
+        self.graph_builder.finalize_manual_graph()
+
         # Store for later use
+        problem = self.planner.get_problem()
+        graph = self.graph_builder.get_graph()
         problem.constraintGraph(graph)
-        self.pyhpp_states = states
-        self.pyhpp_edges = edges
-        
+        self.pyhpp_states = self.graph_builder.get_states()
+        self.pyhpp_edges = self.graph_builder.get_edges()
+        self.pyhpp_edge_topology = self.graph_builder.get_edge_topology()
+
         return graph
         
     def generate_configurations(
