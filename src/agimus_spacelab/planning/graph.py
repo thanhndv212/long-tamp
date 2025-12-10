@@ -331,45 +331,6 @@ class GraphBuilder:
         
         return self.graph
 
-    def _generate_rules_from_valid_pairs(
-        self,
-        grippers: List[str],
-        valid_pairs: Dict[str, List[str]],
-        rule_class: Any = None
-    ) -> List:
-        """
-        Generate Rule objects from valid_pairs mapping.
-        
-        Args:
-            grippers: List of gripper names used in the graph
-            valid_pairs: Dict mapping gripper names to list of valid handles
-            rule_class: Rule class to use (auto-detected from backend if None)
-            
-        Returns:
-            List of Rule objects for the factory
-        """
-        # Determine Rule class based on backend
-        if rule_class is None:
-            rule_class = PyHPPRule if self.backend == "pyhpp" else Rule
-        
-        rules = []
-        
-        # Allow specific valid pairs
-        for gripper_name, handles in valid_pairs.items():
-            # Check if this gripper is in our graph
-            if gripper_name not in grippers:
-                continue
-            
-            # Create allow rule for each valid handle
-            for handle in handles:
-                # Use exact match patterns
-                gripper_pattern = f"^{gripper_name}$"
-                handle_pattern = f"^{handle}$"
-                rules.append(
-                    rule_class([gripper_pattern], [handle_pattern], True)
-                )
-        return rules
-
     def create_factory_graph(
         self,
         grippers: List[str],
@@ -392,8 +353,8 @@ class GraphBuilder:
             environment_contacts: List of environment contact surface names
             rules: Optional list of Rule objects for graph generation
             valid_pairs: Optional dict mapping gripper names to list of
-                valid handle names. If provided, generates rules to only
-                allow these specific gripper-handle pairs.
+                valid handle names. Uses setPossibleGrasps to restrict
+                which gripper-handle pairs are allowed.
             
         Returns:
             ConstraintGraph or Graph instance
@@ -409,7 +370,6 @@ class GraphBuilder:
             # Create CORBA constraint graph
             self.graph = ConstraintGraph(self.robot, "graph")
             self.factory = ConstraintGraphFactory(self.graph)
-            rule_class = Rule
             
         else:  # pyhpp
             if not HAS_PYHPP_GRAPH:
@@ -420,7 +380,6 @@ class GraphBuilder:
             self.graph.maxIterations(10000)
             self.graph.errorThreshold(1e-4)
             self.factory = PyHPPConstraintGraphFactory(self.graph)
-            rule_class = PyHPPRule
         
         # Set grippers
         self.factory.setGrippers(grippers)
@@ -440,24 +399,19 @@ class GraphBuilder:
             print(f"    \u2713 Set environment contacts: "
                   f"{environment_contacts}")
         
-        # Set rules
+        # Set grasp restrictions
         if rules is not None:
             # Use explicitly provided rules
             self.factory.setRules(rules)
             print("    \u2713 Set custom rules")
         elif valid_pairs is not None:
-            # Generate rules from valid_pairs mapping
-            generated_rules = self._generate_rules_from_valid_pairs(
-                grippers, valid_pairs, rule_class
-            )
-            self.factory.setRules(generated_rules)
-            print(f"    \u2713 Set rules from valid_pairs "
-                  f"({len(generated_rules)} rules)")
-        else:
-            # Default: allow all gripper-handle pairs
-            default_rules = [rule_class([".*"], [".*"], True)]
-            self.factory.setRules(default_rules)
-            print("    \u2713 Set rules: allow all")
+            # Use setPossibleGrasps - more convenient than rules
+            # valid_pairs format: {gripper_name: [handle1, handle2, ...]}
+            self.factory.setPossibleGrasps(valid_pairs)
+            print("    \u2713 Set possible grasps from valid_pairs")
+            for gripper, handles in valid_pairs.items():
+                print(f"        {gripper}: {handles}")
+        # If neither rules nor valid_pairs, allow all (default behavior)
         
         # Generate graph
         self.factory.generate()
