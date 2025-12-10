@@ -152,6 +152,7 @@ class CorbaBackend(BackendBase):
         urdf_suffix: str = "",
         srdf_suffix: str = "",
         meshpkg_name: Optional[str] = None,
+        pose: Any = None,
     ):
         """Load environment model."""
         if self.vf is None:

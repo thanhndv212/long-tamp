@@ -81,16 +81,17 @@ class SceneBuilder:
                 print(f"      ⚠ Unknown robot: {rb_name}")
         return self
         
-    def load_environment(self, environment_names: List[str]) -> 'SceneBuilder':
+    def load_environment(self, environment_names: List[str], pose=None) -> 'SceneBuilder':
         """Load the environment (dispenser, ground, etc.)."""
         print(f"   Loading environment ({environment_names})...")
-        for env_name in environment_names:
+        for id, env_name in enumerate(environment_names):
             if env_name in self.FILE_PATHS["environment"]:
                 print(f"      Loading environment: {env_name}")
                 print(f"         from: {self.FILE_PATHS['environment'][env_name]}")
                 self.planner.load_environment(
                     name=env_name,
-                    urdf_path=self.FILE_PATHS["environment"][env_name]
+                    urdf_path=self.FILE_PATHS["environment"][env_name],
+                    pose=pose[id] if pose is not None else None
                 )
             else:
                 print(f"      ⚠ Unknown environment: {env_name}")
