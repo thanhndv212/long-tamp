@@ -179,16 +179,18 @@ class GraphBuilder:
             raise ValueError(f"Target state '{to_state}' not found")
         
         if self.backend == "corba":
-            # CORBA uses createEdge
+            # CORBA uses createEdge with state names
             edge_id = self.graph.createEdge(
                 from_state, to_state, name, weight,
                 containing_state or from_state
             )
         else:  # pyhpp
-            # PyHPP uses createEdge/createTransition
-            edge_id = self.graph.createEdge(
-                from_state, to_state, name, weight,
-                containing_state or from_state
+            # PyHPP uses createTransition with state objects
+            from_id = self.states[from_state]
+            to_id = self.states[to_state]
+            containing_id = self.states[containing_state or from_state]
+            edge_id = self.graph.createTransition(
+                from_id, to_id, name, weight, containing_id
             )
         
         self.edges[name] = edge_id
