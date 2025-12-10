@@ -488,91 +488,66 @@ class GraspBallTask(ManipulationTask):
         """Create all state transitions for CORBA using GraphBuilder."""
         gb = self.graph_builder
 
-        # Self-loops
-        gb.add_edge('placement', 'placement', 'transit', 1, 'placement')
-        gb.add_edge('grasp', 'grasp', 'transfer', 1, 'grasp')
+        # Define edge topology: (from_state, to_state, name, weight, containing)
+        edges = [
+            # Self-loops
+            ('placement', 'placement', 'transit', 1, 'placement'),
+            ('grasp', 'grasp', 'transfer', 1, 'grasp'),
+            # From placement
+            ('placement', 'gripper-above-ball', 'approach-ball', 1, 'placement'),
+            # From gripper-above-ball
+            ('gripper-above-ball', 'placement', 'move-gripper-away', 1, 'placement'),
+            ('gripper-above-ball', 'grasp-placement', 'grasp-ball', 1, 'placement'),
+            # From grasp-placement
+            ('grasp-placement', 'gripper-above-ball', 'move-gripper-up', 1, 'placement'),
+            ('grasp-placement', 'ball-above-ground', 'take-ball-up', 1, 'grasp'),
+            # From ball-above-ground
+            ('ball-above-ground', 'grasp-placement', 'put-ball-down', 1, 'grasp'),
+            ('ball-above-ground', 'grasp', 'take-ball-away', 1, 'grasp'),
+            # From grasp
+            ('grasp', 'ball-above-ground', 'approach-ground', 1, 'grasp'),
+        ]
 
-        # From placement
-        gb.add_edge(
-            'placement', 'gripper-above-ball', 'approach-ball', 1, 'placement'
-        )
+        for from_s, to_s, name, weight, containing in edges:
+            gb.add_edge(from_s, to_s, name, weight, containing)
 
-        # From gripper-above-ball
-        gb.add_edge(
-            'gripper-above-ball', 'placement', 'move-gripper-away', 1, 'placement'
-        )
-        gb.add_edge(
-            'gripper-above-ball', 'grasp-placement', 'grasp-ball', 1, 'placement'
-        )
-
-        # From grasp-placement
-        gb.add_edge(
-            'grasp-placement', 'gripper-above-ball', 'move-gripper-up',
-            1, 'placement'
-        )
-        gb.add_edge(
-            'grasp-placement', 'ball-above-ground', 'take-ball-up', 1, 'grasp'
-        )
-
-        # From ball-above-ground
-        gb.add_edge(
-            'ball-above-ground', 'grasp-placement', 'put-ball-down', 1, 'grasp'
-        )
-        gb.add_edge(
-            'ball-above-ground', 'grasp', 'take-ball-away', 1, 'grasp'
-        )
-
-        # From grasp
-        gb.add_edge(
-            'grasp', 'ball-above-ground', 'approach-ground', 1, 'grasp'
-        )
-    
     def _assign_corba_state_constraints_with_builder(self):
         """Assign constraints to states for CORBA using GraphBuilder."""
         gb = self.graph_builder
 
-        gb.add_state_constraints(
-            "placement", [], constraint_names=["placement"]
-        )
-        gb.add_state_constraints(
-            "gripper-above-ball", [],
-            constraint_names=["placement", "gripper_ball_aligned"]
-        )
-        gb.add_state_constraints(
-            "grasp-placement", [], constraint_names=["grasp", "placement"]
-        )
-        gb.add_state_constraints(
-            "ball-above-ground", [],
-            constraint_names=["grasp", "ball_near_table"]
-        )
-        gb.add_state_constraints(
-            "grasp", [], constraint_names=["grasp"]
-        )
-    
+        # Define state constraints: {state_name: [constraint_names]}
+        state_constraints = {
+            "placement": ["placement"],
+            "gripper-above-ball": ["placement", "gripper_ball_aligned"],
+            "grasp-placement": ["grasp", "placement"],
+            "ball-above-ground": ["grasp", "ball_near_table"],
+            "grasp": ["grasp"],
+        }
+
+        for state, constraints in state_constraints.items():
+            gb.add_state_constraints(state, [], constraint_names=constraints)
+
     def _assign_corba_edge_constraints_with_builder(self):
         """Assign path constraints to edges for CORBA using GraphBuilder."""
         gb = self.graph_builder
 
-        # Edges with placement/complement
-        for edge in ["transit", "approach-ball", "move-gripper-away"]:
-            gb.add_edge_constraints(
-                edge, [], constraint_names=["placement/complement"]
-            )
-
-        # Grasp-ball and move-gripper-up
-        for edge in ["grasp-ball", "move-gripper-up"]:
-            gb.add_edge_constraints(
-                edge, [], constraint_names=["placement/complement"]
-            )
-
-        # Take-ball-up and put-ball-down
-        for edge in ["take-ball-up", "put-ball-down"]:
-            gb.add_edge_constraints(
-                edge, [], constraint_names=["ball_near_table/complement"]
-            )
+        # Define edge constraints: {constraint_name: [edge_names]}
+        edge_constraints = {
+            "placement/complement": [
+                "transit", "approach-ball", "move-gripper-away",
+                "grasp-ball", "move-gripper-up"
+            ],
+            "ball_near_table/complement": ["take-ball-up", "put-ball-down"],
+        }
 
         # Free motion edges (no path constraints)
-        for edge in ["transfer", "take-ball-away", "approach-ground"]:
+        free_edges = ["transfer", "take-ball-away", "approach-ground"]
+
+        for constraint, edges in edge_constraints.items():
+            for edge in edges:
+                gb.add_edge_constraints(edge, [], constraint_names=[constraint])
+
+        for edge in free_edges:
             gb.add_edge_constraints(edge, [], constraint_names=[])
     
     def _create_pyhpp_graph(self):
