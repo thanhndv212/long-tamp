@@ -152,9 +152,17 @@ class PyHPPBackend(BackendBase):
         self,
         name: str,
         urdf_path: str,
+        srdf_path: Optional[str] = None,
         root_joint_type: str = "freeflyer"
     ):
-        """Load manipulable object."""
+        """Load manipulable object.
+        
+        Args:
+            name: Name for the object (used as prefix for handles/grippers)
+            urdf_path: Path to URDF file
+            srdf_path: Path to SRDF file containing handles/grippers/contacts
+            root_joint_type: Type of root joint ('freeflyer' or 'anchor')
+        """
         if self.device is None:
             raise RuntimeError("Must load robot first")
         
@@ -164,7 +172,7 @@ class PyHPPBackend(BackendBase):
             name,
             root_joint_type,
             urdf_path,
-            "",
+            srdf_path or "",
             SE3.Identity()
         )
         

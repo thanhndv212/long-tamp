@@ -181,12 +181,28 @@ class CorbaBackend(BackendBase):
         self,
         name: str,
         urdf_path: str,
+        srdf_path: Optional[str] = None,
         root_joint_type: str = "freeflyer",
         urdf_suffix: str = "",
         srdf_suffix: str = "",
         meshpkg_name: Optional[str] = None,
     ):
-        """Load manipulable object."""
+        """Load manipulable object.
+        
+        Args:
+            name: Name for the object
+            urdf_path: Path to URDF file
+            srdf_path: Path to SRDF file (optional, for API consistency)
+            root_joint_type: Type of root joint
+            urdf_suffix: URDF suffix for loading
+            srdf_suffix: SRDF suffix for loading
+            meshpkg_name: Mesh package name
+            
+        Note:
+            CORBA backend uses srdf_suffix to find SRDF in the same location
+            as the URDF. The srdf_path parameter is accepted but not used
+            directly since loadObjectModel handles SRDF loading internally.
+        """
         if self.vf is None:
             self.vf = ViewerFactory(self.ps)
         

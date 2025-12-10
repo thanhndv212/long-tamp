@@ -110,9 +110,22 @@ class SceneBuilder:
                 print(f"      ⚠ Unknown object: {obj_name}")
                 continue
             
+            obj_config = self.FILE_PATHS["objects"][obj_name]
+            
+            # Handle both old format (string) and new format (dict)
+            if isinstance(obj_config, str):
+                # Old format: just URDF path
+                urdf_path = obj_config
+                srdf_path = None
+            else:
+                # New format: dict with urdf and srdf
+                urdf_path = obj_config.get("urdf", obj_config)
+                srdf_path = obj_config.get("srdf")
+            
             self.planner.load_object(
                 name=obj_name,
-                urdf_path=self.FILE_PATHS["objects"][obj_name],
+                urdf_path=urdf_path,
+                srdf_path=srdf_path,
                 root_joint_type="freeflyer"
             )
             self.loaded_objects.append(obj_name)
