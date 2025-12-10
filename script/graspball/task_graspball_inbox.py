@@ -441,20 +441,31 @@ class GraspBallTask(ManipulationTask):
         
         Overrides base class to use custom scene setup.
         """
+        cfg = self.config
+        if self.backend == "pyhpp":
+            box_pose = SE3(
+                rotation=np.eye(3),
+                translation=np.array([cfg.BOX_X, 0, 0.04])
+            )
         # 1. Custom scene setup (not using SceneBuilder)
-        # self.setup_scene(validation_step, projector_step)
-        self.planner, self.robot, self.ps = self.scene_builder.build(
-            robot_names=self.robot_names,
-            environment_names=self.environment_names,
+        self.scene_builder.load_robot(
             composite_names=self.composite_names,
-            object_names=self.object_names,
-            validation_step=validation_step,
-            projector_step=projector_step
+            robot_names=self.robot_names
         )
+        self.scene_builder.load_environment(
+            environment_names=self.environment_names,
+            pose=[None,box_pose] if self.backend == "pyhpp" else None
+        )
+        self.scene_builder.load_objects(
+            object_names=self.object_names
+        )
+        self.scene_builder.set_joint_bounds()
+        self.scene_builder.configure_path_validation(validation_step,
+                                                     projector_step)
+        self.planner, self.robot, self.ps = self.scene_builder.get_instances()
         
         # Position box walls
         if self.backend == "corba":
-            cfg = self.config
             box_x = cfg.BOX_X
             box_off = cfg.BOX_OFFSET
             self.scene_builder.move_obstacle(
