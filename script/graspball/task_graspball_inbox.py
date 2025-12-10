@@ -57,38 +57,6 @@ except ImportError:
     HAS_CORBA = False
     HAS_PYHPP = False
 
-# CORBA-specific imports for manual graph building
-try:
-    from hpp.corbaserver.manipulation import ConstraintGraph, Constraints
-    from hpp.corbaserver import Client
-except ImportError:
-    ConstraintGraph = None
-    Constraints = None
-    Client = None
-
-# PyHPP-specific imports for manual graph building
-try:
-    from pyhpp.manipulation import Graph
-    from pyhpp.constraints import (
-        RelativeTransformation,
-        Transformation,
-        ComparisonTypes,
-        ComparisonType,
-        Implicit,
-    )
-    from pinocchio import SE3, Quaternion, StdVec_Bool as Mask
-except ImportError:
-    Graph = None
-    RelativeTransformation = None
-    Transformation = None
-    ComparisonTypes = None
-    ComparisonType = None
-    Implicit = None
-    SE3 = None
-    Quaternion = None
-    Mask = None
-
-
 # ============================================================================
 # Task Implementation
 # ============================================================================
