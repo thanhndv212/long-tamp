@@ -12,7 +12,8 @@ try:
     from hpp.corbaserver.manipulation import (
         ConstraintGraph,
         ConstraintGraphFactory,
-        Rule
+        Rule,
+        Constraints
     )
     HAS_CORBA_GRAPH = True
 except ImportError:
@@ -20,6 +21,7 @@ except ImportError:
     ConstraintGraph = None
     ConstraintGraphFactory = None
     Rule = None
+    Constraints = None
 
 # Import for PyHPP backend
 try:
@@ -87,14 +89,14 @@ class GraphBuilder:
             self.graph.maxIterations(10000)
             self.graph.errorThreshold(1e-4)
             print("   ✓ PyHPP graph initialized (manual mode)")
-                
+
         return self.graph
-    
-    def add_state(self, name: str, is_waypoint: bool = False, 
+
+    def add_state(self, name: str, is_waypoint: bool = False,
                   priority: int = 0) -> int:
         """
         Add a state to the graph.
-        
+
         Args:
             name: State name
             is_waypoint: Whether this is a waypoint state
@@ -118,7 +120,37 @@ class GraphBuilder:
         self.states[name] = state_id
         print(f"    ✓ State '{name}' created (ID: {state_id})")
         return state_id
-    
+
+    def add_states(self, names: List[str], is_waypoint: bool = False) -> None:
+        """
+        Add multiple states to the graph at once.
+
+        For CORBA backend, this is more efficient than calling add_state
+        multiple times as it creates all nodes in a single call.
+
+        Args:
+            names: List of state names
+            is_waypoint: Whether these are waypoint states
+
+        Note:
+            For PyHPP backend, this calls add_state for each name.
+        """
+        if self.graph is None:
+            raise RuntimeError(
+                "Graph not initialized. Call create_manual_graph() first"
+            )
+
+        if self.backend == "corba":
+            # CORBA can create multiple nodes at once
+            self.graph.createNode(names, is_waypoint)
+            for name in names:
+                self.states[name] = name  # CORBA uses name as ID
+            print(f"    ✓ Created {len(names)} states: {names}")
+        else:  # pyhpp
+            # PyHPP creates states one at a time
+            for name in names:
+                self.add_state(name, is_waypoint)
+
     def add_edge(self, from_state: str, to_state: str, name: str,
                  weight: int = 1,
                  containing_state: Optional[str] = None) -> int:
@@ -164,7 +196,109 @@ class GraphBuilder:
         print(f"    ✓ Edge '{name}': {from_state} → {to_state} "
               f"(ID: {edge_id})")
         return edge_id
-    
+
+    def add_state_constraints(
+        self,
+        state_name: str,
+        constraints: List[Any],
+        constraint_names: Optional[List[str]] = None
+    ) -> None:
+        """
+        Add constraints to a state.
+
+        Args:
+            state_name: Name of the state to add constraints to
+            constraints: List of constraint objects (PyHPP) or ignored (CORBA)
+            constraint_names: List of constraint names (CORBA) or ignored
+                (PyHPP)
+
+        Note:
+            - CORBA: Uses constraint_names to reference constraints by name
+            - PyHPP: Uses constraint objects directly
+        """
+        if self.graph is None:
+            raise RuntimeError("Graph not initialized")
+
+        if state_name not in self.states:
+            raise ValueError(f"State '{state_name}' not found")
+
+        if self.backend == "corba":
+            if constraint_names is None:
+                raise ValueError(
+                    "constraint_names required for CORBA backend"
+                )
+            # CORBA uses addConstraints with Constraints object
+            self.graph.addConstraints(
+                node=state_name,
+                constraints=Constraints(numConstraints=constraint_names)
+            )
+            print(f"    ✓ Added constraints {constraint_names} "
+                  f"to state '{state_name}'")
+
+        else:  # pyhpp
+            if constraints is None or len(constraints) == 0:
+                raise ValueError(
+                    "constraints list required for PyHPP backend"
+                )
+            # PyHPP uses addNumericalConstraint for each constraint
+            state_id = self.states[state_name]
+            for constraint in constraints:
+                self.graph.addNumericalConstraint(state_id, constraint)
+            print(f"    ✓ Added {len(constraints)} constraint(s) "
+                  f"to state '{state_name}'")
+
+    def add_edge_constraints(
+        self,
+        edge_name: str,
+        constraints: List[Any],
+        constraint_names: Optional[List[str]] = None
+    ) -> None:
+        """
+        Add constraints to an edge (path constraints).
+
+        Args:
+            edge_name: Name of the edge to add constraints to
+            constraints: List of constraint objects (PyHPP) or ignored (CORBA)
+            constraint_names: List of constraint names (CORBA) or ignored
+                (PyHPP)
+
+        Note:
+            - CORBA: Uses constraint_names to reference constraints by name
+            - PyHPP: Uses constraint objects directly
+        """
+        if self.graph is None:
+            raise RuntimeError("Graph not initialized")
+
+        if edge_name not in self.edges:
+            raise ValueError(f"Edge '{edge_name}' not found")
+
+        if self.backend == "corba":
+            # CORBA uses addConstraints with Constraints object
+            # Empty constraint_names is valid (no path constraints)
+            names = constraint_names or []
+            self.graph.addConstraints(
+                edge=edge_name,
+                constraints=Constraints(numConstraints=names)
+            )
+            if names:
+                print(f"    ✓ Added constraints {names} to edge '{edge_name}'")
+            else:
+                print(f"    ✓ Added empty constraints to edge '{edge_name}'")
+
+        else:  # pyhpp
+            # PyHPP uses addNumericalConstraintsToTransition
+            edge_id = self.edges[edge_name]
+            if constraints and len(constraints) > 0:
+                self.graph.addNumericalConstraintsToTransition(
+                    edge_id, constraints
+                )
+                print(f"    ✓ Added {len(constraints)} constraint(s) "
+                      f"to edge '{edge_name}'")
+            else:
+                # No constraints to add (free motion edge)
+                print(f"    ✓ No constraints added to edge '{edge_name}' "
+                      "(free motion)")
+
     def finalize_manual_graph(self) -> Any:
         """
         Finalize manual graph construction and initialize it.
