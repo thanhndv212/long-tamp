@@ -183,7 +183,87 @@ class ManipulationConfig:
         ("grasp", "ball-above-ground", "approach-ground"),
         ("grasp", "grasp", "transfer"),
     ]
-    
+    # ============================================================================
+    # Graph Definition (Declarative)
+    # ============================================================================
+
+    GRASPBALL_GRAPH = {
+        "name": "graspball_graph",
+
+        # States with their constraints
+        "states": {
+            "placement": {"constraints": ["placement"]},
+            "gripper-above-ball": {
+                "constraints": ["placement", "gripper_ball_aligned"]
+            },
+            "grasp-placement": {"constraints": ["grasp", "placement"]},
+            "ball-above-ground": {"constraints": ["grasp", "ball_near_table"]},
+            "grasp": {"constraints": ["grasp"]},
+        },
+
+        # Edges: from -> to via containing state
+        "edges": {
+            # Self-loops
+            "transit": {
+                "from": "placement", "to": "placement", "in": "placement"
+            },
+            "transfer": {
+                "from": "grasp", "to": "grasp", "in": "grasp"
+            },
+            # From placement
+            "approach-ball": {
+                "from": "placement", "to": "gripper-above-ball", "in": "placement"
+            },
+            # From gripper-above-ball
+            "move-gripper-away": {
+                "from": "gripper-above-ball", "to": "placement", "in": "placement"
+            },
+            "grasp-ball": {
+                "from": "gripper-above-ball", "to": "grasp-placement",
+                "in": "placement"
+            },
+            # From grasp-placement
+            "move-gripper-up": {
+                "from": "grasp-placement", "to": "gripper-above-ball",
+                "in": "placement"
+            },
+            "take-ball-up": {
+                "from": "grasp-placement", "to": "ball-above-ground", "in": "grasp"
+            },
+            # From ball-above-ground
+            "put-ball-down": {
+                "from": "ball-above-ground", "to": "grasp-placement", "in": "grasp"
+            },
+            "take-ball-away": {
+                "from": "ball-above-ground", "to": "grasp", "in": "grasp"
+            },
+            # From grasp
+            "approach-ground": {
+                "from": "grasp", "to": "ball-above-ground", "in": "grasp"
+            },
+        },
+
+        # Edge path constraints (grouped by constraint)
+        # Edges not listed are free motion (no path constraints)
+        "edge_constraints": {
+            "placement/complement": [
+                "transit", "approach-ball", "move-gripper-away",
+                "grasp-ball", "move-gripper-up"
+            ],
+            "ball_near_table/complement": ["take-ball-up", "put-ball-down"],
+        },
+
+        # Free moton edges (no path constraints)
+        "free_motion_edges": ["transfer", "take-ball-away", "approach-ground"],
+
+        # Constant RHS settings (CORBA only)
+        "constant_rhs": {
+            "placement": True,
+            "placement/complement": False,
+            "ball_near_table/complement": False,
+        },
+    }
+
     # Path planning parameters
     PATH_VALIDATION_STEP = 0.01
     PATH_PROJECTOR_STEP = 0.1
