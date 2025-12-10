@@ -264,6 +264,54 @@ class ManipulationConfig:
         },
     }
 
+    # ============================================================================
+    # Constraint Definitions (Data-driven)
+    # ============================================================================
+    # Each tuple: (type, name, args_dict)
+    # - type: "grasp", "placement", or "complement"
+    # - name: constraint name
+    # - args: dict with keys depending on type
+    #   - grasp: gripper, obj, transform, mask
+    #   - placement/complement: obj, transform, mask
+
+    @classmethod
+    def get_constraint_defs(cls):
+        """Return constraint definitions for this task."""
+        return [
+            ("grasp", "grasp", {
+                "gripper": cls.GRIPPER_NAME,
+                "obj": cls.BALL_NAME,
+                "transform": cls.BALL_IN_GRIPPER,
+                "mask": cls.GRASP_MASK,
+            }),
+            ("placement", "placement", {
+                "obj": cls.BALL_NAME,
+                "transform": cls.BALL_ON_GROUND,
+                "mask": cls.PLACEMENT_MASK,
+            }),
+            ("complement", "placement", {
+                "obj": cls.BALL_NAME,
+                "transform": cls.BALL_ON_GROUND,
+                "mask": cls.PLACEMENT_COMPLEMENT_MASK,
+            }),
+            ("grasp", "gripper_ball_aligned", {
+                "gripper": cls.GRIPPER_NAME,
+                "obj": cls.BALL_NAME,
+                "transform": cls.GRIPPER_ABOVE_BALL,
+                "mask": cls.GRASP_MASK,
+            }),
+            ("placement", "ball_near_table", {
+                "obj": cls.BALL_NAME,
+                "transform": cls.BALL_NEAR_TABLE,
+                "mask": cls.PLACEMENT_MASK,
+            }),
+            ("complement", "ball_near_table", {
+                "obj": cls.BALL_NAME,
+                "transform": [cls.BOX_X, 0.2, 0.1, 0, 0, 0, 1],
+                "mask": cls.PLACEMENT_COMPLEMENT_MASK,
+            }),
+        ]
+
     # Path planning parameters
     PATH_VALIDATION_STEP = 0.01
     PATH_PROJECTOR_STEP = 0.1

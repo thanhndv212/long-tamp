@@ -209,181 +209,50 @@ class GraspBallTask(ManipulationTask):
         pass
     
     def create_constraints(self) -> None:
-        """Create all transformation constraints."""
+        """Create all transformation constraints for both backends."""
         cfg = self.config
-        
-        if self.backend == "pyhpp":
-            self.pyhpp_constraints = self._create_pyhpp_constraints()
-            return
-        
-        # CORBA constraints using ConstraintBuilder
         cb = ConstraintBuilder
         
-        # 1. Grasp: gripper holds ball
-        cb.create_grasp_constraint(
-            self.ps, "grasp",
-            cfg.GRIPPER_NAME, cfg.BALL_NAME,
-            cfg.BALL_IN_GRIPPER, cfg.GRASP_MASK,
-            robot=self.robot, backend=self.backend
-        )
+        # Get robot reference (differs by backend)
+        robot = (self.planner.get_robot() if self.backend == "pyhpp"
+                 else self.robot)
         
-        # 2. Placement: ball on ground
-        cb.create_placement_constraint(
-            self.ps, "placement",
-            cfg.BALL_NAME, cfg.BALL_ON_GROUND,
-            cfg.PLACEMENT_MASK,
-            robot=self.robot, backend=self.backend
-        )
+        # Get constraint definitions from config
+        constraint_defs = cfg.get_constraint_defs()
         
-        # 3. Placement complement: X, Y, yaw free
-        cb.create_complement_constraint(
-            self.ps, "placement",
-            cfg.BALL_NAME, cfg.BALL_ON_GROUND,
-            cfg.PLACEMENT_COMPLEMENT_MASK,
-            robot=self.robot, backend=self.backend
-        )
+        constraints = {}
+        for ctype, name, args in constraint_defs:
+            if ctype == "grasp":
+                result = cb.create_grasp_constraint(
+                    self.ps, name,
+                    args["gripper"], args["obj"],
+                    args["transform"], args["mask"],
+                    robot=robot, backend=self.backend
+                )
+            elif ctype == "placement":
+                result = cb.create_placement_constraint(
+                    self.ps, name,
+                    args["obj"], args["transform"], args["mask"],
+                    robot=robot, backend=self.backend
+                )
+            elif ctype == "complement":
+                result = cb.create_complement_constraint(
+                    self.ps, name,
+                    args["obj"], args["transform"], args["mask"],
+                    robot=robot, backend=self.backend
+                )
+            
+            # Store constraint for PyHPP (returns object), CORBA returns None
+            if self.backend == "pyhpp":
+                key = f"{name}/complement" if ctype == "complement" else name
+                constraints[key] = result
         
-        # 4. Gripper-ball aligned: gripper above ball
-        cb.create_grasp_constraint(
-            self.ps, "gripper_ball_aligned",
-            cfg.GRIPPER_NAME, cfg.BALL_NAME,
-            cfg.GRIPPER_ABOVE_BALL, cfg.GRASP_MASK,
-            robot=self.robot, backend=self.backend
-        )
-        
-        # 5. Ball near table constraint
-        cb.create_placement_constraint(
-            self.ps, "ball_near_table",
-            cfg.BALL_NAME, cfg.BALL_NEAR_TABLE,
-            cfg.PLACEMENT_MASK,
-            robot=self.robot, backend=self.backend
-        )
-        
-        # 6. Ball near table complement
-        ball_near_table_comp = [cfg.BOX_X, 0.2, 0.1, 0, 0, 0, 1]
-        cb.create_complement_constraint(
-            self.ps, "ball_near_table",
-            cfg.BALL_NAME, ball_near_table_comp,
-            cfg.PLACEMENT_COMPLEMENT_MASK,
-            robot=self.robot, backend=self.backend
-        )
+        # Store for PyHPP graph building
+        if self.backend == "pyhpp":
+            self.pyhpp_constraints = constraints
         
         print("   ✓ Created transformation constraints")
-        
-    def _create_pyhpp_constraints(self) -> Dict:
-        """Create PyHPP-specific constraints."""
-        cfg = self.config
-        constraints = {}
-        
-        robot = self.planner.get_robot()
-        
-        # Get joint IDs
-        joint_gripper = robot.model().getJointId(cfg.GRIPPER_NAME)
-        joint_ball = robot.model().getJointId(cfg.BALL_NAME)
-        Id = SE3.Identity()
-        
-        # 1. GRASP: gripper/ball fixed (all 6 DOF)
-        q_grasp = Quaternion(0.5, 0.5, -0.5, 0.5)
-        ball_in_gripper = SE3(q_grasp, np.array([0, 0.137, 0]))
-        mask_full = Mask()
-        mask_full[:] = (True,) * 6
-        
-        pc_grasp = RelativeTransformation.create(
-            'grasp', robot.asPinDevice(),
-            joint_gripper, joint_ball,
-            ball_in_gripper, Id, mask_full
-        )
-        cts_grasp = ComparisonTypes()
-        cts_grasp[:] = tuple([ComparisonType.EqualToZero] * 6)
-        constraints['grasp'] = Implicit.create(pc_grasp, cts_grasp, mask_full)
-        print("    ✓ grasp constraint")
-        
-        # 2. PLACEMENT: world/ball - fixed z, r, p
-        q_placement = Quaternion(0, 0, 0, 1)
-        ball_on_ground = SE3(
-            q_placement, np.array([0, 0, cfg.BALL_RADIUS])
-        )
-        mask_placement = [False, False, True, True, True, False]
-        
-        pc_placement = Transformation.create(
-            'placement', robot.asPinDevice(),
-            joint_ball, Id, ball_on_ground, mask_placement
-        )
-        cts_placement = ComparisonTypes()
-        cts_placement[:] = tuple([ComparisonType.EqualToZero] * 3)
-        implicit_mask_placement = [True, True, True]
-        constraints['placement'] = Implicit.create(
-            pc_placement, cts_placement, implicit_mask_placement
-        )
-        print("    ✓ placement constraint")
-        
-        # 3. PLACEMENT/COMPLEMENT: world/ball - fixed x, y, yaw
-        mask_placement_comp = [True, True, False, False, False, True]
-        pc_placement_comp = Transformation.create(
-            'placement/complement', robot.asPinDevice(),
-            joint_ball, Id, ball_on_ground, mask_placement_comp
-        )
-        cts_placement_comp = ComparisonTypes()
-        cts_placement_comp[:] = tuple([ComparisonType.Equality] * 3)
-        implicit_mask_comp = [True, True, True]
-        constraints['placement/complement'] = Implicit.create(
-            pc_placement_comp, cts_placement_comp, implicit_mask_comp
-        )
-        print("    ✓ placement/complement constraint")
-        
-        # 4. GRIPPER_BALL_ALIGNED: gripper/ball - all fixed
-        q_aligned = Quaternion(0.5, 0.5, -0.5, 0.5)
-        gripper_above_ball = SE3(q_aligned, np.array([0, 0.2, 0]))
-        mask_aligned = Mask()
-        mask_aligned[:] = (True,) * 6
-        
-        pc_aligned = RelativeTransformation.create(
-            'gripper_ball_aligned', robot.asPinDevice(),
-            joint_gripper, joint_ball,
-            gripper_above_ball, Id, mask_aligned
-        )
-        cts_aligned = ComparisonTypes()
-        cts_aligned[:] = tuple([ComparisonType.EqualToZero] * 6)
-        constraints['gripper_ball_aligned'] = Implicit.create(
-            pc_aligned, cts_aligned, mask_aligned
-        )
-        print("    ✓ gripper_ball_aligned constraint")
-        
-        # 5. BALL_NEAR_TABLE: world/ball - fixed z, r, p
-        q_table = Quaternion(0, 0, 0, 1)
-        ball_near_table = SE3(q_table, np.array([cfg.BOX_X, 0, 0.1]))
-        mask_table = [False, False, True, True, True, False]
-        
-        pc_table = Transformation.create(
-            'ball_near_table', robot.asPinDevice(),
-            joint_ball, Id, ball_near_table, mask_table
-        )
-        cts_table = ComparisonTypes()
-        cts_table[:] = tuple([ComparisonType.EqualToZero] * 3)
-        implicit_mask_table = [True, True, True]
-        constraints['ball_near_table'] = Implicit.create(
-            pc_table, cts_table, implicit_mask_table
-        )
-        print("    ✓ ball_near_table constraint")
-        
-        # 6. BALL_NEAR_TABLE/COMPLEMENT: world/ball - fixed x, y, yaw
-        ball_near_table_comp = SE3(q_table, np.array([cfg.BOX_X, 0.2, 0.1]))
-        mask_table_comp = [True, True, False, False, False, True]
-        
-        pc_table_comp = Transformation.create(
-            'ball_near_table/complement', robot.asPinDevice(),
-            joint_ball, Id, ball_near_table_comp, mask_table_comp
-        )
-        cts_table_comp = ComparisonTypes()
-        cts_table_comp[:] = tuple([ComparisonType.Equality] * 3)
-        implicit_mask_table_comp = [True, True, True]
-        constraints['ball_near_table/complement'] = Implicit.create(
-            pc_table_comp, cts_table_comp, implicit_mask_table_comp
-        )
-        print("    ✓ ball_near_table/complement constraint")
-        
-        return constraints
-        
+
     def create_graph(self):
         """Create and configure constraint graph."""
         if self.backend == "corba":
