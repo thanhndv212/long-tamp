@@ -409,8 +409,6 @@ class GraphBuilder:
             # valid_pairs format: {gripper_name: [handle1, handle2, ...]}
             self.factory.setPossibleGrasps(valid_pairs)
             print("    \u2713 Set possible grasps from valid_pairs")
-            for gripper, handles in valid_pairs.items():
-                print(f"        {gripper}: {handles}")
         # If neither rules nor valid_pairs, allow all (default behavior)
         
         # Generate graph
@@ -426,10 +424,8 @@ class GraphBuilder:
         
         # Print factory-generated nodes for reference
         print(f"    \u2139 Factory created {len(self.states)} nodes:")
-        for node_name in list(self.states.keys())[:5]:
+        for node_name in list(self.states.keys()):
             print(f"      - {node_name}")
-        if len(self.states) > 5:
-            print(f"      ... and {len(self.states) - 5} more")
         
         return self.graph
 
@@ -454,14 +450,10 @@ class GraphBuilder:
                     except Exception:
                         pass
             else:  # pyhpp
-                # PyHPP graph - access states and transitions
-                # The factory stores states in its own dict
-                if hasattr(self.factory, 'states'):
-                    for grasps, state_obj in self.factory.states.items():
-                        state_name = state_obj.name
-                        self.states[state_name] = state_obj.state
-                
-                # Extract edges from edge_objects dictionary
+                # PyHPP graph - extract all states from the graph
+                if hasattr(self.graph, 'getStateNames'):
+                    for state_name in self.graph.getStateNames():
+                        self.states[state_name] = state_name
                 # edge_objects dict maps edge names to edge objects
                 if hasattr(self.factory, 'edge_objects'):
                     edge_items = self.factory.edge_objects.items()
