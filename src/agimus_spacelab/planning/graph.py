@@ -426,7 +426,12 @@ class GraphBuilder:
         print(f"    \u2139 Factory created {len(self.states)} nodes:")
         for node_name in list(self.states.keys()):
             print(f"      - {node_name}")
-        
+        print(f"    \u2139 Factory created {len(self.edges)} edges:")
+        for edge_name in list(self.edges.keys()):
+            from_state, to_state = self.edge_topology.get(
+                edge_name, ("unknown", "unknown")
+            )
+            print(f"      - {edge_name}: {from_state} → {to_state}")
         return self.graph
 
     def _extract_factory_graph_structure(self) -> None:
@@ -454,44 +459,18 @@ class GraphBuilder:
                 if hasattr(self.graph, 'getStateNames'):
                     for state_name in self.graph.getStateNames():
                         self.states[state_name] = state_name
-                # edge_objects dict maps edge names to edge objects
-                if hasattr(self.factory, 'edge_objects'):
-                    edge_items = self.factory.edge_objects.items()
-                    for edge_name, edge_obj in edge_items:
-                        self.edges[edge_name] = edge_obj
-                        # Try to extract edge topology from edge object
+                
+                if hasattr(self.graph, 'getTransitionNames'):
+                    for edge_name in self.graph.getTransitionNames():
+                        self.edges[edge_name] = edge_name
                         try:
-                            has_from = hasattr(edge_obj, 'stateFrom')
-                            has_to = hasattr(edge_obj, 'stateTo')
-                            if has_from and has_to:
-                                state_from = edge_obj.stateFrom()
-                                state_to = edge_obj.stateTo()
-                                if hasattr(state_from, 'name'):
-                                    from_state = state_from.name()
-                                else:
-                                    from_state = str(state_from)
-                                if hasattr(state_to, 'name'):
-                                    to_state = state_to.name()
-                                else:
-                                    to_state = str(state_to)
-                                self.edge_topology[edge_name] = (
-                                    from_state, to_state
-                                )
+                            edge_ = self.graph.getTransition(edge_name)
+                            print("Type of edge_:", type(edge_))
+                            from_state, to_state = self.graph.getNodesConnectedByTransition(edge_name)
+                            print(f"{edge_name}: {from_state.name()} → {to_state.name()}")
+                            self.edge_topology[edge_name] = (from_state, to_state)
                         except Exception:
                             pass
-                
-                # Extract from factory.transitions if edge_objects
-                # not available. Transitions is a set of
-                # (forward_name, backward_name) tuples
-                if not self.edges and hasattr(self.factory, 'transitions'):
-                    for names_tuple in self.factory.transitions:
-                        is_tuple = isinstance(names_tuple, tuple)
-                        if is_tuple and len(names_tuple) >= 2:
-                            forward_name = names_tuple[0]
-                            backward_name = names_tuple[1]
-                            self.edges[forward_name] = forward_name
-                            self.edges[backward_name] = backward_name
-                        
         except Exception as e:
             print(f"    \u26a0 Could not extract graph structure: {e}")
     
