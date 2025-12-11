@@ -464,12 +464,23 @@ class GraphBuilder:
                     for edge_name in self.graph.getTransitionNames():
                         self.edges[edge_name] = edge_name
                         try:
-                            edge_ = self.graph.getTransition(edge_name)
-                            print("Type of edge_:", type(edge_))
-                            from_state, to_state = self.graph.getNodesConnectedByTransition(edge_name)
-                            print(f"{edge_name}: {from_state.name()} → {to_state.name()}")
-                            self.edge_topology[edge_name] = (from_state, to_state)
+                            edge_obj = self.graph.getTransition(edge_name)
+                            # getNodesConnectedByTransition returns strings
+                            # (state names) via output parameters converted
+                            # to tuple
+                            result = self.graph.getNodesConnectedByTransition(
+                                edge_obj
+                            )
+                            print("Edge topology result:", result)
+                            # Result should be (from_name, to_name) as strings
+                            if isinstance(result, tuple) and len(result) >= 2:
+                                from_name, to_name = result[0], result[1]
+                                self.edge_topology[edge_name] = (
+                                    from_name, to_name
+                                )
                         except Exception:
+                            # Silently skip if method not available
+                            print("Could not get edge topology for", edge_name)
                             pass
         except Exception as e:
             print(f"    \u26a0 Could not extract graph structure: {e}")
