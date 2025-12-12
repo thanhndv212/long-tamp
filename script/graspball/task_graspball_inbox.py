@@ -503,7 +503,7 @@ def main(
     edges_dict = getattr(task, 'pyhpp_edges', None)
     edge_topology = getattr(task, 'pyhpp_edge_topology', None)
     viz_path = visualize_constraint_graph(
-        task.graph,
+        task.graph_builder,
         output_path="constraint_graph",
         states_dict=states_dict,
         edges_dict=edges_dict,
