@@ -57,6 +57,22 @@ def xyzrpy_to_xyzquat(xyzrpy):
     return se3_to_xyzquat(se3)
 
 
+def xyzquat_to_xyzrpy(xyzquat):
+    """
+    Convert [x, y, z, qx, qy, qz, qw] to [x, y, z, roll, pitch, yaw].
+    
+    Args:
+        xyzquat: List or array of 7 values [x, y, z, qx, qy, qz, qw]
+        
+    Returns:
+        numpy.array: 6 values [x, y, z, roll, pitch, yaw]
+    """
+    se3 = xyzquat_to_se3(xyzquat)
+    xyz = se3.translation
+    rpy = se3.rotation.eulerAngles(0, 1, 2)  # roll, pitch, yaw
+    return np.concatenate([xyz, rpy])
+
+
 def xyzquat_to_se3(xyzquat):
     """
     Convert [x, y, z, qx, qy, qz, qw] to SE3 transformation.
