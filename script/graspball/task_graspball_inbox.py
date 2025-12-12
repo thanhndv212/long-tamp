@@ -242,11 +242,6 @@ class GraspBallTask(ManipulationTask):
 
         # Store graph and metadata
         graph = self.graph_builder.get_graph()
-        if self.backend == "pyhpp":
-            problem.constraintGraph(graph)
-            self.pyhpp_states = self.graph_builder.get_states()
-            self.pyhpp_edges = self.graph_builder.get_edges()
-            self.pyhpp_edge_topology = self.graph_builder.get_edge_topology()
 
         return graph
         
