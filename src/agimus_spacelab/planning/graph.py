@@ -717,24 +717,61 @@ class GraphBuilder:
                     for edge_name in self.graph.getTransitionNames():
                         self.edges[edge_name] = edge_name
                         try:
-                            edge_obj = self.graph.getTransition(edge_name)
-                            # getNodesConnectedByTransition returns strings
-                            # (state names) via output parameters converted
-                            # to tuple
-                            result = self.graph.getNodesConnectedByTransition(
-                                edge_obj
+                            edge_obj = None
+                            get_transition = getattr(
+                                self.graph, 'getTransition', None
                             )
-                            print("Edge topology result:", result)
-                            # Result should be (from_name, to_name) as strings
-                            if isinstance(result, tuple) and len(result) >= 2:
-                                from_name, to_name = result[0], result[1]
+                            if callable(get_transition):
+                                edge_obj = get_transition(edge_name)
+
+                            get_nodes = getattr(
+                                self.graph,
+                                'getNodesConnectedByTransition',
+                                None,
+                            )
+                            if not callable(get_nodes):
+                                continue
+
+                            # Depending on bindings, this may accept either a
+                            # Transition object or a transition name.
+                            try:
+                                query = (
+                                    edge_obj
+                                    if edge_obj is not None
+                                    else edge_name
+                                )
+                                result = get_nodes(query)
+                            except Exception:
+                                result = get_nodes(edge_name)
+
+                            is_pair = isinstance(result, tuple)
+                            is_pair = is_pair and len(result) >= 2
+                            if not is_pair:
+                                continue
+
+                            def _state_name(s: Any) -> Optional[str]:
+                                if isinstance(s, str):
+                                    return s
+                                name_attr = getattr(s, 'name', None)
+                                if callable(name_attr):
+                                    try:
+                                        return name_attr()
+                                    except Exception:
+                                        return None
+                                if isinstance(name_attr, str):
+                                    return name_attr
+                                return None
+
+                            from_name = _state_name(result[0])
+                            to_name = _state_name(result[1])
+                            if from_name and to_name:
                                 self.edge_topology[edge_name] = (
-                                    from_name, to_name
+                                    from_name,
+                                    to_name,
                                 )
                         except Exception:
-                            # Silently skip if method not available
-                            print("Could not get edge topology for", edge_name)
-                            pass
+                            # Skip if bindings don't expose topology helpers.
+                            continue
         except Exception as e:
             print(f"    \u26a0 Could not extract graph structure: {e}")
     
