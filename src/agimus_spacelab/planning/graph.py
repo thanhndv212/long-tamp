@@ -5,7 +5,15 @@ Constraint graph builder for manipulation tasks.
 Provides GraphBuilder for creating constraint graphs with dual backend support.
 """
 
-from typing import Dict, List, Tuple, Optional, Any
+from __future__ import annotations
+
+from typing import Dict, List, Tuple, Optional, Any, Type, Union
+
+from agimus_spacelab.config.base_config import BaseTaskConfig, ConstraintDef
+from agimus_spacelab.planning.constraints import (
+    ConstraintBuilder,
+    FactoryConstraintLibrary,
+)
 
 # Import for CORBA backend
 try:
@@ -43,7 +51,7 @@ class GraphBuilder:
     Builder class for creating constraint graphs with dual backend support.
     
     Supports both manual graph construction (node by node, edge by edge) and
-    factory-based automatic graph generation (CORBA only).
+    factory-based automatic graph generation.
     """
     
     def __init__(self, planner, robot, ps, backend: str = "corba"):
@@ -67,6 +75,23 @@ class GraphBuilder:
         self.states = {}  # name -> id
         self.edges = {}   # name -> id
         self.edge_topology = {}  # name -> (from_state, to_state)
+
+    def _attach_graph_to_problem_if_supported(self) -> None:
+        """Attach the current graph to the backend problem, when required.
+
+        In PyHPP, the `Problem` must have a constraint graph set via
+        `problem.constraintGraph(graph)`. If this is not done, planning fails
+        with: "No graph in the problem.".
+        """
+
+        if self.backend != "pyhpp":
+            return
+        if self.graph is None or self.ps is None:
+            return
+
+        attach = getattr(self.ps, "constraintGraph", None)
+        if callable(attach):
+            attach(self.graph)
         
     def create_manual_graph(self, name: str = "graph") -> Any:
         """
@@ -327,6 +352,7 @@ class GraphBuilder:
         else:  # pyhpp
             # PyHPP graph initialization
             self.graph.initialize()
+            self._attach_graph_to_problem_if_supported()
             print("   ✓ PyHPP graph initialized")
         
         return self.graph
@@ -339,7 +365,8 @@ class GraphBuilder:
         contact_surfaces_per_object: Optional[List[List[str]]] = None,
         environment_contacts: Optional[List[str]] = None,
         rules: Optional[List] = None,
-        valid_pairs: Optional[Dict[str, List[str]]] = None
+        valid_pairs: Optional[Dict[str, List[str]]] = None,
+        pyhpp_constraints: Optional[Dict[str, Any]] = None,
     ) -> Any:
         """
         Create constraint graph using factory for both backends.
@@ -379,7 +406,11 @@ class GraphBuilder:
             self.graph = PyHPPGraph("graph", self.robot, self.ps)
             self.graph.maxIterations(10000)
             self.graph.errorThreshold(1e-4)
-            self.factory = PyHPPConstraintGraphFactory(self.graph)
+            # PyHPP factory can be provided a dict of already-available
+            # numerical constraints (name -> constraint object).
+            self.factory = PyHPPConstraintGraphFactory(
+                self.graph, constraints=pyhpp_constraints or {}
+            )
         
         # Set grippers
         self.factory.setGrippers(grippers)
@@ -417,6 +448,7 @@ class GraphBuilder:
         
         # Initialize graph
         self.graph.initialize()
+        self._attach_graph_to_problem_if_supported()
         print("    \u2713 Graph initialized")
         
         # Store states and edges for tracking
@@ -433,6 +465,227 @@ class GraphBuilder:
             )
             print(f"      - {edge_name}: {from_state} → {to_state}")
         return self.graph
+
+    # ---------------------------------------------------------------------
+    # Task-config-driven entrypoints
+    # ---------------------------------------------------------------------
+
+    TaskConfigT = Union[Type[BaseTaskConfig], BaseTaskConfig]
+
+    @staticmethod
+    def _as_task_config(task: TaskConfigT) -> Type[BaseTaskConfig]:
+        # Task configs in this repo are typically class-based (class
+        # attributes). If the caller passes an instance, recover the class.
+        return task if isinstance(task, type) else task.__class__
+
+    def build_graph_for_task(
+        self,
+        task: TaskConfigT,
+        *,
+        mode: Optional[str] = None,
+        name: str = "graph",
+        pyhpp_constraints: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        """Build a constraint graph from a task specification.
+
+        Args:
+            task: A `BaseTaskConfig` subclass (or instance).
+            mode: "factory" or "manual". If None, defaults to:
+                - "manual" if the task defines STATES/EDGES,
+                - otherwise "factory".
+            name: Graph name (manual mode only; factory mode uses "graph").
+            pyhpp_constraints: Optional dict (name -> constraint object) to
+                seed the PyHPP factory's available constraints.
+        """
+
+        task_cls = self._as_task_config(task)
+        chosen_mode = mode
+        if chosen_mode is None:
+            if getattr(task_cls, "STATES", None) and getattr(
+                task_cls, "EDGES", None
+            ):
+                chosen_mode = "manual"
+            else:
+                chosen_mode = "factory"
+
+        if chosen_mode == "factory":
+            contact_surfaces = list(
+                getattr(task_cls, "CONTACT_SURFACES_PER_OBJECT", [])
+            )
+            env_contacts = list(getattr(task_cls, "ENVIRONMENT_CONTACTS", []))
+            return self.create_factory_graph(
+                grippers=list(getattr(task_cls, "GRIPPERS", [])),
+                objects=list(getattr(task_cls, "OBJECTS", [])),
+                handles_per_object=task_cls.get_handles_per_object(),
+                contact_surfaces_per_object=(contact_surfaces or None),
+                environment_contacts=(env_contacts or None),
+                rules=None,
+                valid_pairs=dict(getattr(task_cls, "VALID_PAIRS", {})) or None,
+                pyhpp_constraints=pyhpp_constraints,
+            )
+
+        if chosen_mode == "manual":
+            return self.build_manual_graph_from_task(task_cls, name=name)
+
+        raise ValueError("mode must be 'factory' or 'manual'")
+
+    def get_factory_constraint_library(
+        self, task: TaskConfigT
+    ) -> FactoryConstraintLibrary:
+        """Return a ConstraintGraphFactory naming helper for this task."""
+
+        task_cls = self._as_task_config(task)
+        return FactoryConstraintLibrary(
+            grippers=list(getattr(task_cls, "GRIPPERS", [])),
+            objects=list(getattr(task_cls, "OBJECTS", [])),
+            handles_per_object=task_cls.get_handles_per_object(),
+        )
+
+    def build_manual_graph_from_task(
+        self,
+        task: TaskConfigT,
+        *,
+        name: str = "graph",
+    ) -> Any:
+        """Build a manual graph (states/edges/constraints) from BaseTaskConfig.
+
+        This is useful for tasks that define a custom topology (not purely
+        combinatorial grasp/placement graphs).
+        """
+
+        task_cls = self._as_task_config(task)
+        self.create_manual_graph(name=name)
+
+        # 1) Create constraints declared by the task.
+        pyhpp_constraint_objects: Dict[str, Any] = {}
+        for cdef in task_cls.get_constraint_defs():
+            if not isinstance(cdef, ConstraintDef):
+                raise TypeError(
+                    "Task get_constraint_defs() must return ConstraintDef "
+                    "items"
+                )
+
+            if cdef.type == "grasp":
+                if not cdef.gripper or not cdef.obj or not cdef.transform:
+                    raise ValueError(f"Invalid grasp ConstraintDef: {cdef}")
+                created = ConstraintBuilder.create_grasp_constraint(
+                    self.ps,
+                    cdef.name,
+                    cdef.gripper,
+                    cdef.obj,
+                    cdef.transform,
+                    mask=cdef.mask,
+                    robot=self.robot,
+                    backend=self.backend,
+                )
+                if created is not None:
+                    pyhpp_constraint_objects[cdef.name] = created
+
+            elif cdef.type == "placement":
+                if not cdef.obj or not cdef.transform:
+                    raise ValueError(
+                        f"Invalid placement ConstraintDef: {cdef}"
+                    )
+                created = ConstraintBuilder.create_placement_constraint(
+                    self.ps,
+                    cdef.name,
+                    cdef.obj,
+                    cdef.transform,
+                    cdef.mask,
+                    robot=self.robot,
+                    backend=self.backend,
+                )
+                if created is not None:
+                    pyhpp_constraint_objects[cdef.name] = created
+
+            elif cdef.type == "complement":
+                if not cdef.obj or not cdef.transform:
+                    raise ValueError(
+                        f"Invalid complement ConstraintDef: {cdef}"
+                    )
+                created = ConstraintBuilder.create_complement_constraint(
+                    self.ps,
+                    cdef.name,
+                    cdef.obj,
+                    cdef.transform,
+                    cdef.mask,
+                    robot=self.robot,
+                    backend=self.backend,
+                )
+                cname = f"{cdef.name}/complement"
+                if created is not None:
+                    pyhpp_constraint_objects[cname] = created
+
+            else:
+                raise ValueError(f"Unknown constraint type '{cdef.type}'")
+
+        # 2) Create states.
+        for state in task_cls.STATES.values():
+            self.add_state(
+                state.name,
+                is_waypoint=state.is_waypoint,
+                priority=state.priority,
+            )
+
+        # 3) Create edges.
+        for edge in task_cls.EDGES.values():
+            self.add_edge(
+                edge.from_state,
+                edge.to_state,
+                edge.name,
+                weight=int(edge.weight),
+                containing_state=edge.containing_state,
+            )
+
+        # 4) Attach constraints to states and edges.
+        for state in task_cls.STATES.values():
+            if state.constraints:
+                if self.backend == "corba":
+                    self.add_state_constraints(
+                        state.name,
+                        constraints=[],
+                        constraint_names=state.constraints,
+                    )
+                else:
+                    missing = [
+                        n
+                        for n in state.constraints
+                        if n not in pyhpp_constraint_objects
+                    ]
+                    if missing:
+                        raise KeyError(
+                            "State '%s' references unknown constraints: %s"
+                            % (state.name, missing)
+                        )
+                    objs = [
+                        pyhpp_constraint_objects[n] for n in state.constraints
+                    ]
+                    self.add_state_constraints(state.name, constraints=objs)
+
+        for edge in task_cls.EDGES.values():
+            if self.backend == "corba":
+                self.add_edge_constraints(
+                    edge.name,
+                    constraints=[],
+                    constraint_names=edge.path_constraints,
+                )
+            else:
+                missing = [
+                    n
+                    for n in edge.path_constraints
+                    if n not in pyhpp_constraint_objects
+                ]
+                if missing:
+                    raise KeyError(
+                        "Edge '%s' references unknown constraints: %s"
+                        % (edge.name, missing)
+                    )
+                objs = [
+                    pyhpp_constraint_objects[n] for n in edge.path_constraints
+                ]
+                self.add_edge_constraints(edge.name, constraints=objs)
+
+        return self.finalize_manual_graph()
 
     def _extract_factory_graph_structure(self) -> None:
         """
