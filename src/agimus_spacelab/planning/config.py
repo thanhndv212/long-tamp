@@ -72,9 +72,32 @@ class ConfigGenerator:
             success = res
             config = q_proj
         else:  # pyhpp
-            # PyHPP uses state objects, get from states dict
+            # PyHPP bindings expect a State object (not a state name).
             q_arr = np.array(q) if not isinstance(q, np.ndarray) else q
-            result = self.graph.applyStateConstraints(node_name, q_arr)
+
+            state_obj = node_name
+            if isinstance(node_name, str):
+                # Try common APIs to fetch state object by name.
+                get_state = getattr(self.graph, "getState", None)
+                if callable(get_state):
+                    try:
+                        state_obj = get_state(node_name)
+                    except Exception:
+                        # getState may be overloaded for (config)->State
+                        # and reject string; fall through to other names.
+                        pass
+
+                if isinstance(state_obj, str):
+                    for attr in ("getStateByName", "state", "getNode"):
+                        fn = getattr(self.graph, attr, None)
+                        if callable(fn):
+                            try:
+                                state_obj = fn(node_name)
+                                break
+                            except Exception:
+                                continue
+
+            result = self.graph.applyStateConstraints(state_obj, q_arr)
             success = result.success
             config = result.configuration.tolist()
         
@@ -119,9 +142,26 @@ class ConfigGenerator:
                 q_rand = self._shooter.shoot()
                 q_from_arr = np.array(q_from) if not isinstance(
                     q_from, np.ndarray) else q_from
-                result = self.graph.generateTargetConfig(
-                    edge_name, q_from_arr, q_rand
-                )
+
+                # PyHPP bindings often expect a Transition object, not a name.
+                transition = edge_name
+                if isinstance(edge_name, str):
+                    get_transition = getattr(self.graph, "getTransition", None)
+                    if callable(get_transition):
+                        try:
+                            transition = get_transition(edge_name)
+                        except Exception:
+                            transition = edge_name
+
+                try:
+                    result = self.graph.generateTargetConfig(
+                        transition, q_from_arr, q_rand
+                    )
+                except Exception:
+                    # Fallback for bindings that accept the edge name.
+                    result = self.graph.generateTargetConfig(
+                        edge_name, q_from_arr, q_rand
+                    )
                 success = result.success
                 config = result.configuration.tolist() if success else None
             
