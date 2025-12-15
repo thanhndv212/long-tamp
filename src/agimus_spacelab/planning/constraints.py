@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""
+"""agimus_spacelab.planning.constraints
+
 Constraint creation utilities for manipulation tasks.
 
-Provides ConstraintBuilder for creating transformation constraints.
+This module contains two layers:
+- `ConstraintBuilder`: creates backend-specific numerical constraints.
+- `FactoryConstraintLibrary`: provides ConstraintGraphFactory-compatible
+    naming helpers and optional enumeration of expected factory names.
 """
 
-from typing import List, Any, Optional
+from dataclasses import dataclass
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 # Import PyHPP constraint types (optional)
 try:
@@ -45,7 +50,7 @@ class ConstraintBuilder:
     @staticmethod
     def create_grasp_constraint(
         ps, name: str, gripper: str, tool: str,
-        transform: List[float], 
+        transform: List[float],
         mask: List[bool] = None,
         robot=None, backend: str = "corba"
     ) -> Any:
@@ -227,4 +232,132 @@ class ConstraintBuilder:
             return None
 
 
-__all__ = ["ConstraintBuilder"]
+@dataclass(frozen=True)
+class FactoryConstraintLibrary:
+    """Helper for ConstraintGraphFactory-compatible constraint names.
+
+    The factory (both CORBA and PyHPP) uses fixed naming conventions:
+    - Grasp:         "{gripper} grasps {handle}"
+    - Pregrasp:      "{gripper} pregrasps {handle}"
+    - Placement:     "place_{object}"
+    - Preplacement:  "preplace_{object}"
+    - Hold:          add suffix "/hold" (e.g. grasp/placement constraints)
+    - Complements:   add suffix "/complement"
+
+    This class centralizes those conventions so the rest of the framework can
+    reliably reference factory-created constraints.
+    """
+
+    grippers: Sequence[str]
+    objects: Sequence[str]
+    handles_per_object: Sequence[Sequence[str]]
+
+    @property
+    def handles(self) -> List[str]:
+        return [h for hs in self.handles_per_object for h in hs]
+
+    # --- Naming helpers -------------------------------------------------
+
+    @staticmethod
+    def grasp(gripper: str, handle: str) -> str:
+        return f"{gripper} grasps {handle}"
+
+    @staticmethod
+    def pregrasp(gripper: str, handle: str) -> str:
+        return f"{gripper} pregrasps {handle}"
+
+    @staticmethod
+    def place(obj: str) -> str:
+        return f"place_{obj}"
+
+    @staticmethod
+    def preplace(obj: str) -> str:
+        return f"preplace_{obj}"
+
+    @staticmethod
+    def complement(name: str) -> str:
+        return f"{name}/complement"
+
+    @staticmethod
+    def hold(name: str) -> str:
+        return f"{name}/hold"
+
+    @classmethod
+    def grasp_complement(cls, gripper: str, handle: str) -> str:
+        return cls.complement(cls.grasp(gripper, handle))
+
+    @classmethod
+    def grasp_hold(cls, gripper: str, handle: str) -> str:
+        return cls.hold(cls.grasp(gripper, handle))
+
+    @classmethod
+    def place_complement(cls, obj: str) -> str:
+        return cls.complement(cls.place(obj))
+
+    @classmethod
+    def place_hold(cls, obj: str) -> str:
+        return cls.hold(cls.place(obj))
+
+    # --- Enumeration (optional) ----------------------------------------
+
+    def iter_expected_placement_names(self) -> Iterable[str]:
+        for obj in self.objects:
+            yield self.place(obj)
+            yield self.place_complement(obj)
+            yield self.place_hold(obj)
+            yield self.preplace(obj)
+
+    def iter_expected_grasp_names(
+        self,
+        valid_pairs: Optional[Dict[str, List[str]]] = None,
+    ) -> Iterable[str]:
+        """Yield grasp-related names for all (gripper, handle) pairs.
+
+        If `valid_pairs` is provided, only yields names for those allowed
+        (gripper -> handles) associations.
+        """
+
+        if valid_pairs is None:
+            for gripper in self.grippers:
+                for handle in self.handles:
+                    g = self.grasp(gripper, handle)
+                    yield g
+                    yield self.complement(g)
+                    yield self.hold(g)
+                    yield self.pregrasp(gripper, handle)
+        else:
+            for gripper, handles in valid_pairs.items():
+                for handle in handles:
+                    g = self.grasp(gripper, handle)
+                    yield g
+                    yield self.complement(g)
+                    yield self.hold(g)
+                    yield self.pregrasp(gripper, handle)
+
+    def iter_all_expected_factory_names(
+        self,
+        valid_pairs: Optional[Dict[str, List[str]]] = None,
+    ) -> Iterable[str]:
+        yield from self.iter_expected_placement_names()
+        yield from self.iter_expected_grasp_names(valid_pairs=valid_pairs)
+
+    @staticmethod
+    def is_factory_reserved_name(name: str) -> bool:
+        # Keep this intentionally simple: it protects the known factory
+        # conventions and helps avoid accidental collisions.
+        return any(
+            predicate
+            for predicate in (
+                " grasps " in name,
+                " pregrasps " in name,
+                name.startswith("place_"),
+                name.startswith("preplace_"),
+                name.endswith("/hold"),
+            )
+        )
+
+
+__all__ = [
+    "ConstraintBuilder",
+    "FactoryConstraintLibrary",
+]
