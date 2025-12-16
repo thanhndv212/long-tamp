@@ -465,6 +465,7 @@ class CorbaBackend(BackendBase):
             self.configure_path_optimization(num_loops=50,
                                              max_iterations=max_iterations)
             
+            self.ps.setMaxIterPathPlanning(max_iterations)
             self.ps.solve()
             return True
         except Exception as e:
