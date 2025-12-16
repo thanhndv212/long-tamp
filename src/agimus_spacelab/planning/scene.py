@@ -183,6 +183,125 @@ class SceneBuilder:
             print("      (PyHPP: collision management not yet implemented)")
         return self
 
+    def disable_collisions_between_subtrees(
+        self,
+        robot_frame_or_joint: str,
+        obstacle_root_joint: str,
+        remove_collision: bool = True,
+        remove_distance: bool = False,
+        verbose: bool = False,
+        max_pairs: int = 80,
+    ) -> 'SceneBuilder':
+        """Disable collisions between a robot subtree and an obstacle subtree.
+
+        This is intended to handle common setups where SRDF grippers/handles are
+        defined on fixed/fake links: collisions may happen between collision
+        geometries attached to those links, and a simple single-pair exclusion is
+        insufficient.
+
+        For CORBA, this expands to repeated calls to
+        `ProblemSolver.removeObstacleFromJoint(obstacle, joint, ...)`.
+
+        Args:
+            robot_frame_or_joint: A joint name or a frame/link name on the robot.
+                If a frame/link is provided, it is converted to its parent joint.
+            obstacle_root_joint: Root joint of the obstacle/object (e.g.
+                `frame_gripper/root_joint`). Child joints are included.
+        """
+        print(
+            "   Disabling collisions (subtrees): %s <-> %s"
+            % (robot_frame_or_joint, obstacle_root_joint)
+        )
+
+        if self.backend != "corba":
+            print("      (PyHPP: collision management not yet implemented)")
+            return self
+
+        robot = self.planner.get_robot()
+        ps = self.planner.get_problem()
+
+        # Resolve robot joint
+        robot_joint = robot_frame_or_joint
+        try:
+            all_joints = set(robot.getAllJointNames())
+        except Exception:
+            all_joints = set()
+
+        if robot_joint not in all_joints:
+            try:
+                robot_joint = robot.getParentFrame(robot_frame_or_joint)
+            except Exception:
+                # Keep original; better to attempt than to silently ignore.
+                robot_joint = robot_frame_or_joint
+
+        # Robot subtree joints (including fixed/fake-link joints)
+        robot_joints = [robot_joint]
+        try:
+            robot_joints += list(robot.getChildJoints(robot_joint, True))
+        except Exception:
+            pass
+
+        # Obstacle subtree joints
+        obstacle_joints = [obstacle_root_joint]
+        try:
+            obstacle_joints += list(robot.getChildJoints(obstacle_root_joint, True))
+        except Exception:
+            pass
+
+        # Prefer filtering based on current outer-objects lists to avoid relying
+        # on exact naming conventions of inner collision objects (which may be
+        # indexed like `..._0`).
+        obstacle_prefix = obstacle_root_joint.split("/", 1)[0] + "/"
+
+        def _pairs_between_by_prefix() -> List[tuple[str, str]]:
+            pairs: List[tuple[str, str]] = []
+            for rj in robot_joints:
+                try:
+                    outer = robot.getJointOuterObjects(rj)
+                except Exception:
+                    outer = []
+                for obj in outer:
+                    if isinstance(obj, str) and obj.startswith(obstacle_prefix):
+                        pairs.append((rj, obj))
+            return pairs
+
+        before_pairs: List[tuple[str, str]] = _pairs_between_by_prefix()
+        if verbose:
+            print(
+                "      Target obstacle prefix: %s"
+                % obstacle_prefix
+            )
+            print(
+                "      Found %d existing collision pairs to filter"
+                % len(before_pairs)
+            )
+            for rj, obj in before_pairs[: max_pairs]:
+                print(f"        - {rj} <-> {obj}")
+            if len(before_pairs) > max_pairs:
+                print(f"        ... ({len(before_pairs) - max_pairs} more)")
+
+        removed = 0
+        for rj, obj in before_pairs:
+            try:
+                ps.removeObstacleFromJoint(obj, rj, remove_collision, remove_distance)
+                removed += 1
+            except Exception:
+                continue
+
+        if verbose:
+            print(f"      removeObstacleFromJoint calls attempted: {removed}")
+            after_pairs = _pairs_between_by_prefix()
+            print(
+                "      Remaining collision pairs after filtering: %d"
+                % len(after_pairs)
+            )
+            for rj, obj in after_pairs[: max_pairs]:
+                print(f"        - {rj} <-> {obj}")
+            if len(after_pairs) > max_pairs:
+                print(f"        ... ({len(after_pairs) - max_pairs} more)")
+
+        return self
+
     def move_obstacle(self,
                       obstacle_name: str,
                       position: List[float],
