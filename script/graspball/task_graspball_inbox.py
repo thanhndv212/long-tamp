@@ -250,14 +250,15 @@ class GraspBallTask(ManipulationTask):
     ) -> Dict[str, List[float]]:
         """Generate all waypoint configurations for both backends."""
         cg = self.config_gen
+        gb = self.graph_builder
         q1 = list(q_init)
 
         # Helper to get node/edge identifier based on backend
         def node(name):
-            return self.pyhpp_states[name] if self.backend == "pyhpp" else name
+            return gb.states[name] if self.backend == "pyhpp" else name
 
         def edge(name):
-            return self.pyhpp_edges[name] if self.backend == "pyhpp" else name
+            return gb.edges[name] if self.backend == "pyhpp" else name
 
         # 1. Project initial config on placement
         print("    1. Projecting onto 'placement' state...")
