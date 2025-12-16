@@ -168,7 +168,8 @@ class ManipulationTask:
         
     def run(self, visualize: bool = True,
             solve: bool = False,
-            preferred_configs: List[str] = None) -> Dict[str, Any]:
+            preferred_configs: List[str] = None,
+            max_iterations: int = 1000) -> Dict[str, Any]:
         """
         Run the complete task workflow.
         
@@ -261,7 +262,7 @@ class ManipulationTask:
                     _reset_goals_if_possible()
                     self.planner.set_initial_config(configs[a])
                     self.planner.add_goal_config(configs[b])
-                    ok = self.planner.solve()
+                    ok = self.planner.solve(max_iterations=max_iterations)
                     if not ok:
                         print("   ⚠ Planning failed")
                         break
