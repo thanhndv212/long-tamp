@@ -522,7 +522,7 @@ def main(visualize=True, solve=True):
     planner.load_environment("box", ManipulationConfig.BOX_URDF)
 
     # Get problem solver
-    ps = planner.get_problem_solver()
+    ps = planner.get_problem()
     
     # Position box walls (must be done after getting ps)
     ps.moveObstacle('box/base_link_0', [0.3 + 0.04, 0, 0.04, 0, 0, 0, 1])
