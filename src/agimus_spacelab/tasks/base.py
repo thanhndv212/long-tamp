@@ -7,6 +7,8 @@ Provides ManipulationTask base class with common structure.
 
 from typing import List, Dict, Any, Optional
 
+import re
+
 from agimus_spacelab.planning import SceneBuilder, ConfigGenerator
 
 class ManipulationTask:
@@ -165,7 +167,8 @@ class ManipulationTask:
         print("\n   ✓ Task setup complete")
         
     def run(self, visualize: bool = True,
-            solve: bool = False) -> Dict[str, Any]:
+            solve: bool = False,
+            preferred_configs: List[str] = None) -> Dict[str, Any]:
         """
         Run the complete task workflow.
         
@@ -196,22 +199,100 @@ class ManipulationTask:
         # 6. Solve
         if solve and "q_goal" in configs:
             print("\n6. Solving planning problem...")
-            self.planner.set_initial_config(configs["q_init"])
-            self.planner.add_goal_config(configs["q_goal"])
-            
-            try:
-                self.planner.solve()
-                # print("   ✓ Solution found!")
-                
-                if visualize:
+
+            def _reset_goals_if_possible() -> None:
+                if self.ps is None:
+                    return
+                reset = getattr(self.ps, "resetGoalConfigs", None)
+                if callable(reset):
+                    reset()
+
+            def _ordered_config_keys(cfgs: Dict[str, Any]) -> List[str]:
+                # Always plan from q_init to q_goal.
+                if "q_init" not in cfgs or "q_goal" not in cfgs:
+                    return []
+
+                # Factory mode: q_wp_<i>_<edge>
+                wp = []
+                for k in cfgs.keys():
+                    m = re.match(r"^q_wp_(\d+)_", k)
+                    if m:
+                        wp.append((int(m.group(1)), k))
+                if wp:
+                    wp_sorted = [k for _, k in sorted(wp, key=lambda t: t[0])]
+                    return ["q_init", *wp_sorted, "q_goal"]
+
+                # Manual mode (common naming convention)
+                preferred = preferred_configs
+                mids = [k for k in preferred if k in cfgs]
+                if mids:
+                    return ["q_init", *mids, "q_goal"]
+
+                # Fallback: any q_* keys in insertion order.
+                mids = [
+                    k
+                    for k in cfgs.keys()
+                    if k.startswith("q_") and k not in ("q_init", "q_goal")
+                ]
+                return ["q_init", *mids, "q_goal"]
+
+            seq = _ordered_config_keys(configs)
+            if not seq or len(seq) < 2:
+                print("   ⚠ Planning skipped: missing q_init/q_goal")
+            elif len(seq) == 2:
+                _reset_goals_if_possible()
+                self.planner.set_initial_config(configs["q_init"])
+                self.planner.add_goal_config(configs["q_goal"])
+                ok = self.planner.solve()
+                if not ok:
+                    print("   ⚠ Planning failed")
+                elif visualize:
                     print("\n7. Playing solution path...")
                     try:
                         self.planner.play_path(0)
                         print("   ✓ Path playback complete")
                     except Exception as e:
                         print(f"   ⚠ Path playback failed: {e}")
-            except Exception as e:
-                print(f"   ⚠ Planning failed: {e}")
+            else:
+                path_ids: List[int] = []
+                for i in range(len(seq) - 1):
+                    a, b = seq[i], seq[i + 1]
+                    print(f"\n   Segment {i+1}/{len(seq)-1}: {a} -> {b}")
+                    _reset_goals_if_possible()
+                    self.planner.set_initial_config(configs[a])
+                    self.planner.add_goal_config(configs[b])
+                    ok = self.planner.solve()
+                    if not ok:
+                        print("   ⚠ Planning failed")
+                        break
+                    # Record the latest path id when available (CORBA).
+                    if self.ps is not None:
+                        num_paths = getattr(self.ps, "numberPaths", None)
+                        if callable(num_paths):
+                            try:
+                                path_ids.append(int(num_paths()) - 1)
+                            except Exception:
+                                pass
+
+                # Concatenate path segments when available (CORBA).
+                if len(path_ids) > 1 and self.ps is not None:
+                    concat = getattr(self.ps, "concatenatePath", None)
+                    if callable(concat):
+                        try:
+                            for j in range(1, len(path_ids)):
+                                concat(path_ids[0], path_ids[j])
+                        except Exception:
+                            pass
+
+                if visualize:
+                    print("\n7. Playing solution path...")
+                    try:
+                        # Use concatenated path id when known, otherwise fall back to 0.
+                        pid = path_ids[0] if path_ids else 0
+                        self.planner.play_path(pid)
+                        print("   ✓ Path playback complete")
+                    except Exception as e:
+                        print(f"   ⚠ Path playback failed: {e}")
                 
         return {
             "configs": configs,
