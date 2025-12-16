@@ -300,9 +300,9 @@ class ManipulationTask:
 
                 # Fallback: any q_* keys in insertion order.
                 mids = [
-                    k
-                    for k in cfgs.keys()
-                    if k.startswith("q_") and k not in ("q_init", "q_goal")
+                    # k
+                    # for k in cfgs.keys()
+                    # if k.startswith("q_") and k not in ("q_init", "q_goal")
                 ]
                 return ["q_init", *mids, "q_goal"]
 
@@ -319,10 +319,13 @@ class ManipulationTask:
                     _reset_goals_if_possible()
                     self.planner.set_initial_config(configs["q_init"])
                     self.planner.add_goal_config(configs["q_goal"])
-                    ok = self.planner.solve(max_iterations=max_iterations)
-                    if not ok:
+                    success = self.planner.solve(max_iterations=max_iterations)
+                    if success:
+                        print("   ✓ Planning successful")
+                    else:
                         print("   ⚠ Planning failed")
-                    elif visualize:
+                    
+                    if success and visualize:
                         print("\n7. Playing solution path...")
                         try:
                             self.planner.play_path(0)
@@ -337,8 +340,10 @@ class ManipulationTask:
                         _reset_goals_if_possible()
                         self.planner.set_initial_config(configs[a])
                         self.planner.add_goal_config(configs[b])
-                        ok = self.planner.solve(max_iterations=max_iterations)
-                        if not ok:
+                        success = self.planner.solve(max_iterations=max_iterations)
+                        if success:
+                            print("   ✓ Planning successful")
+                        else:
                             print("   ⚠ Planning failed")
                             break
                         # Record the latest path id when available (CORBA).
