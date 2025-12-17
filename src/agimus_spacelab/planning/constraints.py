@@ -40,6 +40,42 @@ except ImportError:
     xyzquat_to_se3 = None
 
 
+def get_joint_id_for_name(robot, name: str) -> tuple:
+    """Get joint ID and frame placement for a joint or frame name.
+
+    If `name` is a joint name, returns (joint_id, SE3.Identity()).
+    If `name` is a frame name, returns (parent_joint_id, frame_placement)
+    where frame_placement is the SE3 transform from parent joint to frame.
+
+    Args:
+        robot: Robot/Device instance with model() method
+        name: Joint name or frame name
+
+    Returns:
+        Tuple of (joint_id: int, placement: SE3)
+        - joint_id: The joint ID (or parent joint ID for frames)
+        - placement: SE3.Identity() for joints, or frame.placement for frames
+
+    Raises:
+        ValueError: If name is neither a valid joint nor frame name
+    """
+    model = robot.model()
+
+    # Check if it's a joint name
+    if model.existJointName(name):
+        return model.getJointId(name), SE3.Identity()
+
+    # Check if it's a frame name
+    if model.existFrame(name):
+        frame_id = model.getFrameId(name)
+        frame = model.frames[frame_id]
+        return frame.parentJoint, frame.placement
+
+    raise ValueError(
+        f"'{name}' is neither a joint name nor a frame name in the robot model"
+    )
+
+
 class ConstraintBuilder:
     """
     Helper class for creating transformation constraints.
@@ -79,12 +115,18 @@ class ConstraintBuilder:
             if not HAS_PYHPP_CONSTRAINTS:
                 raise ImportError("PyHPP constraints not available")
             
-            # Get joint IDs
-            joint_gripper = robot.model().getJointId(gripper)
-            joint_tool = robot.model().getJointId(tool)
+            # Get joint IDs and frame placements (handles both joint and frame names)
+            joint_gripper, frame1_placement = get_joint_id_for_name(robot, gripper)
+            joint_tool, frame2_placement = get_joint_id_for_name(robot, tool)
             
-            # Convert transform to SE3
+            # Convert user transform to SE3
             grasp_tf = xyzquat_to_se3(transform)
+            
+            # Compose transforms: frame1_placement * grasp_tf for joint1 frame
+            # and frame2_placement for joint2 frame
+            # RelativeTransformation expects transforms from joint to constraint frame
+            frame1_tf = frame1_placement * grasp_tf
+            frame2_tf = frame2_placement
             
             # Create mask
             mask_vec = Mask()
@@ -94,7 +136,7 @@ class ConstraintBuilder:
             pc = RelativeTransformation.create(
                 name, robot.asPinDevice(),
                 joint_gripper, joint_tool,
-                grasp_tf, SE3.Identity(), mask_vec
+                frame1_tf, frame2_tf, mask_vec
             )
             
             # Create comparison types (all EqualToZero for grasp)
@@ -141,16 +183,21 @@ class ConstraintBuilder:
             if not HAS_PYHPP_CONSTRAINTS:
                 raise ImportError("PyHPP constraints not available")
             
-            # Get joint ID
-            joint_tool = robot.model().getJointId(tool)
+            # Get joint ID and frame placement (handles both joint and frame names)
+            joint_tool, frame_placement = get_joint_id_for_name(robot, tool)
             
-            # Convert pose to SE3
-            placement_tf = xyzquat_to_se3(world_pose)
+            # Convert world pose to SE3
+            world_tf = xyzquat_to_se3(world_pose)
+            
+            # Transformation constraint: joint frame should be at world_tf
+            # If tool is a frame, we need frame_placement as the local transform
+            # The constraint is: world_tf = joint_tf * frame_placement
+            # So joint_tf should satisfy this relationship
             
             # Create transformation constraint
             pc = Transformation.create(
                 name, robot.asPinDevice(),
-                joint_tool, SE3.Identity(), placement_tf, mask
+                joint_tool, frame_placement, world_tf, mask
             )
             
             # Create comparison types (EqualToZero for placement)
@@ -201,16 +248,16 @@ class ConstraintBuilder:
             if not HAS_PYHPP_CONSTRAINTS:
                 raise ImportError("PyHPP constraints not available")
             
-            # Get joint ID
-            joint_tool = robot.model().getJointId(tool)
+            # Get joint ID and frame placement (handles both joint and frame names)
+            joint_tool, frame_placement = get_joint_id_for_name(robot, tool)
             
-            # Convert pose to SE3
-            placement_tf = xyzquat_to_se3(world_pose)
+            # Convert world pose to SE3
+            world_tf = xyzquat_to_se3(world_pose)
             
             # Create transformation constraint
             pc = Transformation.create(
                 constraint_name, robot.asPinDevice(),
-                joint_tool, SE3.Identity(), placement_tf, complement_mask
+                joint_tool, frame_placement, world_tf, complement_mask
             )
             
             # Complement uses Equality comparison type
@@ -709,4 +756,5 @@ class FactoryConstraintRegistry:
 __all__ = [
     "ConstraintBuilder",
     "FactoryConstraintRegistry",
+    "get_joint_id_for_name",
 ]
