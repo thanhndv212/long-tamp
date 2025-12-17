@@ -12,7 +12,6 @@ from typing import Dict, List, Tuple, Optional, Any, Type, Union
 from agimus_spacelab.config.base_config import BaseTaskConfig, ConstraintDef
 from agimus_spacelab.planning.constraints import (
     ConstraintBuilder,
-    FactoryConstraintLibrary,
 )
 
 # Import for CORBA backend
@@ -528,18 +527,6 @@ class GraphBuilder:
             return self.build_manual_graph_from_task(task_cls, name=name)
 
         raise ValueError("mode must be 'factory' or 'manual'")
-
-    def get_factory_constraint_library(
-        self, task: TaskConfigT
-    ) -> FactoryConstraintLibrary:
-        """Return a ConstraintGraphFactory naming helper for this task."""
-
-        task_cls = self._as_task_config(task)
-        return FactoryConstraintLibrary(
-            grippers=list(getattr(task_cls, "GRIPPERS", [])),
-            objects=list(getattr(task_cls, "OBJECTS", [])),
-            handles_per_object=task_cls.get_handles_per_object(),
-        )
 
     def build_manual_graph_from_task(
         self,
