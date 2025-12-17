@@ -69,9 +69,9 @@ def create_constraints(planner):
     
     # Get joint IDs
     joint_gripper = robot.model().getJointId(
-        ManipulationConfig.GRIPPER_NAME
+        ManipulationConfig.GRIPPER_JOINT
     )
-    joint_ball = robot.model().getJointId(ManipulationConfig.BALL_NAME)
+    joint_ball = robot.model().getJointId(ManipulationConfig.BALL_JOINT)
     Id = SE3.Identity()
     
     # ========================================================================
@@ -670,7 +670,7 @@ def main(visualize=True, solve=True):
     
     # Set joint bounds
     bounds = JointBounds.freeflyer_bounds()
-    planner.set_joint_bounds(ManipulationConfig.BALL_NAME, bounds)
+    planner.set_joint_bounds(ManipulationConfig.BALL_JOINT, bounds)
     
     # Load ground (visualization only)
     planner.load_environment(

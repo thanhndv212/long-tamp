@@ -111,8 +111,8 @@ class ManipulationConfig:
     """Configuration for grasp ball manipulation task."""
     
     # Gripper name
-    GRIPPER_NAME = "ur5/wrist_3_joint"
-    BALL_NAME = "pokeball/root_joint"
+    GRIPPER_JOINT = "ur5/wrist_3_joint"
+    BALL_JOINT = "pokeball/root_joint"
     
     # Ball properties
     BALL_RADIUS = 0.025
@@ -279,34 +279,34 @@ class ManipulationConfig:
         """Return constraint definitions for this task."""
         return [
             ("grasp", "grasp", {
-                "gripper": cls.GRIPPER_NAME,
-                "obj": cls.BALL_NAME,
+                "gripper": cls.GRIPPER_JOINT,
+                "obj": cls.BALL_JOINT,
                 "transform": cls.BALL_IN_GRIPPER,
                 "mask": cls.GRASP_MASK,
             }),
             ("placement", "placement", {
-                "obj": cls.BALL_NAME,
+                "obj": cls.BALL_JOINT,
                 "transform": cls.BALL_ON_GROUND,
                 "mask": cls.PLACEMENT_MASK,
             }),
             ("complement", "placement", {
-                "obj": cls.BALL_NAME,
+                "obj": cls.BALL_JOINT,
                 "transform": cls.BALL_ON_GROUND,
                 "mask": cls.PLACEMENT_COMPLEMENT_MASK,
             }),
             ("grasp", "gripper_ball_aligned", {
-                "gripper": cls.GRIPPER_NAME,
-                "obj": cls.BALL_NAME,
+                "gripper": cls.GRIPPER_JOINT,
+                "obj": cls.BALL_JOINT,
                 "transform": cls.GRIPPER_ABOVE_BALL,
                 "mask": cls.GRASP_MASK,
             }),
             ("placement", "ball_near_table", {
-                "obj": cls.BALL_NAME,
+                "obj": cls.BALL_JOINT,
                 "transform": cls.BALL_NEAR_TABLE,
                 "mask": cls.PLACEMENT_MASK,
             }),
             ("complement", "ball_near_table", {
-                "obj": cls.BALL_NAME,
+                "obj": cls.BALL_JOINT,
                 "transform": [cls.BOX_X, 0.2, 0.1, 0, 0, 0, 1],
                 "mask": cls.PLACEMENT_COMPLEMENT_MASK,
             }),

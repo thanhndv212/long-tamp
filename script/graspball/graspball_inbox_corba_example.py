@@ -57,8 +57,8 @@ def create_transformation_constraints(ps):
     # Grasp constraint: gripper holds ball
     ps.createTransformationConstraint(
         "grasp",
-        ManipulationConfig.GRIPPER_NAME,
-        ManipulationConfig.BALL_NAME,
+        ManipulationConfig.GRIPPER_JOINT,
+        ManipulationConfig.BALL_JOINT,
         ManipulationConfig.BALL_IN_GRIPPER,
         ManipulationConfig.GRASP_MASK
     )
@@ -67,7 +67,7 @@ def create_transformation_constraints(ps):
     ps.createTransformationConstraint(
         "placement",
         "",
-        ManipulationConfig.BALL_NAME,
+        ManipulationConfig.BALL_JOINT,
         ManipulationConfig.BALL_ON_GROUND,
         ManipulationConfig.PLACEMENT_MASK
     )
@@ -76,7 +76,7 @@ def create_transformation_constraints(ps):
     ps.createTransformationConstraint(
         "placement/complement",
         "",
-        ManipulationConfig.BALL_NAME,
+        ManipulationConfig.BALL_JOINT,
         ManipulationConfig.BALL_ON_GROUND,
         ManipulationConfig.PLACEMENT_COMPLEMENT_MASK
     )
@@ -84,8 +84,8 @@ def create_transformation_constraints(ps):
     # Gripper-ball alignment: gripper above ball
     ps.createTransformationConstraint(
         "gripper_ball_aligned",
-        ManipulationConfig.GRIPPER_NAME,
-        ManipulationConfig.BALL_NAME,
+        ManipulationConfig.GRIPPER_JOINT,
+        ManipulationConfig.BALL_JOINT,
         ManipulationConfig.GRIPPER_ABOVE_BALL,
         [True, True, True, True, True, True]
     )
@@ -94,7 +94,7 @@ def create_transformation_constraints(ps):
     ps.createTransformationConstraint(
         "ball_near_table",
         "",
-        ManipulationConfig.BALL_NAME,
+        ManipulationConfig.BALL_JOINT,
         ManipulationConfig.BALL_NEAR_TABLE,
         ManipulationConfig.PLACEMENT_MASK
     )
@@ -103,7 +103,7 @@ def create_transformation_constraints(ps):
     ps.createTransformationConstraint(
         "ball_near_table/complement",
         "",
-        ManipulationConfig.BALL_NAME,
+        ManipulationConfig.BALL_JOINT,
         [ManipulationConfig.BOX_X, 0.2, 0.1, 0, 0, 0, 1],
         ManipulationConfig.PLACEMENT_COMPLEMENT_MASK
     )
@@ -515,7 +515,7 @@ def main(visualize=True, solve=True):
     
     # Set joint bounds
     bounds = JointBounds.freeflyer_bounds()
-    planner.set_joint_bounds(ManipulationConfig.BALL_NAME, bounds)
+    planner.set_joint_bounds(ManipulationConfig.BALL_JOINT, bounds)
     
     # Setup environment
     planner.load_environment("ground", ManipulationConfig.GROUND_URDF)
