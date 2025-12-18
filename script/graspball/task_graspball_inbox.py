@@ -396,7 +396,8 @@ class GraspBallTask(ManipulationTask):
 def main(
     visualize: bool = True,
     solve: bool = False,
-    backend: str = "corba"
+    backend: str = "corba",
+    use_factory: bool = False
 ):
     """
     Run the grasp ball task.
@@ -422,7 +423,15 @@ def main(
     )
     
     # Run task
-    result = task.run(visualize=visualize, solve=solve)
+    preferred_configs = [] if use_factory else [
+        "q_above",
+        "q_grasp_place",
+        "q_ball_up",
+        "q_grasp",
+        ]
+    result = task.run(visualize=visualize, solve=solve,
+                      preferred_configs=preferred_configs,
+                      max_iterations=1000)
     
     # Visualize handles and grippers if viewer available
     if visualize and result.get('viewer'):
@@ -527,13 +536,17 @@ if __name__ == "__main__":
         choices=["corba", "pyhpp"],
         help="Backend to use: corba (default) or pyhpp"
     )
-    
+    parser.add_argument(
+        "--factory", action="store_true",
+        help="Use ConstraintGraphFactory (automatic graph generation)"
+    )
     args = parser.parse_args()
     
     task, result = main(
         visualize=not args.no_viz,
         solve=args.solve,
-        backend=args.backend
+        backend=args.backend,
+        use_factory=args.factory
     )
     
     if task and result:
