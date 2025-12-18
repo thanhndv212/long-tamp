@@ -566,7 +566,8 @@ class CorbaBackend(BackendBase):
         print("   Configuring path validation...")
         self.ps.selectPathValidation("Discretized", validation_step)
         self.ps.selectPathProjector("Progressive", projector_step)
-
+        # self.ps.selectSteeringMethod("ReedsShepp")
+        # self.ps.selectPathPlanner("DiffusingPlanner")
     def configure_path_optimization(
         self,
         num_loops: int = 50,
@@ -580,13 +581,13 @@ class CorbaBackend(BackendBase):
         """
         if self._use_path_optimization:
             # Enable path optimization in CORBA
-            self.ps.setParameter(
-                "PathOptimization/RandomShortcut/NumberOfLoops", num_loops
-            )
-        
-        if self._use_path_projection:
+            self.ps.addPathOptimizer("RandomShortcut")
+            # self.ps.setParameter(
+            #     "PathOptimization/RandomShortcut/NumberOfLoops", num_loops
+            # )
+        # if self._use_path_projection:
             # Enable path projection
-            self.ps.setParameter("PathProjection/ProgressBased", True)
+            # self.ps.setParameter("PathProjection/ProgressBased", True)
         
         # Set max iterations for steering method
         # self.ps.setParameter(

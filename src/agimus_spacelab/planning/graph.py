@@ -109,6 +109,8 @@ class GraphBuilder:
                 raise ImportError("CORBA backend not available")
             
             self.graph = ConstraintGraph(self.robot, "graph")
+            self.ps.setMaxIterProjection(100)
+            self.ps.setErrorThreshold(1e-4)
             print("   ✓ CORBA graph initialized (manual mode)")
             
         else:  # pyhpp
@@ -116,7 +118,7 @@ class GraphBuilder:
                 raise ImportError("PyHPP backend not available")
             
             self.graph = PyHPPGraph(name, self.robot, self.ps)
-            self.graph.maxIterations(10000)
+            self.graph.maxIterations(100)
             self.graph.errorThreshold(1e-4)
             print("   ✓ PyHPP graph initialized (manual mode)")
 
