@@ -49,6 +49,35 @@ class ConfigGenerator:
         self._shooter = None
         if self.backend == "pyhpp":
             self._shooter = self.ps.configurationShooter()
+
+    def is_config_valid(
+        self, q: List[float], verbose: bool = False
+    ) -> Tuple[bool, str]:
+        """
+        Check if a configuration is valid (collision-free and within bounds).
+        
+        Args:
+            q: Configuration to validate
+            verbose: If True, print validation result
+            
+        Returns:
+            Tuple of (is_valid, error_message)
+            - is_valid: True if configuration is valid
+            - error_message: Empty string if valid, otherwise describes the issue
+        """
+        if self.backend == "corba":
+            is_valid, error_msg = self.robot.isConfigValid(list(q))
+        else:  # pyhpp
+            q_arr = np.array(q) if not isinstance(q, np.ndarray) else q
+            is_valid, error_msg = self.ps.isConfigValid(q_arr)
+        
+        if verbose:
+            if is_valid:
+                print("       ✓ Configuration is valid")
+            else:
+                print(f"       ⚠ Configuration invalid: {error_msg}")
+        
+        return is_valid, error_msg
         
     def project_on_node(
         self, node_name: str, q: List[float],
@@ -65,52 +94,69 @@ class ConfigGenerator:
         Returns:
             Tuple of (success, projected_config)
         """
-        if self.backend == "corba":
-            res, q_proj, err = self.graph.applyNodeConstraints(
-                node_name, list(q)
-            )
-            success = res
-            config = q_proj
-        else:  # pyhpp
-            # PyHPP bindings expect a State object (not a state name).
-            q_arr = np.array(q) if not isinstance(q, np.ndarray) else q
+        for attempt in range(self.max_attempts):
+            if self.backend == "corba":
+                res, q_proj, err = self.graph.applyNodeConstraints(
+                    node_name, list(q)
+                )
+                success = res
+                config = q_proj
+            else:  # pyhpp
+                # PyHPP bindings expect a State object (not a state name).
+                q_arr = np.array(q) if not isinstance(q, np.ndarray) else q
 
-            state_obj = node_name
-            if isinstance(node_name, str):
-                # Try common APIs to fetch state object by name.
-                get_state = getattr(self.graph, "getState", None)
-                if callable(get_state):
-                    try:
-                        state_obj = get_state(node_name)
-                    except Exception:
-                        # getState may be overloaded for (config)->State
-                        # and reject string; fall through to other names.
-                        pass
+                state_obj = node_name
+                if isinstance(node_name, str):
+                    # Try common APIs to fetch state object by name.
+                    get_state = getattr(self.graph, "getState", None)
+                    if callable(get_state):
+                        try:
+                            state_obj = get_state(node_name)
+                        except Exception:
+                            # getState may be overloaded for (config)->State
+                            # and reject string; fall through to other names.
+                            pass
 
-                if isinstance(state_obj, str):
-                    for attr in ("getStateByName", "state", "getNode"):
-                        fn = getattr(self.graph, attr, None)
-                        if callable(fn):
-                            try:
-                                state_obj = fn(node_name)
-                                break
-                            except Exception:
-                                continue
+                    if isinstance(state_obj, str):
+                        for attr in ("getStateByName", "state", "getNode"):
+                            fn = getattr(self.graph, attr, None)
+                            if callable(fn):
+                                try:
+                                    state_obj = fn(node_name)
+                                    break
+                                except Exception:
+                                    continue
 
-            result = self.graph.applyStateConstraints(state_obj, q_arr)
-            success = result.success
-            config = result.configuration.tolist()
-        
-        if config_label:
+                result = self.graph.applyStateConstraints(state_obj, q_arr)
+                success = result.success
+                config = result.configuration.tolist()
+            
             if success:
-                self.configs[config_label] = config
-                print(f"       ✓ {config_label} projected onto "
-                      f"'{node_name}'")
+                # Validate the projected configuration
+                is_valid, err_msg = self.is_config_valid(config)
+                if is_valid:
+                    if config_label:
+                        self.configs[config_label] = config
+                        print(f"       ✓ {config_label} projected onto "
+                              f"'{node_name}' after {attempt + 1} attempts")
+                    return True, config
+                else:
+                    if (attempt + 1) % 200 == 0:
+                        print(f"       Projected config invalid: {err_msg}, "
+                              f"attempt {attempt + 1}/{self.max_attempts}...")
+                    continue
             else:
-                self.configs[config_label] = list(q)
-                print("       ⚠ Projection failed, using input")
+                if (attempt + 1) % 200 == 0:
+                    print(f"       Projection failed, "
+                          f"attempt {attempt + 1}/{self.max_attempts}...")
+                continue
+        
+        # All attempts failed
+        if config_label:
+            self.configs[config_label] = list(q)
+            print(f"       ⚠ Projection failed after {self.max_attempts} attempts")
                 
-        return success, config if success else list(q)
+        return False, list(q)
         
     def generate_via_edge(
         self, edge_name: str, q_from: List[float],
@@ -154,7 +200,7 @@ class ConfigGenerator:
                             transition = edge_name
 
                 try:
-                    result = self.graph.generateTargetConfig(
+                    resault = self.graph.generateTargetConfig(
                         transition, q_from_arr, q_rand
                     )
                 except Exception:
@@ -166,10 +212,18 @@ class ConfigGenerator:
                 config = result.configuration.tolist() if success else None
             
             if success:
+                # Validate the generated configuration
+                is_valid, err_msg = self.is_config_valid(config)
+                if not is_valid:
+                    # Config generated but invalid, continue trying
+                    if verbose and (i + 1) % 200 == 0:
+                        print(f"       Config invalid: {err_msg}, retrying...")
+                    continue
+                
                 if config_label:
                     self.configs[config_label] = config
                     print(f"       ✓ {config_label} generated via "
-                          f"'{edge_name}'")
+                          f"'{edge_name}' after {i + 1} attempts")
                 return True, config
                 
             if verbose and (i + 1) % 200 == 0:
