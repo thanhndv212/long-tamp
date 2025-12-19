@@ -64,16 +64,16 @@ def create_constraints(planner):
     Returns dictionary of constraint name -> Implicit constraint object
     """
     constraints = {}
-    
+
     robot = planner.get_robot()
-    
+
     # Get joint IDs
     joint_gripper = robot.model().getJointId(
         ManipulationConfig.GRIPPER_JOINT
     )
     joint_ball = robot.model().getJointId(ManipulationConfig.BALL_JOINT)
     Id = SE3.Identity()
-    
+
     # ========================================================================
     # 1. GRASP: gripper/ball fixed (all 6 DOF)
     # ========================================================================
@@ -81,21 +81,21 @@ def create_constraints(planner):
     ball_in_gripper = SE3(q_grasp, np.array([0, 0.137, 0]))
     mask_full = Mask()
     mask_full[:] = (True,) * 6
-    
-    pc_grasp = RelativeTransformation.create(
-        'grasp',
-        robot.asPinDevice(),
+
+    pc_grasp = RelativeTransformation(
+        "grasp",
+        robot,
         joint_gripper,
         joint_ball,
         ball_in_gripper,
         Id,
-        mask_full
+        mask_full,
     )
-    
+
     cts_grasp = ComparisonTypes()
     cts_grasp[:] = tuple([ComparisonType.EqualToZero] * 6)
-    constraints['grasp'] = Implicit.create(pc_grasp, cts_grasp, mask_full)
-    
+    constraints["grasp"] = Implicit(pc_grasp, cts_grasp, mask_full)
+
     # ========================================================================
     # 2. PLACEMENT: world/ball - fixed z, fixed r, p
     # ========================================================================
@@ -104,45 +104,45 @@ def create_constraints(planner):
         q_placement, np.array([0, 0, ManipulationConfig.BALL_RADIUS])
     )
     mask_placement = [False, False, True, True, True, False]
-    
-    pc_placement = Transformation.create(
-        'placement',
-        robot.asPinDevice(),
+
+    pc_placement = Transformation(
+        "placement",
+        robot,
         joint_ball,
         Id,
         ball_on_ground,
-        mask_placement
+        mask_placement,
     )
-    
+
     cts_placement = ComparisonTypes()
     cts_placement[:] = tuple([ComparisonType.EqualToZero] * 3)
     implicit_mask_placement = [True, True, True]
-    constraints['placement'] = Implicit.create(
+    constraints["placement"] = Implicit(
         pc_placement, cts_placement, implicit_mask_placement
     )
-    
+
     # ========================================================================
     # 3. PLACEMENT/COMPLEMENT: world/ball - fixed x, y, yaw
     # ========================================================================
     mask_placement_comp = [True, True, False, False, False, True]
-    
-    pc_placement_comp = Transformation.create(
-        'placement/complement',
-        robot.asPinDevice(),
+
+    pc_placement_comp = Transformation(
+        "placement/complement",
+        robot,
         joint_ball,
         Id,
         ball_on_ground,
-        mask_placement_comp
+        mask_placement_comp,
     )
-    
+
     # NOTE: Complement constraints use ComparisonType.Equality (not EqualToZero)
     cts_placement_comp = ComparisonTypes()
     cts_placement_comp[:] = tuple([ComparisonType.Equality] * 3)
     implicit_mask_comp = [True, True, True]
-    constraints['placement/complement'] = Implicit.create(
+    constraints["placement/complement"] = Implicit(
         pc_placement_comp, cts_placement_comp, implicit_mask_comp
     )
-    
+
     # ========================================================================
     # 4. GRIPPER_BALL_ALIGNED: gripper/ball - all fixed
     # ========================================================================
@@ -150,69 +150,69 @@ def create_constraints(planner):
     gripper_above_ball = SE3(q_aligned, np.array([0, 0.2, 0]))
     mask_aligned = Mask()
     mask_aligned[:] = (True,) * 6
-    
-    pc_aligned = RelativeTransformation.create(
-        'gripper_ball_aligned',
-        robot.asPinDevice(),
+
+    pc_aligned = RelativeTransformation(
+        "gripper_ball_aligned",
+        robot,
         joint_gripper,
         joint_ball,
         gripper_above_ball,
         Id,
-        mask_aligned
+        mask_aligned,
     )
-    
+
     cts_aligned = ComparisonTypes()
     cts_aligned[:] = tuple([ComparisonType.EqualToZero] * 6)
-    constraints['gripper_ball_aligned'] = Implicit.create(
+    constraints["gripper_ball_aligned"] = Implicit(
         pc_aligned, cts_aligned, mask_aligned
     )
-    
+
     # ========================================================================
     # 5. BALL_NEAR_TABLE: world/ball - fixed z, fixed r, p
     # ========================================================================
     q_table = Quaternion(0, 0, 0, 1)
     ball_near_table = SE3(q_table, np.array([0.3, 0, 0.1]))
     mask_table = [False, False, True, True, True, False]
-    
-    pc_table = Transformation.create(
-        'ball_near_table',
-        robot.asPinDevice(),
+
+    pc_table = Transformation(
+        "ball_near_table",
+        robot,
         joint_ball,
         Id,
         ball_near_table,
-        mask_table
+        mask_table,
     )
-    
+
     cts_table = ComparisonTypes()
     cts_table[:] = tuple([ComparisonType.EqualToZero] * 3)
     implicit_mask_table = [True, True, True]
-    constraints['ball_near_table'] = Implicit.create(
+    constraints["ball_near_table"] = Implicit(
         pc_table, cts_table, implicit_mask_table
     )
-    
+
     # ========================================================================
     # 6. BALL_NEAR_TABLE/COMPLEMENT: world/ball - fixed x, y, yaw
     # ========================================================================
     ball_near_table_comp = SE3(q_table, np.array([0.3, 0.2, 0.1]))
     mask_table_comp = [True, True, False, False, False, True]
-    
-    pc_table_comp = Transformation.create(
-        'ball_near_table/complement',
-        robot.asPinDevice(),
+
+    pc_table_comp = Transformation(
+        "ball_near_table/complement",
+        robot,
         joint_ball,
         Id,
         ball_near_table_comp,
-        mask_table_comp
+        mask_table_comp,
     )
-    
+
     # NOTE: Complement constraints use ComparisonType.Equality (not EqualToZero)
     cts_table_comp = ComparisonTypes()
     cts_table_comp[:] = tuple([ComparisonType.Equality] * 3)
     implicit_mask_table_comp = [True, True, True]
-    constraints['ball_near_table/complement'] = Implicit.create(
+    constraints["ball_near_table/complement"] = Implicit(
         pc_table_comp, cts_table_comp, implicit_mask_table_comp
     )
-    
+
     return constraints
 
 
@@ -644,15 +644,15 @@ def main(visualize=True, solve=True):
     if not HAS_PYHPP:
         print("Error: PyHPP backend not available")
         return False, None, None, None, None, None, None, None, None
-    
+
     print("=" * 70)
     print("Grasp Ball Manipulation - PyHPP Backend")
     print("=" * 70)
-    
+
     # 1. Create planner and load robot
     print("\n1. Loading robot and objects...")
     planner = PyHPPManipulationPlanner()
-    
+
     # Load robot
     planner.load_robot(
         name="ur5",
@@ -660,24 +660,24 @@ def main(visualize=True, solve=True):
         srdf_path=ManipulationConfig.ROBOT_SRDF,
         root_joint_type="anchor"
     )
-    
+
     # Load ball
     planner.load_object(
         name="pokeball",
         urdf_path=ManipulationConfig.BALL_URDF,
         root_joint_type="freeflyer"
     )
-    
+
     # Set joint bounds
     bounds = JointBounds.freeflyer_bounds()
     planner.set_joint_bounds(ManipulationConfig.BALL_JOINT, bounds)
-    
+
     # Load ground (visualization only)
     planner.load_environment(
         name="ground",
         urdf_path=ManipulationConfig.GROUND_URDF
     )
-    
+
     # Load box at correct position (0.3, 0, 0.04)
     # In CORBA, this is done via ps.moveObstacle() for each wall
     # In PyHPP, we position the entire box at load time
@@ -691,44 +691,43 @@ def main(visualize=True, solve=True):
         urdf_path=ManipulationConfig.BOX_URDF,
         pose=box_pose
     )
-    
+
     print("✓ Robot and objects loaded")
-    
+
     # 2. Configure path validation and projection BEFORE graph creation
     print("\n2. Configuring path validation and projection...")
-    from pyhpp.manipulation import createProgressiveProjector
+    from pyhpp.manipulation import ProgressiveProjector
     from pyhpp.core import (
-        createDiscretizedCollisionAndJointBound,
-        createDiscretizedCollision,
-        createDiscretizedJointBound,
-        createDiscretized,
+        DiscretizedCollisionAndJointBound,
+        DiscretizedCollision,
+        DiscretizedJointBound,
+        Discretized,
     )
-    
-    
+
     problem = planner.get_problem()
     robot = planner.get_robot()
-    
+
     # Path projector (Progressive) - for constraint projection along paths
-    problem.pathProjector = createProgressiveProjector(
-        problem.distance(), problem.steeringMethod(),
-        ManipulationConfig.PATH_PROJECTOR_STEP  # 0.1
+    problem.pathProjector = ProgressiveProjector(
+        problem.distance(),
+        problem.steeringMethod(),
+        ManipulationConfig.PATH_PROJECTOR_STEP,  # 0.1
     )
-    
+
     # Path validation (Discretized) - for collision checking
-    problem.pathValidation = createDiscretized(
-        robot.asPinDevice(),
-        ManipulationConfig.PATH_VALIDATION_STEP  # 0.01
+    problem.pathValidation = Discretized(
+        robot, ManipulationConfig.PATH_VALIDATION_STEP  # 0.01
     )
-    
+
     # 3. Create constraint graph
     print("\n3. Creating constraint graph...")
     graph, states, edges, constraints = create_constraint_graph(planner)
-    
+
     # 4. Test graph traversal
     Q, q_init, q_goal = generate_configurations(
         graph, states, edges, planner
     )
-    
+
     # 5. Setup planning problem
     print("\n" + "=" * 70)
     print("Setting up planning problem")
@@ -736,7 +735,7 @@ def main(visualize=True, solve=True):
     planner.set_initial_config(q_init)
     planner.add_goal_config(q_goal)
     print("✓ Problem setup complete")
-    
+
     # 6. Visualization
     viewer = None
     if visualize:
@@ -749,30 +748,30 @@ def main(visualize=True, solve=True):
             print("✓ Displaying initial configuration")
         except Exception as e:
             print(f"⚠ Visualization failed: {e}")
-    
+
     # 7. Solve
     path = None
     solve_success = False
     if solve:
         print("\n7. Solving manipulation problem...")
         print("  This may take a while...")
-        
+
         from pyhpp.manipulation import ManipulationPlanner as HPPPlanner
-        
+
         problem = planner.get_problem()
-        
+
         hpp_planner = HPPPlanner(problem)
         hpp_planner.maxIterations(10000)
-        
+
         print("  Max iterations: 10000")
-        
+
         try:
             solve_success = hpp_planner.solve()
-            
+
             if solve_success:
                 print("  ✓ Solution found!")
                 path = hpp_planner.path()
-                
+
                 if visualize and viewer:
                     print("\n8. Playing solution path...")
                     try:
@@ -786,7 +785,7 @@ def main(visualize=True, solve=True):
         except Exception as e:
             print(f"  ✗ Planning failed: {e}")
             solve_success = False
-    
+
     # Final summary
     print("\n" + "=" * 70)
     if solve and solve_success:
@@ -794,7 +793,7 @@ def main(visualize=True, solve=True):
     else:
         print("Setup Complete!")
     print("=" * 70)
-    
+
     if not solve or not solve_success:
         print("\nNext steps:")
         if not solve:
@@ -809,7 +808,7 @@ def main(visualize=True, solve=True):
             print("3. Try adjusting path validation parameters")
         print("4. Use viewer(q) to display configurations")
         print("5. Animate configs: animate_configurations(viewer, Q, dt=1.0)")
-    
+
     print("\nReturned objects:")
     print("  planner     - PyHPPManipulationPlanner instance")
     print("  graph       - Constraint graph")
@@ -819,7 +818,7 @@ def main(visualize=True, solve=True):
     print("  viewer      - Gepetto viewer (if visualization enabled)")
     print("  path        - Solution path (if solved successfully)")
     print("  Q           - List of test configurations")
-    
+
     return (
         solve_success if solve else True,
         planner, graph, states, edges,

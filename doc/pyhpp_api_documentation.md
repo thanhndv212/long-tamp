@@ -79,7 +79,7 @@ pyhpp/
     ├── Graph                       # Constraint graph
     ├── ManipulationPlanner         # High-level manipulation planner
     ├── TransitionPlanner           # Transition-specific planner
-    ├── createProgressiveProjector  # Path projection factories
+    ├── ProgressiveProjector  # Path projection factories
     └── constraint_graph_factory.py # Python helper for graph generation
 ```
 
@@ -140,7 +140,7 @@ Constraints use **static factory methods**, not constructors:
 
 ```python
 # ✅ CORRECT: Static factory method
-constraint = Transformation.create(name, device, joint_id, ...)
+constraint = Transformation(name, device, joint_id, ...)
 
 # ❌ INCORRECT: Constructor (not exposed)
 # constraint = Transformation(name, device, ...)  # Will fail!
@@ -217,9 +217,9 @@ edge = graph.createTransition(free_state, grasp_state, "take", 1.0, free_state)
 joint_id = robot.model().getJointId("object/root_joint")
 mask = [False, False, True, True, True, False]  # Fix z, roll, pitch
 
-constraint = Transformation.create(
+constraint = Transformation(
     "placement",
-    robot.asPinDevice(),
+    robot,
     joint_id,
     SE3.Identity(),
     SE3(Quaternion(0, 0, 0, 1), np.array([0, 0, 0.1])),
@@ -229,7 +229,7 @@ constraint = Transformation.create(
 # 8. Wrap in Implicit
 cts = ComparisonTypes()
 cts[:] = tuple([ComparisonType.EqualToZero] * 3)
-implicit_constraint = Implicit.create(constraint, cts, [True, True, True])
+implicit_constraint = Implicit(constraint, cts, [True, True, True])
 
 # 9. Add to graph
 graph.addNumericalConstraint(grasp_state, implicit_constraint)
@@ -469,14 +469,14 @@ Path projectors ensure that paths satisfy constraints:
 
 ```python
 from pyhpp.manipulation import (
-    createProgressiveProjector,
+    ProgressiveProjector,
     createDichotomyProjector,
     createGlobalProjector
 )
 
 # Progressive projector (RECOMMENDED for manipulation)
 # Projects path incrementally with given step size
-projector = createProgressiveProjector(
+projector = ProgressiveProjector(
     problem.distance(),           # Distance metric
     problem.steeringMethod(),     # Steering method
     0.1                           # Step size
@@ -724,7 +724,7 @@ from pinocchio import SE3, Quaternion, StdVec_Bool as Mask
 import numpy as np
 
 # ✅ CORRECT: Use .create() factory method
-constraint = Transformation.create(...)
+constraint = Transformation(...)
 
 # ❌ INCORRECT: Constructors not exposed to Python
 # constraint = Transformation(...)  # Will fail!
@@ -748,9 +748,9 @@ position = np.array([0.3, 0.0, 0.1])  # Target position
 target = SE3(quaternion, position)
 
 # Create constraint
-constraint = Transformation.create(
+constraint = Transformation(
     "placement",           # Constraint name
-    robot.asPinDevice(),  # Pinocchio device wrapper
+    robot,  # Pinocchio device wrapper
     joint_id,             # Joint ID to constrain
     SE3.Identity(),       # Reference frame (identity = world frame)
     target,               # Target transform
@@ -805,9 +805,9 @@ offset = np.array([0, 0.137, 0])      # 137mm forward
 grasp_transform = SE3(q, offset)
 
 # Create relative constraint
-constraint = RelativeTransformation.create(
+constraint = RelativeTransformation(
     "grasp",
-    robot.asPinDevice(),
+    robot,
     gripper_id,           # First joint (reference frame)
     object_id,            # Second joint (target frame)
     grasp_transform,      # Transform: T_gripper_to_object
@@ -828,7 +828,7 @@ mask_pos[:] = (True, True, True)  # Constrain x, y, z
 
 position_constraint = Position.create(
     "position",
-    robot.asPinDevice(),
+    robot,
     joint_id,
     SE3.Identity(),
     target_transform,
@@ -844,7 +844,7 @@ mask_orient[:] = (True, True, True)  # Constrain roll, pitch, yaw
 
 orientation_constraint = Orientation.create(
     "orientation",
-    robot.asPinDevice(),
+    robot,
     joint_id,
     SE3.Identity(),
     target_transform,
@@ -856,14 +856,14 @@ orientation_constraint = Orientation.create(
 
 ```python
 locked = LockedJoint.create(
-    robot.asPinDevice(),
+    robot,
     "joint_name",
     np.array([value])     # Locked value (1D array even for 1 DOF)
 )
 
 # Example: Lock a revolute joint at 90 degrees
 locked_elbow = LockedJoint.create(
-    robot.asPinDevice(),
+    robot,
     "elbow_joint",
     np.array([np.pi/2])
 )
@@ -871,7 +871,7 @@ locked_elbow = LockedJoint.create(
 
 ### 4.7 Implicit Constraints
 
-⚠️ **All constraints must be wrapped in `Implicit.create()` before adding to graph!**
+⚠️ **All constraints must be wrapped in `Implicit()` before adding to graph!**
 
 ```python
 # Define comparison types for each constrained DOF
@@ -882,7 +882,7 @@ comparison_types[:] = tuple([ComparisonType.EqualToZero] * 3)
 implicit_mask = [True, True, True]
 
 # Wrap base constraint
-implicit_constraint = Implicit.create(
+implicit_constraint = Implicit(
     constraint,           # Base constraint (Transformation, etc.)
     comparison_types,     # How to compare constraint values
     implicit_mask        # Which DOF are implicit
@@ -905,7 +905,7 @@ comparison_types = ComparisonTypes()
 comparison_types[:] = tuple([ComparisonType.Superior])  # z ≥ 0
 implicit_mask = [True]
 
-implicit_constraint = Implicit.create(height_constraint, comparison_types, implicit_mask)
+implicit_constraint = Implicit(height_constraint, comparison_types, implicit_mask)
 ```
 
 ### 4.8 Constraint Evaluation
@@ -1163,9 +1163,9 @@ problem.initConfig(q_init)
 problem.addGoalConfig(q_goal)
 
 # 5. Configure path projector
-from pyhpp.manipulation import createProgressiveProjector
+from pyhpp.manipulation import ProgressiveProjector
 
-projector = createProgressiveProjector(
+projector = ProgressiveProjector(
     problem.distance(),
     problem.steeringMethod(),
     0.1
@@ -1258,7 +1258,7 @@ animate_path(viewer, path, dt=0.02)
 | **Random Config** | `robot.shootRandomConfig()` | `problem.configurationShooter().shoot()` |
 | **Constraint Creation** | Constructor | Static `.create()` methods |
 | **Graph Initialization** | Automatic | Explicit `graph.initialize()` |
-| **Constraint Wrapping** | Optional | Required (`Implicit.create()`) |
+| **Constraint Wrapping** | Optional | Required (`Implicit()`) |
 | **Type Conversion** | CORBA sequences | NumPy arrays |
 
 ### Common Migration Issues
@@ -1281,7 +1281,7 @@ q_rand = shooter.shoot()
 constraint = Transformation(name, device, joint_id, ...)
 
 # PyHPP (explicit factory method)
-constraint = Transformation.create(name, device, joint_id, ...)
+constraint = Transformation(name, device, joint_id, ...)
 ```
 
 #### 3. Graph Initialization
@@ -1304,7 +1304,7 @@ graph.initialize()  # REQUIRED!
 graph.addNumericalConstraint(state, constraint)
 
 # PyHPP (required)
-implicit = Implicit.create(constraint, comparison_types, mask)
+implicit = Implicit(constraint, comparison_types, mask)
 graph.addNumericalConstraint(state, implicit)
 ```
 
@@ -1340,7 +1340,7 @@ q = shooter.shoot()
 constraint = Transformation(name, device, ...)
 
 # ✅ Correct
-constraint = Transformation.create(name, device, ...)
+constraint = Transformation(name, device, ...)
 ```
 
 #### 3. `RuntimeError: Graph not initialized`
@@ -1409,7 +1409,7 @@ for i in range(1000):
 
 ```python
 # Evaluate constraint before adding to graph
-constraint = Transformation.create(...)
+constraint = Transformation(...)
 value = constraint(q)
 print(f"Constraint value: {value}")
 print(f"Constraint error: {np.linalg.norm(value)}")
@@ -1503,14 +1503,14 @@ The `tests/` directory contains excellent working examples:
 
 1. **Always** use `.create()` factory methods for constraints
 2. **Always** call `graph.initialize()` before using the graph
-3. **Always** wrap constraints in `Implicit.create()` before adding to graph
+3. **Always** wrap constraints in `Implicit()` before adding to graph
 4. **Always** use `problem.configurationShooter().shoot()` for random configs
-5. **Always** use `robot.asPinDevice()` when creating constraints
+5. **Always** use `robot` when creating constraints
 
 ### 📚 Best Practices
 
 - Import `Device` and `urdf` from `pyhpp.manipulation` for manipulation tasks
-- Use `createProgressiveProjector()` for path projection in manipulation
+- Use `ProgressiveProjector()` for path projection in manipulation
 - Set appropriate `maxIterations` and `errorThreshold` for your problem
 - Test constraint projections before planning
 - Use test files in `tests/` directory as reference examples
@@ -1521,7 +1521,7 @@ The `tests/` directory contains excellent working examples:
 2. Create `Problem`
 3. Create `Graph` and build structure (states, transitions)
 4. Create constraints using `.create()` methods
-5. Wrap constraints in `Implicit.create()`
+5. Wrap constraints in `Implicit()`
 6. Add constraints to states/edges
 7. Configure graph parameters
 8. **Initialize graph** (`graph.initialize()`)

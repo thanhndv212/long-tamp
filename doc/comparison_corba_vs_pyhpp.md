@@ -192,15 +192,15 @@ edge = graph.createTransition(
 )
 
 # Create constraints using factory methods
-constraint = Transformation.create(
-    "placement", robot.asPinDevice(),
+constraint = Transformation(
+    "placement", robot,
     joint_id, SE3.Identity(), target, mask
 )
 
 # Wrap in Implicit (required!)
 cts = ComparisonTypes()
 cts[:] = tuple([ComparisonType.EqualToZero] * 3)
-implicit = Implicit.create(constraint, cts, [True, True, True])
+implicit = Implicit(constraint, cts, [True, True, True])
 
 graph.addNumericalConstraint(state_grasp, implicit)
 
@@ -251,9 +251,9 @@ grasp_tf = SE3(
     np.array([0, 0.137, 0])
 )
 
-grasp = RelativeTransformation.create(
+grasp = RelativeTransformation(
     "grasp",
-    robot.asPinDevice(),
+    robot,
     gripper_id,
     object_id,
     grasp_tf,
@@ -268,9 +268,9 @@ placement_tf = SE3(
     np.array([0, 0, 0.1])
 )
 
-placement = Transformation.create(
+placement = Transformation(
     "placement",
-    robot.asPinDevice(),
+    robot,
     object_id,
     SE3.Identity(),
     placement_tf,
@@ -280,11 +280,11 @@ placement = Transformation.create(
 # Wrap in Implicit (REQUIRED before adding to graph!)
 cts = ComparisonTypes()
 cts[:] = tuple([ComparisonType.EqualToZero] * 6)
-implicit_grasp = Implicit.create(grasp, cts, mask)
+implicit_grasp = Implicit(grasp, cts, mask)
 
 cts_place = ComparisonTypes()
 cts_place[:] = tuple([ComparisonType.EqualToZero] * 3)
-implicit_place = Implicit.create(
+implicit_place = Implicit(
     placement, cts_place, [True, True, True]
 )
 ```
@@ -293,7 +293,7 @@ implicit_place = Implicit.create(
 1. Use `.create()` factory methods, not constructors
 2. Use joint IDs (integers), not names (strings)
 3. Use `SE3`/`Quaternion` objects, not lists
-4. Always wrap in `Implicit.create()` before adding to graph
+4. Always wrap in `Implicit()` before adding to graph
 
 ---
 
@@ -328,8 +328,8 @@ problem.initConfig(q_init)
 problem.addGoalConfig(q_goal)
 
 # Optional: configure path projector
-from pyhpp.manipulation import createProgressiveProjector
-projector = createProgressiveProjector(
+from pyhpp.manipulation import ProgressiveProjector
+projector = ProgressiveProjector(
     problem.distance(),
     problem.steeringMethod(),
     0.1
@@ -598,8 +598,8 @@ edge = graph.createTransition(
 )
 
 # Manual constraint creation
-constraint = Transformation.create(...)
-implicit = Implicit.create(constraint, cts, mask)
+constraint = Transformation(...)
+implicit = Implicit(constraint, cts, mask)
 graph.addNumericalConstraint(state_grasp, implicit)
 
 graph.maxIterations(100)
@@ -623,9 +623,9 @@ graph.createGraspConstraint("grasp", "gripper", "handle")
 joint1_id = robot.model().getJointId("gripper/joint")
 joint2_id = robot.model().getJointId("object/root_joint")
 
-constraint = RelativeTransformation.create(
+constraint = RelativeTransformation(
     "grasp",
-    robot.asPinDevice(),
+    robot,
     joint1_id,
     joint2_id,
     grasp_transform,
@@ -635,7 +635,7 @@ constraint = RelativeTransformation.create(
 
 cts = ComparisonTypes()
 cts[:] = tuple([ComparisonType.EqualToZero] * 6)
-implicit = Implicit.create(constraint, cts, mask)
+implicit = Implicit(constraint, cts, mask)
 ```
 
 ---
@@ -723,7 +723,7 @@ TypeError: __init__() missing required argument
 constraint = Transformation(name, device, ...)
 
 # ✅ Correct (use .create() factory method)
-constraint = Transformation.create(name, device, ...)
+constraint = Transformation(name, device, ...)
 ```
 
 ---
@@ -759,7 +759,7 @@ graph.addNumericalConstraint(state, constraint)
 # ✅ Correct (wrap in Implicit first)
 cts = ComparisonTypes()
 cts[:] = tuple([ComparisonType.EqualToZero] * n)
-implicit = Implicit.create(constraint, cts, mask)
+implicit = Implicit(constraint, cts, mask)
 graph.addNumericalConstraint(state, implicit)
 ```
 
@@ -799,11 +799,11 @@ TypeError: incompatible function arguments
 **SOLUTION:**
 ```python
 # ❌ Wrong
-constraint = Transformation.create(..., "joint_name", ...)
+constraint = Transformation(..., "joint_name", ...)
 
 # ✅ Correct (get joint ID from model)
 joint_id = robot.model().getJointId("joint_name")
-constraint = Transformation.create(..., joint_id, ...)
+constraint = Transformation(..., joint_id, ...)
 ```
 
 ---
@@ -1063,28 +1063,28 @@ grasp_tf = SE3(
     np.array([0, 0.137, 0])
 )
 
-grasp = RelativeTransformation.create(
-    "grasp", robot.asPinDevice(),
+grasp = RelativeTransformation(
+    "grasp", robot,
     gripper_id, ball_id,
     grasp_tf, SE3.Identity(), mask
 )
 
 cts_grasp = ComparisonTypes()
 cts_grasp[:] = tuple([ComparisonType.EqualToZero] * 6)
-implicit_grasp = Implicit.create(grasp, cts_grasp, mask)
+implicit_grasp = Implicit(grasp, cts_grasp, mask)
 
 # Placement constraint
 placement_mask = [False, False, True, True, True, False]
 place_tf = SE3(Quaternion(0, 0, 0, 1), np.array([0, 0, 0.1]))
 
-placement = Transformation.create(
-    "placement", robot.asPinDevice(),
+placement = Transformation(
+    "placement", robot,
     ball_id, SE3.Identity(), place_tf, placement_mask
 )
 
 cts_place = ComparisonTypes()
 cts_place[:] = tuple([ComparisonType.EqualToZero] * 3)
-implicit_place = Implicit.create(
+implicit_place = Implicit(
     placement, cts_place, [True, True, True]
 )
 
