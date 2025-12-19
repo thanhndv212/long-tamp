@@ -84,9 +84,10 @@ class PyHPPBackend(BackendBase):
 
     def random_config(self) -> np.ndarray:
         """Generate a random configuration."""
-        if self.device is None:
-            raise RuntimeError("Robot not loaded yet")
-        return np.array(self.device.randomConfiguration())
+        if self.problem is None:
+            raise RuntimeError("Problem not created yet")
+        self._shooter = self.problem.configurationShooter()
+        return np.array(self._shooter.shoot())
 
     def load_robot(
         self,

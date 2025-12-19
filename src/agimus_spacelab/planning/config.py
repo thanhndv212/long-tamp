@@ -179,14 +179,14 @@ class ConfigGenerator:
         for i in range(self.max_attempts):
             # Generate random config
             if self.backend == "corba":
-                q_rand = self.robot.shootRandomConfig()
+                q_rand = self.planner.random_config()
                 res, q_target, err = self.graph.generateTargetConfig(
                     edge_name, q_from, q_rand
                 )
                 success = res
                 config = q_target
             else:  # pyhpp
-                q_rand = self._shooter.shoot()
+                q_rand = self.planner.random_config()
                 q_from_arr = np.array(q_from) if not isinstance(
                     q_from, np.ndarray) else q_from
 
