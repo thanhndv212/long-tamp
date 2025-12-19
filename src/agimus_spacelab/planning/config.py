@@ -24,7 +24,7 @@ class ConfigGenerator:
     
     Handles projection, random sampling, and waypoint generation.
     """
-    
+
     def __init__(self, robot, graph, planner, ps, backend: str = "corba",
                  max_attempts: int = 1000):
         """
@@ -70,15 +70,15 @@ class ConfigGenerator:
         else:  # pyhpp
             q_arr = np.array(q) if not isinstance(q, np.ndarray) else q
             is_valid, error_msg = self.ps.isConfigValid(q_arr)
-        
+
         if verbose:
             if is_valid:
                 print("       ✓ Configuration is valid")
             else:
                 print(f"       ⚠ Configuration invalid: {error_msg}")
-        
+
         return is_valid, error_msg
-        
+
     def project_on_node(
         self, node_name: str, q: List[float],
         config_label: Optional[str] = None
@@ -127,10 +127,11 @@ class ConfigGenerator:
                                 except Exception:
                                     continue
 
-                result = self.graph.applyStateConstraints(state_obj, q_arr)
-                success = result.success
-                config = result.configuration.tolist()
-            
+                res, q_proj, err = self.graph.applyStateConstraints(
+                    state_obj, q_arr
+                )
+                success = res
+                config = q_proj.tolist() if success else None
             if success:
                 # Validate the projected configuration
                 is_valid, err_msg = self.is_config_valid(config)
@@ -150,14 +151,14 @@ class ConfigGenerator:
                     print(f"       Projection failed, "
                           f"attempt {attempt + 1}/{self.max_attempts}...")
                 continue
-        
+
         # All attempts failed
         if config_label:
             self.configs[config_label] = list(q)
             print(f"       ⚠ Projection failed after {self.max_attempts} attempts")
-                
+
         return False, list(q)
-        
+
     def generate_via_edge(
         self, edge_name: str, q_from: List[float],
         config_label: Optional[str] = None,
@@ -200,17 +201,16 @@ class ConfigGenerator:
                             transition = edge_name
 
                 try:
-                    resault = self.graph.generateTargetConfig(
+                    res, q_target, err = self.graph.generateTargetConfig(
                         transition, q_from_arr, q_rand
                     )
                 except Exception:
                     # Fallback for bindings that accept the edge name.
-                    result = self.graph.generateTargetConfig(
+                    res, q_target, err = self.graph.generateTargetConfig(
                         edge_name, q_from_arr, q_rand
                     )
-                success = result.success
-                config = result.configuration.tolist() if success else None
-            
+                success = res
+                config = q_target.tolist() if success else None
             if success:
                 # Validate the generated configuration
                 is_valid, err_msg = self.is_config_valid(config)
@@ -219,20 +219,20 @@ class ConfigGenerator:
                     if verbose and (i + 1) % 200 == 0:
                         print(f"       Config invalid: {err_msg}, retrying...")
                     continue
-                
+
                 if config_label:
                     self.configs[config_label] = config
                     print(f"       ✓ {config_label} generated via "
                           f"'{edge_name}' after {i + 1} attempts")
                 return True, config
-                
+
             if verbose and (i + 1) % 200 == 0:
                 print(f"       Attempt {i + 1}/{self.max_attempts}...")
-                
+
         if config_label:
             print(f"       ⚠ Failed after {self.max_attempts} attempts")
         return False, None
-        
+
     def build_robot_config(
         self, joint_groups: Optional[List[str]] = None
     ) -> List[float]:
@@ -257,7 +257,7 @@ class ConfigGenerator:
         """
         if joint_groups is None:
             joint_groups = ["UR10", "VISPA_BASE", "VISPA_ARM"]
-        
+
         q_robot = []
         for group in joint_groups:
             if hasattr(InitialConfigurations, group):
@@ -266,7 +266,7 @@ class ConfigGenerator:
                 print(f"       ⚠ No initial config for joint group '{group}'")
                 # Add zero configuration as fallback
         return q_robot
-        
+
     def build_object_configs(self, object_names: List[str]) -> List[float]:
         """
         Build object configurations from initial poses.
@@ -278,7 +278,7 @@ class ConfigGenerator:
             Concatenated object configurations in XYZQUAT format
         """
         q_objects = []
-        
+
         for obj_name in object_names:
             # Get initial pose in XYZRPY
             obj_attr = obj_name.replace("-", "_").replace(" ", "_").upper()
@@ -290,9 +290,9 @@ class ConfigGenerator:
                 print(f"       ⚠ No initial config for {obj_name}")
                 # Add zero configuration as fallback
                 q_objects.extend([0.0] * 7)
-                
+
         return q_objects
-        
+
     def get_robot_dof(self, joint_groups: Optional[List[str]] = None) -> int:
         """
         Get total robot DOF for specified joint groups.
@@ -311,7 +311,7 @@ class ConfigGenerator:
             if hasattr(InitialConfigurations, group):
                 total_dof += len(getattr(InitialConfigurations, group))
         return total_dof
-        
+
     def modify_object_pose(
         self, q: List[float], object_index: int,
         translation_delta: Optional[List[float]] = None,
@@ -332,15 +332,15 @@ class ConfigGenerator:
         q_new = list(q)
         robot_dof = self.get_robot_dof()
         obj_start = robot_dof + object_index * 7
-        
+
         if translation_delta:
             for i in range(3):
                 q_new[obj_start + i] += translation_delta[i]
-                
+
         if quaternion:
             for i in range(4):
                 q_new[obj_start + 3 + i] = quaternion[i]
-                
+
         return q_new
 
 

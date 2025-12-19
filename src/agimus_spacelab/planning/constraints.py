@@ -82,7 +82,7 @@ class ConstraintBuilder:
     
     Supports dual backend (CORBA and PyHPP).
     """
-    
+
     @staticmethod
     def create_grasp_constraint(
         ps, name: str, gripper: str, tool: str,
@@ -108,43 +108,47 @@ class ConstraintBuilder:
         """
         if mask is None:
             mask = [True] * 6
-        
+
         if backend == "pyhpp":
             if robot is None:
                 raise ValueError("robot parameter required for PyHPP backend")
             if not HAS_PYHPP_CONSTRAINTS:
                 raise ImportError("PyHPP constraints not available")
-            
+
             # Get joint IDs and frame placements (handles both joint and frame names)
             joint_gripper, frame1_placement = get_joint_id_for_name(robot, gripper)
             joint_tool, frame2_placement = get_joint_id_for_name(robot, tool)
-            
+
             # Convert user transform to SE3
             grasp_tf = xyzquat_to_se3(transform)
-            
+
             # Compose transforms: frame1_placement * grasp_tf for joint1 frame
             # and frame2_placement for joint2 frame
             # RelativeTransformation expects transforms from joint to constraint frame
             frame1_tf = frame1_placement * grasp_tf
             frame2_tf = frame2_placement
-            
+
             # Create mask
             mask_vec = Mask()
             mask_vec[:] = tuple(mask)
-            
+
             # Create relative transformation constraint
-            pc = RelativeTransformation.create(
-                name, robot.asPinDevice(),
-                joint_gripper, joint_tool,
-                frame1_tf, frame2_tf, mask_vec
+            pc = RelativeTransformation(
+                name,
+                robot,
+                joint_gripper,
+                joint_tool,
+                frame1_tf,
+                frame2_tf,
+                mask_vec,
             )
-            
+
             # Create comparison types (all EqualToZero for grasp)
             cts = ComparisonTypes()
             cts[:] = tuple([ComparisonType.EqualToZero] * sum(mask))
-            
+
             # Create implicit constraint
-            constraint = Implicit.create(pc, cts, mask_vec)
+            constraint = Implicit(pc, cts, mask_vec)
             print(f"    ✓ {name}: {gripper} -> {tool} (PyHPP)")
             return constraint
         else:
@@ -154,7 +158,7 @@ class ConstraintBuilder:
             )
             print(f"    ✓ {name}: {gripper} -> {tool}")
             return None
-        
+
     @staticmethod
     def create_placement_constraint(
         ps, name: str, tool: str,
@@ -182,32 +186,36 @@ class ConstraintBuilder:
                 raise ValueError("robot parameter required for PyHPP backend")
             if not HAS_PYHPP_CONSTRAINTS:
                 raise ImportError("PyHPP constraints not available")
-            
+
             # Get joint ID and frame placement (handles both joint and frame names)
             joint_tool, frame_placement = get_joint_id_for_name(robot, tool)
-            
+
             # Convert world pose to SE3
             world_tf = xyzquat_to_se3(world_pose)
-            
+
             # Transformation constraint: joint frame should be at world_tf
             # If tool is a frame, we need frame_placement as the local transform
             # The constraint is: world_tf = joint_tf * frame_placement
             # So joint_tf should satisfy this relationship
-            
+
             # Create transformation constraint
-            pc = Transformation.create(
-                name, robot.asPinDevice(),
-                joint_tool, frame_placement, world_tf, mask
+            pc = Transformation(
+                name,
+                robot,
+                joint_tool,
+                frame_placement,
+                world_tf,
+                mask,
             )
-            
+
             # Create comparison types (EqualToZero for placement)
             num_constrained = sum(mask)
             cts = ComparisonTypes()
             cts[:] = tuple([ComparisonType.EqualToZero] * num_constrained)
             implicit_mask = [True] * num_constrained
-            
+
             # Create implicit constraint
-            constraint = Implicit.create(pc, cts, implicit_mask)
+            constraint = Implicit(pc, cts, implicit_mask)
             print(f"    ✓ {name}: tool at {world_pose[:3]} (PyHPP)")
             return constraint
         else:
@@ -217,7 +225,7 @@ class ConstraintBuilder:
             )
             print(f"    ✓ {name}: tool at {world_pose[:3]}")
             return None
-        
+
     @staticmethod
     def create_complement_constraint(
         ps, base_name: str, tool: str,
@@ -241,33 +249,37 @@ class ConstraintBuilder:
             Implicit constraint for PyHPP, None for CORBA
         """
         constraint_name = f"{base_name}/complement"
-        
+
         if backend == "pyhpp":
             if robot is None:
                 raise ValueError("robot parameter required for PyHPP backend")
             if not HAS_PYHPP_CONSTRAINTS:
                 raise ImportError("PyHPP constraints not available")
-            
+
             # Get joint ID and frame placement (handles both joint and frame names)
             joint_tool, frame_placement = get_joint_id_for_name(robot, tool)
-            
+
             # Convert world pose to SE3
             world_tf = xyzquat_to_se3(world_pose)
-            
+
             # Create transformation constraint
-            pc = Transformation.create(
-                constraint_name, robot.asPinDevice(),
-                joint_tool, frame_placement, world_tf, complement_mask
+            pc = Transformation(
+                constraint_name,
+                robot,
+                joint_tool,
+                frame_placement,
+                world_tf,
+                complement_mask,
             )
-            
+
             # Complement uses Equality comparison type
             num_constrained = sum(complement_mask)
             cts = ComparisonTypes()
             cts[:] = tuple([ComparisonType.Equality] * num_constrained)
             implicit_mask = [True] * num_constrained
-            
+
             # Create implicit constraint
-            constraint = Implicit.create(pc, cts, implicit_mask)
+            constraint = Implicit(pc, cts, implicit_mask)
             print(f"    ✓ {constraint_name}: free DOFs (PyHPP)")
             return constraint
         else:

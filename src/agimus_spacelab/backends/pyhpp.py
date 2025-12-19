@@ -17,13 +17,10 @@ try:
         Graph,
         ManipulationPlanner as HPPManipulationPlanner,
         Problem,
-        createProgressiveProjector,
+        ProgressiveProjector,
     )
     from pyhpp.core import (
-        createDiscretizedCollisionAndJointBound,
-        createDiscretizedCollision,
-        createDiscretizedJointBound,
-        createDiscretized,
+        Discretized,
     )
     from pyhpp.gepetto.viewer import Viewer
     HAS_PYHPP = True
@@ -33,7 +30,7 @@ except ImportError:
 
 class PyHPPBackend(BackendBase):
     """PyHPP backend implementation for manipulation planning."""
-    
+
     def __init__(self):
         """Initialize PyHPP backend."""
         if not HAS_PYHPP:
@@ -41,14 +38,14 @@ class PyHPPBackend(BackendBase):
                 "PyHPP backend not available. "
                 "Please install hpp-python."
             )
-        
+
         self.device = None
         self.problem = None
         self.graph = None
         self.planner = None
         self.viewer = None
         self.path = None
-        
+
         # Configuration options for path validation and projection
         self._use_pathvalidation = True
         self._use_progressive_projector = True
@@ -90,7 +87,7 @@ class PyHPPBackend(BackendBase):
         if self.device is None:
             raise RuntimeError("Robot not loaded yet")
         return np.array(self.device.randomConfiguration())
-        
+
     def load_robot(
         self,
         robot_name: str,
@@ -101,7 +98,7 @@ class PyHPPBackend(BackendBase):
     ):
         """Load robot using PyHPP."""
         self.device = Device(robot_name)
-        
+
         urdf.loadModel(
             self.device,
             0,
@@ -111,12 +108,12 @@ class PyHPPBackend(BackendBase):
             srdf_path or "",
             SE3.Identity()
         )
-        
+
         # Create problem
         self.problem = Problem(self.device)
-        
+
         return self.device
-    
+
     def load_environment(
         self,
         name: str,
@@ -132,10 +129,10 @@ class PyHPPBackend(BackendBase):
         """
         if self.device is None:
             raise RuntimeError("Must load robot first")
-        
+
         if pose is None:
             pose = SE3.Identity()
-        
+
         urdf.loadModel(
             self.device,
             0,
@@ -145,9 +142,9 @@ class PyHPPBackend(BackendBase):
             "",
             pose
         )
-        
+
         return name
-    
+
     def load_object(
         self,
         name: str,
@@ -165,7 +162,7 @@ class PyHPPBackend(BackendBase):
         """
         if self.device is None:
             raise RuntimeError("Must load robot first")
-        
+
         urdf.loadModel(
             self.device,
             0,
@@ -175,16 +172,16 @@ class PyHPPBackend(BackendBase):
             srdf_path or "",
             SE3.Identity()
         )
-        
+
         return name
-    
+
     def set_joint_bounds(self, joint_name: str, bounds: List[float]):
         """Set joint bounds."""
         if self.device is None:
             raise RuntimeError("Must load robot first")
-        
+
         self.device.setJointBounds(joint_name, bounds)
-    
+
     def set_initial_config(self, q: np.ndarray):
         """Set initial configuration."""
         if self.problem is None:
@@ -192,7 +189,7 @@ class PyHPPBackend(BackendBase):
         if isinstance(q, list):
             q = np.array(q)
         self.problem.initConfig(q)
-    
+
     def add_goal_config(self, q: np.ndarray):
         """Add goal configuration."""
         if self.problem is None:
@@ -200,7 +197,7 @@ class PyHPPBackend(BackendBase):
         if isinstance(q, list):
             q = np.array(q)
         self.problem.addGoalConfig(q)
-    
+
     def create_constraint_graph(
         self,
         name: str,
@@ -212,27 +209,27 @@ class PyHPPBackend(BackendBase):
         """Create constraint graph using PyHPP."""
         if self.problem is None:
             raise RuntimeError("Must create problem first")
-        
+
         # Note: PyHPP requires manual graph construction
         # This is a simplified version
         self.graph = Graph(name, self.device, self.problem)
-        
+
         # Create basic states
         _ = self.graph.createState("free", False, 0)  # free_state created but not used
-        
+
         # For each object, create grasp states
         for obj_name in objects:
             state_name = f"grasp_{obj_name}"
             self.graph.createState(state_name, False, 0)
-        
+
         # Initialize graph
         self.graph.maxIterations(100)
         self.graph.errorThreshold(1e-5)
         self.graph.initialize()
-        
+
         # Set graph in problem
         self.problem.constraintGraph(self.graph)
-        
+
         return self.graph
 
     def create_state(
@@ -253,7 +250,7 @@ class PyHPPBackend(BackendBase):
         """
         if self.graph is None:
             raise RuntimeError("Graph not initialized")
-        
+
         state_id = self.graph.createState(name, is_waypoint, priority)
         return state_id
 
@@ -279,7 +276,7 @@ class PyHPPBackend(BackendBase):
         """
         if self.graph is None:
             raise RuntimeError("Graph not initialized")
-        
+
         edge_id = self.graph.createEdge(
             from_state,
             to_state,
@@ -309,28 +306,28 @@ class PyHPPBackend(BackendBase):
         """
         if self.graph is None:
             raise RuntimeError("Graph not initialized")
-        
+
         # Store current parameters
         old_max_iter = self.graph.maxIterations()
         old_error = self.graph.errorThreshold()
-        
+
         # Set temporary parameters
         self.graph.maxIterations(max_iterations)
         self.graph.errorThreshold(error_threshold)
-        
+
         # Apply constraints
         success, q_proj, error = self.graph.applyConstraints(state, list(q))
-        
+
         # Restore parameters
         self.graph.maxIterations(old_max_iter)
         self.graph.errorThreshold(old_error)
-        
+
         return ConstraintResult(
             success=success,
             configuration=np.array(q_proj),
             error=error
         )
-    
+
     def solve(self, max_iterations: int = 10000) -> bool:
         """Solve planning problem.
         
@@ -342,34 +339,34 @@ class PyHPPBackend(BackendBase):
         """
         if self.problem is None:
             raise RuntimeError("Must create problem first")
-        
+
         try:
             # Configure path validation with dichotomy if enabled
             self.configure_path_validation()
-            
+
             self.planner = HPPManipulationPlanner(self.problem)
             self.planner.maxIterations(max_iterations)
             success = self.planner.solve()
-            
+
             if success:
                 self.path = self.planner.path()
-            
+
             return success
         except Exception as e:
             print(f"Planning failed: {e}")
             return False
-    
+
     def get_path(self) -> Optional[Any]:
         """Get computed path."""
         return self.path
-    
+
     def visualize(self, q: Optional[np.ndarray] = None):
         """Visualize configuration."""
         if self.viewer is None:
             if self.device is None:
                 raise RuntimeError("Must load robot first")
             self.viewer = Viewer(self.device)
-        
+
         if q is not None:
             if isinstance(q, list):
                 q = np.array(q)
@@ -381,36 +378,36 @@ class PyHPPBackend(BackendBase):
                 self.viewer(q_init)
             except Exception:
                 pass
-    
+
     def play_path(self, path_index: int = 0):
         """Play path in viewer."""
         if self.path is None:
             print("No path to play")
             return
-        
+
         if self.viewer is None:
             self.visualize()
-        
+
         # Animate path
         import time
         t = 0.0
         dt = 0.01
         length = self.path.length()
-        
+
         while t <= length:
             q = self.path(t)
             self.viewer(q)
             time.sleep(dt)
             t += dt
-    
+
     def get_robot(self):
         """Get device object."""
         return self.device
-    
+
     def get_problem(self):
         """Get problem object."""
         return self.problem
-    
+
     def get_graph(self):
         """Get constraint graph."""
         return self.graph
@@ -444,7 +441,7 @@ class PyHPPBackend(BackendBase):
         """
         if self.graph is None:
             raise RuntimeError("Graph not created yet")
-        
+
         self.graph.setMaxIterations(max_iterations)
         self.graph.setErrorThreshold(error_threshold)
 
@@ -460,13 +457,15 @@ class PyHPPBackend(BackendBase):
 
         # Configure path validation if enabled
         if self._use_pathvalidation:
-            self.problem.pathValidation = createDiscretized(
-                self.device.asPinDevice(), validation_step)
+            self.problem.pathValidation = Discretized(
+                self.device, validation_step
+            )
         # Configure path projection if enabled
         if self._use_progressive_projector:
-            self.problem.pathProjector = createProgressiveProjector(
-                self.problem.distance(), self.problem.steeringMethod(),
-                projector_step
+            self.problem.pathProjector = ProgressiveProjector(
+                self.problem.distance(),
+                self.problem.steeringMethod(),
+                projector_step,
             )
         return self
 
