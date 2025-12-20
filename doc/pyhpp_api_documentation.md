@@ -211,7 +211,7 @@ free_state = graph.createState("free", False, 0)
 grasp_state = graph.createState("grasp", False, 0)
 
 # 6. Create transition
-edge = graph.createTransition(free_state, grasp_state, "take", 1.0, free_state)
+edge = graph.createTransition(free_state, grasp_state, "take", 1, free_state)
 
 # 7. Create constraint: object must stay on table
 joint_id = robot.model().getJointId("object/root_joint")
@@ -241,14 +241,14 @@ graph.initialize()
 
 # 11. Use the graph
 q_init = np.zeros(robot.configSize())
-result = graph.applyStateConstraints(grasp_state, q_init)
+success, q_proj, residual = graph.applyStateConstraints(grasp_state, q_init)
 
-if result.success:
-    print(f"✓ Projection succeeded")
-    print(f"  Configuration: {np.around(result.configuration, 3)}")
-    print(f"  Error: {result.error:.6f}")
+if success:
+    print("✓ Projection succeeded")
+    print(f"  Configuration: {np.around(q_proj, 3)}")
+    print(f"  Residual: {residual:.6f}")
 else:
-    print(f"✗ Projection failed with error: {result.error}")
+    print(f"✗ Projection failed (residual={residual})")
 ```
 
 ### Execution Flow
@@ -270,7 +270,7 @@ The `Device` class represents a robot with its geometric and kinematic propertie
 
 ### 1.1 Module Import Flexibility
 
-**Important:** `Device` and `urdf` are available from both modules!
+**Important:** `Device` and `urdf` are available from both modules.
 
 ```python
 # Option 1: Import from pyhpp.pinocchio (core planning)
@@ -279,8 +279,9 @@ from pyhpp.pinocchio import Device, urdf
 # Option 2: Import from pyhpp.manipulation (manipulation planning)
 from pyhpp.manipulation import Device, urdf
 
-# Both are identical - choose based on your context
-# Recommended: Use pyhpp.manipulation for manipulation scripts
+# Notes:
+# - pyhpp.manipulation.Device is a subclass of pyhpp.pinocchio.Device
+# - pyhpp.manipulation.Device adds manipulation-specific helpers (handles, grippers, ...)
 ```
 
 ### 1.2 Creating a Device
@@ -290,9 +291,6 @@ from pyhpp.manipulation import Device
 
 # Create empty device
 robot = Device("robot_name")
-
-# Alternative: explicit factory method (same result)
-robot = Device.create("robot_name")
 ```
 
 ### 1.3 Loading URDF Models
@@ -371,11 +369,14 @@ config_space = robot.configSpace()     # Configuration space object
 
 # Configuration access
 q = robot.currentConfiguration()       # Get current config (numpy array)
-robot.currentConfiguration(q_new)     # Set current config
+ok = robot.currentConfiguration(q_new) # Set current config, returns bool
 
 # Forward kinematics
-robot.computeForwardKinematics(1)      # 1=position, 2=velocity, 3=accel
+from pyhpp.pinocchio import ComputationFlag
+
+robot.computeForwardKinematics(ComputationFlag.JOINT_POSITION)
 robot.computeFramesForwardKinematics() # Compute all frame transforms
+robot.updateGeometryPlacements()       # Update collision geometry placements
 ```
 
 #### Access Pinocchio Model
@@ -385,12 +386,143 @@ robot.computeFramesForwardKinematics() # Compute all frame transforms
 model = robot.model()                  # Pinocchio Model
 data = robot.data()                    # Pinocchio Data
 
+geom_model = robot.geomModel()         # GeometryModel (collision)
+geom_data = robot.geomData()           # GeometryData (collision)
+
+visual_model = robot.visualModel()     # GeometryModel (visual)
+
 # Get joint and frame IDs (required for constraints)
 joint_id = model.getJointId("joint_name")
 frame_id = model.getFrameId("frame_name")
+```
 
-# Convert to Pinocchio device (needed for constraints)
+#### Kinematics Helpers
+
+`pyhpp.pinocchio.Device` also provides a few convenience methods:
+
+```python
+# Center of mass (requires forward kinematics; will internally compute COM)
+com = robot.getCenterOfMass()  # 3-vector
+
+# Get a frame pose from current model/data (requires frames FK already computed)
+robot.computeForwardKinematics(ComputationFlag.JOINT_POSITION)
+robot.computeFramesForwardKinematics()
+
+pose = robot.getJointPosition("some_frame_or_joint_name")
+# pose is [x, y, z, qx, qy, qz, qw]
+
+# Batch query: set configuration + compute FK internally
+poses = robot.getJointsPosition(q, ["joint1", "joint2"])
+# poses is a list of [x, y, z, qx, qy, qz, qw]
+
+# Joint ranks in the configuration vector
+ric = robot.rankInConfiguration  # dict: {"joint_name": rank_in_configuration}
+```
+
+#### Manipulation-Specific Extensions (pyhpp.manipulation.Device)
+
+When you import `Device` from `pyhpp.manipulation`, you get additional helpers:
+
+```python
+from pyhpp.manipulation import Device
+from pinocchio import SE3
+
+robot = Device("robot_name")
+
+# If your device contains multiple robots, set the root pose of one robot.
+robot.setRobotRootPosition("robotName", SE3.Identity())
+
+# Access SRDF-defined handles and grippers
+handles = robot.handles()   # HandleMap: dict-like {name: Handle}
+grippers = robot.grippers() # GripperMap: dict-like {name: Gripper}
+
+handle = handles["some_handle"]
+print(handle.name)
+handle.localPosition = SE3.Identity()
+
+# Joint utilities
+names = robot.getJointNames()               # list[str]
+segment = robot.getJointConfig("joint")    # list[float]
+
+# Explicitly cast to a pinocchio device pointer when needed
 pin_device = robot.asPinDevice()
+```
+
+The `Handle` type exposed in `pyhpp.manipulation` has:
+
+- Properties: `name`, `localPosition`, `mask`, `maskComp`, `clearance`
+- Methods: `createGrasp()`, `createPreGrasp()`, `createGraspComplement()`, `createGraspAndComplement()`
+
+#### Grippers and Handles
+
+The manipulation stack uses two related concepts:
+
+- `pyhpp.pinocchio.Gripper`: a frame attached to a robot joint (the “tool”).
+- `pyhpp.manipulation.Handle`: a frame attached to an object joint (the “graspable feature”).
+
+In practice, you usually **load** these from SRDF/URDF via `urdf.loadModel(...)` and then query them from `pyhpp.manipulation.Device`:
+
+```python
+handles = robot.handles()    # HandleMap (dict-like): {name: Handle}
+grippers = robot.grippers()  # GripperMap (dict-like): {name: Gripper}
+
+handle = handles["object/handle"]
+gripper = grippers["robot/gripper"]
+```
+
+##### `Gripper` (pyhpp.pinocchio)
+
+Static factory (exposed by the bindings):
+
+```python
+from pyhpp.pinocchio import Gripper
+
+gripper = Gripper.create("gripper_name", robot.asPinDevice())
+```
+
+Properties:
+
+- `localPosition`: SE3-like transform of the grasped object in the gripper joint frame.
+- `clearance`: `float` (get/set)
+
+##### `Handle` (pyhpp.manipulation)
+
+Static factory (exposed by the bindings):
+
+```python
+from pyhpp.manipulation import Handle
+from pinocchio import SE3
+
+# Signature:
+# Handle.create(name: str, localPosition: SE3, robot: Device, joint: Joint) -> Handle
+```
+
+Properties (get/set unless noted):
+
+- `name`: `str`
+- `localPosition`: `SE3` (pose of the handle in the joint frame)
+- `mask`: `list[bool]` of length 6 (grasp symmetry mask)
+- `maskComp`: `list[bool]` of length 6 (complement mask)
+- `clearance`: `float`
+
+Notes:
+
+- Updating `mask` also resets `maskComp` in the underlying C++ class.
+
+Constraint builders (return an `Implicit` constraint object usable in graphs):
+
+```python
+# Grasp constraint (non-parameterizable)
+implicit = handle.createGrasp(gripper, "")
+
+# Complement (parameterizable, used for leaf/target constraints)
+implicit_comp = handle.createGraspComplement(gripper, "")
+
+# Full relative transformation (grasp + complement)
+implicit_both = handle.createGraspAndComplement(gripper, "")
+
+# Pregrasp: shift along handle x-axis
+implicit_pre = handle.createPreGrasp(gripper, 0.02, "")
 ```
 
 ### 1.5 Random Configuration Sampling
@@ -562,6 +694,11 @@ print(f"Generated {len(configs)} configurations along path")
 
 The `Graph` class implements constraint-based manipulation planning using a graph where nodes represent discrete modes (states) and edges represent feasible transitions.
 
+The Python bindings also expose lightweight wrapper objects:
+
+- `State`: has `name()`
+- `Transition`: has `name()` and `pathValidation()`
+
 ### 3.1 Creating a Graph
 
 ```python
@@ -614,7 +751,7 @@ edge = graph.createTransition(
     from_state,        # Source state
     to_state,          # Target state
     "edge_name",       # Unique edge name
-    1.0,               # weight (for probabilistic selection)
+    1,                 # weight (int, for probabilistic selection)
     containing_state   # State whose constraints apply to the path
 )
 
@@ -623,7 +760,7 @@ transit = graph.createTransition(
     states['free'],
     states['free'],
     "transit",
-    1.0,
+    1,
     states['free']
 )
 ```
@@ -638,9 +775,13 @@ edge = graph.createWaypointTransition(
     to_state,
     "waypoint_edge",
     2,                 # Number of waypoints
-    1.0,               # Weight
-    containing_state
+    1,                 # Weight (int)
+    containing_state,
+    False              # automaticBuilder
 )
+
+# If automaticBuilder=True, intermediate waypoint states/edges are created
+# automatically and wired into the WaypointTransition.
 ```
 
 #### Level-Set Transition
@@ -652,31 +793,184 @@ edge = graph.createLevelSetTransition(
     from_state,
     to_state,
     "levelset_edge",
-    1.0,
+    1,
     containing_state
 )
 ```
 
-### 3.4 Querying Transitions
+### 3.4 Querying States and Transitions
 
 ```python
 # Get transition by name
 edge = graph.getTransition("edge_name")
 
-# Get all transition names
+# Get state by name
+state = graph.getState("state_name")
+
+# Get all names
 edge_names = graph.getTransitionNames()
+state_names = graph.getStateNames()
+
+# Get wrapper objects (State / Transition)
+states = graph.getStates()
+edges = graph.getTransitions()
 
 # Get connected states
 from_state, to_state = graph.getNodesConnectedByTransition(edge)
 
 # Get/set edge properties
 weight = graph.getWeight(edge)
-graph.setWeight(edge, 2.0)
+graph.setWeight(edge, 2)
 
 is_short = graph.isShort(edge)  # Check if transition is "short"
+
+# Get/set which state a transition is "in" (its containing node)
+graph.setContainingNode(edge, states['free'])
+containing = graph.getContainingNode(edge)  # returns a state name (string)
+
+# For waypoint transitions only: set which (edge,state) pair to use at a waypoint index
+# index is 0..nbWaypoints-1
+graph.setWaypoint(waypoint_edge, 0, some_edge, some_state)
 ```
 
-### 3.5 Graph Initialization
+### 3.5 State Queries
+
+```python
+# Return the name (string) of the state that contains configuration q
+state_name = graph.getStateFromConfiguration(q)
+```
+
+### 3.6 Constraint Management in the Graph
+
+Numerical constraints (implicit constraints) can be attached to states, transitions, or the whole graph.
+
+```python
+# Add a single numerical constraint to a state
+graph.addNumericalConstraint(grasp_state, implicit_constraint)
+
+# Add a list of numerical constraints
+graph.addNumericalConstraintsToState(grasp_state, [implicit1, implicit2])
+graph.addNumericalConstraintsToTransition(edge, [implicit_edge])
+graph.addNumericalConstraintsToGraph([implicit_global])
+
+# Add numerical constraints that apply to PATHS inside a state
+graph.addNumericalConstraintsForPath(grasp_state, [implicit_path])
+
+# Query constraints
+state_constraints = graph.getNumericalConstraintsForState(grasp_state)
+edge_constraints = graph.getNumericalConstraintsForEdge(edge)
+graph_constraints = graph.getNumericalConstraintsForGraph()
+
+# Reset constraints of a state
+graph.resetConstraints(grasp_state)
+
+# Advanced: register constraint/complement/both triplets for graph initialization
+# (initialize() calls registerConstraints() internally on these)
+graph.registerConstraints(constraint, complement, both)
+```
+
+### 3.7 Built-in Constraint Helpers
+
+The Graph bindings provide helpers that create common manipulation constraints.
+
+```python
+# Placement constraint between two surface sets (lists of triangle set names)
+constraint, complement, both = graph.createPlacementConstraint(
+    "place", ["object_surface"], ["table_surface"], 1e-4
+)
+
+# Overload without explicit margin: defaults to 1e-4
+constraint, complement, both = graph.createPlacementConstraint(
+    "place", ["object_surface"], ["table_surface"]
+)
+
+# Pre-placement constraint (width margin)
+preplace = graph.createPrePlacementConstraint(
+    "preplace", ["object_surface"], ["table_surface"], 0.02
+)
+
+# Grasp constraints return a list: [constraint, complement, both]
+grasp_triplet = graph.createGraspConstraint("grasp", "gripper", "handle")
+
+# Pre-grasp constraint
+pregrasp = graph.createPreGraspConstraint("pregrasp", "gripper", "handle")
+```
+
+### 3.8 Error Checks and Projection Utilities
+
+These methods are useful for debugging constraints and building valid configurations.
+
+```python
+# Check state constraints at a configuration
+# Returns: (error_vector, belongs)
+err, ok = graph.getConfigErrorForState(grasp_state, q)
+
+# Check transition constraints at a configuration
+# Returns: (error_vector, belongs)
+err, ok = graph.getConfigErrorForTransition(edge, q)
+
+# Check foliation leaf/target validity for a transition
+err, ok = graph.getConfigErrorForTransitionLeaf(edge, q_leaf, q)
+err, ok = graph.getConfigErrorForTransitionTarget(edge, q_leaf, q)
+
+# Apply constraints (returns: success, q_out, residual_error)
+success, q_proj, residual = graph.applyStateConstraints(grasp_state, q)
+
+# Apply transition leaf constraints (requires q_rhs as right-hand-side)
+success, q_proj, residual = graph.applyLeafConstraints(edge, q_rhs, q)
+
+# Generate a valid target configuration along a transition
+success, q_target, residual = graph.generateTargetConfig(edge, q_rhs, q_seed)
+```
+
+Notes:
+
+- `residual_error` is taken from the underlying ConfigProjector when available; it can be `NaN` if no projector is attached.
+- `applyLeafConstraints()` uses `q_rhs` to set the projector right-hand-side (`rightHandSideFromConfig`).
+
+### 3.9 Level-Set Transitions
+
+For `LevelSetTransition` edges, you can define the foliation by attaching constraints:
+
+```python
+graph.addLevelSetFoliation(levelset_edge, cond_constraints, param_constraints)
+```
+
+### 3.10 Collision/Relative-Motion Helpers (Per Transition)
+
+```python
+# Security margins matrix (returned as a list of lists)
+matrix = graph.getSecurityMarginMatrixForTransition(edge)
+
+# Set collision security margin for a pair of joints along a transition
+graph.setSecurityMarginForTransition(edge, "joint1", "joint2", 0.01)
+
+# Relative motion matrix (list of lists of ints)
+rel = graph.getRelativeMotionMatrix(edge)
+
+# Remove collision pair from a transition (sets relative motion constrained)
+graph.removeCollisionPairFromTransition(edge, "joint1", "joint2")
+```
+
+### 3.11 Subgraphs and Debug Display
+
+```python
+# Create a subgraph with guided state selection (requires a Roadmap instance)
+graph.createSubGraph("subgraph", roadmap)
+
+# Set target node list for GuidedStateSelector
+graph.setTargetNodeList([free_state, grasp_state])
+
+# Human-readable dumps of constraints
+print(graph.displayStateConstraints(grasp_state))
+print(graph.displayTransitionConstraints(edge))
+print(graph.displayTransitionTargetConstraints(edge))
+
+# Output graph in DOT format
+graph.display("graph.dot")
+```
+
+### 3.12 Graph Initialization
 
 ⚠️ **CRITICAL:** You MUST call `initialize()` before using the graph!
 
@@ -971,18 +1265,16 @@ graph.resetConstraints(state)
 
 ```python
 # Apply all state constraints to project a configuration
-result = graph.applyStateConstraints(state, q_input)
+success, q_projected, residual = graph.applyStateConstraints(state, q_input)
 
-if result.success:
-    q_projected = result.configuration
-    error = result.error
-    print(f"✓ Projection succeeded (error: {error:.6f})")
+if success:
+    print(f"✓ Projection succeeded (residual: {residual:.6f})")
     print(f"  Projected config: {q_projected}")
 else:
-    print(f"✗ Projection failed (error: {result.error:.6f})")
+    print(f"✗ Projection failed (residual: {residual})")
 
 # Use projected configuration
-if result.success:
+if success:
     # Configuration satisfies state constraints
     pass
 ```
@@ -991,7 +1283,7 @@ if result.success:
 
 ```python
 # Apply edge (leaf) constraints
-result = graph.applyLeafConstraints(edge, q_rhs, q_input)
+success, q_projected, residual = graph.applyLeafConstraints(edge, q_rhs, q_input)
 ```
 
 #### Generate Target Configuration
@@ -1005,10 +1297,9 @@ shooter = problem.configurationShooter()
 # Generate target satisfying edge constraints
 for i in range(100):
     q_rand = shooter.shoot()
-    result = graph.generateTargetConfig(edge, q_start, q_rand)
+    success, q_target, residual = graph.generateTargetConfig(edge, q_start, q_rand)
     
-    if result.success:
-        q_target = result.configuration
+    if success:
         # Use q_target for planning
         break
 ```
@@ -1017,7 +1308,7 @@ for i in range(100):
 
 ```python
 # Check if configuration satisfies state constraints
-error_vector, is_satisfied = graph.getConfigErrorForState(q, state)
+error_vector, is_satisfied = graph.getConfigErrorForState(state, q)
 
 if is_satisfied:
     print(f"✓ Config satisfies state constraints")
@@ -1146,17 +1437,15 @@ shooter = problem.configurationShooter()
 # Find valid initial configuration
 for i in range(100):
     q = shooter.shoot()
-    result = graph.applyStateConstraints(initial_state, q)
-    if result.success:
-        q_init = result.configuration
+    success, q_init, residual = graph.applyStateConstraints(initial_state, q)
+    if success:
         break
 
 # Find valid goal configuration
 for i in range(100):
     q = shooter.shoot()
-    result = graph.applyStateConstraints(goal_state, q)
-    if result.success:
-        q_goal = result.configuration
+    success, q_goal, residual = graph.applyStateConstraints(goal_state, q)
+    if success:
         break
 
 problem.initConfig(q_init)
@@ -1397,9 +1686,8 @@ graph.errorThreshold(1e-4)
 shooter = problem.configurationShooter()
 for i in range(1000):
     q = shooter.shoot()
-    result = graph.applyStateConstraints(state, q)
-    if result.success and result.error < 1e-5:
-        q_valid = result.configuration
+    success, q_valid, residual = graph.applyStateConstraints(state, q)
+    if success and residual < 1e-5:
         break
 ```
 
@@ -1439,8 +1727,8 @@ print(f"Transitions: {edges}")
 # Check connectivity
 for edge_name in edges:
     edge = graph.getTransition(edge_name)
-    from_s, to_s = graph.getNodesConnectedByTransition(edge)
-    print(f"{edge_name}: {from_s.name()} → {to_s.name()}")
+    from_state_name, to_state_name = graph.getNodesConnectedByTransition(edge)
+    print(f"{edge_name}: {from_state_name} → {to_state_name}")
 ```
 
 #### 4. Enable Verbose Output
