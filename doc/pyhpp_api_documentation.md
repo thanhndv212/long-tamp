@@ -135,15 +135,19 @@ class PyWGraph:
     PyWProblemPtr_t problem
 ```
 
-#### 2. Factory Methods
-Constraints use **static factory methods**, not constructors:
+#### 2. Constructors vs. `.create(...)`
+
+In `pyhpp`, some objects are constructed with Python `__init__`, while others use a static `.create(...)`.
 
 ```python
-# ✅ CORRECT: Static factory method
-constraint = Transformation(name, device, joint_id, ...)
+# Common constructors
+f = Transformation(name, robot, joint_id, frame2, frame1, mask)
+c = Implicit(f, comparisonTypes, mask)
+lj = LockedJoint(robot, "joint_name", q_joint)
 
-# ❌ INCORRECT: Constructor (not exposed)
-# constraint = Transformation(name, device, ...)  # Will fail!
+# Common static factories
+rc = RelativeCom.create("com", robot, joint, reference, mask)
+ex = Explicit.create(configSpace, f, inArg, outArg, inDer, outDer, comp)
 ```
 
 #### 3. Result Objects
@@ -167,7 +171,7 @@ class ConstraintResult:
 """Minimal HPP-Python manipulation planning example."""
 
 import numpy as np
-from pinocchio import SE3, Quaternion, StdVec_Bool as Mask
+from pinocchio import SE3, Quaternion
 
 from pyhpp.manipulation import Device, urdf, Problem, Graph
 from pyhpp.constraints import (
@@ -1143,56 +1147,70 @@ graph.initialize()
 
 Constraints define geometric relationships that configurations must satisfy.
 
-### 4.1 Constraint Factory Pattern
+### 4.1 Overview: Differentiable Functions vs. Constraints
 
-⚠️ **Critical:** Constraints use static factory methods (`.create()`), NOT constructors!
+In `pyhpp.constraints`, there are two layers:
+
+- **Geometric functions** (subclasses of `DifferentiableFunction`) such as `Transformation`, `RelativeTransformation`, `Position`, `Orientation`, `RelativeCom`, …
+    - They can be evaluated (`f(q)`) and differentiated (`f.J(q)`).
+    - They are **not** directly “numerical constraints” until wrapped.
+- **Numerical constraints** (`Implicit` and subclasses) that can be added to a constraint graph / numerical constraint set.
+    - `Implicit(function, comparisonTypes, mask)` wraps a `DifferentiableFunction`.
+    - Some constraints are already `Implicit` subclasses (e.g. `LockedJoint`, and also `Explicit`).
+
+Important for Python API usage: some classes are constructed with Python `__init__`, others use static `.create(...)`.
+
+### 4.2 `DifferentiableFunction` (evaluation API)
+
+All `DifferentiableFunction` instances expose a small “Pythonic” API:
 
 ```python
-from pyhpp.constraints import (
-    Transformation,
-    RelativeTransformation,
-    Position,
-    Orientation,
-    Implicit,
-    LockedJoint,
-    ComparisonTypes,
-    ComparisonType,
-)
-from pinocchio import SE3, Quaternion, StdVec_Bool as Mask
-import numpy as np
+value = f(q)   # same as f.__call__(q)
+J = f.J(q)     # Jacobian
 
-# ✅ CORRECT: Use .create() factory method
-constraint = Transformation(...)
-
-# ❌ INCORRECT: Constructors not exposed to Python
-# constraint = Transformation(...)  # Will fail!
+# Sizes
+ni = f.ni      # input size
+ndi = f.ndi    # input derivative size
+no = f.no      # output size
+ndo = f.ndo    # output derivative size
 ```
 
-### 4.2 Transformation: Absolute Pose Constraint
+### 4.3 `Transformation`: Absolute pose function (world ↔ joint)
 
-Constrains a joint's pose relative to the world frame.
+`Transformation` is a `DifferentiableFunction`. It is constructed in Python as:
 
 ```python
-# Get joint ID from Pinocchio model
-joint_id = robot.model().getJointId("object/root_joint")
+Transformation(name, robot, joint2, frame2, frame1, mask)
+```
 
-# Define DOF mask: [x, y, z, roll, pitch, yaw]
-# True = constrained (fixed), False = free
-mask = [False, False, True, True, True, False]  # Fix z, roll, pitch
+Semantics (world is used as “joint1”): it enforces the equality
 
-# Create target SE3 transform
-quaternion = Quaternion(0, 0, 0, 1)  # Identity rotation (qx, qy, qz, qw)
-position = np.array([0.3, 0.0, 0.1])  # Target position
-target = SE3(quaternion, position)
+`oM_joint2 * frame2 = frame1`
 
-# Create constraint
-constraint = Transformation(
-    "placement",           # Constraint name
-    robot,  # Pinocchio device wrapper
-    joint_id,             # Joint ID to constrain
-    SE3.Identity(),       # Reference frame (identity = world frame)
-    target,               # Target transform
-    mask                  # DOF mask
+where `frame1` is an SE(3) in the world frame, and `frame2` is an SE(3) fixed in `joint2`.
+
+Example: constrain a joint frame to a target pose in the world.
+
+```python
+from pyhpp.constraints import Transformation
+from pinocchio import SE3
+import numpy as np
+
+joint2 = robot.model().getJointId("object/root_joint")
+
+# [x, y, z, rx, ry, rz] mask: True means the component is used in the error.
+mask = [False, False, True, True, True, False]  # constrain z, rx, ry
+
+target = SE3.Identity()
+target.translation = np.array([0.3, 0.0, 0.1])
+
+f = Transformation(
+        "placement",
+        robot,
+        joint2,
+        SE3.Identity(),  # frame2 in joint2
+        target,         # frame1 in world
+        mask,
 )
 ```
 
@@ -1223,105 +1241,117 @@ mask_orientation = [False, False, False, True, True, True]
 mask_full = [True, True, True, True, True, True]
 ```
 
-### 4.3 RelativeTransformation: Relative Pose Constraint
+### 4.4 `RelativeTransformation`: Relative pose function (joint ↔ joint)
 
 Constrains relative pose between two joints (e.g., gripper grasping object).
 
 ```python
-# Get joint IDs
-gripper_id = robot.model().getJointId("ur5/wrist_3_joint")
-object_id = robot.model().getJointId("pokeball/root_joint")
+from pyhpp.constraints import RelativeTransformation
+from pinocchio import SE3
+import numpy as np
 
-# Full 6-DOF mask (constrain all relative DOF)
-mask_full = Mask()  # Pinocchio's StdVec_Bool
-mask_full[:] = (True,) * 6
+gripper = robot.model().getJointId("ur5/wrist_3_joint")
+obj = robot.model().getJointId("pokeball/root_joint")
 
-# Define relative transform (grasp pose)
-# This is the transform from gripper to object when grasping
-q = Quaternion(0.5, 0.5, -0.5, 0.5)  # 90° rotations
-offset = np.array([0, 0.137, 0])      # 137mm forward
-grasp_transform = SE3(q, offset)
+mask_full = [True] * 6
 
-# Create relative constraint
-constraint = RelativeTransformation(
+# “grasp” is a transform fixed in the gripper joint.
+grasp_in_gripper = SE3.Identity()
+grasp_in_gripper.translation = np.array([0.0, 0.137, 0.0])
+
+# RelativeTransformation(name, robot, joint1, joint2, frame1, frame2, mask)
+# Enforces: oM_joint1 * frame1 = oM_joint2 * frame2
+f = RelativeTransformation(
     "grasp",
     robot,
-    gripper_id,           # First joint (reference frame)
-    object_id,            # Second joint (target frame)
-    grasp_transform,      # Transform: T_gripper_to_object
-    SE3.Identity(),       # Additional frame offset (usually identity)
-    mask_full
+    gripper,
+    obj,
+    grasp_in_gripper,  # frame1 in joint1
+    SE3.Identity(),    # frame2 in joint2
+    mask_full,
 )
 ```
 
 **Interpretation:**
-- When this constraint is satisfied: `T_gripper * grasp_transform = T_object`
-- Maintains fixed relative pose between gripper and object
+- When this is satisfied: `oM_gripper * grasp_in_gripper = oM_object`
+- Maintains a fixed relative pose between the two joints
 
-### 4.4 Position: Position-Only Constraint
+### 4.5 `Position`: Position-only function
 
 ```python
-mask_pos = Mask()
-mask_pos[:] = (True, True, True)  # Constrain x, y, z
+from pyhpp.constraints import Position
+from pinocchio import SE3
 
-position_constraint = Position.create(
+joint2 = robot.model().getJointId("object/root_joint")
+mask_pos = [True, True, True]
+
+f_pos = Position(
     "position",
     robot,
-    joint_id,
+    joint2,
     SE3.Identity(),
-    target_transform,
-    mask_pos
+    SE3.Identity(),
+    mask_pos,
 )
 ```
 
-### 4.5 Orientation: Orientation-Only Constraint
+### 4.6 `Orientation`: Orientation-only function
 
 ```python
-mask_orient = Mask()
-mask_orient[:] = (True, True, True)  # Constrain roll, pitch, yaw
+from pyhpp.constraints import Orientation
+from pinocchio import SE3
 
-orientation_constraint = Orientation.create(
+joint2 = robot.model().getJointId("object/root_joint")
+mask_orient = [True, True, True]
+
+f_ori = Orientation(
     "orientation",
     robot,
-    joint_id,
+    joint2,
     SE3.Identity(),
-    target_transform,
-    mask_orient
+    SE3.Identity(),
+    mask_orient,
 )
 ```
 
-### 4.6 LockedJoint: Fixed Joint Value
+### 4.7 `LockedJoint`: fixed joint value (already an `Implicit`)
 
 ```python
-locked = LockedJoint.create(
+from pyhpp.constraints import LockedJoint
+import numpy as np
+
+locked = LockedJoint(
     robot,
     "joint_name",
-    np.array([value])     # Locked value (1D array even for 1 DOF)
+    np.array([value])  # 1D array in the joint configuration space
 )
 
 # Example: Lock a revolute joint at 90 degrees
-locked_elbow = LockedJoint.create(
-    robot,
-    "elbow_joint",
-    np.array([np.pi/2])
-)
+locked_elbow = LockedJoint(robot, "elbow_joint", np.array([np.pi / 2]))
 ```
 
-### 4.7 Implicit Constraints
+### 4.8 `Implicit`: wrapping a function into a numerical constraint
 
-⚠️ **All constraints must be wrapped in `Implicit()` before adding to graph!**
+`Implicit` turns a `DifferentiableFunction` into a numerical constraint by specifying:
+
+- a **comparison type per output derivative row** (`ComparisonTypes`),
+- a **mask** saying which rows are active.
+
+Note: not everything needs wrapping. For example, `LockedJoint` is already an `Implicit` subclass.
 
 ```python
+from pyhpp.constraints import Implicit, ComparisonTypes, ComparisonType
+
 # Define comparison types for each constrained DOF
 comparison_types = ComparisonTypes()
-comparison_types[:] = tuple([ComparisonType.EqualToZero] * 3)
+comparison_types[:] = tuple([ComparisonType.EqualToZero] * f.ndo)
 
-# Define implicit mask (which DOF contribute to implicit constraint)
-implicit_mask = [True, True, True]
+# Define implicit mask (which rows are active). If empty, defaults to all True.
+implicit_mask = [True] * f.ndo
 
 # Wrap base constraint
 implicit_constraint = Implicit(
-    constraint,           # Base constraint (Transformation, etc.)
+    f,                   # A DifferentiableFunction (Transformation, etc.)
     comparison_types,     # How to compare constraint values
     implicit_mask        # Which DOF are implicit
 )
@@ -1335,6 +1365,8 @@ implicit_constraint = Implicit(
 | `ComparisonType.Superior` | h(q) ≥ 0 | Inequality (lower bound) |
 | `ComparisonType.Inferior` | h(q) ≤ 0 | Inequality (upper bound) |
 
+`ComparisonType.Equality` is also available. In HPP, rows with `Equality` contribute to the implicit constraint **parameterization** (see `Implicit.parameterSize()`), and can be used with a right-hand side.
+
 **Example with Inequality:**
 
 ```python
@@ -1346,17 +1378,51 @@ implicit_mask = [True]
 implicit_constraint = Implicit(height_constraint, comparison_types, implicit_mask)
 ```
 
-### 4.8 Constraint Evaluation
+### 4.9 Constraint evaluation
 
 ```python
-# Evaluate constraint at configuration q
-value = constraint(q)        # Constraint value vector
+# Evaluate a DifferentiableFunction at configuration q
+value = f(q)
+J = f.J(q)
 
-# Get Jacobian
-J = constraint.J(q)          # Constraint Jacobian matrix
+# Sizes
+output_size = f.no
+output_derivative_size = f.ndo
+```
 
-# Check constraint dimension
-dim = constraint.dimension()  # Number of constraint equations
+### 4.10 Solvers (optional, direct use)
+
+The constraints module exposes two solvers:
+
+- `HierarchicalIterative(configSpace)`: can be configured (`maxIterations`, `errorThreshold`) and constraints can be added via `add(constraint, priority)`.
+- `BySubstitution(configSpace)`: extends `HierarchicalIterative` and additionally exposes `solve(q)` in Python.
+
+```python
+from pyhpp.constraints import BySubstitution
+
+solver = BySubstitution(robot.configSpace())
+solver.maxIterations = 50
+solver.errorThreshold = 1e-4
+solver.add(implicit_constraint, 0)
+
+q_proj, status = solver.solve(q)
+```
+
+If you modify the solver explicit constraint set via `solver.explicitConstraintSet()`, call `solver.explicitConstraintSetHasChanged()` afterwards.
+
+### 4.11 `RelativeCom`
+
+`RelativeCom` is a `DifferentiableFunction` that constrains the robot center of mass relative to a joint.
+
+```python
+from pyhpp.constraints import RelativeCom
+import numpy as np
+
+joint = robot.getJointByName("base_joint")
+reference = np.array([0.0, 0.0, 0.0])
+mask = [True, True, True]
+
+f_com = RelativeCom.create("com", robot, joint, reference, mask)
 ```
 
 ---
@@ -1515,13 +1581,9 @@ print("Solving manipulation planning problem...")
 success = planner.solve()
 
 if success:
-    path = planner.path()
-    print(f"✓ Found path of length {path.length()}")
-    
-    # Get planning statistics
-    n_nodes = planner.roadmap().numNodes()
-    n_edges = planner.roadmap().numEdges()
-    print(f"  Roadmap: {n_nodes} nodes, {n_edges} edges")
+    # PathPlanner returns a PathVector
+    path = planner.solve()
+    print(f"✓ Found path")
 else:
     print("✗ Planning failed")
 ```
@@ -1536,8 +1598,11 @@ from pyhpp.manipulation import TransitionPlanner
 # Create transition planner
 transition_planner = TransitionPlanner(problem)
 
-# Plan specific transition
-path = transition_planner.planTransition(edge, q_start, q_goal)
+# Plan for a specific transition:
+# 1) select the edge
+transition_planner.setEdge(edge)
+# 2) plan from q_init to a list of goal configs (matrix: n_goals x configSize)
+path = transition_planner.planPath(q_start, q_goals, resetRoadmap=True)
 ```
 
 #### Lower-Level Planners
@@ -1603,15 +1668,17 @@ projector = ProgressiveProjector(
     problem.steeringMethod(),
     0.1
 )
-problem.pathProjector = projector
+problem.pathProjector(projector)
 
 # 6. Plan
+from pyhpp.manipulation import ManipulationPlanner
+
 planner = ManipulationPlanner(problem)
 planner.maxIterations(5000)
 
-if planner.solve():
-    path = planner.path()
-    print(f"✓ Success! Path length: {path.length()}")
+path = planner.solve()
+if path is not None:
+    print("✓ Success!")
 else:
     print("✗ Planning failed")
 ```
@@ -1689,7 +1756,7 @@ animate_path(viewer, path, dt=0.02)
 | **Performance** | Serialization overhead | Near-native speed |
 | **API Style** | String-based names | Object references |
 | **Random Config** | `robot.shootRandomConfig()` | `problem.configurationShooter().shoot()` |
-| **Constraint Creation** | Constructor | Static `.create()` methods |
+| **Constraint Creation** | Constructor | Mix of constructors and static `.create()` |
 | **Graph Initialization** | Automatic | Explicit `graph.initialize()` |
 | **Constraint Wrapping** | Optional | Required (`Implicit()`) |
 | **Type Conversion** | CORBA sequences | NumPy arrays |
@@ -1710,11 +1777,13 @@ q_rand = shooter.shoot()
 #### 2. Constraint Creation
 
 ```python
-# CORBA (implied constructor)
+# CORBA
 constraint = Transformation(name, device, joint_id, ...)
 
-# PyHPP (explicit factory method)
-constraint = Transformation(name, device, joint_id, ...)
+# PyHPP
+# Many constraints are constructed directly (e.g. Transformation),
+# while some use a static .create(...) (e.g. RelativeCom, Explicit).
+constraint = Transformation(name, robot, joint_id, frame2, frame1, mask)
 ```
 
 #### 3. Graph Initialization
@@ -1766,14 +1835,14 @@ q = shooter.shoot()
 
 **Problem:** Trying to use constructor instead of factory method.
 
-**Solution:** Use `.create()` static methods for constraints.
+**Solution:** Double-check the signature. In `pyhpp.constraints`, some classes use constructors and others use `.create(...)`.
 
 ```python
-# ❌ Wrong
-constraint = Transformation(name, device, ...)
+# Example: Transformation is constructed directly
+f = Transformation(name, robot, joint_id, frame2, frame1, mask)
 
-# ✅ Correct
-constraint = Transformation(name, device, ...)
+# Example: RelativeCom uses a static factory
+f_com = RelativeCom.create("com", robot, joint, reference, mask)
 ```
 
 #### 3. `RuntimeError: Graph not initialized`
@@ -1933,9 +2002,9 @@ The `tests/` directory contains excellent working examples:
 
 ### ✅ Critical Rules
 
-1. **Always** use `.create()` factory methods for constraints
+1. **Always** use the correct construction style (constructor vs `.create(...)`) for the specific constraint
 2. **Always** call `graph.initialize()` before using the graph
-3. **Always** wrap constraints in `Implicit()` before adding to graph
+3. **Always** wrap `DifferentiableFunction` constraints in `Implicit()` before adding to the graph as numerical constraints
 4. **Always** use `problem.configurationShooter().shoot()` for random configs
 5. **Always** use `robot` when creating constraints
 
@@ -1952,8 +2021,8 @@ The `tests/` directory contains excellent working examples:
 1. Create `Device` and load URDFs
 2. Create `Problem`
 3. Create `Graph` and build structure (states, transitions)
-4. Create constraints using `.create()` methods
-5. Wrap constraints in `Implicit()`
+4. Create constraints using constructors or `.create(...)` as appropriate
+5. Wrap `DifferentiableFunction` constraints in `Implicit()`
 6. Add constraints to states/edges
 7. Configure graph parameters
 8. **Initialize graph** (`graph.initialize()`)
