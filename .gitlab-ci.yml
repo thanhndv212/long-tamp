@@ -5,6 +5,8 @@ pages:
   stage: pages
   image: python:3.12
   script:
+    - echo "CI_PAGES_URL=${CI_PAGES_URL}"
+    - echo "CI_PAGES_DOMAIN=${CI_PAGES_DOMAIN}"
     - python -m pip install --upgrade pip
     - pip install -r doc/requirements-docs.txt
     - sphinx-build -b html doc public
