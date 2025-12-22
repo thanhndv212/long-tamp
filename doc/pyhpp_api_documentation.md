@@ -547,7 +547,12 @@ for i in range(100):
 
 ## 2. Problem: Planning Problem Definition
 
-The `Problem` class encapsulates the planning problem including initial/goal configurations, distance metrics, steering methods, and path validation.
+The `Problem` class encapsulates the planning problem: initial and goal configurations, components (distance, steering method, validations), and a constraint set used for projection.
+
+There are two Python entry points:
+
+- `pyhpp.core.Problem`: wraps `hpp::core::Problem`.
+- `pyhpp.manipulation.Problem`: derives from `pyhpp.core.Problem` and wraps `hpp::manipulation::Problem` (adds graph integration).
 
 ### 2.1 Creating a Problem
 
@@ -556,12 +561,12 @@ from pyhpp.manipulation import Problem
 
 # Create problem for a device
 problem = Problem(robot)
+```
 
-# Alternative: Using ProblemSolver (high-level interface)
-from pyhpp.core import ProblemSolver
-ps = ProblemSolver.create()
-robot = ps.createRobot("robot_name")
-ps.robot(robot)
+Notes:
+
+- `pyhpp.manipulation.Problem(robot)` expects a manipulation-capable device (typically `pyhpp.manipulation.Device`, or a device created/loaded via `pyhpp.manipulation.urdf`).
+- If you do not need a constraint graph, you can also use `pyhpp.core.Problem(robot)`.
 ```
 
 ### 2.2 Setting Initial and Goal Configurations
@@ -582,7 +587,19 @@ problem.addGoalConfig(q_goal2)
 problem.addGoalConfig(q_goal3)
 ```
 
-### 2.3 Accessing Problem Components
+### 2.3 Accessing and Configuring Problem Components
+
+The bindings expose these components as **getter/setter methods** (call with no argument to get, or with one argument to set):
+
+- `distance()` / `distance(d)`
+- `steeringMethod()` / `steeringMethod(sm)`
+- `pathValidation()` / `pathValidation(pv)`
+- `pathProjector()` / `pathProjector(pp)`
+- `configurationShooter()` / `configurationShooter(cs)`
+- `configValidation()` / `configValidation(cv)`
+- `target()` / `target(t)`
+
+They also expose `robot()` to retrieve the underlying device.
 
 ```python
 # Get problem components
@@ -595,15 +612,134 @@ shooter = problem.configurationShooter()    # Configuration shooter
 q_random = shooter.shoot()                  # Sample random config
 ```
 
-### 2.4 Path Projection
+Config validation helpers:
+
+```python
+# Add a built-in config validation by name
+problem.addConfigValidation("CollisionValidation")
+problem.addConfigValidation("JointBoundValidation")
+
+# Or clear all config validations
+problem.clearConfigValidations()
+```
+
+Parameter API:
+
+```python
+# Parameters are stored in the underlying C++ problem.
+# The binding supports float/int directly.
+problem.setParameter("some_parameter", 0.05)
+problem.setParameter("some_parameter", 10)
+
+param = problem.getParameter("some_parameter")
+```
+
+Note: `setParameter` checks the declared parameter type on the C++ side; a wrong type raises an exception.
+
+### 2.4 Constraints and Projection on Configurations
+
+The Python wrapper maintains a `ConstraintSet` (internally named "Default constraint set") used by the following helpers:
+
+```python
+# Project a configuration onto the active constraint set
+success, q_proj, residual = problem.applyConstraints(q)
+
+# Validate a configuration against config validations
+valid, report = problem.isConfigValid(q)
+if not valid:
+    print(report)
+```
+
+Config projector utilities:
+
+```python
+# These attributes control the config projector created by
+# addNumericalConstraintsToConfigProjector(...)
+problem.errorThreshold = 1e-4
+problem.maxIterProjection = 20
+
+# Add numerical (Implicit) constraints into a ConfigProjector.
+# If no ConfigProjector exists yet, it is created.
+problem.addNumericalConstraintsToConfigProjector(
+    "proj",
+    [implicit1, implicit2],
+    [0, 1],  # priorities (optional overload)
+)
+
+# When constraints use the 'Equality' comparison type, you can update
+# their right-hand side from a reference configuration.
+problem.setRightHandSideFromConfig(q_ref)
+```
+
+You can also install an externally-created constraint set on the problem:
+
+```python
+problem.setConstraints(constraint_set)
+```
+
+### 2.5 Constraint Factory Helpers (Problem)
+
+The bindings expose a few C++ helpers that directly create `Implicit` constraints:
+
+```python
+# Relative COM constraint:
+# - comName == "" uses the full robot COM
+# - comName != "" uses a partial COM previously registered with addPartialCom
+implicit = problem.createRelativeComConstraint(
+    "rel_com",
+    "",                 # comName
+    "some_joint",
+    [0.0, 0.0, 0.0],     # point
+    [True, True, True],
+)
+
+# Transformation constraint (overloaded):
+# - joint1Name == "" constrains joint2 in the world frame
+# - joint1Name != "" constrains joint2 relative to joint1
+implicit = problem.createTransformationConstraint(
+    "tf",
+    "joint1",           # or ""
+    "joint2",
+    M,
+    [True, True, True, True, True, True],
+)
+
+# COM between feet constraint (with optional partial COM)
+implicit = problem.createComBetweenFeet(
+    "com_between_feet",
+    "",                 # comName
+    "left_foot",
+    "right_foot",
+    pointL,
+    pointR,
+    "",                 # jointRefName ("" means root joint)
+    pointRef,
+    [True, True, True],
+)
+
+# Control whether the constraint uses a constant RHS (EqualToZero)
+# or a configurable RHS (Equality).
+problem.setConstantRightHandSide(implicit, True)
+```
+
+Partial COM helpers:
+
+```python
+problem.addPartialCom("arm_com", ["joint1", "joint2", "joint3"])
+com = problem.getPartialCom("arm_com")
+```
+
+### 2.6 Path Projection
 
 Path projectors ensure that paths satisfy constraints:
 
 ```python
 from pyhpp.manipulation import (
+    NoneProjector,
     ProgressiveProjector,
-    createDichotomyProjector,
-    createGlobalProjector
+    DichotomyProjector,
+    GlobalProjector,
+    RecursiveHermiteProjector,
 )
 
 # Progressive projector (RECOMMENDED for manipulation)
@@ -613,80 +749,88 @@ projector = ProgressiveProjector(
     problem.steeringMethod(),     # Steering method
     0.1                           # Step size
 )
-problem.pathProjector = projector
+problem.pathProjector(projector)
 
 # Dichotomy projector (binary search approach)
 # Uses dichotomy to find projection
-projector = createDichotomyProjector(
+projector = DichotomyProjector(
     problem.distance(),
     problem.steeringMethod(),
     1e-3                          # Precision threshold
 )
 
+# Attach to the problem
+problem.pathProjector(projector)
+
 # Global projector (single projection)
 # Projects entire path at once
-projector = createGlobalProjector(
+projector = GlobalProjector(
     problem.distance(),
-    problem.steeringMethod()
+    problem.steeringMethod(),
+    1e-3
 )
+
+# Optional: Recursive Hermite projector
+projector = RecursiveHermiteProjector(
+    problem.distance(),
+    problem.steeringMethod(),
+    1e-3
+)
+
+# Disable projection (nullptr)
+problem.pathProjector(NoneProjector())
 ```
 
-### 2.5 Path Planning
+Notes:
 
-#### Method 1: Direct Solve
+- In the Python bindings, the projector constructors are exposed as functions named
+    `ProgressiveProjector`, `DichotomyProjector`, `GlobalProjector`, `RecursiveHermiteProjector`.
+    There are no `createDichotomyProjector` / `createGlobalProjector` functions.
+- All of these factory functions take `(distance, steeringMethod, step)`.
+- In `pyhpp.manipulation`, these functions accept either a regular steering method or a graph steering method
+    (the binding extracts the inner steering method automatically).
+
+### 2.7 Direct Path Utility
+
+The binding provides `directPath(q1, q2, validate)` as a convenience wrapper:
 
 ```python
-# Solve problem directly
-success = problem.solve()
-
-if success:
-    paths = problem.paths()
-    path = paths[0]
-    print(f"Found path of length {path.length()}")
-else:
-    print("No path found")
+success, path, report = problem.directPath(q1, q2, True)
+if not success:
+    print(report)
 ```
 
-#### Method 2: Using ManipulationPlanner
+Behavior (when `validate=True`):
+
+- Uses the current `steeringMethod()` to build a direct path.
+- If a `pathProjector()` is set, tries to project the path.
+- Validates the (projected) path with `pathValidation()`.
+
+Return value:
+
+- `success`: `bool`
+- `path`: a `PathVector` (or `None` if the steering method failed)
+- `report`: `str` (empty on success)
+
+### 2.8 Manipulation-Specific Additions (`pyhpp.manipulation.Problem`)
+
+`pyhpp.manipulation.Problem` adds graph integration:
 
 ```python
-from pyhpp.manipulation import ManipulationPlanner
+from pyhpp.manipulation import Graph, Problem
 
-# Create planner
-planner = ManipulationPlanner(problem)
-planner.maxIterations(5000)
+problem = Problem(robot)
+graph = Graph("g", robot, problem)
 
-# Solve
-success = planner.solve()
-
-if success:
-    path = planner.path()
-    print(f"Path length: {path.length()}")
+problem.constraintGraph(graph)
+problem.checkProblem()  # Raises if init/goal invalid or if graph is missing
 ```
 
-### 2.6 Path Operations
+Steering method note:
 
-```python
-# Evaluate path at parameter t
-q, success = path(0.5)          # Get config at t=0.5 (50%)
-q_initial = path.initial()      # Start configuration
-q_final = path.end()            # End configuration
-
-# Path properties
-length = path.length()          # Total path length (time parameter)
-time_range = path.timeRange()   # (t_min, t_max)
-
-# Iterate through path
-dt = 0.01
-t = 0.0
-configs = []
-while t <= path.length():
-    q = path(t)
-    configs.append(q)
-    t += dt
-
-print(f"Generated {len(configs)} configurations along path")
-```
+- In manipulation, the underlying C++ default steering method is a *graph steering method*.
+- The Python getter `problem.steeringMethod()` returns the *inner* steering method when the graph steering method is active.
+- The setter `problem.steeringMethod(...)` accepts either a regular steering method wrapper or a graph steering method wrapper.
 
 ---
 
