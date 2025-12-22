@@ -47,7 +47,6 @@ tmp/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
-Makefile
 *.cmake
 !CMakeLists.txt
 install_manifest.txt
