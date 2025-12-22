@@ -1,16 +1,15 @@
-"""
-Configuration utilities for agimus_spacelab.
+"""Configuration utilities for ``agimus_spacelab``.
 
 This module provides:
+
 - Base configuration classes for task definitions
-- RuleGenerator: For generating constraint graph rules
+- ``RuleGenerator`` for generating constraint-graph rules
 - SpaceLab-specific configuration
 
-Usage:
+Usage::
+
     from agimus_spacelab.config import BaseTaskConfig, Defaults, RuleGenerator
-    from agimus_spacelab.config import (
-        ModelPaths, ConstraintDef, StateDef, EdgeDef
-    )
+    from agimus_spacelab.config import ModelPaths, ConstraintDef, StateDef, EdgeDef
 """
 
 from .rules import RuleGenerator
