@@ -1,0 +1,16 @@
+stages:
+  - pages
+
+pages:
+  stage: pages
+  image: python:3.12
+  script:
+    - python -m pip install --upgrade pip
+    - pip install -r doc/requirements-docs.txt
+    - sphinx-build -b html doc public
+  artifacts:
+    paths:
+      - public
+  rules:
+    # Publish Pages only from the default branch
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
