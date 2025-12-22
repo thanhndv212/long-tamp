@@ -137,7 +137,41 @@ class PyWGraph:
 
 #### 2. Constructors vs. `.create(...)`
 
-In `pyhpp`, some objects are constructed with Python `__init__`, while others use a static `.create(...)`.
+In `pyhpp`, construction style is **per-class**: some objects use a Python constructor, while others use a static `.create(...)`.
+
+Also note a third (common) pattern: **the Python constructor exists, but it is implemented as** `make_constructor(&Type::create)` in Boost.Python. In that case you still write `Type(...)` in Python, even though the underlying C++ factory is `Type::create`.
+
+The lists below reflect the current bindings under [hpp/src/hpp-python/src/pyhpp](hpp/src/hpp-python/src/pyhpp).
+
+**Call as constructor in Python (internally calls `::create`)**
+
+- `pyhpp.constraints.Implicit(...)`
+- `pyhpp.core.WeighedDistance(...)`
+- `pyhpp.core.Roadmap(...)`
+- `pyhpp.core.RandomShortcut(...)`
+- `pyhpp.core.SimpleShortcut(...)`
+- `pyhpp.core.PartialShortcut(...)`
+- `pyhpp.core.SimpleTimeParameterization(...)`
+- `pyhpp.core.RSTimeParameterization(...)`
+- `pyhpp.manipulation.RandomShortcut(...)`
+- `pyhpp.manipulation.EnforceTransitionSemantic(...)`
+
+**Call as static factory in Python: `Type.create(...)`**
+
+- `pyhpp.core.ProblemSolver.create()`
+- `pyhpp.core.Parameter.create(obj)` and `pyhpp.core.Parameter.create_bool(bool)`
+- `pyhpp.core.StraightPath.create(...)`
+- `pyhpp.core.path.Vector.create(...)`
+- `pyhpp.core.problem_target.GoalConfigurations.create(...)`
+- `pyhpp.constraints.RelativeCom.create(...)`
+- `pyhpp.constraints.Explicit.create(...)`
+- `pyhpp.manipulation.Handle.create(...)`
+- `pyhpp.pinocchio.Gripper.create(...)`
+
+**Module-level factories (not `Type.create`, but still create-based helpers)**
+
+- `pyhpp.manipulation.GraphRandomShortcut(problem)` / `pyhpp.manipulation.GraphPartialShortcut(problem)`
+- `pyhpp.core.create(duration, ndof)` (creates a `PathWrap` instance)
 
 ```python
 # Common constructors
@@ -265,6 +299,8 @@ else:
 6. **Constraints** → Create geometric constraints using factory methods
 7. **Graph Configuration** → Set parameters and initialize
 8. **Planning** → Apply constraints, generate configurations, solve
+
+Note: for constraints, construction style depends on the class: some use constructors (e.g. `Transformation`, `Implicit`, `LockedJoint`), while others use static `.create(...)`.
 
 ---
 
@@ -1578,12 +1614,11 @@ planner.timeOut(60.0)  # seconds
 
 # Solve
 print("Solving manipulation planning problem...")
-success = planner.solve()
 
-if success:
-    # PathPlanner returns a PathVector
-    path = planner.solve()
-    print(f"✓ Found path")
+# `solve()` returns a `PathVector` (or `None` on failure)
+path = planner.solve()
+if path is not None:
+    print("✓ Found path")
 else:
     print("✗ Planning failed")
 ```
@@ -1612,11 +1647,152 @@ from pyhpp.core import BiRRTPlanner, DiffusingPlanner
 
 # Bidirectional RRT
 birrt = BiRRTPlanner(problem)
-birrt.solve()
+path = birrt.solve()
 
 # Diffusing planner
 diffusing = DiffusingPlanner(problem)
-diffusing.solve()
+path2 = diffusing.solve()
+```
+
+Additional planners exposed by the bindings in `pyhpp.core`:
+
+- `VisibilityPrmPlanner(problem)`
+- `BiRrtStar(problem)`
+- `kPrmStar(problem)`
+- `SearchInRoadmap(problem, roadmap)`
+- `PlanAndOptimize(pathPlanner)`
+
+Additional planners exposed by the bindings in `pyhpp.manipulation`:
+
+- `StatesPathFinder(problem)`
+- `EndEffectorTrajectory(problem)` (and an overload taking `(problem, roadmap)`)
+
+### 5.4.1 Manipulation Steering Methods
+
+The manipulation module exposes steering-method wrappers that are useful when planning with a constraint graph:
+
+```python
+from pyhpp.manipulation import GraphSteeringMethod, EndEffectorTrajectorySteeringMethod
+
+# Wrap an existing (core) steering method into a graph-aware one.
+gsm = GraphSteeringMethod(problem.steeringMethod())
+
+# A steering method that follows an end-effector reference trajectory.
+from pyhpp.core import ProblemSolver
+
+# EndEffectorTrajectorySteeringMethod expects the underlying C++ core problem.
+ps = ProblemSolver.create()
+ps.robot(robot.asPinDevice())
+cpp_problem = ps.problem()
+eet_sm = EndEffectorTrajectorySteeringMethod(cpp_problem)
+eet_sm.setTrajectoryConstraint(implicit_constraint)
+eet_sm.setTrajectory(path, se3Output=True)
+```
+
+### 5.5 Core `ProblemSolver` (high-level planning loop)
+
+`pyhpp.core.ProblemSolver` is a high-level orchestration object that manages a `Problem`, a roadmap, a chosen planner, and optional optimizers.
+
+Key points from the bindings:
+
+- Construct via static factory: `ProblemSolver.create()`
+- Set/get the robot via `robot()` (getter/setter)
+- Set init and goals via `initConfig(...)` and `addGoalConfig(...)`
+- Solve via `solve()` (fills the internal `paths()` container)
+- Retrieve a found path via `path(i)` (returns a `PathVector`)
+
+```python
+from pyhpp.core import ProblemSolver
+
+ps = ProblemSolver.create()
+ps.robot(robot.asPinDevice())
+
+ps.resetProblem()
+ps.initConfig(q_init)
+ps.addGoalConfig(q_goal)
+
+# Optional: inspect available planners / optimizers registered in the containers
+print(ps.pathPlanners.keys())
+print(ps.pathOptimizers.keys())
+
+ok = ps.solve()
+if ok and len(ps.paths()) > 0:
+    path = ps.path(0)
+```
+
+### 5.6 Core path validation and path optimization
+
+#### Path validation
+
+`pyhpp.core.PathValidation.validate(path)` returns a tuple `(valid, validPart, report)`.
+
+The module also exposes factory functions:
+
+```python
+from pyhpp.core import DiscretizedCollisionAndJointBound, Progressive, Dichotomy
+
+pv = DiscretizedCollisionAndJointBound(robot.asPinDevice(), stepSize=0.05)
+ok, valid_part, report = pv.validate(path)
+
+# Continuous validators
+pv2 = Progressive(robot.asPinDevice(), tolerance=1e-3)
+pv3 = Dichotomy(robot.asPinDevice(), tolerance=1e-3)
+```
+
+#### Path optimization
+
+The base class is `pyhpp.core.PathOptimizer`, with `optimize(pathVector)`.
+
+Concrete optimizers constructed via `__init__` include:
+
+- `RandomShortcut(problem)`
+- `SimpleShortcut(problem)`
+- `PartialShortcut(problem)`
+- `SimpleTimeParameterization(problem)`
+- `RSTimeParameterization(problem)`
+
+The manipulation module adds:
+
+- `RandomShortcut(problem)` (manipulation variant)
+- `EnforceTransitionSemantic(problem)`
+- Graph-aware factories: `GraphRandomShortcut(problem)` and `GraphPartialShortcut(problem)`
+
+### 5.7 Core submodules: `pyhpp.core.path`, `pyhpp.core.path_optimization`, `pyhpp.core.problem_target`
+
+These are imported by `pyhpp.core` and provide advanced types.
+
+#### `pyhpp.core.path`
+
+```python
+from pyhpp.core.path import Vector, SplineB1, SplineB3
+
+pv = Vector.create(robot.configSize(), robot.numberDof())
+```
+
+#### `pyhpp.core.path_optimization`
+
+This module exposes low-level optimization primitives (linear constraints, quadratic programs) and spline-gradient-based abstract optimizers:
+
+```python
+from pyhpp.core.path_optimization import LinearConstraint, QuadraticProgram
+
+lc = LinearConstraint(10, 5)
+qp = QuadraticProgram(5)
+```
+
+#### `pyhpp.core.problem_target`
+
+`GoalConfigurations` is exposed as a `ProblemTarget` implementation:
+
+```python
+from pyhpp.core.problem_target import GoalConfigurations
+
+from pyhpp.core import ProblemSolver
+
+ps = ProblemSolver.create()
+ps.robot(robot.asPinDevice())
+cpp_problem = ps.problem()
+target = GoalConfigurations.create(cpp_problem)
 ```
 
 ### 5.4 Complete Planning Workflow
