@@ -7,46 +7,53 @@ of the agimus_spacelab package.
 Spacelab Examples
 -----------------
 
-CORBA Backend Example
-~~~~~~~~~~~~~~~~~~~~~
+Scene Visualization Example
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Complete example using the CORBA backend for Spacelab manipulation:
+Loads the SpaceLab scene and visualizes it with gepetto-viewer (when available).
 
-.. literalinclude:: ../script/examples/spacelab_corba_example.py
-   :language: python
-   :linenos:
-
-To run:
-
-.. code-block:: bash
-
-    cd script/examples
-    python3 spacelab_corba_example.py
-
-PyHPP Backend Example
-~~~~~~~~~~~~~~~~~~~~~
-
-Complete example using the PyHPP backend for Spacelab manipulation:
-
-.. literalinclude:: ../script/examples/spacelab_pyhpp_example.py
-   :language: python
-   :linenos:
+.. literalinclude:: ../script/spacelab/visualize_scene.py
+    :language: python
+    :linenos:
 
 To run:
 
 .. code-block:: bash
 
-    cd script/examples
-    python3 spacelab_pyhpp_example.py
+     cd script/spacelab
+     python3 visualize_scene.py
 
-Unified API Example
-~~~~~~~~~~~~~~~~~~~
+Frame Visualization Example
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Backend-agnostic example using the unified API:
+Demonstrates handle and gripper frame visualization utilities.
 
-.. literalinclude:: ../script/examples/unified_api_example.py
-   :language: python
-   :linenos:
+.. literalinclude:: ../script/spacelab/example_visualize_frames.py
+    :language: python
+    :linenos:
+
+To run:
+
+.. code-block:: bash
+
+     cd script/spacelab
+     python3 example_visualize_frames.py
+
+Collaborative Assembly Orchestration (Mock)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Demonstrates task orchestration and synchronization (planning calls are mocked).
+
+.. literalinclude:: ../script/spacelab/example_collaborative_assembly.py
+    :language: python
+    :linenos:
+
+To run:
+
+.. code-block:: bash
+
+     cd script/spacelab
+     python3 example_collaborative_assembly.py
 
 Basic Usage Examples
 --------------------

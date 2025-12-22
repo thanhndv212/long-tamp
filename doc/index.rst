@@ -1,96 +1,88 @@
-# Agimus Spacelab Documentation
+Agimus Spacelab Documentation
+==============================
 
 Welcome to the documentation for **Agimus Spacelab**, a generalized manipulation planning framework.
 
-## Overview
+Overview
+--------
 
 Agimus Spacelab provides a unified interface for manipulation planning that supports both:
+
 - **CORBA Server** backend (hpp-manipulation-corba)
 - **PyHPP** backend (hpp-python direct bindings)
 
-## Features
+Features
+--------
 
-- 🔄 **Dual Backend Support**: Switch between CORBA and PyHPP seamlessly
-- 🎯 **Unified API**: Same code works with both backends
-- 🧩 **Modular Design**: Reusable components for various manipulation tasks
-- 📦 **Flexible Installation**: pip or CMake
-- 🔧 **Optional Dependencies**: Install only what you need
-- ✅ **Well-Tested**: Unit tests for reliability
-- 🐳 **Docker Ready**: Complete development environment
+- **Dual backend support**: Switch between CORBA and PyHPP seamlessly
+- **Unified API**: Same code works with both backends
+- **Modular design**: Reusable components for various manipulation tasks
+- **Flexible installation**: pip or CMake
+- **Optional dependencies**: Install only what you need
+- **Well-tested**: Unit tests for reliability
+- **Docker-ready**: Complete development environment
 
-## Quick Links
+User guide
+----------
 
-```{toctree}
-:maxdepth: 2
-:caption: User Guide:
+.. toctree::
+    :maxdepth: 2
+    :caption: User Guide
 
-installation
-usage
-examples
-```
+    installation
+    usage
+    examples
 
-```{toctree}
-:maxdepth: 2
-:caption: API Documentation:
+API documentation
+-----------------
 
-api
-```
+.. toctree::
+    :maxdepth: 2
+    :caption: API Documentation
 
-```{toctree}
-:maxdepth: 1
-:caption: Additional:
+    api
+    pyhpp_api_documentation_md
+    corba_api_documentation_md
 
-comparison_backends
-pyhpp_guide
-```
+Additional
+----------
 
-## Quick Example
+.. toctree::
+    :maxdepth: 1
+    :caption: Additional
 
-```python
-from agimus_spacelab import ManipulationPlanner
+    comparison_corba_vs_pyhpp_md
+    improvement_plan_md
+    hpp_manipulation_complete_motion_plan_md
 
-# Create planner (choose backend)
-planner = ManipulationPlanner(backend="pyhpp")
+Quick example
+-------------
 
-# Load robot and environment
-planner.load_robot("spacelab", robot_urdf, robot_srdf)
-planner.load_environment("ground", env_urdf)
+.. code-block:: python
 
-# Setup and solve
-planner.set_initial_config(q_init)
-planner.add_goal_config(q_goal)
-success = planner.solve()
+    from agimus_spacelab import create_planner
 
-# Visualize
-if success:
-    planner.visualize()
-    planner.play_path()
-```
+    # Create planner (choose backend)
+    planner = create_planner(backend="pyhpp")
 
-## Installation
+    # Load robot and environment
+    planner.load_robot("spacelab", robot_urdf, robot_srdf)
+    planner.load_environment("ground", env_urdf)
 
-Using Docker (recommended):
+    # Setup and solve
+    planner.set_initial_config(q_init)
+    planner.add_goal_config(q_goal)
+    success = planner.solve()
 
-```bash
-cd /path/to/agimus_spacelab
-./docker/run_docker.sh build
-./docker/run_docker.sh start
-./docker/run_docker.sh exec
-```
+    # Visualize
+    if success:
+         planner.visualize()
+         planner.play_path()
 
-Using pip:
+Indices and tables
+------------------
 
-```bash
-pip install -e .
-# With optional backends
-pip install -e ".[corba]"  # CORBA support
-pip install -e ".[pyhpp]"  # PyHPP support
-pip install -e ".[all]"    # Both backends
-```
-
-## Indices and Tables
-
-* {ref}`genindex`
-* {ref}`modindex`
-* {ref}`search`
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
 
