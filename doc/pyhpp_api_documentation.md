@@ -1465,262 +1465,302 @@ f_com = RelativeCom.create("com", robot, joint, reference, mask)
 
 ## 5. Planning and Path Manipulation
 
-### 5.1 Adding Constraints to Graph
+This section documents the planning loop and the main runtime objects involved in planning and path handling.
 
-#### Add to States
+### 5.1 Graph constraints: attaching numerical constraints
 
-```python
-# Add single constraint to a state (RECOMMENDED)
-graph.addNumericalConstraint(state, implicit_constraint)
+Attach constraints to a state:
 
-# Add multiple constraints one by one
-graph.addNumericalConstraint(state, implicit_constraint1)
-graph.addNumericalConstraint(state, implicit_constraint2)
+- `graph.addNumericalConstraint(state, implicit)`
+- `graph.addNumericalConstraintsToState(state, [implicit, ...])`
+- `graph.addNumericalConstraintsForPath(state, [implicit, ...])` (path constraints inside a state)
 
-# Alternative: Add multiple at once (may be deprecated)
-graph.addNumericalConstraintsToState(state, [constraint1, constraint2])
-```
+Attach constraints to a transition:
 
-#### Add to Transitions
+- `graph.addNumericalConstraintsToTransition(edge, [implicit, ...])`
 
-```python
-# Add constraints to an edge
-graph.addNumericalConstraintsToTransition(edge, [constraint1, constraint2])
+Attach constraints globally:
 
-# Note: Edge constraints are also inherited from the containing_state
-# parameter passed to createTransition()
-```
+- `graph.addNumericalConstraintsToGraph([implicit, ...])`
 
-#### Add Globally
+Reset:
 
-```python
-# Apply constraints to all states/edges
-graph.addNumericalConstraintsToGraph([constraint1, constraint2])
-```
+- `graph.resetConstraints(state)`
 
-#### Reset Constraints
+### 5.2 Graph projection helpers and constraint diagnostics
 
-```python
-# Remove all constraints from a state
-graph.resetConstraints(state)
-```
+Projection / generation utilities:
 
-### 5.2 Applying Constraints
+- `graph.applyStateConstraints(state, q)` → `(success: bool, qProj, residual)`
+- `graph.applyLeafConstraints(edge, qRhs, q)` → `(success: bool, qProj, residual)`
+- `graph.generateTargetConfig(edge, qRhs, qSeed)` → `(success: bool, qTarget, residual)`
 
-#### Project onto State
+Error diagnostics:
 
-```python
-# Apply all state constraints to project a configuration
-success, q_projected, residual = graph.applyStateConstraints(state, q_input)
+- `graph.getConfigErrorForState(state, q)` → `(error, belongs)`
+- `graph.getConfigErrorForTransition(edge, q)` → `(error, belongs)`
+- `graph.getConfigErrorForTransitionLeaf(edge, qLeaf, q)` → `(error, belongs)`
+- `graph.getConfigErrorForTransitionTarget(edge, qLeaf, q)` → `(error, belongs)`
 
-if success:
-    print(f"✓ Projection succeeded (residual: {residual:.6f})")
-    print(f"  Projected config: {q_projected}")
-else:
-    print(f"✗ Projection failed (residual: {residual})")
+### 5.3 High-level graph generation: `ConstraintGraphFactory` (pure Python helper)
 
-# Use projected configuration
-if success:
-    # Configuration satisfies state constraints
-    pass
-```
+The module `pyhpp.manipulation.constraint_graph_factory` provides a high-level graph generator with an API intentionally close to the CORBA-side factory.
 
-#### Project onto Transition
+Entry point:
 
 ```python
-# Apply edge (leaf) constraints
-success, q_projected, residual = graph.applyLeafConstraints(edge, q_rhs, q_input)
-```
+from pyhpp.manipulation.constraint_graph_factory import ConstraintGraphFactory, Rule
 
-#### Generate Target Configuration
-
-Useful for sampling-based planning:
-
-```python
-# Get configuration shooter
-shooter = problem.configurationShooter()
-
-# Generate target satisfying edge constraints
-for i in range(100):
-    q_rand = shooter.shoot()
-    success, q_target, residual = graph.generateTargetConfig(edge, q_start, q_rand)
-    
-    if success:
-        # Use q_target for planning
-        break
-```
-
-#### Check Constraint Satisfaction
-
-```python
-# Check if configuration satisfies state constraints
-error_vector, is_satisfied = graph.getConfigErrorForState(state, q)
-
-if is_satisfied:
-    print(f"✓ Config satisfies state constraints")
-    print(f"  Error norm: {np.linalg.norm(error_vector)}")
-else:
-    print(f"✗ Config violates constraints")
-    print(f"  Error: {error_vector}")
-
-# Check transition constraints
-error_vector, is_satisfied = graph.getConfigErrorForTransition(q, edge)
-```
-
-#### Using ConstraintGraphFactory
-
-```python
-from pyhpp.manipulation.constraint_graph_factory import (
-    ConstraintGraphFactory,
-    Rule,
-)
-
-# Create factory
 factory = ConstraintGraphFactory(graph)
-
-# Configure factory
-factory.setGrippers(["robot/gripper1", "robot/gripper2"])
-factory.setObjects(
-    ["object1", "object2"],                    # object names
-    [["object1/handle"], ["object2/handle"]],  # handles per object
-    [["object1/surface"], ["object2/surface"]] # contact surfaces per object
-)
-factory.environmentContacts(["table/surface", "wall/surface"])
-
-# Set rules
-rules = [
-    Rule(["gripper.*"], ["handle.*"], True),   # Allow all gripper-handle pairs
-    Rule(["gripper1"], [""], False),            # Disallow gripper1 empty
-]
-factory.setRules(rules)
-
-# Generate graph
-factory.generate()
 ```
 
-### 5.3 Manipulation Planning
+Main API:
 
-#### Using ManipulationPlanner
+- `factory.setGrippers(grippers: list[str])`
+- `factory.setObjects(objects, handlesPerObjects, contactSurfacesPerObjects)`
+- `factory.environmentContacts(envContacts)`
+- `factory.setRules(rules: list[Rule])`
+- `factory.setPossibleGrasps(graspsDict)`
+- `factory.setPreplacementDistance(objectName, distance)` / `factory.getPreplacementDistance(objectName)`
+- `factory.setPreplaceGuide(preplaceGuide)`
+- `factory.generate()`
+
+Important note:
+
+- This factory creates states/transitions using the bound `Graph` API (including waypoint and level-set transitions), and attaches constraints using `graph.addNumericalConstraintsToState(...)` / `graph.addNumericalConstraintsToTransition(...)`.
+
+### 5.4 Manipulation planning
+
+High-level manipulation planner:
 
 ```python
 from pyhpp.manipulation import ManipulationPlanner
 
-# Create planner
 planner = ManipulationPlanner(problem)
-
-# Configure planner
 planner.maxIterations(5000)
-planner.timeOut(60.0)  # seconds
+planner.timeOut(60.0)
 
-# Solve
-print("Solving manipulation planning problem...")
-
-# `solve()` returns a `PathVector` (or `None` on failure)
-path = planner.solve()
-if path is not None:
-    print("✓ Found path")
-else:
-    print("✗ Planning failed")
+path = planner.solve()  # returns a PathVector (or None)
 ```
 
-#### Using TransitionPlanner
-
-For planning specific transitions:
+Transition-level planning:
 
 ```python
 from pyhpp.manipulation import TransitionPlanner
 
-# Create transition planner
-transition_planner = TransitionPlanner(problem)
-
-# Plan for a specific transition:
-# 1) select the edge
-transition_planner.setEdge(edge)
-# 2) plan from q_init to a list of goal configs (matrix: n_goals x configSize)
-path = transition_planner.planPath(q_start, q_goals, resetRoadmap=True)
+tp = TransitionPlanner(problem)
+tp.setEdge(edge)
+path = tp.planPath(q_start, q_goals, resetRoadmap=True)
 ```
 
-#### Lower-Level Planners
+Core planners are also exposed (examples):
+
+- `pyhpp.core.BiRRTPlanner(problem)`
+- `pyhpp.core.DiffusingPlanner(problem)`
+
+### 5.5 Manipulation steering methods (graph-aware wrappers)
+
+Wrappers used in graph-based planning:
 
 ```python
-from pyhpp.core import BiRRTPlanner, DiffusingPlanner
+from pyhpp.manipulation import GraphSteeringMethod
 
-# Bidirectional RRT
-birrt = BiRRTPlanner(problem)
-path = birrt.solve()
-
-# Diffusing planner
-diffusing = DiffusingPlanner(problem)
-path2 = diffusing.solve()
-```
-
-Additional planners exposed by the bindings in `pyhpp.core`:
-
-- `VisibilityPrmPlanner(problem)`
-- `BiRrtStar(problem)`
-- `kPrmStar(problem)`
-- `SearchInRoadmap(problem, roadmap)`
-- `PlanAndOptimize(pathPlanner)`
-
-Additional planners exposed by the bindings in `pyhpp.manipulation`:
-
-- `StatesPathFinder(problem)`
-- `EndEffectorTrajectory(problem)` (and an overload taking `(problem, roadmap)`)
-
-### 5.4.1 Manipulation Steering Methods
-
-The manipulation module exposes steering-method wrappers that are useful when planning with a constraint graph:
-
-```python
-from pyhpp.manipulation import GraphSteeringMethod, EndEffectorTrajectorySteeringMethod
-
-# Wrap an existing (core) steering method into a graph-aware one.
 gsm = GraphSteeringMethod(problem.steeringMethod())
+```
 
-# A steering method that follows an end-effector reference trajectory.
+`EndEffectorTrajectorySteeringMethod` is constructed from a core `hpp::core::Problem`:
+
+```python
+from pyhpp.manipulation import EndEffectorTrajectorySteeringMethod
 from pyhpp.core import ProblemSolver
 
-# EndEffectorTrajectorySteeringMethod expects the underlying C++ core problem.
 ps = ProblemSolver.create()
 ps.robot(robot.asPinDevice())
 cpp_problem = ps.problem()
-eet_sm = EndEffectorTrajectorySteeringMethod(cpp_problem)
-eet_sm.setTrajectoryConstraint(implicit_constraint)
-eet_sm.setTrajectory(path, se3Output=True)
+
+eet = EndEffectorTrajectorySteeringMethod(cpp_problem)
+eet.setTrajectoryConstraint(implicit_constraint)
+eet.setTrajectory(path, se3Output=True)
 ```
 
-### 5.5 Core `ProblemSolver` (high-level planning loop)
+### 5.6 Core `ProblemSolver` (binding-accurate API)
 
-`pyhpp.core.ProblemSolver` is a high-level orchestration object that manages a `Problem`, a roadmap, a chosen planner, and optional optimizers.
+Construction:
 
-Key points from the bindings:
+- `ProblemSolver.create()` (static)
 
-- Construct via static factory: `ProblemSolver.create()`
-- Set/get the robot via `robot()` (getter/setter)
-- Set init and goals via `initConfig(...)` and `addGoalConfig(...)`
-- Solve via `solve()` (fills the internal `paths()` container)
-- Retrieve a found path via `path(i)` (returns a `PathVector`)
+Core accessors:
+
+- `ps.problem()` → core `Problem`
+- `ps.robot()` / `ps.robot(device)` (getter/setter)
+- `ps.createRobot(robotName)`
+
+Environment / obstacles:
+
+- `ps.addObstacle(obstacleDevice, collision, distance)`
+
+Initial and goal configurations:
+
+- `ps.initConfig()` / `ps.initConfig(q)` (getter/setter)
+- `ps.addGoalConfig(q)`
+- `ps.resetGoalConfigs()`
+
+Solve lifecycle:
+
+- `ps.resetProblem()`
+- `ps.resetRoadmap()`
+- `ps.solve()` → `bool`
+- Step-by-step API: `ps.prepareSolveStepByStep()`, `ps.executeOneStep()`, `ps.finishSolveStepByStep()`
+
+Paths container management:
+
+- `ps.paths()` → internal paths container (indexable from Python)
+- `ps.path(i)` → returns the `i`-th stored path (`PathVector`)
+- `ps.addPath(pathVector)`
+- `ps.erasePath(i)`
+
+Path optimization pipeline:
+
+- `ps.createPathOptimizers()`
+- `ps.optimizePath(pathVector)`
+- `ps.addPathOptimizer(name, optimizer)` / `ps.clearPathOptimizers()`
+- `ps.pathOptimizers` (container)
+
+Component selection by type-name (string):
+
+- `ps.robotType()` / `ps.robotType(name)`
+- `ps.pathPlannerType()` / `ps.pathPlannerType(name)` and `ps.pathPlanner()`
+- `ps.distanceType()` / `ps.distanceType(name)`
+- `ps.steeringMethodType()` / `ps.steeringMethodType(name)`
+- `ps.configurationShooterType()` / `ps.configurationShooterType(name)`
+
+Config validation stack:
+
+- `ps.addConfigValidation(name, validation)`
+- `ps.configValidationTypes()`
+- `ps.clearConfigValidations()`
+
+Path validation / projection types:
+
+- `ps.pathValidationType(name, parameters)`
+- `ps.pathProjectorType(name, parameters)`
+
+Tuning parameters:
+
+- `ps.maxIterProjection()` / `ps.maxIterProjection(n)`
+- `ps.maxIterPathPlanning()` / `ps.maxIterPathPlanning(n)`
+- `ps.errorThreshold()` / `ps.errorThreshold(eps)`
+
+Named builders/containers:
+
+- `ps.pathPlanners` (container-like object)
+- `ps.pathOptimizers` (container-like object)
+
+Both containers expose methods like `keys()`, `has(key)`, `erase(key)`, `clear()`, `__getitem__(key)`, and `add(key, valueOrBuilder)`.
+
+Example (same pattern as `hpp-python/tests/problem-solver.py`):
 
 ```python
 from pyhpp.core import ProblemSolver
+import numpy as np
 
 ps = ProblemSolver.create()
-ps.robot(robot.asPinDevice())
+robot = ps.createRobot("ur3")
+ps.robot(robot)
 
-ps.resetProblem()
-ps.initConfig(q_init)
-ps.addGoalConfig(q_goal)
+qinit = np.zeros((robot.model().nq, 1))
+qgoal = qinit.copy()
+qgoal[0, 0] = 1
 
-# Optional: inspect available planners / optimizers registered in the containers
-print(ps.pathPlanners.keys())
-print(ps.pathOptimizers.keys())
+ps.initConfig(qinit)
+ps.addGoalConfig(qgoal)
 
 ok = ps.solve()
-if ok and len(ps.paths()) > 0:
-    path = ps.path(0)
+if ok:
+    path = ps.paths()[0]  # PathVector (inherits Path)
 ```
 
-### 5.6 Core path validation and path optimization
+### 5.7 Core paths: `Path`, `StraightPath`, and `PathVector`
+
+Common `Path` API (bound methods):
+
+- `path(t)` / `path.eval(t)` → `(q, success)`
+- `path(qOut, t)` / `path.eval(qOut, t)` → `success` (fills `qOut`)
+- `path.derivative(t, order)`
+- `path.copy()`
+- `path.extract(t0, t1)` (also accepts an interval)
+- `path.timeRange()` / `path.paramRange()`
+- `path.length()`
+- `path.initial()` / `path.end()`
+- `path.constraints()`
+- `path.outputSize()` / `path.outputDerivativeSize()`
+
+Example for the two `__call__` overloads:
+
+```python
+q, success = path(0.3)
+
+qout = np.zeros_like(q)
+success = path(qout, path.length())
+```
+
+`StraightPath` creation:
+
+- `StraightPath.create(...)` (static, with overloads)
+
+`PathVector` is exposed as `pyhpp.core.path.Vector` (and inherits `Path`):
+
+- `Vector.create(configSize, numberDof)` (static)
+- `pv.numberPaths()`
+- `pv.pathAtRank(i)`
+- `pv.rankAtParam(t)`
+- `pv.appendPath(path)`
+- `pv.concatenate(otherPathVector)`
+- `pv.flatten()`
+
+### 5.8 Core roadmap: `Roadmap`
+
+`pyhpp.core.Roadmap` is a C++ roadmap object that can be used directly from Python (e.g. to implement RRT/PRM experiments).
+
+Construction (as used in `hpp-python/tests/rrt.py`):
+
+```python
+from pyhpp.core import Roadmap, WeighedDistance
+
+weighedDistance = WeighedDistance(robot)
+roadmap = Roadmap(weighedDistance, robot)
+```
+
+Core API surface (bound methods):
+
+- `roadmap.clear()`
+- `roadmap.initNode(q)` (also overload returning a node object)
+- `roadmap.addNode(q)`
+- `roadmap.addNodeAndEdges(...)` / `roadmap.addNodeAndEdge(...)`
+- `roadmap.addEdge(q1, q2, path)` (also overload)
+- `roadmap.addEdges(...)`
+- `roadmap.merge(otherRoadmap)`
+- `roadmap.insertPathVector(pathVector)`
+- `roadmap.addGoalNode(q)` / `roadmap.resetGoalNodes()`
+- `roadmap.goalNodes()`
+- `roadmap.nodes()`
+- `roadmap.nodesConnectedComponent(i)`
+- `roadmap.connectedComponents()`
+- `roadmap.numberConnectedComponents()`
+- `roadmap.getConnectedComponent(i)`
+- `roadmap.connectedComponentOfNode(q)`
+- Nearest queries: `roadmap.nearestNode(...)` (multiple overloads) and `roadmap.nearestNodes(...)`
+- `roadmap.nodesWithinBall(q, radius)`
+- `roadmap.pathExists()`
+- `roadmap.distance()`
+
+Typical nearest-neighbor usage (from `hpp-python/tests/rrt.py` pattern):
+
+```python
+q_near, d = roadmap.nearestNode(q_rand, cc)
+```
+
+### 5.9 Core path validation and path optimization
 
 #### Path validation
 
@@ -1757,7 +1797,7 @@ The manipulation module adds:
 - `EnforceTransitionSemantic(problem)`
 - Graph-aware factories: `GraphRandomShortcut(problem)` and `GraphPartialShortcut(problem)`
 
-### 5.7 Core submodules: `pyhpp.core.path`, `pyhpp.core.path_optimization`, `pyhpp.core.problem_target`
+### 5.10 Core submodules: `pyhpp.core.path`, `pyhpp.core.path_optimization`, `pyhpp.core.problem_target`
 
 These are imported by `pyhpp.core` and provide advanced types.
 
@@ -1786,7 +1826,6 @@ qp = QuadraticProgram(5)
 
 ```python
 from pyhpp.core.problem_target import GoalConfigurations
-
 from pyhpp.core import ProblemSolver
 
 ps = ProblemSolver.create()
@@ -1795,7 +1834,7 @@ cpp_problem = ps.problem()
 target = GoalConfigurations.create(cpp_problem)
 ```
 
-### 5.4 Complete Planning Workflow
+### 5.11 Complete Planning Workflow
 
 ```python
 # 1. Setup
