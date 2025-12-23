@@ -180,8 +180,22 @@ class ConfigGenerator:
             # Generate random config
             if self.backend == "corba":
                 q_rand = self.planner.random_config()
+
+                # omniORB stubs expect plain Python sequences (list/tuple),
+                # not numpy arrays.
+                q_from_seq = (
+                    q_from.tolist()
+                    if isinstance(q_from, np.ndarray)
+                    else list(q_from)
+                )
+                q_rand_seq = (
+                    q_rand.tolist()
+                    if isinstance(q_rand, np.ndarray)
+                    else list(q_rand)
+                )
+
                 res, q_target, err = self.graph.generateTargetConfig(
-                    edge_name, q_from, q_rand
+                    edge_name, q_from_seq, q_rand_seq
                 )
                 success = res
                 config = q_target
