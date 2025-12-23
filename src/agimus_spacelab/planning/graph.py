@@ -495,6 +495,114 @@ class GraphBuilder:
             print(f"      - {edge_name}: {from_state} → {to_state}")
         return self.graph
 
+    def create_manual_graph(self,
+                            config: BaseTaskConfig,
+                            pyhpp_constraints: Optional[Dict[str, Any]] = None
+                            ) -> Any:
+        """Create the manual graph using GraphBuilder (both backends)."""
+        print("    Building graph manually")
+
+        cfg = config
+        graph_def = getattr(cfg, "GRASP_FG_GRAPH", None)
+        if not isinstance(graph_def, dict):
+            raise RuntimeError("Missing 'GRASP_FG_GRAPH' graph config")
+
+        # PyHPP constraint objects (CORBA uses names)
+        constraints = (
+            pyhpp_constraints if self.backend == "pyhpp" else None
+        )
+
+        # Create empty graph
+        graph_name = (
+            "manipulation_graph" if self.backend == "pyhpp" else "graph"
+        )
+        self.initiate_graph(name=graph_name)
+
+        # Create states (order matters for solver performance)
+        state_names = getattr(cfg, "GRAPH_NODES", None) or list(
+            graph_def.get("states", {}).keys()
+        )
+        if self.backend == "corba":
+            self.add_states(state_names)
+        else:
+            for state_name in state_names:
+                self.add_state(state_name)
+        print(f"    ✓ Created {len(state_names)} states")
+
+        # Create edges from declarative definition
+        for edge_name, edge_info in graph_def.get("edges", {}).items():
+            self.add_edge(
+                edge_info["from"],
+                edge_info["to"],
+                edge_name,
+                edge_info.get("weight", 1),
+                edge_info["in"],
+            )
+        print("    ✓ Created edges (transitions)")
+
+        # Add constraints to states from declarative definition
+        states_def = graph_def.get("states", {})
+        for state_name, state_info in states_def.items():
+            constraint_names = state_info.get("constraints", [])
+            if constraint_names:
+                if self.backend == "corba":
+                    self.add_state_constraints(
+                        state_name, [], constraint_names=constraint_names
+                    )
+                else:
+                    constraint_objs = [
+                        constraints[n] for n in constraint_names
+                    ]
+                    self.add_state_constraints(state_name, constraint_objs)
+        print("    ✓ Added constraints to nodes")
+
+        # Add constraints to edges from declarative definition
+        edge_constraints_def = graph_def.get("edge_constraints", {})
+        for constraint_name, edge_list in edge_constraints_def.items():
+            for edge_name in edge_list:
+                if self.backend == "corba":
+                    self.add_edge_constraints(
+                        edge_name, [], constraint_names=[constraint_name]
+                    )
+                else:
+                    self.add_edge_constraints(
+                        edge_name, [constraints[constraint_name]]
+                    )
+
+        # Free motion edges (no path constraints)
+        for edge_name in graph_def.get("free_motion_edges", []):
+            if self.backend == "corba":
+                self.add_edge_constraints(edge_name, [], constraint_names=[])
+            else:
+                self.add_edge_constraints(edge_name, [])
+        print("    ✓ Added constraints to edges")
+
+        # Set constant RHS (CORBA only)
+        if self.backend == "corba":
+            for constraint_name, is_constant in graph_def.get(
+                "constant_rhs", {}
+            ).items():
+                self.ps.setConstantRightHandSide(constraint_name, is_constant)
+            print("    ✓ Set constant right-hand side")
+
+            # # Set security margins BEFORE initialize (CORBA only)
+            # for edge_name in cfg.PLACEMENT_EDGES:
+            #     self.graph.setSecurityMarginForEdge(
+            #         edge_name,
+            #         cfg.TOOL_CONTACT_JOINT,
+            #         cfg.DISPENSER_CONTACT_JOINT,
+            #         cfg.CONTACT_MARGIN,
+            #     )
+            # print(
+            #     f"    ✓ Set security margin ({cfg.CONTACT_MARGIN}m) "
+            #     "for placement edges"
+            # )
+
+        # Initialize graph
+        self.finalize_manual_graph()
+        print("    ✓ Graph initialized")
+        return self.get_graph()
+
     # ---------------------------------------------------------------------
     # Task-config-driven entrypoints
     # ---------------------------------------------------------------------
