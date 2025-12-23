@@ -92,7 +92,7 @@ class GraphBuilder:
         if callable(attach):
             attach(self.graph)
 
-    def create_manual_graph(self, name: str = "graph") -> Any:
+    def initiate_graph(self, name: str = "graph") -> Any:
         """
         Initialize an empty constraint graph for manual construction.
         
@@ -139,7 +139,7 @@ class GraphBuilder:
         """
         if self.graph is None:
             raise RuntimeError(
-                "Graph not initialized. Call create_manual_graph() first"
+                "Graph not initialized. Call initiate_graph() first"
             )
 
         if self.backend == "corba":
@@ -169,7 +169,7 @@ class GraphBuilder:
         """
         if self.graph is None:
             raise RuntimeError(
-                "Graph not initialized. Call create_manual_graph() first"
+                "Graph not initialized. Call initiate_graph() first"
             )
 
         if self.backend == "corba":
@@ -201,7 +201,7 @@ class GraphBuilder:
         """
         if self.graph is None:
             raise RuntimeError(
-                "Graph not initialized. Call create_manual_graph() first"
+                "Graph not initialized. Call initiate_graph() first"
             )
 
         # Verify states exist
@@ -445,7 +445,7 @@ class GraphBuilder:
 
         # Prepare valid factory inputs
         config = self._prepapre_factory_inputs(config)
-        
+
         # Set grippers
         self.factory.setGrippers(config.GRIPPERS)
         print(f"    \u2713 Set grippers: {config.GRIPPERS}")
@@ -679,7 +679,7 @@ class GraphBuilder:
         """
 
         task_cls = self._as_task_config(task)
-        self.create_manual_graph(name=name)
+        self.initiate_graph(name=name)
 
         # 1) Create constraints declared by the task.
         pyhpp_constraint_objects: Dict[str, Any] = {}
