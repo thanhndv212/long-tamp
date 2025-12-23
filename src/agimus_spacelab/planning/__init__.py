@@ -21,7 +21,7 @@ Usage:
 from .planner import create_planner, check_backend
 from .scene import SceneBuilder
 from .graph import GraphBuilder
-from .constraints import ConstraintBuilder
+from .constraints import ConstraintBuilder, FactoryConstraintRegistry
 from .config import ConfigGenerator
 
 
@@ -31,5 +31,6 @@ __all__ = [
     "SceneBuilder",
     "GraphBuilder",
     "ConstraintBuilder",
+    "FactoryConstraintRegistry",
     "ConfigGenerator",
 ]
