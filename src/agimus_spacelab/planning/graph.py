@@ -52,7 +52,7 @@ class GraphBuilder:
     Supports both manual graph construction (node by node, edge by edge) and
     factory-based automatic graph generation.
     """
-    
+
     def __init__(self, planner, robot, ps, backend: str = "corba"):
         """
         Initialize graph builder.
@@ -69,7 +69,7 @@ class GraphBuilder:
         self.backend = backend.lower()
         self.graph = None
         self.factory = None
-        
+
         # Track manually created states and edges
         self.states = {}  # name -> id
         self.edges = {}   # name -> id
@@ -91,7 +91,7 @@ class GraphBuilder:
         attach = getattr(self.ps, "constraintGraph", None)
         if callable(attach):
             attach(self.graph)
-        
+
     def create_manual_graph(self, name: str = "graph") -> Any:
         """
         Initialize an empty constraint graph for manual construction.
@@ -103,20 +103,20 @@ class GraphBuilder:
             ConstraintGraph or Graph instance
         """
         print(f"   Creating manual constraint graph: {name}")
-        
+
         if self.backend == "corba":
             if not HAS_CORBA_GRAPH:
                 raise ImportError("CORBA backend not available")
-            
+
             self.graph = ConstraintGraph(self.robot, "graph")
             self.ps.setMaxIterProjection(100)
             self.ps.setErrorThreshold(1e-4)
             print("   ✓ CORBA graph initialized (manual mode)")
-            
+
         else:  # pyhpp
             if not HAS_PYHPP_GRAPH:
                 raise ImportError("PyHPP backend not available")
-            
+
             self.graph = PyHPPGraph(name, self.robot, self.ps)
             self.graph.maxIterations(100)
             self.graph.errorThreshold(1e-4)
@@ -141,14 +141,14 @@ class GraphBuilder:
             raise RuntimeError(
                 "Graph not initialized. Call create_manual_graph() first"
             )
-        
+
         if self.backend == "corba":
             # CORBA uses createNode
             state_id = self.graph.createNode([name], is_waypoint)
         else:  # pyhpp
             # PyHPP uses createState
             state_id = self.graph.createState(name, is_waypoint, priority)
-        
+
         self.states[name] = state_id
         print(f"    ✓ State '{name}' created (ID: {state_id})")
         return state_id
@@ -203,13 +203,13 @@ class GraphBuilder:
             raise RuntimeError(
                 "Graph not initialized. Call create_manual_graph() first"
             )
-        
+
         # Verify states exist
         if from_state not in self.states:
             raise ValueError(f"Source state '{from_state}' not found")
         if to_state not in self.states:
             raise ValueError(f"Target state '{to_state}' not found")
-        
+
         if self.backend == "corba":
             # CORBA uses createEdge with state names
             edge_id = self.graph.createEdge(
@@ -224,7 +224,7 @@ class GraphBuilder:
             edge_id = self.graph.createTransition(
                 from_id, to_id, name, weight, containing_id
             )
-        
+
         self.edges[name] = edge_id
         self.edge_topology[name] = (from_state, to_state)
         print(f"    ✓ Edge '{name}': {from_state} → {to_state} "
@@ -342,10 +342,7 @@ class GraphBuilder:
         """
         if self.graph is None:
             raise RuntimeError("Graph not initialized")
-        
-        print(f"   Finalizing graph with {len(self.states)} states "
-              f"and {len(self.edges)} edges")
-        
+
         if self.backend == "corba":
             # CORBA graph initialization
             self.graph.initialize()
@@ -355,18 +352,55 @@ class GraphBuilder:
             self.graph.initialize()
             self._attach_graph_to_problem_if_supported()
             print("   ✓ PyHPP graph initialized")
-        
+
         return self.graph
+
+    def _prepapre_factory_inputs(self, config):
+        """Prepare and validate factory inputs from config.
+
+        Args:
+            grippers: List of gripper names
+            objects: List of object names
+            handles_per_object: List of handle lists, one per object
+            contact_surfaces_per_object: List of contact surface lists per
+                object (defaults to empty lists)
+            environment_contacts: List of environment contact surface names
+            rules: Optional list of Rule objects for graph generation
+            valid_pairs: Optional dict mapping gripper names to list of
+                valid handle names. Uses setPossibleGrasps to restrict
+                which gripper-handle pairs are allowed.
+        Returns:
+            Prepared config with defaults filled in."""
+
+        # grippers, objects, handles_per_object are required
+        if not config.GRIPPERS:
+            raise ValueError("At least one gripper required")
+        if not config.OBJECTS:
+            raise ValueError("At least one object required")
+        if len(config.HANDLES_PER_OBJECT) != len(config.OBJECTS):
+            raise ValueError(
+                "handles_per_object length must match objects length"
+            )
+        if config.CONTACT_SURFACES_PER_OBJECT is not None:
+            if len(config.CONTACT_SURFACES_PER_OBJECT) != len(
+                config.OBJECTS
+            ):
+                raise ValueError(
+                    "contact_surfaces_per_object length must match "
+                    "objects length"
+                )
+        else:
+            config.CONTACT_SURFACES_PER_OBJECT = [
+                [] for _ in config.OBJECTS
+            ]
+
+        if config.ENVIRONMENT_CONTACTS is None:
+            config.ENVIRONMENT_CONTACTS = []
+        return config
 
     def create_factory_graph(
         self,
-        grippers: List[str],
-        objects: List[str],
-        handles_per_object: List[List[str]],
-        contact_surfaces_per_object: Optional[List[List[str]]] = None,
-        environment_contacts: Optional[List[str]] = None,
-        rules: Optional[List] = None,
-        valid_pairs: Optional[Dict[str, List[str]]] = None,
+        config: BaseTaskConfig,
         pyhpp_constraints: Optional[Dict[str, Any]] = None,
     ) -> Any:
         """
@@ -389,72 +423,66 @@ class GraphBuilder:
         """
         print("    Using ConstraintGraphFactory for automatic graph "
               "generation")
-        
+
         # Backend-specific setup
         if self.backend == "corba":
             if not HAS_CORBA_GRAPH:
                 raise ImportError("CORBA backend not available")
-            
+
             # Create CORBA constraint graph
             self.graph = ConstraintGraph(self.robot, "graph")
             self.factory = ConstraintGraphFactory(self.graph)
-            
+
         else:  # pyhpp
             if not HAS_PYHPP_GRAPH:
                 raise ImportError("PyHPP backend not available")
-            
+
             # Create PyHPP constraint graph
             self.graph = PyHPPGraph("graph", self.robot, self.ps)
-            self.graph.maxIterations(10000)
-            self.graph.errorThreshold(1e-4)
-            # PyHPP factory can be provided a dict of already-available
-            # numerical constraints (name -> constraint object).
             self.factory = PyHPPConstraintGraphFactory(
                 self.graph, constraints=pyhpp_constraints or {}
             )
+
+        # Prepare valid factory inputs
+        config = self._prepapre_factory_inputs(config)
         
         # Set grippers
-        self.factory.setGrippers(grippers)
-        print(f"    \u2713 Set grippers: {grippers}")
-        
+        self.factory.setGrippers(config.GRIPPERS)
+        print(f"    \u2713 Set grippers: {config.GRIPPERS}")
+
         # Set objects with handles and contact surfaces
-        if contact_surfaces_per_object is None:
-            contact_surfaces_per_object = [[] for _ in objects]
         self.factory.setObjects(
-            objects, handles_per_object, contact_surfaces_per_object
+            config.OBJECTS, config.HANDLES_PER_OBJECT,
+            config.CONTACT_SURFACES_PER_OBJECT
         )
-        print(f"    \u2713 Set objects: {objects}")
-        
+        print(f"    \u2713 Set objects: {config.OBJECTS}")
+
         # Set environment contacts if provided
-        if environment_contacts:
-            self.factory.environmentContacts(environment_contacts)
+        if config.ENVIRONMENT_CONTACTS:
+            self.factory.environmentContacts(config.ENVIRONMENT_CONTACTS)
             print(f"    \u2713 Set environment contacts: "
-                  f"{environment_contacts}")
-        
+                  f"{config.ENVIRONMENT_CONTACTS}")
+
         # Set grasp restrictions
-        if rules is not None:
-            # Use explicitly provided rules
-            self.factory.setRules(rules)
+        if config.RULES is not None:
+            self.factory.setRules(config.RULES)
             print("    \u2713 Set custom rules")
-        elif valid_pairs is not None:
-            # Use setPossibleGrasps - more convenient than rules
-            # valid_pairs format: {gripper_name: [handle1, handle2, ...]}
-            self.factory.setPossibleGrasps(valid_pairs)
+        elif config.VALID_PAIRS is not None:
+            self.factory.setPossibleGrasps(config.VALID_PAIRS)
             print("    \u2713 Set possible grasps from valid_pairs")
-        # If neither rules nor valid_pairs, allow all (default behavior)
-        
+
         # Generate graph
         self.factory.generate()
         print("    \u2713 Generated graph structure")
-        
+
         # Initialize graph
         self.graph.initialize()
         self._attach_graph_to_problem_if_supported()
         print("    \u2713 Graph initialized")
-        
+
         # Store states and edges for tracking
         self._extract_factory_graph_structure()
-        
+
         # Print factory-generated nodes for reference
         print(f"    \u2139 Factory created {len(self.states)} nodes:")
         for node_name in list(self.states.keys()):
@@ -687,7 +715,7 @@ class GraphBuilder:
                 # CORBA graph has nodes and edges dictionaries
                 for node_name in self.graph.nodes.keys():
                     self.states[node_name] = node_name
-                
+
                 for edge_name in self.graph.edges.keys():
                     self.edges[edge_name] = edge_name
                     try:
@@ -701,7 +729,7 @@ class GraphBuilder:
                 if hasattr(self.graph, 'getStateNames'):
                     for state_name in self.graph.getStateNames():
                         self.states[state_name] = state_name
-                
+
                 if hasattr(self.graph, 'getTransitionNames'):
                     for edge_name in self.graph.getTransitionNames():
                         self.edges[edge_name] = edge_name
@@ -763,7 +791,7 @@ class GraphBuilder:
                             continue
         except Exception as e:
             print(f"    \u26a0 Could not extract graph structure: {e}")
-    
+
     def apply_state_constraints(
         self,
         state_name: str,
@@ -785,7 +813,7 @@ class GraphBuilder:
         """
         if self.graph is None:
             raise RuntimeError("Graph not initialized")
-        
+
         if self.backend == "corba":
             # CORBA uses applyNodeConstraints
             success, q_proj, error = self.graph.applyNodeConstraints(
@@ -796,34 +824,34 @@ class GraphBuilder:
             # Store current parameters
             old_max_iter = self.graph.maxIterations()
             old_error = self.graph.errorThreshold()
-            
+
             # Set temporary parameters
             self.graph.maxIterations(max_iterations)
             self.graph.errorThreshold(error_threshold)
-            
+
             # Apply constraints
             success, q_proj, error = self.graph.applyConstraints(
                 state_name, list(q)
             )
-            
+
             # Restore parameters
             self.graph.maxIterations(old_max_iter)
             self.graph.errorThreshold(old_error)
-        
+
         return success, q_proj, error
-    
+
     def get_graph(self) -> Any:
         """Get the constraint graph."""
         return self.graph
-    
+
     def get_states(self) -> Dict[str, int]:
         """Get dictionary of state names to IDs."""
         return self.states.copy()
-    
+
     def get_edges(self) -> Dict[str, int]:
         """Get dictionary of edge names to IDs."""
         return self.edges.copy()
-    
+
     def get_edge_topology(self) -> Dict[str, Tuple[str, str]]:
         """Get dictionary of edge names to (from, to) tuples."""
         return self.edge_topology.copy()
