@@ -52,7 +52,7 @@ The **heart of the formulation**. A directed graph where:
 - Implemented in edge.hh
 
 **Graph Structure:**
-```cpp
+```text
 Graph
 ├── StateSelector (determines which state a configuration belongs to)
 │   └── States (contact modes)

@@ -12,5 +12,12 @@ For *rendered* Markdown, install MyST and rebuild:
 
 Source:
 
-.. literalinclude:: HPP-Manipulation: Complete Motion Plan.md
-   :language: text
+.. only:: myst
+
+   .. include:: hpp_manipulation_complete_motion_plan.md
+      :parser: myst_parser.sphinx_
+
+.. only:: not myst
+
+   .. literalinclude:: hpp_manipulation_complete_motion_plan.md
+      :language: text

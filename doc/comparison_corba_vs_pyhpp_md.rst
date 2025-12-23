@@ -12,5 +12,12 @@ For *rendered* Markdown, install MyST and rebuild:
 
 Source:
 
-.. literalinclude:: comparison_corba_vs_pyhpp.md
-   :language: text
+.. only:: myst
+
+   .. include:: comparison_corba_vs_pyhpp.md
+      :parser: myst_parser.sphinx_
+
+.. only:: not myst
+
+   .. literalinclude:: comparison_corba_vs_pyhpp.md
+      :language: text

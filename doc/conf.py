@@ -106,8 +106,27 @@ exclude_patterns = [
     "*.md",
 ]
 
-# Note: Markdown files in this repo are embedded via .rst wrapper pages.
+# Markdown files in this repo are embedded via .rst wrapper pages.
 # We intentionally do not build .md files as standalone source documents.
+
+# Optional: render embedded Markdown with MyST when available.
+HAS_MYST = False
+try:
+    import myst_parser  # noqa: F401
+
+    HAS_MYST = True
+    extensions.append("myst_parser")
+except Exception:
+    HAS_MYST = False
+
+if HAS_MYST:
+    # Allow wrapper pages to conditionally use MyST features.
+    tags.add("myst")
+    # These docs include some MyST cross-reference roles that may not resolve
+    # when Markdown is embedded (not built as standalone pages).
+    suppress_warnings = [
+        "myst.xref_missing",
+    ]
 
 # Theme: prefer ReadTheDocs if installed, otherwise fall back to a built-in.
 try:

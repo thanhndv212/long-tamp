@@ -12,5 +12,12 @@ For *rendered* Markdown, install MyST and rebuild:
 
 Source:
 
-.. literalinclude:: IMPROVEMENT_PLAN.md
-   :language: text
+.. only:: myst
+
+   .. include:: IMPROVEMENT_PLAN.md
+      :parser: myst_parser.sphinx_
+
+.. only:: not myst
+
+   .. literalinclude:: IMPROVEMENT_PLAN.md
+      :language: text

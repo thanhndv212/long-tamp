@@ -12,5 +12,12 @@ If you want *rendered* Markdown (headings, links, tables), install MyST and rebu
 
 Source:
 
-.. literalinclude:: pyhpp_api_documentation.md
-   :language: text
+.. only:: myst
+
+   .. include:: pyhpp_api_documentation.md
+      :parser: myst_parser.sphinx_
+
+.. only:: not myst
+
+   .. literalinclude:: pyhpp_api_documentation.md
+      :language: text

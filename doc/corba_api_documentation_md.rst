@@ -12,5 +12,12 @@ For *rendered* Markdown, install MyST and rebuild:
 
 Source:
 
-.. literalinclude:: corba_api_documentation.md
-   :language: text
+.. only:: myst
+
+   .. include:: corba_api_documentation.md
+      :parser: myst_parser.sphinx_
+
+.. only:: not myst
+
+   .. literalinclude:: corba_api_documentation.md
+      :language: text
