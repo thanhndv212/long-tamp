@@ -139,11 +139,32 @@ class ManipulationTask:
         self.pyhpp_constraints = constraints
 
     def create_graph(self):
-        """
-        Create and configure the constraint graph.
-        Override in subclass.
-        """
-        raise NotImplementedError("Subclass must implement create_graph()")
+        """Create and configure constraint graph."""
+        # Backend-specific objects
+        if self.backend == "pyhpp":
+            robot = self.planner.get_robot()
+            problem = self.planner.get_problem()
+        else:
+            robot = self.robot
+            problem = self.ps
+
+        # Initialize GraphBuilder
+        self.graph_builder = GraphBuilder(
+            self.planner, robot, problem, backend=self.backend
+        )
+
+        if self.use_factory:
+            # Pass pre-registered constraints to factory (PyHPP uses them
+            # directly; CORBA already has them in the problem solver)
+            return self.graph_builder.create_factory_graph(
+                self.config,
+                pyhpp_constraints=self.pyhpp_constraints,
+            )
+        else:
+            return self.graph_builder.create_manual_graph(
+                self.config,
+                pyhpp_constraints=self.pyhpp_constraints,
+            )
 
     def setup_collision_management(self) -> None:
         """
