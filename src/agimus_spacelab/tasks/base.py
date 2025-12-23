@@ -18,7 +18,7 @@ class ManipulationTask:
     Provides common structure for task definition, constraint creation,
     graph building, and configuration management.
     """
-    
+
     def __init__(self, joint_bounds=None, FILE_PATHS: Optional[Dict[str, Any]] = None, task_name: str = "Manipulation Task", backend: str = "corba"):
         """
         Initialize manipulation task.
@@ -37,49 +37,27 @@ class ManipulationTask:
         self.ps = None
         self.graph = None
         self.config_gen = None
-    
+
+    def get_robot_names(self) -> List[str]:
+        return self.config.ROBOT_NAMES
+
+    def get_composite_names(self) -> List[str]:
+        return self.config.ROBOT_NAMES
+
+    def get_object_names(self) -> List[str]:
+        return self.config.OBJECTS
+
+    def get_environment_names(self) -> List[str]:
+        return self.config.ENVIRONMENT_NAMES
+
     def get_joint_groups(self) -> List[str]:
-        """
-        Define which joint groups to use for the robot.
-        Override in subclass.
-        """
-        raise NotImplementedError("Subclass must implement get_joint_groups()")
+        """Return joint groups from configuration."""
+        return self.config.ROBOTS
 
     def get_objects(self) -> List[str]:
-        """
-        Define which objects are needed for this task.
-        Override in subclass.
-        """
-        raise NotImplementedError("Subclass must implement get_objects()")
-    
-    def get_robot_names(self) -> List[str]:
-        """
-        Define robot names to load.
-        Override in subclass. Default: empty list.
-        """
-        return []
-    
-    def get_composite_names(self) -> List[str]:
-        """
-        Define composite robot names.
-        Override in subclass. Default: empty list.
-        """
-        return []
-    
-    def get_object_names(self) -> List[str]:
-        """
-        Define object names to load.
-        Override in subclass. Default: uses get_objects().
-        """
-        return self.get_objects()
-    
-    def get_environment_names(self) -> List[str]:
-        """
-        Define environment names to load.
-        Override in subclass. Default: empty list.
-        """
-        return []
-        
+        """Return list of objects from configuration."""
+        return self.config.OBJECTS
+
     def create_constraints(self) -> None:
         """
         Create all transformation constraints for the task.
@@ -88,21 +66,21 @@ class ManipulationTask:
         raise NotImplementedError(
             "Subclass must implement create_constraints()"
         )
-        
+
     def create_graph(self):
         """
         Create and configure the constraint graph.
         Override in subclass.
         """
         raise NotImplementedError("Subclass must implement create_graph()")
-        
+
     def setup_collision_management(self) -> None:
         """
         Configure collision checking (disable expected contacts, etc.).
         Override in subclass if needed.
         """
         pass
-        
+
     def build_initial_config(self) -> List[float]:
         """
         Build the initial configuration.
@@ -113,7 +91,7 @@ class ManipulationTask:
         q_robot = self.config_gen.build_robot_config(joint_groups)
         q_objects = self.config_gen.build_object_configs(objects)
         return q_robot + q_objects
-        
+
     def generate_configurations(
         self, q_init: List[float]
     ) -> Dict[str, List[float]]:
@@ -124,7 +102,7 @@ class ManipulationTask:
         raise NotImplementedError(
             "Subclass must implement generate_configurations()"
         )
-        
+
     def setup(self, validation_step: float = 0.01,
               projector_step: float = 0.1):
         """
@@ -137,7 +115,7 @@ class ManipulationTask:
         print("=" * 70)
         print(f"{self.task_name}")
         print("=" * 70)
-        
+
         # 1. Scene setup
         self.planner, self.robot, self.ps = self.scene_builder.build(
             robot_names=self.get_robot_names(),
@@ -147,25 +125,25 @@ class ManipulationTask:
             validation_step=validation_step,
             projector_step=projector_step
         )
-        
+
         # 2. Custom collision management
         self.setup_collision_management()
-        
+
         # 3. Create constraints
         print("\n2. Creating constraints...")
         self.create_constraints()
-        
+
         # 4. Create graph
         print("\n3. Creating constraint graph...")
         self.graph = self.create_graph()
-        
+
         # 5. Initialize configuration generator
         self.config_gen = ConfigGenerator(
             self.robot, self.graph, self.planner, self.ps, backend=self.backend
         )
-        
+
         print("\n   ✓ Task setup complete")
-        
+
     def run(self, visualize: bool = True,
             solve: bool = False,
             preferred_configs: List[str] = [],
@@ -184,12 +162,12 @@ class ManipulationTask:
         """
         if not self.graph:
             raise RuntimeError("Must call setup() before run()")
-            
+
         # 4. Generate configurations
         print("\n4. Generating configurations...")
         q_init = self.build_initial_config()
         configs = self.generate_configurations(q_init)
-        
+
         # 5. Visualize
         if visualize:
             print("\n5. Starting visualization...")
@@ -198,7 +176,7 @@ class ManipulationTask:
                 print("   ✓ Initial configuration displayed")
             except Exception as e:
                 print(f"   ⚠ Visualization failed: {e}")
-                
+
         # 6. Solve
         if solve and "q_goal" in configs:
             print("\n6. Solving planning problem...")
@@ -324,7 +302,7 @@ class ManipulationTask:
                         print("   ✓ Planning successful")
                     else:
                         print("   ⚠ Planning failed")
-                    
+
                     if success and visualize:
                         print("\n7. Playing solution path...")
                         try:
@@ -376,7 +354,7 @@ class ManipulationTask:
                             print(f"   ⚠ Path playback failed: {e}")
             finally:
                 _restore_joint_bounds(restore)
-                
+
         return {
             "configs": configs,
             "planner": self.planner,
