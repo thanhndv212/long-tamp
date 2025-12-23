@@ -9,7 +9,14 @@ from typing import List, Dict, Any, Optional, Tuple
 
 import re
 
-from agimus_spacelab.planning import SceneBuilder, ConfigGenerator
+from agimus_spacelab.planning import (
+    SceneBuilder,
+    ConfigGenerator,
+    GraphBuilder,
+    ConstraintBuilder,
+    FactoryConstraintRegistry
+)
+
 
 class ManipulationTask:
     """
@@ -59,13 +66,77 @@ class ManipulationTask:
         return self.config.OBJECTS
 
     def create_constraints(self) -> None:
+        """Create all transformation constraints for both backends.
+
+        In factory mode, uses FactoryConstraintRegistry to create constraints
+        with factory naming conventions:
+        - Grasp: "{gripper} grasps {handle}"
+        - Placement: "place_{object}"
+        - Complement: "{base}/complement"
+
+        For CORBA, they're stored in the problem solver.
+        For PyHPP, they're stored in self.pyhpp_constraints and passed to
+        the factory constructor.
         """
-        Create all transformation constraints for the task.
-        Override in subclass.
-        """
-        raise NotImplementedError(
-            "Subclass must implement create_constraints()"
+        cfg = self.config
+
+        # Get robot reference (differs by backend)
+        robot = (
+            self.planner.get_robot() if self.backend == "pyhpp" else self.robot
         )
+
+        if self.use_factory:
+            print("    Registering constraints for factory mode...")
+            self._create_factory_constraints(robot)
+        else:
+            print("    Creating constraints manually...")
+            self._create_manual_constraints(robot)
+
+        print("   ✓ Created transformation constraints")
+
+    def _create_factory_constraints(self, robot) -> None:
+        """Create constraints with factory naming using FactoryConstraintRegistry.
+
+        Uses constraint definitions from config but registers them with
+        factory naming conventions.
+        """
+        cfg = self.config
+
+        # Use FactoryConstraintRegistry for proper factory naming
+        registry = FactoryConstraintRegistry(
+            self.ps, robot=robot, backend=self.backend
+        )
+
+        # Get constraint definitions from config
+        constraint_defs = cfg.get_constraint_defs()
+
+        # Object name for placement constraints (e.g., "frame_gripper")
+        obj_name = cfg.TOOL_NAME
+
+        # Register all constraints with factory naming
+        # Maps user names -> factory names
+        self._constraint_name_map = registry.register_from_defs(
+            constraint_defs, obj_name
+        )
+
+        # Store for PyHPP graph building
+        self.pyhpp_constraints = registry.get_factory_constraints_arg()
+
+    def _create_manual_constraints(self, robot) -> None:
+        """Create constraints with custom naming (manual mode)."""
+        cfg = self.config
+        cb = ConstraintBuilder
+
+        # Get constraint definitions from config
+        constraint_defs = cfg.get_constraint_defs()
+
+        # Create all constraints from definitions
+        constraints = cb.create_constraints_from_defs(
+            self.ps, constraint_defs, robot=robot, backend=self.backend
+        )
+
+        # Store for PyHPP graph building
+        self.pyhpp_constraints = constraints
 
     def create_graph(self):
         """
