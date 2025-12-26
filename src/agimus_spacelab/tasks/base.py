@@ -26,7 +26,13 @@ class ManipulationTask:
     graph building, and configuration management.
     """
 
-    def __init__(self, joint_bounds=None, FILE_PATHS: Optional[Dict[str, Any]] = None, task_name: str = "Manipulation Task", backend: str = "corba"):
+    def __init__(
+        self,
+        joint_bounds=None,
+        FILE_PATHS: Optional[Dict[str, Any]] = None,
+        task_name: str = "Manipulation Task",
+        backend: str = "corba",
+    ):
         """
         Initialize manipulation task.
         
@@ -36,9 +42,11 @@ class ManipulationTask:
         """
         self.task_name = task_name
         self.backend = backend.lower()
-        self.scene_builder = SceneBuilder(joint_bounds=joint_bounds,
-                                          FILE_PATHS=FILE_PATHS,
-                                          backend=backend)
+        self.scene_builder = SceneBuilder(
+            joint_bounds=joint_bounds,
+            FILE_PATHS=FILE_PATHS,
+            backend=backend,
+        )
         self.planner = None
         self.robot = None
         self.ps = None

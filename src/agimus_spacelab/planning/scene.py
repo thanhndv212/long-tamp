@@ -31,8 +31,13 @@ class SceneBuilder:
     Handles loading robots, environment, objects, and configuring collision checking.
     """
     
-    def __init__(self, joint_bounds=None, FILE_PATHS: Optional[Dict[str, Any]] = None, planner: Optional[Any] = None,
-                 backend: str = "corba"):
+    def __init__(
+        self,
+        joint_bounds=None,
+        FILE_PATHS: Optional[Dict[str, Any]] = None,
+        planner: Optional[Any] = None,
+        backend: str = "corba",
+    ):
         """
         Initialize scene builder.
         
