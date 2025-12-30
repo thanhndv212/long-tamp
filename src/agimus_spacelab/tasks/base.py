@@ -52,26 +52,29 @@ class ManipulationTask:
         self.ps = None
         self.graph = None
         self.config_gen = None
+        self.task_config = None
+        self.use_factory = False
+        self.pyhpp_constraints = {}
 
     def get_robot_names(self) -> List[str]:
-        return self.config.ROBOT_NAMES
+        return self.task_config.ROBOT_NAMES
 
     def get_composite_names(self) -> List[str]:
-        return self.config.ROBOT_NAMES
+        return self.task_config.ROBOT_NAMES
 
     def get_object_names(self) -> List[str]:
-        return self.config.OBJECTS
+        return self.task_config.OBJECTS
 
     def get_environment_names(self) -> List[str]:
-        return self.config.ENVIRONMENT_NAMES
+        return self.task_config.ENVIRONMENT_NAMES
 
     def get_joint_groups(self) -> List[str]:
         """Return joint groups from configuration."""
-        return self.config.ROBOTS
+        return self.task_config.ROBOTS
 
     def get_objects(self) -> List[str]:
         """Return list of objects from configuration."""
-        return self.config.OBJECTS
+        return self.task_config.OBJECTS
 
     def create_constraints(self) -> None:
         """Create all transformation constraints for both backends.
@@ -102,7 +105,7 @@ class ManipulationTask:
         Uses constraint definitions from config but registers them with
         factory naming conventions.
         """
-        cfg = self.config
+        cfg = self.task_config
 
         # Use FactoryConstraintRegistry for proper factory naming
         registry = FactoryConstraintRegistry(
@@ -126,7 +129,7 @@ class ManipulationTask:
 
     def _create_manual_constraints(self, robot) -> None:
         """Create constraints with custom naming (manual mode)."""
-        cfg = self.config
+        cfg = self.task_config
         cb = ConstraintBuilder
 
         # Get constraint definitions from config
@@ -154,12 +157,12 @@ class ManipulationTask:
             # Pass pre-registered constraints to factory (PyHPP uses them
             # directly; CORBA already has them in the problem solver)
             return self.graph_builder.create_factory_graph(
-                self.config,
+                self.task_config,
                 pyhpp_constraints=self.pyhpp_constraints,
             )
         else:
             return self.graph_builder.create_manual_graph(
-                self.config,
+                self.task_config,
                 pyhpp_constraints=self.pyhpp_constraints,
             )
 
