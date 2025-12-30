@@ -213,30 +213,6 @@ class BackendBase(ABC):
     # =========================================================================
     
     @abstractmethod
-    def create_constraint_graph(
-        self,
-        name: str,
-        grippers: List[str],
-        objects: Dict[str, Dict],
-        rules: str = "auto",
-        **kwargs
-    ) -> Any:
-        """Create constraint graph for manipulation.
-        
-        Args:
-            name: Name for the constraint graph
-            grippers: List of gripper names
-            objects: Dict mapping object names to their config:
-                     {"obj_name": {"handles": [...], "contact_surfaces": [...]}}
-            rules: Rule generation strategy ("auto", "all", or custom)
-            **kwargs: Backend-specific options
-            
-        Returns:
-            Backend-specific constraint graph object
-        """
-        pass
-    
-    @abstractmethod
     def create_state(
         self,
         name: str,

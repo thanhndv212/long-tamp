@@ -4,7 +4,7 @@ CORBA backend implementation for manipulation planning.
 This backend uses hpp-manipulation-corba for communication with HPP.
 """
 
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, List, Optional
 import numpy as np
 from ..utils import parse_package_uri
 from .base import BackendBase, ConstraintResult
@@ -14,10 +14,7 @@ try:
     from hpp.corbaserver import loadServerPlugin
     from hpp.corbaserver.manipulation import (
         Client,
-        ConstraintGraph,
-        ConstraintGraphFactory,
         ProblemSolver,
-        Rule,
     )
     from hpp.corbaserver.manipulation.robot import Robot as ParentRobot
     from hpp.gepetto import PathPlayer
@@ -25,8 +22,6 @@ try:
     HAS_CORBA = True
 except ImportError:
     HAS_CORBA = False
-    if TYPE_CHECKING:
-        from hpp.corbaserver.manipulation import ConstraintGraph
 
 
 class CorbaBackend(BackendBase):
@@ -239,97 +234,6 @@ class CorbaBackend(BackendBase):
             self.ps.addGoalConfig(q)
         else:
             self.ps.addGoalConfig(q.tolist())
-    
-    def create_constraint_graph(
-        self,
-        name: str,
-        grippers: List[str],
-        objects: Dict[str, Dict],
-        rules: str = "auto",
-        **kwargs
-    ) -> ConstraintGraph:
-        """Create constraint graph using CORBA."""
-        self.graph = ConstraintGraph(self.robot, name)
-        self.factory = ConstraintGraphFactory(self.graph)
-        
-        # Configure factory
-        self.factory.setGrippers(grippers)
-        
-        # Prepare object data
-        object_names = list(objects.keys())
-        handles_per_object = [
-            objects[obj]["handles"] for obj in object_names
-        ]
-        surfaces_per_object = [
-            objects[obj].get("contact_surfaces", [])
-            for obj in object_names
-        ]
-        
-        self.factory.setObjects(
-            object_names,
-            handles_per_object,
-            surfaces_per_object
-        )
-        
-        # Generate rules based on strategy
-        if rules == "all":
-            rule_list = [Rule([".*"], [".*"], True)]
-        else:
-            # Auto rules from valid pairs
-            rule_list = self._generate_auto_rules(grippers, objects)
-        
-        self.factory.setRules(rule_list)
-        self.factory.generate()
-        
-        self.graph.initialize()
-        
-        return self.graph
-    
-    def _generate_auto_rules(
-        self,
-        grippers: List[str],
-        objects: Dict[str, Dict]
-    ) -> List[Rule]:
-        """Generate rules automatically."""
-        # Note: ManipulationConfig should be passed from outside
-        # This is a fallback for backward compatibility
-        try:
-            import sys
-            from pathlib import Path
-            config_dir = (
-                Path(__file__).parent.parent.parent.parent.parent / "config"
-            )
-            sys.path.insert(0, str(config_dir))
-            from spacelab_config import ManipulationConfig
-        except ImportError:
-            raise ImportError(
-                "ManipulationConfig not found. Please provide "
-                "valid_pairs parameter or ensure spacelab_config.py "
-                "is in the config directory."
-            )
-        
-        rules = []
-        valid_pairs = ManipulationConfig.VALID_PAIRS
-        
-        for gripper_key, gripper_name in enumerate(grippers):
-            # Get short name from full path
-            gripper_short = gripper_name.split("/")[-1]
-            
-            # Find matching key in valid_pairs
-            matching_key = None
-            for key in valid_pairs:
-                if gripper_short in key or key in gripper_name:
-                    matching_key = key
-                    break
-            
-            if matching_key:
-                allowed_handles = valid_pairs[matching_key]
-                for handle in allowed_handles:
-                    rules.append(
-                        Rule([gripper_name], [handle], True)
-                    )
-        
-        return rules
 
     def create_state(
         self,
@@ -568,6 +472,7 @@ class CorbaBackend(BackendBase):
         self.ps.selectPathProjector("Progressive", projector_step)
         # self.ps.selectSteeringMethod("ReedsShepp")
         # self.ps.selectPathPlanner("DiffusingPlanner")
+
     def configure_path_optimization(
         self,
         num_loops: int = 50,
@@ -593,6 +498,7 @@ class CorbaBackend(BackendBase):
         # self.ps.setParameter(
         #     "SteeringMethod/Kinodynamic/maxIterations", max_iterations
         # )
+
 
 # Alias for backward compatibility
 CorbaManipulationPlanner = CorbaBackend

@@ -199,40 +199,6 @@ class PyHPPBackend(BackendBase):
             q = np.array(q)
         self.problem.addGoalConfig(q)
 
-    def create_constraint_graph(
-        self,
-        name: str,
-        grippers: List[str],
-        objects: Dict[str, Dict],
-        rules: str = "auto",
-        **kwargs
-    ) -> "Graph":
-        """Create constraint graph using PyHPP."""
-        if self.problem is None:
-            raise RuntimeError("Must create problem first")
-
-        # Note: PyHPP requires manual graph construction
-        # This is a simplified version
-        self.graph = Graph(name, self.device, self.problem)
-
-        # Create basic states
-        _ = self.graph.createState("free", False, 0)  # free_state created but not used
-
-        # For each object, create grasp states
-        for obj_name in objects:
-            state_name = f"grasp_{obj_name}"
-            self.graph.createState(state_name, False, 0)
-
-        # Initialize graph
-        self.graph.maxIterations(100)
-        self.graph.errorThreshold(1e-5)
-        self.graph.initialize()
-
-        # Set graph in problem
-        self.problem.constraintGraph(self.graph)
-
-        return self.graph
-
     def create_state(
         self,
         name: str,
