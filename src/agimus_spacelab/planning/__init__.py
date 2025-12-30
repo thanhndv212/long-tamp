@@ -22,7 +22,7 @@ from .planner import create_planner, check_backend
 from .scene import SceneBuilder
 from .graph import GraphBuilder
 from .constraints import ConstraintBuilder, FactoryConstraintRegistry
-from .config import ConfigGenerator
+from .config import ConfigGenerator, bfs_edge_path, freeze_joints_by_substrings
 
 
 __all__ = [
@@ -33,4 +33,6 @@ __all__ = [
     "ConstraintBuilder",
     "FactoryConstraintRegistry",
     "ConfigGenerator",
+    "bfs_edge_path",
+    "freeze_joints_by_substrings",
 ]

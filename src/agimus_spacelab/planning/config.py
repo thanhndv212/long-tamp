@@ -5,7 +5,8 @@ Configuration generation and management for manipulation tasks.
 Provides ConfigGenerator for generating and validating configurations.
 """
 
-from typing import List, Tuple, Optional
+from collections import deque
+from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 # Import from package config
@@ -16,6 +17,105 @@ try:
     from agimus_spacelab.utils import xyzrpy_to_xyzquat
 except ImportError:
     xyzrpy_to_xyzquat = None
+
+
+def bfs_edge_path(
+    start_state: str,
+    goal_state: str,
+    edge_topology: Dict[str, Tuple[str, str]],
+) -> List[str]:
+    """Find a directed edge-name path from start_state to goal_state.
+
+    Args:
+        start_state: Source state name.
+        goal_state: Target state name.
+        edge_topology: Mapping edge_name -> (src_state, dst_state)
+
+    Returns:
+        List of edge names forming a path. Empty if no path exists.
+    """
+
+    adjacency: Dict[str, List[Tuple[str, str]]] = {}
+    for edge_name, (src, dst) in edge_topology.items():
+        adjacency.setdefault(src, []).append((dst, edge_name))
+
+    queue: deque[str] = deque([start_state])
+    prev_state: Dict[str, str] = {}
+    prev_edge: Dict[str, str] = {}
+    visited = {start_state}
+
+    while queue:
+        state = queue.popleft()
+        if state == goal_state:
+            break
+        for nxt, edge_name in adjacency.get(state, []):
+            if nxt in visited:
+                continue
+            visited.add(nxt)
+            prev_state[nxt] = state
+            prev_edge[nxt] = edge_name
+            queue.append(nxt)
+
+    if goal_state not in visited:
+        return []
+
+    edges: List[str] = []
+    cur = goal_state
+    while cur != start_state:
+        edges.append(prev_edge[cur])
+        cur = prev_state[cur]
+    edges.reverse()
+    return edges
+
+
+def freeze_joints_by_substrings(
+    robot,
+    q: List[float],
+    q_ref: List[float],
+    joint_substrings: List[str],
+    *,
+    backend: str = "corba",
+) -> List[float]:
+    """Keep joint values constant for joints whose names match substrings.
+
+    Intended use: tasks that do not use some robot groups (e.g. VISPA arms)
+    can keep them fixed during projection/shooting to avoid drift.
+
+    Notes:
+    - This is a no-op for non-CORBA backends.
+    - The CORBA robot API is expected to provide `getJointNames()`,
+      `rankInConfiguration[...]`, `getJointConfigSize(name)`.
+    """
+
+    if backend.lower() != "corba":
+        return q
+    if robot is None:
+        return q
+    if not joint_substrings:
+        return list(q)
+
+    q_out = list(q)
+
+    try:
+        joint_names = robot.getJointNames()
+    except Exception:
+        return q_out
+
+    for joint in joint_names:
+        if not any(s in joint for s in joint_substrings):
+            continue
+        try:
+            rank = robot.rankInConfiguration[joint]
+            size = robot.getJointConfigSize(joint)
+        except Exception:
+            continue
+        if size <= 0:
+            continue
+        if rank + size > len(q_out) or rank + size > len(q_ref):
+            continue
+        q_out[rank : rank + size] = q_ref[rank : rank + size]
+
+    return q_out
 
 
 class ConfigGenerator:
