@@ -86,13 +86,7 @@ class ManipulationTask:
         For PyHPP, they're stored in self.pyhpp_constraints and passed to
         the factory constructor.
         """
-        cfg = self.config
-
-        # Get robot reference (differs by backend)
-        robot = (
-            self.planner.get_robot() if self.backend == "pyhpp" else self.robot
-        )
-
+        robot = self.robot
         if self.use_factory:
             print("    Registering constraints for factory mode...")
             self._create_factory_constraints(robot)
@@ -148,13 +142,8 @@ class ManipulationTask:
 
     def create_graph(self):
         """Create and configure constraint graph."""
-        # Backend-specific objects
-        if self.backend == "pyhpp":
-            robot = self.planner.get_robot()
-            problem = self.planner.get_problem()
-        else:
-            robot = self.robot
-            problem = self.ps
+        robot = self.robot
+        problem = self.ps
 
         # Initialize GraphBuilder
         self.graph_builder = GraphBuilder(
