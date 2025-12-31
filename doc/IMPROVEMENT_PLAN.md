@@ -1,3 +1,164 @@
+# Agimus SpaceLab: Improvement Plan (Verified + Updated)
+
+**Last updated:** 2025-12-30  
+**Scope:** `agimus_spacelab` (task orchestration + HPP manipulation planning integration)  
+**Goal:** Make the package reliably usable for real manipulation planning workflows (CORBA + PyHPP) with clear extension points, tests, and docs.
+
+---
+
+## 1) Current Status (Verified in this repo)
+
+This section is based on what exists under `src/agimus_spacelab/src/agimus_spacelab/`.
+
+### Implemented building blocks
+
+- **Task orchestration framework**
+  - `AtomicTask`, `TaskBuilder`, `TaskOrchestrator` exist in `agimus_spacelab/tasks/orchestration.py`.
+  - Dependency management + resource gating are present (basic, single-process).
+
+- **Planning foundations (backend-agnostic APIs)**
+  - `SceneBuilder`, `ConstraintBuilder`, `GraphBuilder`, `ConfigGenerator` exist under `agimus_spacelab/planning/`.
+  - `GraphBuilder` supports:
+    - **Factory-based** graph generation (`create_factory_graph`) for CORBA and PyHPP.
+    - **Manual** graph generation (`create_manual_graph`) driven by declarative config.
+
+- **Backends**
+  - CORBA backend exists in `agimus_spacelab/backends/corba.py`.
+  - PyHPP backend exists in `agimus_spacelab/backends/pyhpp.py`.
+  - The high-level planner factory exists in `agimus_spacelab/planning/planner.py`.
+
+- **Planning bridge (orchestrator → planner)**
+  - A bridge exists in `agimus_spacelab/tasks/bridge.py`:
+    - `PlanningBridge` + convenience `create_grasp_task` / `create_place_task`.
+    - `ManipulationPlannerBridge` is an alias for backward-compat.
+
+- **Docs tooling**
+  - Sphinx documentation exists under `doc/` and has been made resilient to missing optional deps (builds cleanly in the container environment).
+
+### Verified gaps / issues
+
+- **Behavior tree layer is not implemented**
+  - No BT library usage (e.g. `py_trees`) is present in the source tree.
+
+- **Bridge correctness is incomplete**
+  - `PlanningContext.constraints_satisfied` is never set to `True` in `PlanningBridge`, so the final `success` condition can never be satisfied.
+  - `PlanningBridge` currently reports PyHPP path building as “not yet implemented”.
+  - The bridge currently mixes several backend-specific concepts (edge retrieval + path building) and needs a clearer execution contract.
+
+- **CORBA boundary type safety is partially addressed**
+  - `ConfigGenerator.generate_via_edge` converts numpy arrays to Python sequences before calling CORBA stubs.
+  - The codebase still needs a systematic audit to ensure *all* CORBA calls receive `list`/`tuple` (not `numpy.ndarray`).
+
+- **No explicit “graph pattern library” module**
+  - The previous plan referenced a `graph_patterns.py`. That file does not exist.
+  - Instead, `GraphBuilder` + task config classes already provide most of the intended structure; the missing part is higher-level “task templates/presets”.
+
+- **Test coverage is limited**
+  - There is a `tests/` folder, but end-to-end planning + orchestration tests are not clearly established as a stable baseline.
+
+---
+
+## 2) Target Architecture (Minimal, realistic)
+
+The existing 3-layer concept is already present. The goal is to make the boundaries explicit and reliable.
+
+1. **Planning layer** (`agimus_spacelab/planning/*`, `agimus_spacelab/backends/*`)
+2. **Task layer** (`agimus_spacelab/tasks/*`)
+3. **(Optional) Reactive execution layer** (Behavior Tree or similar)
+
+Key principle: **backend differences should be contained** in the planning layer and small adapter utilities, not spread through tasks.
+
+---
+
+## 3) Roadmap (Prioritized)
+
+### Phase A — Make the bridge reliable (1–2 weeks)
+
+**A1. Fix `PlanningBridge` success semantics**
+- Set `PlanningContext.constraints_satisfied` based on real checks (projection + constraint application + optional validation report).
+- Ensure the bridge returns `True` on a genuinely usable path (and `False` otherwise).
+
+**A2. Define an explicit “execution result” contract**
+- Standardize what an AtomicTask returns/stores:
+  - planned path (or serialized path id)
+  - planning time
+  - failure reason (string/enum)
+
+**A3. Centralize CORBA conversion utilities**
+- Add a tiny utility (e.g. `agimus_spacelab/utils/corba_types.py`) with helpers like:
+  - `as_corba_seq(x) -> list[float]`
+  - `as_numpy(x) -> np.ndarray`
+- Replace scattered ad-hoc conversions with the helper to prevent regressions.
+
+**A4. Add a smoke-test example**
+- Provide one minimal example script that:
+  - creates a `ManipulationTask`
+  - builds a graph
+  - builds an `AtomicTask` via `create_grasp_task`
+  - runs the orchestrator
+
+Deliverable: “bridge works for CORBA grasp task end-to-end” (in the container).
+
+### Phase B — PyHPP parity where it matters (2–4 weeks)
+
+**B1. Implement PyHPP path building in `PlanningBridge`**
+- Implement the equivalent of “build path on transition” for PyHPP.
+- Keep it behind a backend abstraction if needed (bridge should not need to know how a path is built).
+
+**B2. Make factory-graph + planning a first-class path**
+- The code already supports factory graphs; make sure the default task configs and examples use it.
+
+Deliverable: “same task can run on CORBA and PyHPP with only backend switch”.
+
+### Phase C — Task templates instead of a separate ‘pattern library’ (4–8 weeks)
+
+Rather than a new `graph_patterns.py`, prefer **task-config templates** that use the existing `GraphBuilder` + factory mechanism.
+
+**C1. Provide reusable task configs**
+- Grasp
+- Place
+- Pick-and-place
+- (Optional) handover (multi-arm)
+
+**C2. Define naming conventions + invariants**
+- Standard state/edge naming across tasks so the bridge can remain simple.
+
+Deliverable: reusable “scenario configs” that consistently generate graphs.
+
+### Phase D — Optional behavior tree integration (only after A–C) (8–12+ weeks)
+
+Behavior trees add dependencies and complexity; only do this once the base bridge is stable.
+
+**D1. Decide on BT dependency strategy**
+- Option 1: Optional dependency (`py_trees`) and keep the core package BT-free.
+- Option 2: Separate package `agimus_spacelab_bt`.
+
+**D2. Minimal BT nodes**
+- `PlanMotion` (wraps bridge)
+- `ExecuteTrajectory` (if execution is part of this stack)
+- `RetryWithNewSeed` (planning failure recovery)
+
+Deliverable: one reactive demo that can recover from planning failures.
+
+---
+
+## 4) Risks / Known Technical Debt
+
+- **CORBA stub type strictness**: omniORB requires Python sequences; numpy arrays will intermittently crash calls.
+- **Backend drift**: CORBA and PyHPP will diverge unless tested with the same scenarios.
+- **Edge/path API differences**: keep backend-specific logic in the planning layer.
+
+---
+
+## 5) Definition of Done (for this plan)
+
+- One manipulation scenario can be executed via `TaskOrchestrator` using the bridge.
+- The scenario runs on CORBA and PyHPP (or PyHPP is explicitly documented as “partial” with clear missing pieces).
+- CI (or at least container-local) has a smoke test that prevents regressions.
+- Docs describe:
+  - how to run the demo
+  - backend requirements
+  - typical failure modes and fixes (including numpy→list CORBA conversion).
 # Agimus SpaceLab: Comprehensive Improvement Plan
 
 **Date:** December 3, 2025  
