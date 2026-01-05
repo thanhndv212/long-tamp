@@ -181,7 +181,8 @@ class ConfigGenerator:
 
     def project_on_node(
         self, node_name: str, q: List[float],
-        config_label: Optional[str] = None
+        config_label: Optional[str] = None,
+        verbose: bool = True
     ) -> Tuple[bool, List[float]]:
         """
         Project configuration onto node constraints.
@@ -190,10 +191,13 @@ class ConfigGenerator:
             node_name: Name of the graph node
             q: Configuration to project
             config_label: Optional label to store result
+            verbose: Print progress messages
             
         Returns:
             Tuple of (success, projected_config)
         """
+        last_err = None
+        last_valid_err = None
         for attempt in range(self.max_attempts):
             if self.backend == "corba":
                 res, q_proj, err = self.graph.applyNodeConstraints(
@@ -201,6 +205,7 @@ class ConfigGenerator:
                 )
                 success = res
                 config = q_proj
+                last_err = err
             else:  # pyhpp
                 # PyHPP bindings expect a State object (not a state name).
                 q_arr = np.array(q) if not isinstance(q, np.ndarray) else q
@@ -232,30 +237,23 @@ class ConfigGenerator:
                 )
                 success = res
                 config = q_proj.tolist() if success else None
+                last_err = err
             if success:
-                # Validate the projected configuration
-                is_valid, err_msg = self.is_config_valid(config)
+                is_valid, valid_err = self.is_config_valid(config)
                 if is_valid:
                     if config_label:
                         self.configs[config_label] = config
                         print(f"       ✓ {config_label} projected onto "
                               f"'{node_name}' after {attempt + 1} attempts")
                     return True, config
-                else:
-                    if (attempt + 1) % 200 == 0:
-                        print(f"       Projected config invalid: {err_msg}, "
-                              f"attempt {attempt + 1}/{self.max_attempts}...")
-                    continue
-            else:
-                if (attempt + 1) % 200 == 0:
-                    print(f"       Projection failed, "
-                          f"attempt {attempt + 1}/{self.max_attempts}...")
-                continue
+                last_valid_err = valid_err
 
         # All attempts failed
         if config_label:
             self.configs[config_label] = list(q)
-            print(f"       ⚠ Projection failed after {self.max_attempts} attempts")
+            if verbose:
+                print(f"       ⚠ proj failed: {node_name} "
+                      f"({last_valid_err or last_err or 'unknown'})")
 
         return False, list(q)
 
@@ -276,6 +274,8 @@ class ConfigGenerator:
         Returns:
             Tuple of (success, generated_config or None)
         """
+        last_err = None
+        last_valid_err = None
         for i in range(self.max_attempts):
             # Generate random config
             if self.backend == "corba":
@@ -299,6 +299,7 @@ class ConfigGenerator:
                 )
                 success = res
                 config = q_target
+                last_err = err
             else:  # pyhpp
                 q_rand = self.planner.random_config()
                 q_from_arr = np.array(q_from) if not isinstance(
@@ -325,13 +326,11 @@ class ConfigGenerator:
                     )
                 success = res
                 config = q_target.tolist() if success else None
+                last_err = err
             if success:
-                # Validate the generated configuration
-                is_valid, err_msg = self.is_config_valid(config)
+                is_valid, valid_err = self.is_config_valid(config)
                 if not is_valid:
-                    # Config generated but invalid, continue trying
-                    if verbose and (i + 1) % 200 == 0:
-                        print(f"       Config invalid: {err_msg}, retrying...")
+                    last_valid_err = valid_err
                     continue
 
                 if config_label:
@@ -340,11 +339,9 @@ class ConfigGenerator:
                           f"'{edge_name}' after {i + 1} attempts")
                 return True, config
 
-            if verbose and (i + 1) % 200 == 0:
-                print(f"       Attempt {i + 1}/{self.max_attempts}...")
-
-        if config_label:
-            print(f"       ⚠ Failed after {self.max_attempts} attempts")
+        if config_label and verbose:
+            print(f"       ⚠ gen failed: {edge_name} "
+                  f"({last_valid_err or last_err or 'unknown'})")
         return False, None
 
     def build_robot_config(
