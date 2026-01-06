@@ -347,6 +347,91 @@ class ConstraintBuilder:
 
         return constraints
 
+    @staticmethod
+    def create_locked_joint_constraints(
+        ps,
+        robot,
+        q_ref: List[float],
+        patterns: List[str],
+    ) -> tuple:
+        """Create locked joint constraints for freezing joints.
+
+        Uses ps.createLockedJoint like in tiago_hpp.py example.
+        Locks joints whose names contain any of the given pattern substrings.
+
+        Args:
+            ps: Problem solver instance
+            robot: Robot instance with getJointNames(), getJointConfigSize(),
+                and rankInConfiguration
+            q_ref: Reference configuration to extract joint values from
+            patterns: List of substrings to match against joint names
+                (case-insensitive)
+
+        Returns:
+            Tuple of (constraint_names, joint_names):
+            - constraint_names: List of created constraint names
+            - joint_names: List of joint names that were locked
+
+        Example:
+            # Lock all gripper joints
+            names, joints = ConstraintBuilder.create_locked_joint_constraints(
+                ps, robot, q_init, ["gripper"]
+            )
+        """
+        if not patterns:
+            return [], []
+
+        if robot is None or ps is None:
+            return [], []
+
+        # Check for required methods
+        get_joint_names = getattr(robot, "getJointNames", None)
+        get_size = getattr(robot, "getJointConfigSize", None)
+        rank_map = getattr(robot, "rankInConfiguration", None)
+        create_locked = getattr(ps, "createLockedJoint", None)
+        set_rhs = getattr(ps, "setConstantRightHandSide", None)
+
+        all_required = [get_joint_names, get_size, create_locked]
+        if not all(callable(f) for f in all_required):
+            return [], []
+        if rank_map is None:
+            return [], []
+
+        patterns_l = [p.lower() for p in patterns]
+        constraint_names: List[str] = []
+        frozen_names: List[str] = []
+
+        for jn in get_joint_names():
+            jn_l = jn.lower()
+            if not any(p in jn_l for p in patterns_l):
+                continue
+            try:
+                size = int(get_size(jn))
+                rank = int(rank_map[jn])
+            except Exception:
+                continue
+            if size <= 0 or rank < 0 or rank + size > len(q_ref):
+                continue
+
+            # Extract joint values from reference config
+            values = [float(q_ref[rank + k]) for k in range(size)]
+
+            # Create locked joint constraint
+            constraint_name = f"locked_{jn}"
+            try:
+                create_locked(constraint_name, jn, values)
+                # Make RHS non-constant so it can be updated if needed
+                if callable(set_rhs):
+                    set_rhs(constraint_name, False)
+                constraint_names.append(constraint_name)
+                frozen_names.append(jn)
+                print(f"    ✓ Locked joint: {jn} (size={size})")
+            except Exception as e:
+                print(f"   ⚠ Failed to lock {jn}: {e}")
+                continue
+
+        return constraint_names, frozen_names
+
 
 class FactoryConstraintRegistry:
     """Register constraints for use with ConstraintGraphFactory.
