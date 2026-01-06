@@ -26,7 +26,7 @@ except ImportError:
 
 class CorbaBackend(BackendBase):
     """CORBA backend implementation for manipulation planning."""
-    
+
     def __init__(self):
         """Initialize CORBA backend."""
         if not HAS_CORBA:
@@ -34,11 +34,11 @@ class CorbaBackend(BackendBase):
                 "CORBA backend not available. "
                 "Please install hpp-manipulation-corba."
             )
-        
+
         # Initialize CORBA server
         loadServerPlugin("corbaserver", "manipulation-corba.so")
         Client().problem.resetProblem()
-        
+
         self.robot = None
         self.ps = None
         self.vf = None
@@ -46,10 +46,10 @@ class CorbaBackend(BackendBase):
         self.factory = None
         self.viewer = None
         self.path_player = None
-        
+
         # Configuration options for path validation
         self._use_path_optimization = True
-        self._use_path_projection = False
+        self._use_path_projection = True
 
     def model(self):
         """Get the Pinocchio model."""
@@ -88,7 +88,7 @@ class CorbaBackend(BackendBase):
         if self.robot is None:
             raise RuntimeError("Robot not loaded yet")
         return np.array(self.robot.shootRandomConfig())
-        
+
     def load_robot(
         self,
         robot_name: str,
@@ -132,14 +132,14 @@ class CorbaBackend(BackendBase):
             srdf_path=srdf_path,
             load=True,
             rootJointType=root_joint_type)
-        
+
         # Initialize problem solver
         self.ps = ProblemSolver(self.robot)
         if self.ps is None:
             raise RuntimeError("Failed to create ProblemSolver")
 
         return self.robot
-    
+
     def load_environment(
         self,
         name: str,
@@ -155,7 +155,7 @@ class CorbaBackend(BackendBase):
                 self.vf = ViewerFactory(self.ps)
             else:
                 raise RuntimeError("Problem solver not created yet")
-        
+
         pkg_name, urdf_name = parse_package_uri(urdf_path)
         if meshpkg_name is None:
             meshpkg_name = pkg_name  # Assuming meshes are in the same package
@@ -168,10 +168,10 @@ class CorbaBackend(BackendBase):
             meshPackageName = meshpkg_name
             urdfSuffix = urdf_suffix
             srdfSuffix = srdf_suffix
-        
+
         self.vf.loadEnvironmentModel(EnvConfig, name)
         return EnvConfig
-    
+
     def load_object(
         self,
         name: str,
@@ -200,7 +200,7 @@ class CorbaBackend(BackendBase):
         """
         if self.vf is None:
             self.vf = ViewerFactory(self.ps)
-        
+
         pkg_name, urdf_name = parse_package_uri(urdf_path)
         if meshpkg_name is None:
             meshpkg_name = pkg_name  # Assuming meshes are in the same package
@@ -213,21 +213,21 @@ class CorbaBackend(BackendBase):
             meshPackageName = meshpkg_name
             urdfSuffix = urdf_suffix
             srdfSuffix = srdf_suffix
-        
+
         self.vf.loadObjectModel(ObjConfig, name)
         return ObjConfig
-    
+
     def set_joint_bounds(self, joint_name: str, bounds: List[float]):
         """Set joint bounds."""
         self.robot.setJointBounds(joint_name, bounds)
-    
+
     def set_initial_config(self, q: np.ndarray):
         """Set initial configuration."""
         if isinstance(q, list):
             self.ps.setInitialConfig(q)
         else:
             self.ps.setInitialConfig(q.tolist())
-    
+
     def add_goal_config(self, q: np.ndarray):
         """Add goal configuration."""
         if isinstance(q, list):
@@ -253,7 +253,7 @@ class CorbaBackend(BackendBase):
         """
         if self.graph is None:
             raise RuntimeError("Graph not initialized")
-        
+
         # CORBA API uses createNode which returns node ID
         node_id = self.graph.createNode([name], is_waypoint)
         return node_id
@@ -280,7 +280,7 @@ class CorbaBackend(BackendBase):
         """
         if self.graph is None:
             raise RuntimeError("Graph not initialized")
-        
+
         # CORBA API uses createEdge
         edge_id = self.graph.createEdge(
             from_state,
@@ -311,15 +311,15 @@ class CorbaBackend(BackendBase):
         """
         if self.graph is None:
             raise RuntimeError("Graph not initialized")
-        
+
         # Store current parameters
         old_max_iter = self.ps.getMaxIterProjection()
         old_error = self.ps.getErrorThreshold()
-        
+
         # Set temporary parameters
         self.ps.setMaxIterProjection(max_iterations)
         self.ps.setErrorThreshold(error_threshold)
-        
+
         # Apply constraints using graph
         q_list = q.tolist() if isinstance(q, np.ndarray) else list(q)
         try:
@@ -348,13 +348,13 @@ class CorbaBackend(BackendBase):
                     configuration=q,
                     error=float('inf')
                 )
-        
+
         # Restore parameters
         self.ps.setMaxIterProjection(old_max_iter)
         self.ps.setErrorThreshold(old_error)
-        
+
         return result
-    
+
     def solve(self, max_iterations: int = 10000) -> bool:
         """Solve planning problem.
         
@@ -368,31 +368,31 @@ class CorbaBackend(BackendBase):
             # Configure path validation parameters
             self.configure_path_optimization(num_loops=50,
                                              max_iterations=max_iterations)
-            
+
             self.ps.setMaxIterPathPlanning(max_iterations)
             self.ps.solve()
             return True
         except Exception as e:
             print(f"Planning failed: {e}")
             return False
-    
+
     def get_path(self, index: int = 0) -> Optional[Any]:
         """Get computed path."""
         if self.ps is None:
             return None
-        
+
         try:
             return self.ps.client.problem.getPath(index)
         except Exception:
             return None
-    
+
     def visualize(self, q: Optional[np.ndarray] = None):
         """Visualize configuration."""
         if self.viewer is None:
             if self.vf is None:
                 self.vf = ViewerFactory(self.ps)
             self.viewer = self.vf.createViewer()
-        
+
         if q is not None:
             self.viewer(q.tolist() if isinstance(q, np.ndarray) else q)
         else:
@@ -402,24 +402,24 @@ class CorbaBackend(BackendBase):
                 self.viewer(q_init)
             except Exception:
                 pass
-    
+
     def play_path(self, path_index: int = 0):
         """Play path in viewer."""
         if self.viewer is None:
             self.visualize()
-        
+
         if self.path_player is None:
             self.path_player = PathPlayer(self.viewer)
-        
+
         try:
             self.path_player(path_index)
         except Exception as e:
             print(f"Failed to play path: {e}")
-    
+
     def get_robot(self):
         """Get robot instance."""
         return self.robot
-    
+
     def get_problem(self):
         """Get problem solver."""
         return self.ps
@@ -457,7 +457,7 @@ class CorbaBackend(BackendBase):
         """
         if self.ps is None:
             raise RuntimeError("Problem solver not created yet")
-        
+
         self.ps.setMaxIterProjection(max_iterations)
         self.ps.setErrorThreshold(error_threshold)
 
@@ -486,18 +486,14 @@ class CorbaBackend(BackendBase):
         """
         if self._use_path_optimization:
             # Enable path optimization in CORBA
-            self.ps.addPathOptimizer("RandomShortcut")
-            # self.ps.setParameter(
-            #     "PathOptimization/RandomShortcut/NumberOfLoops", num_loops
-            # )
-        # if self._use_path_projection:
+            self.ps.loadPlugin("spline-gradient-based.so")
+            self.ps.addPathOptimizer("SplineGradientBased_bezier3")
+            # self.ps.addPathOptimizer("RandomShortcut")
+
+        if self._use_path_projection:
             # Enable path projection
-            # self.ps.setParameter("PathProjection/ProgressBased", True)
-        
-        # Set max iterations for steering method
-        # self.ps.setParameter(
-        #     "SteeringMethod/Kinodynamic/maxIterations", max_iterations
-        # )
+            self.ps.selectPathProjector("Progressive", 0.1)
+
 
 
 # Alias for backward compatibility
