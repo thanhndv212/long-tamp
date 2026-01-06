@@ -16,6 +16,10 @@ from agimus_spacelab.planning import (
     ConstraintBuilder,
     FactoryConstraintRegistry
 )
+from agimus_spacelab.planning.config import (
+    build_robot_config,
+    build_object_configs,
+)
 
 
 class ManipulationTask:
@@ -182,8 +186,8 @@ class ManipulationTask:
         """
         objects = self.get_objects()
         joint_groups = self.get_joint_groups()
-        q_robot = self.config_gen.build_robot_config(joint_groups)
-        q_objects = self.config_gen.build_object_configs(objects)
+        q_robot = build_robot_config(joint_groups)
+        q_objects = build_object_configs(objects)
         return q_robot + q_objects
 
     def generate_configurations(
@@ -220,6 +224,7 @@ class ManipulationTask:
         print("=" * 70)
 
         # 1. Scene setup
+        print("\n1. Setting up scene...")
         self.planner, self.robot, self.ps = self.scene_builder.build(
             robot_names=self.get_robot_names(),
             environment_names=self.get_environment_names(),
@@ -228,6 +233,8 @@ class ManipulationTask:
             validation_step=validation_step,
             projector_step=projector_step
         )
+        # Get initial configuration
+        self.q_init = self.build_initial_config()
 
         # 2. Custom collision management
         self.setup_collision_management()
@@ -248,7 +255,7 @@ class ManipulationTask:
 
         if patterns:
             # Build a reference config to extract joint values
-            q_ref = self._build_reference_config_for_locking()
+            q_ref = self.q_init
             if q_ref:
                 constraint_names, frozen_names = (
                     ConstraintBuilder.create_locked_joint_constraints(
@@ -323,7 +330,7 @@ class ManipulationTask:
 
         # 4. Generate configurations
         print("\n4. Generating configurations...")
-        q_init = self.build_initial_config()
+        q_init = self.q_init
         configs = self.generate_configurations(q_init)
 
         # 5. Visualize

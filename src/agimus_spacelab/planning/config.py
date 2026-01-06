@@ -344,122 +344,140 @@ class ConfigGenerator:
                   f"({last_valid_err or last_err or 'unknown'})")
         return False, None
 
-    def build_robot_config(
-        self, joint_groups: Optional[List[str]] = None
-    ) -> List[float]:
-        """
-        Build robot configuration from joint group names.
-        
-        Args:
-            joint_groups: List of joint group names to include.
-                          Keys should match InitialConfigurations attributes
-                          (e.g., ["UR10", "VISPA_BASE", "VISPA_ARM"]).
-                          If None, uses default robot joint groups.
-            
-        Returns:
-            Combined robot configuration
-            
-        Examples:
-            # Use all defaults
-            config = gen.build_robot_config()
-            
-            # Use specific groups
-            config = gen.build_robot_config(["UR10", "VISPA_ARM"])
-        """
-        if joint_groups is None:
-            joint_groups = ["UR10", "VISPA_BASE", "VISPA_ARM"]
-
-        q_robot = []
-        for group in joint_groups:
-            if hasattr(InitialConfigurations, group):
-                q_robot.extend(list(getattr(InitialConfigurations, group)))
-            else:
-                print(f"       ⚠ No initial config for joint group '{group}'")
-                # Add zero configuration as fallback
-        return q_robot
-
-    def build_object_configs(self, object_names: List[str]) -> List[float]:
-        """
-        Build object configurations from initial poses.
-        
-        Args:
-            object_names: List of object names
-            
-        Returns:
-            Concatenated object configurations in XYZQUAT format
-        """
-        q_objects = []
-
-        for obj_name in object_names:
-            # Get initial pose in XYZRPY
-            obj_attr = obj_name.replace("-", "_").replace(" ", "_").upper()
-            if hasattr(InitialConfigurations, obj_attr):
-                pose_xyzrpy = getattr(InitialConfigurations, obj_attr)
-                pose_xyzquat = xyzrpy_to_xyzquat(pose_xyzrpy)
-                q_objects.extend(pose_xyzquat.tolist())
-            else:
-                print(f"       ⚠ No initial config for {obj_name}")
-                # Add zero configuration as fallback
-                q_objects.extend([0.0] * 7)
-
-        return q_objects
-
-    def get_robot_dof(self, joint_groups: Optional[List[str]] = None) -> int:
-        """
-        Get total robot DOF for specified joint groups.
-        
-        Args:
-            joint_groups: List of joint group names to include.
-                          If None, uses default ["UR10", "VISPA_BASE", "VISPA_ARM"].
-                          
-        Returns:
-            Total degrees of freedom
-        """
-        if joint_groups is None:
-            joint_groups = ["UR10", "VISPA_BASE", "VISPA_ARM"]
-        total_dof = 0
-        for group in joint_groups:
-            if hasattr(InitialConfigurations, group):
-                total_dof += len(getattr(InitialConfigurations, group))
-        return total_dof
-
-    def modify_object_pose(
-        self, q: List[float], object_index: int,
-        translation_delta: Optional[List[float]] = None,
-        quaternion: Optional[List[float]] = None
-    ) -> List[float]:
-        """
-        Modify object pose in configuration.
-        
-        Args:
-            q: Full configuration
-            object_index: Index of object (0 for first object after robot)
-            translation_delta: [dx, dy, dz] to add to position
-            quaternion: New quaternion [qx, qy, qz, qw] (replaces existing)
-            
-        Returns:
-            Modified configuration
-        """
-        q_new = list(q)
-        robot_dof = self.get_robot_dof()
-        obj_start = robot_dof + object_index * 7
-
-        if translation_delta:
-            for i in range(3):
-                q_new[obj_start + i] += translation_delta[i]
-
-        if quaternion:
-            for i in range(4):
-                q_new[obj_start + 3 + i] = quaternion[i]
-
-        return q_new
-
 
 # Alias for backward compatibility
 ConfigurationGenerator = ConfigGenerator
 
 
+# =============================================================================
+# Standalone configuration building functions
+# =============================================================================
+
+
+def build_robot_config(
+    joint_groups: Optional[List[str]] = None,
+) -> List[float]:
+    """
+    Build robot configuration from joint group names.
+
+    Args:
+        joint_groups: List of joint group names to include.
+                      Keys should match InitialConfigurations attributes
+                      (e.g., ["UR10", "VISPA_BASE", "VISPA_ARM"]).
+                      If None, uses default robot joint groups.
+
+    Returns:
+        Combined robot configuration
+
+    Examples:
+        # Use all defaults
+        config = build_robot_config()
+
+        # Use specific groups
+        config = build_robot_config(["UR10", "VISPA_ARM"])
+    """
+    if joint_groups is None:
+        joint_groups = ["UR10", "VISPA_BASE", "VISPA_ARM"]
+
+    q_robot = []
+    for group in joint_groups:
+        if hasattr(InitialConfigurations, group):
+            q_robot.extend(list(getattr(InitialConfigurations, group)))
+        else:
+            print(f"       ⚠ No initial config for joint group '{group}'")
+            # Add zero configuration as fallback
+    return q_robot
+
+
+def build_object_configs(object_names: List[str]) -> List[float]:
+    """
+    Build object configurations from initial poses.
+
+    Args:
+        object_names: List of object names
+
+    Returns:
+        Concatenated object configurations in XYZQUAT format
+    """
+    q_objects = []
+
+    for obj_name in object_names:
+        # Get initial pose in XYZRPY
+        obj_attr = obj_name.replace("-", "_").replace(" ", "_").upper()
+        if hasattr(InitialConfigurations, obj_attr):
+            pose_xyzrpy = getattr(InitialConfigurations, obj_attr)
+            pose_xyzquat = xyzrpy_to_xyzquat(pose_xyzrpy)
+            q_objects.extend(pose_xyzquat.tolist())
+        else:
+            print(f"       ⚠ No initial config for {obj_name}")
+            # Add zero configuration as fallback
+            q_objects.extend([0.0] * 7)
+
+    return q_objects
+
+
+def get_robot_dof(joint_groups: Optional[List[str]] = None) -> int:
+    """
+    Get total robot DOF for specified joint groups.
+
+    Args:
+        joint_groups: List of joint group names to include.
+                      If None, uses default ["UR10", "VISPA_BASE", "VISPA_ARM"].
+
+    Returns:
+        Total degrees of freedom
+    """
+    if joint_groups is None:
+        joint_groups = ["UR10", "VISPA_BASE", "VISPA_ARM"]
+    total_dof = 0
+    for group in joint_groups:
+        if hasattr(InitialConfigurations, group):
+            total_dof += len(getattr(InitialConfigurations, group))
+    return total_dof
+
+
+def modify_object_pose(
+    q: List[float],
+    object_index: int,
+    translation_delta: Optional[List[float]] = None,
+    quaternion: Optional[List[float]] = None,
+    joint_groups: Optional[List[str]] = None,
+) -> List[float]:
+    """
+    Modify object pose in configuration.
+
+    Args:
+        q: Full configuration
+        object_index: Index of object (0 for first object after robot)
+        translation_delta: [dx, dy, dz] to add to position
+        quaternion: New quaternion [qx, qy, qz, qw] (replaces existing)
+        joint_groups: Joint groups for calculating robot DOF offset
+
+    Returns:
+        Modified configuration
+    """
+    q_new = list(q)
+    robot_dof = get_robot_dof(joint_groups)
+    obj_start = robot_dof + object_index * 7
+
+    if translation_delta:
+        for i in range(3):
+            q_new[obj_start + i] += translation_delta[i]
+
+    if quaternion:
+        for i in range(4):
+            q_new[obj_start + 3 + i] = quaternion[i]
+
+    return q_new
+
+
 __all__ = [
     "ConfigGenerator",
     "ConfigurationGenerator",
+    "bfs_edge_path",
+    "freeze_joints_by_substrings",
+    "build_robot_config",
+    "build_object_configs",
+    "get_robot_dof",
+    "modify_object_pose",
 ]
