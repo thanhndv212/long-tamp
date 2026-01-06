@@ -243,7 +243,7 @@ class ConfigGenerator:
                 if is_valid:
                     if config_label:
                         self.configs[config_label] = config
-                        print(f"       ✓ {config_label} projected onto "
+                        print(f"       ✓ SUCCESS   {config_label} projected onto node "
                               f"'{node_name}' after {attempt + 1} attempts")
                     return True, config
                 last_valid_err = valid_err
@@ -252,7 +252,7 @@ class ConfigGenerator:
         if config_label:
             self.configs[config_label] = list(q)
             if verbose:
-                print(f"       ⚠ proj failed: {node_name} "
+                print(f"       ⚠ Projection onto node FAILED: {node_name} "
                       f"({last_valid_err or last_err or 'unknown'})")
 
         return False, list(q)
@@ -335,12 +335,12 @@ class ConfigGenerator:
 
                 if config_label:
                     self.configs[config_label] = config
-                    print(f"       ✓ {config_label} generated via "
+                    print(f"       ✓ SUCCESS {config_label} generated via edge "
                           f"'{edge_name}' after {i + 1} attempts")
                 return True, config
 
         if config_label and verbose:
-            print(f"       ⚠ gen failed: {edge_name} "
+            print(f"       ⚠ Generation via edge FAILED: {edge_name} "
                   f"({last_valid_err or last_err or 'unknown'})")
         return False, None
 

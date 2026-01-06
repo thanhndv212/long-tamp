@@ -368,7 +368,8 @@ class GraphBuilder:
                     graph=True,
                     numConstraints=constraint_names,
                 )
-            print(f"    ✓ Added {len(constraint_names)} global constraints")
+            print(f"    ✓ Added {len(constraint_names)} global constraints: ",
+                  f" {constraint_names}")
             return True
         except Exception as e:
             print(f"   ⚠ Failed to add global constraints: {e}")
