@@ -5,7 +5,7 @@ Base class for manipulation tasks.
 Provides ManipulationTask base class with common structure.
 """
 
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 
 import re
 
@@ -143,7 +143,7 @@ class ManipulationTask:
         # Store for PyHPP graph building
         self.pyhpp_constraints = constraints
 
-    def create_graph(self):
+    def create_graph(self, graph_constraints: Optional[List[str]] = None):
         """Create and configure constraint graph."""
         robot = self.robot
         problem = self.ps
@@ -159,11 +159,13 @@ class ManipulationTask:
             return self.graph_builder.create_factory_graph(
                 self.task_config,
                 pyhpp_constraints=self.pyhpp_constraints,
+                graph_constraints=graph_constraints,
             )
         else:
             return self.graph_builder.create_manual_graph(
                 self.task_config,
                 pyhpp_constraints=self.pyhpp_constraints,
+                graph_constraints=graph_constraints,
             )
 
     def setup_collision_management(self) -> None:
@@ -195,15 +197,24 @@ class ManipulationTask:
             "Subclass must implement generate_configurations()"
         )
 
-    def setup(self, validation_step: float = 0.01,
-              projector_step: float = 0.1):
+    def setup(
+        self,
+        validation_step: float = 0.01,
+        projector_step: float = 0.1,
+        freeze_joint_substrings: Optional[List[str]] = None,
+    ):
         """
         Complete task setup: scene, constraints, graph.
-        
+
         Args:
             validation_step: Path validation discretization
             projector_step: Path projector step
+            freeze_joint_substrings: Joint name patterns to lock globally.
+                Creates locked joint constraints added before graph init.
         """
+        # Store for later use
+        self._freeze_joint_substrings = freeze_joint_substrings
+
         print("=" * 70)
         print(f"{self.task_name}")
         print("=" * 70)
@@ -225,30 +236,85 @@ class ManipulationTask:
         print("\n2. Creating constraints...")
         self.create_constraints()
 
-        # 4. Create graph
-        print("\n3. Creating constraint graph...")
-        self.graph = self.create_graph()
+        # 4. Create locked joint constraints if requested (factory mode only)
+        # In manual mode, tasks typically handle joint freezing at config
+        # generation time via _freeze_unused_joints(), so we skip adding
+        # locked constraints to the graph which would conflict.
+        graph_constraints = None
+        patterns = freeze_joint_substrings
+        if patterns is None and self.use_factory:
+            # Only auto-detect FREEZE_JOINT_SUBSTRINGS for factory mode
+            patterns = getattr(self, "FREEZE_JOINT_SUBSTRINGS", None)
 
-        # 5. Initialize configuration generator
+        if patterns:
+            # Build a reference config to extract joint values
+            q_ref = self._build_reference_config_for_locking()
+            if q_ref:
+                constraint_names, frozen_names = (
+                    ConstraintBuilder.create_locked_joint_constraints(
+                        self.ps, self.robot, q_ref, patterns
+                    )
+                )
+                if frozen_names:
+                    print(
+                        f"    ✓ Created locked joint constraints: "
+                        f"{', '.join(sorted(frozen_names))}"
+                    )
+                    graph_constraints = constraint_names
+
+        # 5. Create graph (with global constraints added before init)
+        print("\n3. Creating constraint graph...")
+        self.graph = self.create_graph(graph_constraints=graph_constraints)
+
+        # 6. Initialize configuration generator
         self.config_gen = ConfigGenerator(
             self.robot, self.graph, self.planner, self.ps, backend=self.backend
         )
 
         print("\n   ✓ Task setup complete")
 
-    def run(self, visualize: bool = True,
-            solve: bool = False,
-            preferred_configs: List[str] = [],
-            max_iterations: int = 1000,
-            freeze_joint_substrings: Optional[List[str]] = None,
-            freeze_joint_eps: float = 0.0) -> Dict[str, Any]:
+    def _build_reference_config_for_locking(self) -> Optional[List[float]]:
+        """Build a reference config for locked joint constraints.
+
+        Uses robot's current/neutral config before config_gen is available.
+        """
+        robot = self.robot
+        if robot is None:
+            return None
+
+        # Try to get current config
+        get_current = getattr(robot, "getCurrentConfig", None)
+        if callable(get_current):
+            try:
+                return list(get_current())
+            except Exception:
+                pass
+
+        # Try neutral config
+        get_neutral = getattr(robot, "neutralConfiguration", None)
+        if callable(get_neutral):
+            try:
+                return list(get_neutral())
+            except Exception:
+                pass
+
+        return None
+
+    def run(
+        self,
+        visualize: bool = True,
+        solve: bool = False,
+        preferred_configs: List[str] = [],
+        max_iterations: int = 1000,
+    ) -> Dict[str, Any]:
         """
         Run the complete task workflow.
-        
+
         Args:
             visualize: Whether to visualize configurations
             solve: Whether to solve the planning problem
-            
+            preferred_configs: List of intermediate config keys in order
+
         Returns:
             Dictionary with configs, paths, and other results
         """
@@ -272,73 +338,6 @@ class ManipulationTask:
         # 6. Solve
         if solve and "q_goal" in configs:
             print("\n6. Solving planning problem...")
-
-            def _freeze_joints_for_planning(q_ref: List[float]) -> Tuple[List[str], List[Tuple[str, List[float]]]]:
-                """Freeze joints by clamping bounds; returns (frozen_joint_names, restore_list)."""
-                patterns = freeze_joint_substrings
-                if patterns is None:
-                    patterns = getattr(self, "FREEZE_JOINT_SUBSTRINGS", None)
-                if not patterns:
-                    return [], []
-
-                robot = self.robot
-                if robot is None or self.planner is None:
-                    return [], []
-
-                get_joint_names = getattr(robot, "getJointNames", None)
-                get_size = getattr(robot, "getJointConfigSize", None)
-                rank_map = getattr(robot, "rankInConfiguration", None)
-                get_bounds = getattr(robot, "getJointBounds", None)
-
-                if not callable(get_joint_names) or not callable(get_size) or rank_map is None:
-                    return [], []
-
-                patterns_l = [p.lower() for p in patterns]
-                restore: List[Tuple[str, List[float]]] = []
-                frozen_names: List[str] = []
-
-                for jn in get_joint_names():
-                    jn_l = jn.lower()
-                    if not any(p in jn_l for p in patterns_l):
-                        continue
-                    try:
-                        size = int(get_size(jn))
-                        rank = int(rank_map[jn])
-                    except Exception:
-                        continue
-                    if size <= 0 or rank < 0 or rank + size > len(q_ref):
-                        continue
-
-                    old = None
-                    if callable(get_bounds):
-                        try:
-                            old = list(get_bounds(jn))
-                        except Exception:
-                            old = None
-                    if old is not None:
-                        restore.append((jn, old))
-
-                    bounds: List[float] = []
-                    for k in range(size):
-                        v = float(q_ref[rank + k])
-                        bounds.extend([v - freeze_joint_eps, v + freeze_joint_eps])
-                    try:
-                        self.planner.set_joint_bounds(jn, bounds)
-                        frozen_names.append(jn)
-                    except Exception:
-                        # Best effort: if we can't set bounds, just skip.
-                        continue
-
-                return frozen_names, restore
-
-            def _restore_joint_bounds(restore: List[Tuple[str, List[float]]]) -> None:
-                if not restore or self.planner is None:
-                    return
-                for jn, bounds in restore:
-                    try:
-                        self.planner.set_joint_bounds(jn, bounds)
-                    except Exception:
-                        pass
 
             def _reset_goals_if_possible() -> None:
                 if self.ps is None:
@@ -377,75 +376,69 @@ class ManipulationTask:
                 return ["q_init", *mids, "q_goal"]
 
             seq = _ordered_config_keys(configs)
-            frozen_names, restore = _freeze_joints_for_planning(configs.get("q_init", q_init))
-            if frozen_names:
-                frozen_names_sorted = sorted(frozen_names)
-                eps = float(freeze_joint_eps)
-                print(f"   ✓ Frozen joints during planning (eps={eps:g}): {', '.join(frozen_names_sorted)}")
-            try:
-                if not seq or len(seq) < 2:
-                    print("   ⚠ Planning skipped: missing q_init/q_goal")
-                elif len(seq) == 2:
+
+            if not seq or len(seq) < 2:
+                print("   ⚠ Planning skipped: missing q_init/q_goal")
+            elif len(seq) == 2:
+                _reset_goals_if_possible()
+                self.planner.set_initial_config(configs["q_init"])
+                self.planner.add_goal_config(configs["q_goal"])
+                success = self.planner.solve(max_iterations=max_iterations)
+                if success:
+                    print("   ✓ Planning successful")
+                else:
+                    print("   ⚠ Planning failed")
+
+                if success and visualize:
+                    print("\n7. Playing solution path...")
+                    try:
+                        self.planner.play_path(0)
+                        print("   ✓ Path playback complete")
+                    except Exception as e:
+                        print(f"   ⚠ Path playback failed: {e}")
+            else:
+                path_ids: List[int] = []
+                for i in range(len(seq) - 1):
+                    a, b = seq[i], seq[i + 1]
+                    seg = f"{i + 1}/{len(seq) - 1}"
+                    print(f"\n   Segment {seg}: {a} -> {b}")
                     _reset_goals_if_possible()
-                    self.planner.set_initial_config(configs["q_init"])
-                    self.planner.add_goal_config(configs["q_goal"])
+                    self.planner.set_initial_config(configs[a])
+                    self.planner.add_goal_config(configs[b])
                     success = self.planner.solve(max_iterations=max_iterations)
                     if success:
                         print("   ✓ Planning successful")
                     else:
                         print("   ⚠ Planning failed")
-
-                    if success and visualize:
-                        print("\n7. Playing solution path...")
-                        try:
-                            self.planner.play_path(0)
-                            print("   ✓ Path playback complete")
-                        except Exception as e:
-                            print(f"   ⚠ Path playback failed: {e}")
-                else:
-                    path_ids: List[int] = []
-                    for i in range(len(seq) - 1):
-                        a, b = seq[i], seq[i + 1]
-                        print(f"\n   Segment {i+1}/{len(seq)-1}: {a} -> {b}")
-                        _reset_goals_if_possible()
-                        self.planner.set_initial_config(configs[a])
-                        self.planner.add_goal_config(configs[b])
-                        success = self.planner.solve(max_iterations=max_iterations)
-                        if success:
-                            print("   ✓ Planning successful")
-                        else:
-                            print("   ⚠ Planning failed")
-                            break
-                        # Record the latest path id when available (CORBA).
-                        if self.ps is not None:
-                            num_paths = getattr(self.ps, "numberPaths", None)
-                            if callable(num_paths):
-                                try:
-                                    path_ids.append(int(num_paths()) - 1)
-                                except Exception:
-                                    pass
-
-                    # Concatenate path segments when available (CORBA).
-                    if len(path_ids) > 1 and self.ps is not None:
-                        concat = getattr(self.ps, "concatenatePath", None)
-                        if callable(concat):
+                        break
+                    # Record the latest path id when available (CORBA).
+                    if self.ps is not None:
+                        num_paths = getattr(self.ps, "numberPaths", None)
+                        if callable(num_paths):
                             try:
-                                for j in range(1, len(path_ids)):
-                                    concat(path_ids[0], path_ids[j])
+                                path_ids.append(int(num_paths()) - 1)
                             except Exception:
                                 pass
 
-                    if visualize:
-                        print("\n7. Playing solution path...")
+                # Concatenate path segments when available (CORBA).
+                if len(path_ids) > 1 and self.ps is not None:
+                    concat = getattr(self.ps, "concatenatePath", None)
+                    if callable(concat):
                         try:
-                            # Use concatenated path id when known, otherwise fall back to 0.
-                            pid = path_ids[0] if path_ids else 0
-                            self.planner.play_path(pid)
-                            print("   ✓ Path playback complete")
-                        except Exception as e:
-                            print(f"   ⚠ Path playback failed: {e}")
-            finally:
-                _restore_joint_bounds(restore)
+                            for j in range(1, len(path_ids)):
+                                concat(path_ids[0], path_ids[j])
+                        except Exception:
+                            pass
+
+                if visualize:
+                    print("\n7. Playing solution path...")
+                    try:
+                        # Use concatenated path when known, otherwise 0.
+                        pid = path_ids[0] if path_ids else 0
+                        self.planner.play_path(pid)
+                        print("   ✓ Path playback complete")
+                    except Exception as e:
+                        print(f"   ⚠ Path playback failed: {e}")
 
         return {
             "configs": configs,
