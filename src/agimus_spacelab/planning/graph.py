@@ -333,6 +333,47 @@ class GraphBuilder:
                 print(f"    ✓ No constraints added to edge '{edge_name}' "
                       "(free motion)")
 
+    def add_global_constraints(
+        self,
+        constraint_names: List[str],
+    ) -> bool:
+        """Add numerical constraints globally to the graph.
+
+        Adds constraints to the entire graph (all nodes and edges).
+        Uses graph.addConstraints(graph=True, ...) internally.
+
+        This is useful for:
+        - Locked joint constraints (freeze joints during planning)
+        - Any other constraints that should apply everywhere
+
+        Note: Must be called BEFORE the graph is initialized.
+
+        Args:
+            constraint_names: List of constraint names to add
+
+        Returns:
+            True if constraints were added successfully
+        """
+        if not constraint_names or self.graph is None:
+            return False
+
+        try:
+            if self.backend == "corba":
+                self.graph.addConstraints(
+                    graph=True,
+                    constraints=Constraints(numConstraints=constraint_names),
+                )
+            else:  # pyhpp
+                self.graph.addConstraints(
+                    graph=True,
+                    numConstraints=constraint_names,
+                )
+            print(f"    ✓ Added {len(constraint_names)} global constraints")
+            return True
+        except Exception as e:
+            print(f"   ⚠ Failed to add global constraints: {e}")
+            return False
+
     def finalize_manual_graph(self) -> Any:
         """
         Finalize manual graph construction and initialize it.
@@ -402,10 +443,11 @@ class GraphBuilder:
         self,
         config: BaseTaskConfig,
         pyhpp_constraints: Optional[Dict[str, Any]] = None,
+        graph_constraints: Optional[List[str]] = None,
     ) -> Any:
         """
         Create constraint graph using factory for both backends.
-        
+
         Args:
             grippers: List of gripper names
             objects: List of object names
@@ -417,7 +459,10 @@ class GraphBuilder:
             valid_pairs: Optional dict mapping gripper names to list of
                 valid handle names. Uses setPossibleGrasps to restrict
                 which gripper-handle pairs are allowed.
-            
+            graph_constraints: Optional list of constraint names to add
+                globally to the graph before initialization (e.g., locked
+                joint constraints).
+
         Returns:
             ConstraintGraph or Graph instance
         """
@@ -475,6 +520,10 @@ class GraphBuilder:
         self.factory.generate()
         print("    \u2713 Generated graph structure")
 
+        # Add global constraints before initialization (e.g., locked joints)
+        if graph_constraints:
+            self.add_global_constraints(graph_constraints)
+
         # Initialize graph
         self.graph.initialize()
         self._attach_graph_to_problem_if_supported()
@@ -495,11 +544,20 @@ class GraphBuilder:
             print(f"      - {edge_name}: {from_state} → {to_state}")
         return self.graph
 
-    def create_manual_graph(self,
-                            config: BaseTaskConfig,
-                            pyhpp_constraints: Optional[Dict[str, Any]] = None
-                            ) -> Any:
-        """Create the manual graph using GraphBuilder (both backends)."""
+    def create_manual_graph(
+        self,
+        config: BaseTaskConfig,
+        pyhpp_constraints: Optional[Dict[str, Any]] = None,
+        graph_constraints: Optional[List[str]] = None,
+    ) -> Any:
+        """Create the manual graph using GraphBuilder (both backends).
+
+        Args:
+            config: Task configuration
+            pyhpp_constraints: PyHPP constraint objects (for pyhpp backend)
+            graph_constraints: Optional list of constraint names to add
+                globally (e.g., locked joint constraints)
+        """
         print("    Building graph manually")
 
         cfg = config
@@ -597,6 +655,10 @@ class GraphBuilder:
             #     f"    ✓ Set security margin ({cfg.CONTACT_MARGIN}m) "
             #     "for placement edges"
             # )
+
+        # Add global constraints before initialization (e.g., locked joints)
+        if graph_constraints:
+            self.add_global_constraints(graph_constraints)
 
         # Initialize graph
         self.finalize_manual_graph()
