@@ -30,7 +30,7 @@ class SceneBuilder:
     
     Handles loading robots, environment, objects, and configuring collision checking.
     """
-    
+
     def __init__(
         self,
         joint_bounds=None,
@@ -47,7 +47,7 @@ class SceneBuilder:
         """
         self.backend = backend.lower()
         self.loaded_objects = []
-        
+
         if FILE_PATHS is None:
             self.FILE_PATHS = DEFAULT_PATHS
         else:
@@ -68,7 +68,7 @@ class SceneBuilder:
             self.planner = planner or create_planner(backend=self.backend)
         else:
             raise ValueError(f"Unknown backend: {backend}. Use 'corba' or 'pyhpp'")
-        
+
     def load_robot(self, composite_names: List[str],
                    robot_names: List[str]) -> 'SceneBuilder':
         """Load the composite robot (UR10 + VISPA)."""
@@ -85,7 +85,7 @@ class SceneBuilder:
             else:
                 print(f"      ⚠ Unknown robot: {rb_name}")
         return self
-        
+
     def load_environment(self, environment_names: List[str], pose=None) -> 'SceneBuilder':
         """Load the environment (dispenser, ground, etc.)."""
         print(f"   Loading environment ({environment_names})...")
@@ -101,7 +101,7 @@ class SceneBuilder:
             else:
                 print(f"      ⚠ Unknown environment: {env_name}")
         return self
-        
+
     def load_objects(self, object_names: List[str]) -> 'SceneBuilder':
         """
         Load multiple objects.
@@ -114,9 +114,9 @@ class SceneBuilder:
             if obj_name not in self.FILE_PATHS["objects"]:
                 print(f"      ⚠ Unknown object: {obj_name}")
                 continue
-            
+
             obj_config = self.FILE_PATHS["objects"][obj_name]
-            
+
             # Handle both old format (string) and new format (dict)
             if isinstance(obj_config, str):
                 # Old format: just URDF path
@@ -126,7 +126,7 @@ class SceneBuilder:
                 # New format: dict with urdf and srdf
                 urdf_path = obj_config.get("urdf", obj_config)
                 srdf_path = obj_config.get("srdf")
-            
+
             self.planner.load_object(
                 name=obj_name,
                 urdf_path=urdf_path,
@@ -134,20 +134,20 @@ class SceneBuilder:
                 root_joint_type="freeflyer"
             )
             self.loaded_objects.append(obj_name)
-            
+
         return self
-        
+
     def set_joint_bounds(self) -> 'SceneBuilder':
         """Set joint bounds for all loaded freeflyer objects."""
         print("   Setting joint bounds...")
         bounds = self.joint_bounds.freeflyer_bounds()
-        
+
         for obj_name in self.loaded_objects:
             joint_name = f"{obj_name}/root_joint"
             self.planner.set_joint_bounds(joint_name, bounds)
-            
+
         return self
-        
+
     def configure_path_validation(self,
                                    validation_step: float = 0.01,
                                    projector_step: float = 0.1) -> 'SceneBuilder':
@@ -158,7 +158,7 @@ class SceneBuilder:
             projector_step=projector_step
         )
         return self
-        
+
     def disable_collision_pair(self,
                                obstacle_name: str,
                                joint_name: str,
@@ -234,7 +234,7 @@ class SceneBuilder:
 
         if robot_joint not in all_joints:
             try:
-                robot_joint = robot.getParentFrame(robot_frame_or_joint)
+                robot_joint = robot.getParentJoint(robot_frame_or_joint)
             except Exception:
                 # Keep original; better to attempt than to silently ignore.
                 robot_joint = robot_frame_or_joint
@@ -272,6 +272,8 @@ class SceneBuilder:
 
         before_pairs: List[tuple[str, str]] = _pairs_between_by_prefix()
         if verbose:
+            print("      Robot joints: %s" % robot_joints
+                  )
             print(
                 "      Target obstacle prefix: %s"
                 % obstacle_prefix
@@ -311,7 +313,7 @@ class SceneBuilder:
                       obstacle_name: str,
                       position: List[float],
                       orientation: List[float]) -> 'SceneBuilder':
-        
+
         """
         Move an object to a specified position and orientation.
         Args:
@@ -339,7 +341,7 @@ class SceneBuilder:
         robot = self.planner.get_robot()
         ps = self.planner.get_problem()
         return self.planner, robot, ps
-        
+
     def build(self,
               robot_names: List[str],
               composite_names: List[str],
@@ -365,7 +367,7 @@ class SceneBuilder:
             .load_objects(object_names=object_names)
             .set_joint_bounds()
             .configure_path_validation(validation_step, projector_step))
-        
+
         print("   ✓ Scene setup complete")
         return self.get_instances()
 
