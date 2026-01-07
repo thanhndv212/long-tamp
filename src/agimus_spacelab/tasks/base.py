@@ -332,7 +332,11 @@ class ManipulationTask:
         print("\n4. Generating configurations...")
         q_init = self.q_init
         configs = self.generate_configurations(q_init)
-
+        # check if PATH_OPTIMIZER is set in task_config
+        if hasattr(self.task_config, "PATH_OPTIMIZER"):
+            self.optimizer = self.task_config.PATH_OPTIMIZER
+        else:
+            self.optimizer = "RandomShortcut"
         # 5. Visualize
         if visualize:
             print("\n5. Starting visualization...")
@@ -390,7 +394,7 @@ class ManipulationTask:
                 _reset_goals_if_possible()
                 self.planner.set_initial_config(configs["q_init"])
                 self.planner.add_goal_config(configs["q_goal"])
-                success = self.planner.solve(max_iterations=max_iterations)
+                success = self.planner.solve(max_iterations=max_iterations, optimizer=self.optimizer)
                 if success:
                     print("   ✓ Planning successful")
                 else:
@@ -412,7 +416,7 @@ class ManipulationTask:
                     _reset_goals_if_possible()
                     self.planner.set_initial_config(configs[a])
                     self.planner.add_goal_config(configs[b])
-                    success = self.planner.solve(max_iterations=max_iterations)
+                    success = self.planner.solve(max_iterations=max_iterations, optimizer=self.optimizer)
                     if success:
                         print("   ✓ Planning successful")
                     else:

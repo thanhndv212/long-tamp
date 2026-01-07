@@ -18,9 +18,18 @@ try:
         ManipulationPlanner as HPPManipulationPlanner,
         Problem,
         ProgressiveProjector,
+        RandomShortcut as ManipulationRandomShortcut,
+        EnforceTransitionSemantic,
+        GraphRandomShortcut,
+        GraphPartialShortcut,
     )
     from pyhpp.core import (
         Discretized,
+        RandomShortcut,
+        SimpleShortcut,
+        PartialShortcut,
+        SimpleTimeParameterization,
+        RSTimeParameterization,
     )
     from pyhpp.gepetto.viewer import Viewer
     HAS_PYHPP = True
@@ -45,10 +54,12 @@ class PyHPPBackend(BackendBase):
         self.planner = None
         self.viewer = None
         self.path = None
+        self._path_optimizers = []  # List of path optimizer instances
 
         # Configuration options for path validation and projection
         self._use_pathvalidation = True
         self._use_progressive_projector = True
+        self._use_path_optimization = True
 
     def model(self):
         """Get the Pinocchio model."""
@@ -295,7 +306,7 @@ class PyHPPBackend(BackendBase):
             error=error
         )
 
-    def solve(self, max_iterations: int = 10000) -> bool:
+    def solve(self, max_iterations: int = 10000, optimizer: str = "RandomShortcut") -> bool:
         """Solve planning problem.
         
         Args:
@@ -310,6 +321,9 @@ class PyHPPBackend(BackendBase):
         try:
             # Configure path validation with dichotomy if enabled
             self.configure_path_validation()
+            
+            # Configure path optimization (uses default RandomShortcut)
+            self.configure_path_optimization(optimizer=optimizer)
 
             self.planner = HPPManipulationPlanner(self.problem)
             self.planner.maxIterations(max_iterations)
@@ -317,6 +331,9 @@ class PyHPPBackend(BackendBase):
 
             if success:
                 self.path = self.planner.path()
+                # Apply path optimization if configured
+                if self._path_optimizers:
+                    self.path = self.optimize_path(self.path)
 
             return success
         except Exception as e:
@@ -435,6 +452,93 @@ class PyHPPBackend(BackendBase):
                 projector_step,
             )
         return self
+
+    def set_path_optimization(self, enabled: bool):
+        """Enable or disable path optimization.
+
+        Args:
+            enabled: Whether to use path optimization
+        """
+        self._use_path_optimization = enabled
+
+    def configure_path_optimization(
+        self, optimizer: str = "RandomShortcut", clear_existing: bool = True
+    ):
+        """Configure path optimization.
+
+        Args:
+            optimizer: Path optimizer to use. Available options:
+                Core optimizers (pyhpp.core):
+                - "RandomShortcut": Random shortcut optimizer
+                - "SimpleShortcut": Simple shortcut optimizer
+                - "PartialShortcut": Partial shortcut optimizer
+                - "SimpleTimeParameterization": Adds time parameterization
+                - "RSTimeParameterization": Reeds-Shepp time parameterization
+
+                Manipulation optimizers (pyhpp.manipulation):
+                - "ManipulationRandomShortcut": Manipulation-aware random shortcut
+                - "EnforceTransitionSemantic": Enforces transition semantics
+                - "GraphRandomShortcut": Graph-aware random shortcut
+                - "GraphPartialShortcut": Graph-aware partial shortcut
+            clear_existing: Whether to clear existing optimizers first
+        """
+        if not self._use_path_optimization:
+            return
+
+        if self.problem is None:
+            raise RuntimeError("Must create problem first")
+
+        if clear_existing:
+            self._path_optimizers.clear()
+
+        # Create the optimizer instance based on the string
+        prob = self.problem
+        optimizer_map = {
+            # Core optimizers
+            "RandomShortcut": lambda: RandomShortcut(prob),
+            "SimpleShortcut": lambda: SimpleShortcut(prob),
+            "PartialShortcut": lambda: PartialShortcut(prob),
+            "SimpleTimeParameterization": lambda: SimpleTimeParameterization(
+                prob
+            ),
+            "RSTimeParameterization": lambda: RSTimeParameterization(prob),
+            # Manipulation optimizers
+            "ManipulationRandomShortcut": lambda: ManipulationRandomShortcut(
+                prob
+            ),
+            "EnforceTransitionSemantic": lambda: EnforceTransitionSemantic(
+                prob
+            ),
+            "GraphRandomShortcut": lambda: GraphRandomShortcut(prob),
+            "GraphPartialShortcut": lambda: GraphPartialShortcut(prob),
+        }
+
+        if optimizer not in optimizer_map:
+            raise ValueError(
+                f"Unknown optimizer: {optimizer}. "
+                f"Available: {list(optimizer_map.keys())}"
+            )
+
+        opt_instance = optimizer_map[optimizer]()
+        self._path_optimizers.append(opt_instance)
+
+    def optimize_path(self, path):
+        """Optimize a path using configured optimizers.
+
+        Args:
+            path: PathVector to optimize
+
+        Returns:
+            Optimized PathVector
+        """
+        if not self._path_optimizers:
+            return path
+
+        optimized = path
+        for optimizer in self._path_optimizers:
+            optimized = optimizer.optimize(optimized)
+
+        return optimized
 
 
 # Alias for backward compatibility

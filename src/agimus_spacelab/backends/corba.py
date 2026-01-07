@@ -355,26 +355,59 @@ class CorbaBackend(BackendBase):
 
         return result
 
-    def solve(self, max_iterations: int = 10000) -> bool:
+    def solve(
+        self,
+        max_iterations: int = 10000,
+        optimizer: str = "RandomShortcut"
+    ) -> bool:
         """Solve planning problem.
         
         Args:
             max_iterations: Maximum planning iterations
+            optimizer: Path optimizer to use during optimization
             
         Returns:
             True if solution found
         """
         try:
-            # Configure path validation parameters
-            self.configure_path_optimization(num_loops=50,
-                                             max_iterations=max_iterations)
+            # Configure path optimization (uses default RandomShortcut)
+            self.configure_path_optimization(optimizer=optimizer)
 
             self.ps.setMaxIterPathPlanning(max_iterations)
             self.ps.solve()
+            
+            # Apply path optimization if enabled and paths exist
+            if self._use_path_optimization and self.ps.numberPaths() > 0:
+                self.optimize_path(self.ps.numberPaths() - 1)
+            
             return True
         except Exception as e:
             print(f"Planning failed: {e}")
             return False
+
+    def optimize_path(self, path_index: int = -1) -> int:
+        """Optimize a path using configured optimizers.
+        
+        Args:
+            path_index: Index of the path to optimize. 
+                       If -1, optimizes the last path.
+            
+        Returns:
+            Index of the optimized path
+        """
+        if self.ps is None:
+            raise RuntimeError("Problem solver not created yet")
+        
+        num_paths = self.ps.numberPaths()
+        if num_paths == 0:
+            raise RuntimeError("No paths to optimize")
+        
+        if path_index < 0:
+            path_index = num_paths - 1
+        
+        # optimizePath returns the index of the optimized path
+        optimized_index = self.ps.optimizePath(path_index)
+        return optimized_index
 
     def get_path(self, index: int = 0) -> Optional[Any]:
         """Get computed path."""
@@ -475,25 +508,45 @@ class CorbaBackend(BackendBase):
 
     def configure_path_optimization(
         self,
-        num_loops: int = 50,
-        max_iterations: int = 10000
+        optimizer: str = "RandomShortcut",
+        clear_existing: bool = True
     ):
         """Configure path optimization parameters.
         
         Args:
-            enabled: Whether to enable path optimization
-            num_loops: Number of shortcut loops
+            optimizer: Path optimizer to use. Available options:
+                Built-in (hpp-core):
+                - "RandomShortcut": Random shortcut optimizer
+                - "SimpleShortcut": Simple shortcut optimizer
+                - "PartialShortcut": Partial shortcut optimizer
+                - "SimpleTimeParameterization": Adds time parameterization
+                - "RSTimeParameterization": Reeds-Shepp time parameterization
+                
+                Manipulation-specific (hpp-manipulation):
+                - "Graph-RandomShortcut": Graph-aware random shortcut
+                - "Graph-PartialShortcut": Graph-aware partial shortcut
+                - "EnforceTransitionSemantic": Enforces transition semantics
+                
+                Plugin-based (loaded automatically):
+                - "SplineGradientBased_bezier1": Spline optimization, order 1
+                - "SplineGradientBased_bezier3": Spline optimization, order 3
+                - "SplineGradientBased_bezier5": Spline optimization, order 5
+                - "TOPPRA": Time-optimal path parameterization
+            clear_existing: Whether to clear existing optimizers first
         """
-        if self._use_path_optimization:
-            # Enable path optimization in CORBA
+        if not self._use_path_optimization:
+            return
+        
+        # Load plugin if needed for spline-based or TOPPRA optimizers
+        if optimizer.startswith("SplineGradientBased"):
             self.ps.loadPlugin("spline-gradient-based.so")
-            self.ps.addPathOptimizer("SplineGradientBased_bezier3")
-            # self.ps.addPathOptimizer("RandomShortcut")
-
-        if self._use_path_projection:
-            # Enable path projection
-            self.ps.selectPathProjector("Progressive", 0.1)
-
+        elif optimizer == "TOPPRA":
+            self.ps.loadPlugin("toppra.so")
+        
+        if clear_existing:
+            self.ps.clearPathOptimizers()
+        
+        self.ps.addPathOptimizer(optimizer)
 
 
 # Alias for backward compatibility
