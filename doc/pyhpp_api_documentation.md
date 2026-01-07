@@ -1783,19 +1783,58 @@ pv3 = Dichotomy(robot.asPinDevice(), tolerance=1e-3)
 
 The base class is `pyhpp.core.PathOptimizer`, with `optimize(pathVector)`.
 
-Concrete optimizers constructed via `__init__` include:
+##### Available Path Optimizers
 
-- `RandomShortcut(problem)`
-- `SimpleShortcut(problem)`
-- `PartialShortcut(problem)`
-- `SimpleTimeParameterization(problem)`
-- `RSTimeParameterization(problem)`
+**Core optimizers (`pyhpp.core`):**
 
-The manipulation module adds:
+| Class | Description |
+|-------|-------------|
+| `RandomShortcut(problem)` | Random shortcut optimizer - tries random shortcuts between configurations |
+| `SimpleShortcut(problem)` | Simple shortcut optimizer |
+| `PartialShortcut(problem)` | Partial shortcut optimizer - shortcuts that preserve some path structure |
+| `SimpleTimeParameterization(problem)` | Adds time parameterization to paths |
+| `RSTimeParameterization(problem)` | Reeds-Shepp time parameterization |
 
-- `RandomShortcut(problem)` (manipulation variant)
-- `EnforceTransitionSemantic(problem)`
-- Graph-aware factories: `GraphRandomShortcut(problem)` and `GraphPartialShortcut(problem)`
+**Manipulation optimizers (`pyhpp.manipulation`):**
+
+| Class | Description |
+|-------|-------------|
+| `RandomShortcut(problem)` | Manipulation-aware random shortcut (overrides core version) |
+| `EnforceTransitionSemantic(problem)` | Enforces transition semantics in manipulation graphs |
+| `GraphRandomShortcut(problem)` | Graph-aware random shortcut for constraint graphs |
+| `GraphPartialShortcut(problem)` | Graph-aware partial shortcut for constraint graphs |
+
+##### Usage Example
+
+```python
+from pyhpp.core import RandomShortcut, PartialShortcut
+from pyhpp.manipulation import GraphRandomShortcut, EnforceTransitionSemantic
+
+# Create optimizer (takes problem as argument)
+optimizer = RandomShortcut(problem)
+
+# Optimize a path
+optimized_path = optimizer.optimize(path)
+
+# For manipulation tasks, use graph-aware optimizers
+graph_optimizer = GraphRandomShortcut(problem)
+optimized_path = graph_optimizer.optimize(path)
+
+# Chain multiple optimizers
+path1 = RandomShortcut(problem).optimize(path)
+path2 = PartialShortcut(problem).optimize(path1)
+```
+
+##### PathOptimizer Base Class Methods
+
+```python
+# Base class methods available on all optimizers
+optimizer.problem()       # Get the associated problem
+optimizer.optimize(path)  # Optimize a PathVector, returns optimized PathVector
+optimizer.interrupt()     # Interrupt optimization
+optimizer.maxIterations() # Get/set max iterations
+optimizer.timeOut()       # Get/set timeout
+```
 
 ### 5.10 Core submodules: `pyhpp.core.path`, `pyhpp.core.path_optimization`, `pyhpp.core.problem_target`
 
