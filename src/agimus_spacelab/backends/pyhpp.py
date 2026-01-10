@@ -4,7 +4,7 @@ PyHPP backend implementation for manipulation planning.
 This backend uses hpp-python for direct Python bindings to HPP.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 from pinocchio import SE3
 from .base import BackendBase, ConstraintResult
@@ -14,8 +14,8 @@ try:
     from pyhpp.manipulation import (
         Device,
         urdf,
-        Graph,
         ManipulationPlanner as HPPManipulationPlanner,
+        TransitionPlanner as HPPTransitionPlanner,
         Problem,
         ProgressiveProjector,
         RandomShortcut as ManipulationRandomShortcut,
@@ -55,6 +55,21 @@ class PyHPPBackend(BackendBase):
         self.viewer = None
         self.path = None
         self._path_optimizers = []  # List of path optimizer instances
+
+        # Stored paths (local equivalent to CORBA ProblemSolver path ids)
+        self._stored_paths: List[Any] = []
+
+        # TransitionPlanner (edge-scoped planning)
+        self._transition_planner = None
+        self._transition_time_out = 3.0
+        self._transition_max_iterations = 3000
+        # (projector_type, step). If None, fall back to problem.pathProjector()
+        self._transition_path_projector: Optional[Tuple[str, float]] = (
+            "Progressive",
+            0.2,
+        )
+        # Per-edge optimizer list (edge_name -> optimizer names)
+        self._transition_optimizers_by_edge_name: Dict[str, List[str]] = {}
 
         # Configuration options for path validation and projection
         self._use_pathvalidation = True
@@ -306,7 +321,9 @@ class PyHPPBackend(BackendBase):
             error=error
         )
 
-    def solve(self, max_iterations: int = 10000, optimizer: str = "RandomShortcut") -> bool:
+    def solve(
+        self, max_iterations: int = 10000, optimizer: str = "RandomShortcut"
+    ) -> bool:
         """Solve planning problem.
         
         Args:
@@ -321,7 +338,7 @@ class PyHPPBackend(BackendBase):
         try:
             # Configure path validation with dichotomy if enabled
             self.configure_path_validation()
-            
+
             # Configure path optimization (uses default RandomShortcut)
             self.configure_path_optimization(optimizer=optimizer)
 
@@ -340,8 +357,13 @@ class PyHPPBackend(BackendBase):
             print(f"Planning failed: {e}")
             return False
 
-    def get_path(self) -> Optional[Any]:
-        """Get computed path."""
+    def get_path(self, index: int = 0) -> Optional[Any]:
+        """Get a stored path by id (or fallback to last computed path)."""
+        if self._stored_paths:
+            if index < 0:
+                index = len(self._stored_paths) - 1
+            if 0 <= index < len(self._stored_paths):
+                return self._stored_paths[index]
         return self.path
 
     def visualize(self, q: Optional[np.ndarray] = None):
@@ -365,7 +387,17 @@ class PyHPPBackend(BackendBase):
 
     def play_path(self, path_index: int = 0):
         """Play path in viewer."""
-        if self.path is None:
+        path = None
+        if self._stored_paths:
+            if path_index < 0:
+                path_index = len(self._stored_paths) - 1
+            if 0 <= path_index < len(self._stored_paths):
+                path = self._stored_paths[path_index]
+
+        if path is None:
+            path = self.path
+
+        if path is None:
             print("No path to play")
             return
 
@@ -376,13 +408,18 @@ class PyHPPBackend(BackendBase):
         import time
         t = 0.0
         dt = 0.01
-        length = self.path.length()
+        length = path.length()
 
         while t <= length:
-            q = self.path(t)
+            q = path(t)
             self.viewer(q)
             time.sleep(dt)
             t += dt
+
+    def store_path(self, path) -> int:
+        """Store a PathVector locally and return its integer id."""
+        self._stored_paths.append(path)
+        return len(self._stored_paths) - 1
 
     def get_robot(self):
         """Get device object."""
@@ -476,7 +513,8 @@ class PyHPPBackend(BackendBase):
                 - "RSTimeParameterization": Reeds-Shepp time parameterization
 
                 Manipulation optimizers (pyhpp.manipulation):
-                - "ManipulationRandomShortcut": Manipulation-aware random shortcut
+                                - "ManipulationRandomShortcut":
+                                    Manipulation-aware shortcut
                 - "EnforceTransitionSemantic": Enforces transition semantics
                 - "GraphRandomShortcut": Graph-aware random shortcut
                 - "GraphPartialShortcut": Graph-aware partial shortcut
@@ -491,9 +529,21 @@ class PyHPPBackend(BackendBase):
         if clear_existing:
             self._path_optimizers.clear()
 
-        # Create the optimizer instance based on the string
+        opt_instance = self._create_path_optimizer_instance(optimizer)
+        if opt_instance is None:
+            raise ValueError(
+                f"Unknown optimizer: {optimizer}. "
+                f"Available: {sorted(self._path_optimizer_factories().keys())}"
+            )
+        self._path_optimizers.append(opt_instance)
+
+    def _path_optimizer_factories(self) -> Dict[str, Any]:
+        """Factories for string-based path optimizer selection."""
+        if self.problem is None:
+            raise RuntimeError("Must create problem first")
+
         prob = self.problem
-        optimizer_map = {
+        return {
             # Core optimizers
             "RandomShortcut": lambda: RandomShortcut(prob),
             "SimpleShortcut": lambda: SimpleShortcut(prob),
@@ -513,14 +563,251 @@ class PyHPPBackend(BackendBase):
             "GraphPartialShortcut": lambda: GraphPartialShortcut(prob),
         }
 
-        if optimizer not in optimizer_map:
-            raise ValueError(
-                f"Unknown optimizer: {optimizer}. "
-                f"Available: {list(optimizer_map.keys())}"
+    def _create_path_optimizer_instance(self, optimizer: str):
+        factories = self._path_optimizer_factories()
+        factory = factories.get(str(optimizer))
+        if factory is None:
+            return None
+        return factory()
+
+    # ---------------------------------------------------------------------
+    # TransitionPlanner integration (edge-scoped planning)
+    # ---------------------------------------------------------------------
+
+    def configure_transition_planner(
+        self,
+        *,
+        time_out: Optional[float] = None,
+        max_iterations: Optional[int] = None,
+        path_projector: Optional[Tuple[str, float]] = None,
+    ) -> None:
+        """Configure defaults for TransitionPlanner edge-scoped planning."""
+        if time_out is not None:
+            self._transition_time_out = float(time_out)
+        if max_iterations is not None:
+            self._transition_max_iterations = int(max_iterations)
+        if path_projector is not None:
+            self._transition_path_projector = path_projector
+
+        tp = self._transition_planner
+        if tp is not None:
+            self._apply_transition_planner_defaults(tp)
+
+    def _apply_transition_planner_defaults(self, tp: Any) -> None:
+        try:
+            tp.timeOut(self._transition_time_out)
+        except Exception:
+            pass
+        try:
+            tp.maxIterations(self._transition_max_iterations)
+        except Exception:
+            pass
+
+        # Configure path projector specifically for TransitionPlanner.
+        # If not set, fall back to whatever the Problem currently uses.
+        if self._transition_path_projector is None:
+            try:
+                tp.pathProjector(self.problem.pathProjector())
+            except Exception:
+                pass
+            return
+
+        proj_type, step = self._transition_path_projector
+        try:
+            if str(proj_type) == "Progressive":
+                projector = ProgressiveProjector(
+                    self.problem.distance(),
+                    self.problem.steeringMethod(),
+                    float(step),
+                )
+                tp.pathProjector(projector)
+            else:
+                # Unknown projector type: best-effort fallback
+                tp.pathProjector(self.problem.pathProjector())
+        except Exception:
+            pass
+
+    def ensure_transition_planner(self) -> Any:
+        """Create (or return cached) TransitionPlanner object."""
+        if self.problem is None:
+            raise RuntimeError("Problem not created yet")
+        if self._transition_planner is not None:
+            return self._transition_planner
+
+        tp = HPPTransitionPlanner(self.problem)
+        self._apply_transition_planner_defaults(tp)
+        self._transition_planner = tp
+        return tp
+
+    def reset_transition_planner(self) -> None:
+        """Forget cached TransitionPlanner object (best-effort cleanup)."""
+        self._transition_planner = None
+
+    def _resolve_transition(self, edge: Union[str, Any]) -> Any:
+        if self.graph is None:
+            raise RuntimeError("Graph not initialized")
+        if isinstance(edge, str):
+            return self.graph.getTransition(edge)
+        return edge
+
+    def set_transition_optimizers(
+        self,
+        edge: Union[str, Any],
+        optimizers: Sequence[str],
+        *,
+        clear_existing: bool = True,
+    ) -> None:
+        """Set the optimizer list to use for a given transition edge."""
+        tr = self._resolve_transition(edge)
+        edge_name = tr.name() if hasattr(tr, "name") else str(edge)
+        opts = [str(o) for o in optimizers]
+        missing = edge_name not in self._transition_optimizers_by_edge_name
+        if clear_existing or missing:
+            self._transition_optimizers_by_edge_name[edge_name] = opts
+        else:
+            self._transition_optimizers_by_edge_name[edge_name].extend(opts)
+
+    def clear_transition_optimizers(
+        self, edge: Optional[Union[str, Any]] = None
+    ) -> None:
+        """Clear per-edge transition optimizer lists."""
+        if edge is None:
+            self._transition_optimizers_by_edge_name.clear()
+            return
+        tr = self._resolve_transition(edge)
+        edge_name = tr.name() if hasattr(tr, "name") else str(edge)
+        self._transition_optimizers_by_edge_name.pop(edge_name, None)
+
+    def _configure_transition_planner_for_edge(self, tp: Any, tr: Any) -> None:
+        try:
+            tp.setEdge(tr)
+        except Exception as exc:
+            edge_name = getattr(tr, "name", lambda: str(tr))()
+            raise RuntimeError(
+                f"Failed to set TransitionPlanner edge {edge_name}: {exc}"
             )
 
-        opt_instance = optimizer_map[optimizer]()
-        self._path_optimizers.append(opt_instance)
+        try:
+            tp.clearPathOptimizers()
+        except Exception:
+            pass
+
+        edge_name = tr.name() if hasattr(tr, "name") else str(tr)
+        for opt_name in self._transition_optimizers_by_edge_name.get(
+            edge_name, []
+        ):
+            opt_instance = self._create_path_optimizer_instance(opt_name)
+            if opt_instance is None:
+                available = sorted(self._path_optimizer_factories().keys())
+                raise ValueError(
+                    f"Unknown optimizer: {opt_name}. Available: {available}"
+                )
+            tp.addPathOptimizer(opt_instance)
+
+    def plan_transition_edge(
+        self,
+        edge: Union[str, Any],
+        q1: Sequence[float],
+        q2: Sequence[float],
+        *,
+        validate: bool = True,
+        reset_roadmap: bool = True,
+        time_parameterize: bool = True,
+        store: bool = True,
+    ) -> Union[int, Any]:
+        """Plan a transition along a specific graph edge.
+
+        Returns:
+            If store=True: local stored path id (int).
+            If store=False: a PathVector object.
+        """
+        if self.problem is None:
+            raise RuntimeError("Problem not created yet")
+
+        tp = self.ensure_transition_planner()
+        tr = self._resolve_transition(edge)
+        self._configure_transition_planner_for_edge(tp, tr)
+
+        q1_list = list(q1)
+        q2_list = list(q2)
+
+        pv: Any
+        try:
+            success, path, status = tp.directPath(
+                q1_list, q2_list, bool(validate)
+            )
+        except Exception as exc:
+            raise RuntimeError(f"TransitionPlanner.directPath failed: {exc}")
+
+        if success:
+            try:
+                pv = tp.optimizePath(path)
+            except Exception:
+                pv = path
+        else:
+            try:
+                # planPath expects a matrix of goals (list of lists)
+                pv = tp.planPath(q1_list, [q2_list], bool(reset_roadmap))
+            except Exception as exc:
+                raise RuntimeError(
+                    (
+                        "TransitionPlanner failed (directPath status: %s). "
+                        "planPath error: %s"
+                    )
+                    % (status, exc)
+                )
+
+        if time_parameterize:
+            try:
+                pv = tp.timeParameterization(pv)
+            except Exception:
+                pass
+
+        if not store:
+            return pv
+
+        return self.store_path(pv)
+
+    def plan_transition_sequence(
+        self,
+        edges: Sequence[Union[str, Any]],
+        waypoints: Sequence[Sequence[float]],
+        *,
+        validate: bool = True,
+        reset_roadmap: bool = True,
+        time_parameterize: bool = True,
+        store: bool = True,
+    ) -> Union[int, Any]:
+        """Plan a multi-edge transition sequence and concatenate results."""
+        if len(waypoints) != len(edges) + 1:
+            raise ValueError(
+                "Expected len(waypoints) == len(edges) + 1, got %d and %d"
+                % (len(waypoints), len(edges))
+            )
+
+        pv_total: Optional[Any] = None
+        for i, edge in enumerate(edges):
+            pv_i = self.plan_transition_edge(
+                edge,
+                waypoints[i],
+                waypoints[i + 1],
+                validate=validate,
+                reset_roadmap=reset_roadmap,
+                time_parameterize=time_parameterize,
+                store=False,
+            )
+            if pv_total is None:
+                pv_total = pv_i
+            else:
+                pv_total.concatenate(pv_i)
+
+        if pv_total is None:
+            raise RuntimeError("No edges provided")
+
+        if not store:
+            return pv_total
+
+        return self.store_path(pv_total)
 
     def optimize_path(self, path):
         """Optimize a path using configured optimizers.
