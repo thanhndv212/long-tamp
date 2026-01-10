@@ -1138,6 +1138,116 @@ Key difference to keep in mind:
 - Global planning (`ps.solve`) decides which transitions to attempt.
 - Edge-focused planning (using `graph.generateTargetConfig` + `graph.buildAndProjectPath`) keeps the discrete transition under your control and is ideal for debugging a specific manipulation transition.
 
+#### 5.6.2 Using `TransitionPlanner` from CORBA (edge-focused planning)
+
+The CORBA stack exposes a transition-level planner (C++ `hpp::manipulation::pathPlanner::TransitionPlanner`) that you can use when you want to:
+
+- force planning along a specific graph edge (no automatic edge choice),
+- validate or debug a single transition,
+- build a longer motion by chaining multiple edge-local paths.
+
+There are two common construction patterns in existing AGIMUS demos:
+
+**Pattern A: create a manipulation TransitionPlanner (simple)**
+
+```python
+tp = ps.client.manipulation.problem.createTransitionPlanner()
+```
+
+This returns a CORBA object with TransitionPlanner methods (set edge, planPath, validateConfiguration, …).
+
+**Pattern B: create a TransitionPlanner via the generic path-planner factory (advanced)**
+
+Some code creates a dedicated roadmap and then instantiates the planner with:
+
+```python
+tp = ps.client.basic.problem.createPathPlanner(
+    "TransitionPlanner",
+    cproblem,
+    croadmap,
+)
+```
+
+This is useful when you want a custom `Roadmap` / `Distance` object.
+
+##### Minimal configuration
+
+In practice, you should set *both* timeout and maxIterations on the TransitionPlanner (some demos note this avoids crashes / undefined behavior):
+
+```python
+tp.timeOut(3.0)
+tp.maxIterations(3000)
+tp.setPathProjector("Progressive", 0.2)
+```
+
+You can also attach path optimizers to the transition context:
+
+```python
+tp.addPathOptimizer("EnforceTransitionSemantic")
+tp.addPathOptimizer("RandomShortcut")
+
+# If using plugin optimizers, make sure the plugin is loaded in the server first.
+tp.addPathOptimizer("SplineGradientBased_bezier3")
+```
+
+##### Selecting which transition to plan
+
+TransitionPlanner plans along **one selected edge**.
+
+In CORBA manipulation graphs, edges are commonly referenced by string name and mapped to an integer ID via `graph.edges[...]`:
+
+```python
+edge_id = graph.edges["Loop | f"]
+tp.setEdge(edge_id)
+```
+
+##### Planning APIs you typically use
+
+- `tp.planPath(q_start, [q_goal], resetRoadmap)`
+  - returns a path object when successful.
+  - `resetRoadmap=True` is common when you want repeatable, edge-local planning.
+
+- `tp.directPath(q1, q2, validate)`
+  - returns `(path, success, msg)`.
+  - if it succeeds, you often time-parameterize explicitly (some demos do this because directPath may not apply time-parameterization automatically).
+
+- `tp.timeParameterization(pathVector)`
+  - returns a time-parameterized path vector.
+
+- `tp.validateConfiguration(q, edge_id)`
+  - returns `(ok, msg)` and is useful to quickly check whether a generated target config is valid for a given edge.
+
+##### Typical “edge-focused” workflow
+
+1) Generate a target configuration consistent with the edge leaf:
+
+```python
+success, q_target, residual = graph.generateTargetConfig(edge_name_or_id, q_leaf, q_seed)
+```
+
+2) Optionally validate the configuration in the transition context:
+
+```python
+ok, msg = tp.validateConfiguration(q_target, graph.edges[edge_name])
+```
+
+3) Plan locally along that edge:
+
+```python
+tp.setEdge(graph.edges[edge_name])
+path = tp.planPath(q_leaf, [q_target], True)
+```
+
+4) If you use `directPath`, explicitly time-parameterize the returned vector when needed:
+
+```python
+p, ok, msg = tp.directPath(q1, q2, True)
+pv = p.asVector()
+pv_time = tp.timeParameterization(pv)
+```
+
+Note on object lifetime: many CORBA path objects expose `deleteThis()`; many demos use `hpp.corbaserver.wrap_delete` to avoid leaks when handling lots of temporary paths.
+
 ---
 
 ## 6. Visualization
