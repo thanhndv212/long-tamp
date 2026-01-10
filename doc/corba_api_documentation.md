@@ -1100,6 +1100,44 @@ Edge-based helpers:
 
 These are useful when debugging or when you want to explicitly force a specific transition rather than relying on the planner to pick edges.
 
+#### 5.6.1 ManipulationPlanner vs TransitionPlanner (conceptual comparison)
+
+At the C++ level, HPP-Manipulation distinguishes:
+
+- **Global graph planning** (`hpp::manipulation::ManipulationPlanner`): explores the whole constraint graph, automatically choosing transitions, growing a roadmap until init and goal connect.
+- **Transition-level planning** (`hpp::manipulation::pathPlanner::TransitionPlanner`): plans for one *selected* transition (edge) by configuring an inner problem with that edge’s constraints/steering/validation.
+
+In the CORBA Python API, you most often interact with the *global* planner via:
+
+```python
+ok = ps.solve()
+```
+
+To get **transition-level behavior** in CORBA (edge-focused, controlled transition), you typically emulate what `TransitionPlanner` does by explicitly choosing and using one edge:
+
+1) Pick the edge you want (by name or by inspecting the graph)
+2) Generate a target config consistent with the edge leaf:
+
+```python
+success, q_target, residual = graph.generateTargetConfig(edge, q_from, q_seed)
+```
+
+3) Build a constrained path for that edge and project it:
+
+```python
+success, path_id, report = graph.buildAndProjectPath(edge, q_from, q_target)
+```
+
+4) Optionally validate / post-process the stored path (server-side):
+
+- `ps.projectPath(path_id)`
+- `ps.optimizePath(path_id)`
+
+Key difference to keep in mind:
+
+- Global planning (`ps.solve`) decides which transitions to attempt.
+- Edge-focused planning (using `graph.generateTargetConfig` + `graph.buildAndProjectPath`) keeps the discrete transition under your control and is ideal for debugging a specific manipulation transition.
+
 ---
 
 ## 6. Visualization

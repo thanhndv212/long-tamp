@@ -142,6 +142,41 @@ enum TypeOfFailure {
 
 Statistics tracked per edge to identify bottlenecks.
 
+### 3.4 **ManipulationPlanner vs TransitionPlanner** (global vs local planning)
+
+HPP-Manipulation provides two complementary planning styles:
+
+- `ManipulationPlanner` is a **global** planner: it explores the *constraint graph* and grows a roadmap across many states/edges until the init and goal are connected.
+- `TransitionPlanner` is a **local / transition-level** planner: it plans **only for a chosen transition edge** (or a specific pair of states), typically to debug or to force a particular discrete transition.
+
+#### 3.4.1 Scope and contract
+
+| Aspect | `ManipulationPlanner` | `TransitionPlanner` |
+|---|---|---|
+| Discrete structure | Chooses edges automatically via `graph->chooseEdge(...)` and explores many state/edge combinations | Requires an edge (transition) to be selected (e.g. via `setEdge(...)`) |
+| Continuous manifold | Uses the edge’s **path constraint** manifold and its foliation leaves implicitly during expansion | Plans on the **selected edge** manifold (edge path constraint + edge validation + edge steering) |
+| Goal handling | Goal is usually “reach a goal configuration / goal state” in the full manipulation problem | Goals must satisfy the **same leaf** (right-hand side) induced by the start configuration (otherwise it rejects them) |
+| Output | A path (often a `PathVector`) that may traverse many graph transitions | A path (`PathVector`) for that single transition/edge context |
+
+#### 3.4.2 How constraints and foliation are handled
+
+- `ManipulationPlanner`:
+   - Picks an outgoing edge from the current node’s state.
+   - Uses `edge->generateTargetConfig(...)` to project a random sample onto a reachable target configuration **consistent with the edge leaf**.
+   - Builds a path with `edge->build(...)`, then optionally projects it and validates it.
+   - The roadmap is partitioned by *graph state* and *leaf connected components* (two configs in the same state but different leaves generally cannot be connected within that state).
+
+- `TransitionPlanner`:
+   - Takes an edge and sets the inner problem to match it: path constraints, path validation, steering method.
+   - Initializes the constraint right-hand side from the start configuration (effectively selecting the leaf).
+   - Rejects goal configurations that do not satisfy the same leaf constraint.
+   - Can optionally reset the roadmap for each call (useful for deterministic debugging).
+
+#### 3.4.3 When to use which
+
+- Prefer `ManipulationPlanner` when you want an **end-to-end manipulation plan** and you are OK with the planner choosing which discrete transitions to attempt.
+- Prefer `TransitionPlanner` when you already know the discrete transition you want (or you want to test a single edge), and you need a **repeatable, edge-focused** plan for debugging, benchmarking, or building higher-level orchestration.
+
 ---
 
 ## 4. **Constraint Management**

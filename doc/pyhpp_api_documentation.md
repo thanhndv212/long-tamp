@@ -1553,6 +1553,23 @@ tp.setEdge(edge)
 path = tp.planPath(q_start, q_goals, resetRoadmap=True)
 ```
 
+#### 5.4.1 `ManipulationPlanner` vs `TransitionPlanner` (global vs transition-level)
+
+Both planners operate on the same manipulation problem and constraint graph, but they solve different problems:
+
+| Aspect | `ManipulationPlanner` | `TransitionPlanner` |
+|---|---|---|
+| What it solves | End-to-end manipulation plan across many graph states/edges | A plan for a **single selected edge/transition** |
+| Discrete decisions | Automatic (chooses outgoing edges during expansion) | Manual (you call `setEdge(edge)` / `setEdge(id)`) |
+| Leaf/foliation handling | Implicit: uses edge target generation and the roadmap’s leaf connected components | Explicit: fixes the constraint RHS from `q_start`, and requires all goals to satisfy the same leaf |
+| Roadmap | Grows a roadmap across states/leaves as it explores | Can reuse or reset roadmap per call (`resetRoadmap=True/False`) |
+| Post-processing hooks | Typically relies on the problem’s path projector/validation and any configured optimizers | Has explicit hooks for optimization/time-parameterization (e.g., maintains a list of path optimizers and a time parameterizer in the transition context) |
+
+Practical guidance:
+
+- Use `ManipulationPlanner` when you want the planner to **discover** a sequence of transitions that connects init to goal.
+- Use `TransitionPlanner` when you already know the intended transition (or want to debug one), and you need **repeatable, edge-focused** planning with tight control over the discrete choice.
+
 Core planners are also exposed (examples):
 
 - `pyhpp.core.BiRRTPlanner(problem)`
