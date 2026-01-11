@@ -150,6 +150,17 @@ class ConfigGenerator:
         if self.backend == "pyhpp":
             self._shooter = self.ps.configurationShooter()
 
+    def update_graph(self, new_graph) -> None:
+        """Update the constraint graph reference.
+
+        Used by GraspSequencePlanner when rebuilding phase graphs to keep
+        ConfigGenerator synchronized with the current graph.
+
+        Args:
+            new_graph: New ConstraintGraph or Graph instance
+        """
+        self.graph = new_graph
+
     def is_config_valid(
         self, q: List[float], verbose: bool = False
     ) -> Tuple[bool, str]:
