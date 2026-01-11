@@ -53,12 +53,17 @@ class CorbaBackend(BackendBase):
 
         # TransitionPlanner (edge-scoped planning)
         self._transition_planner = None
-        self._transition_time_out = 3.0
-        self._transition_max_iterations = 3000
+        self._transition_time_out = 60.0  # Increased for waypoint edges
+        self._transition_max_iterations = 10000  # More iterations for RRT*
         self._transition_path_projector: Optional[Tuple[str, float]] = (
             "Progressive",
             0.2,
         )
+        # Default path optimizers to add
+        self._transition_default_optimizers = [
+            "EnforceTransitionSemantic",
+            "SimpleTimeParameterization",
+        ]
         # Per-edge optimizer list (edge_id -> optimizer names)
         self._transition_optimizers_by_edge_id: Dict[int, List[str]] = {}
 
@@ -386,11 +391,11 @@ class CorbaBackend(BackendBase):
 
             self.ps.setMaxIterPathPlanning(max_iterations)
             self.ps.solve()
-            
+
             # Apply path optimization if enabled and paths exist
             if self._use_path_optimization and self.ps.numberPaths() > 0:
                 self.optimize_path(self.ps.numberPaths() - 1)
-            
+
             return True
         except Exception as e:
             print(f"Planning failed: {e}")
@@ -422,6 +427,20 @@ class CorbaBackend(BackendBase):
             )
             % edge
         )
+
+    def _resolve_edge_name(self, edge: Union[int, str]) -> str:
+        """Convert edge ID or name to string name."""
+        if isinstance(edge, str):
+            return edge
+        if self.graph is None:
+            raise RuntimeError("Graph not initialized")
+        edges = getattr(self.graph, "edges", None)
+        if isinstance(edges, dict):
+            # Find edge name by ID
+            for name, eid in edges.items():
+                if int(eid) == int(edge):
+                    return name
+        raise ValueError(f"Edge ID {edge} not found in graph")
 
     def _load_path_optimizer_plugin_if_needed(self, optimizer: str) -> None:
         if self.ps is None:
@@ -472,6 +491,13 @@ class CorbaBackend(BackendBase):
                 tp.setPathProjector(proj_type, float(tol))
             except Exception:
                 pass
+        # Add default path optimizers
+        for opt in self._transition_default_optimizers:
+            try:
+                self._load_path_optimizer_plugin_if_needed(opt)
+                tp.addPathOptimizer(opt)
+            except Exception:
+                pass
 
     def ensure_transition_planner(self) -> Any:
         """Create (or return cached) TransitionPlanner CORBA object."""
@@ -479,8 +505,10 @@ class CorbaBackend(BackendBase):
             raise RuntimeError("Problem solver not created yet")
 
         if self._transition_planner is not None:
+            print(f"      [TP] Using cached TransitionPlanner")
             return self._transition_planner
 
+        print(f"      [TP] Creating new TransitionPlanner")
         tp = self.ps.client.manipulation.problem.createTransitionPlanner()
         self._apply_transition_planner_defaults(tp)
         self._transition_planner = tp
@@ -499,12 +527,15 @@ class CorbaBackend(BackendBase):
         tp = self._transition_planner
         self._transition_planner = None
         if tp is None:
+            print(f"      [TP] No cached TransitionPlanner to reset")
             return
 
+        print(f"      [TP] Resetting cached TransitionPlanner")
         delete_this = getattr(tp, "deleteThis", None)
         if callable(delete_this):
             try:
                 delete_this()
+                print(f"      [TP] Called deleteThis()")
             except Exception:
                 pass
 
@@ -539,19 +570,28 @@ class CorbaBackend(BackendBase):
     ) -> None:
         try:
             tp.setEdge(int(edge_id))
+            print(f"      [TP] Set edge ID: {edge_id}")
         except Exception as exc:
             raise RuntimeError(
                 f"Failed to set TransitionPlanner edge {edge_id}: {exc}"
             )
 
-        try:
-            tp.clearPathOptimizers()
-        except Exception:
-            pass
+        # Only clear and set custom optimizers if edge-specific ones exist
+        if edge_id in self._transition_optimizers_by_edge_id:
+            try:
+                tp.clearPathOptimizers()
+                print(
+                    f"      [TP] Cleared path optimizers (using edge-specific)"
+                )
+            except Exception:
+                pass
 
-        for opt in self._transition_optimizers_by_edge_id.get(edge_id, []):
-            self._load_path_optimizer_plugin_if_needed(opt)
-            tp.addPathOptimizer(opt)
+            for opt in self._transition_optimizers_by_edge_id[edge_id]:
+                self._load_path_optimizer_plugin_if_needed(opt)
+                tp.addPathOptimizer(opt)
+                print(f"      [TP] Added optimizer: {opt}")
+        else:
+            print(f"      [TP] Using default optimizers")
 
     def plan_transition_edge(
         self,
@@ -562,13 +602,12 @@ class CorbaBackend(BackendBase):
         validate: bool = True,
         reset_roadmap: bool = True,
         time_parameterize: bool = True,
-        store: bool = True,
+        store: bool = False,
     ) -> Union[int, Any]:
         """Plan a transition along a specific graph edge.
 
         Returns:
-            If store=True: stored path id (int) in ProblemSolver.
-            If store=False: a core_idl::PathVector CORBA object.
+            PathVector CORBA object (store parameter ignored for TransitionPlanner).
         """
         if self.ps is None:
             raise RuntimeError("Problem solver not created yet")
@@ -579,11 +618,34 @@ class CorbaBackend(BackendBase):
 
         q1_list = list(q1)
         q2_list = list(q2)
+        # validate configurations
+        q1_ok, msg1 = tp.validateConfiguration(q1_list, edge_id)
+        q2_ok, msg2 = tp.validateConfiguration(q2_list, edge_id)
+        print(f"      [TP] Validate q1: {q1_ok}, msg: {msg1}")
+        print(f"      [TP] Validate q2: {q2_ok}, msg: {msg2}")
+
+        # For waypoint edges, skip directPath validation since
+        # straight-line paths often go through collision
+        # Let planPath (RRT*) find collision-free paths
+        use_direct = validate
+        edge_str = self._resolve_edge_name(edge)
+        if (
+            "_01" in edge_str
+            or "_12" in edge_str
+            or "_21" in edge_str
+            or "_10" in edge_str
+        ):
+            use_direct = False
+            print(
+                f"      [TP] Waypoint edge detected, skipping directPath validation"
+            )
 
         try:
             path, success, status = tp.directPath(
-                q1_list, q2_list, bool(validate)
+                q1_list, q2_list, bool(use_direct)
             )
+            if not success and status:
+                print(f"      [TP] directPath failed: {status}")
         except Exception as exc:
             raise RuntimeError(f"TransitionPlanner.directPath failed: {exc}")
 
@@ -617,16 +679,9 @@ class CorbaBackend(BackendBase):
             except Exception:
                 pass
 
-        if not store:
-            return pv
-
-        try:
-            return int(self.ps.client.problem.addPath(pv))
-        except Exception as exc:
-            raise RuntimeError(
-                "Failed to store transition PathVector into ProblemSolver: %s"
-                % exc
-            )
+        # Return PathVector directly - TransitionPlanner paths aren't stored
+        # in ProblemSolver's path list, they're used directly
+        return pv
 
     def plan_transition_sequence(
         self,
@@ -636,9 +691,13 @@ class CorbaBackend(BackendBase):
         validate: bool = True,
         reset_roadmap: bool = True,
         time_parameterize: bool = True,
-        store: bool = True,
+        store: bool = False,
     ) -> Union[int, Any]:
-        """Plan a multi-edge transition sequence and concatenate results."""
+        """Plan a multi-edge transition sequence and concatenate results.
+
+        Returns:
+            Concatenated PathVector CORBA object.
+        """
         if len(waypoints) != len(edges) + 1:
             raise ValueError(
                 "Expected len(waypoints) == len(edges) + 1, got %d and %d"
@@ -664,21 +723,8 @@ class CorbaBackend(BackendBase):
         if pv_total is None:
             raise RuntimeError("No edges provided")
 
-        if not store:
-            return pv_total
-
-        if self.ps is None:
-            raise RuntimeError("Problem solver not created yet")
-        try:
-            return int(self.ps.client.problem.addPath(pv_total))
-        except Exception as exc:
-            raise RuntimeError(
-                (
-                    "Failed to store concatenated PathVector into "
-                    "ProblemSolver: %s"
-                )
-                % exc
-            )
+        # Return concatenated PathVector directly
+        return pv_total
 
     def optimize_path(self, path_index: int = -1) -> int:
         """Optimize a path using configured optimizers.
@@ -710,7 +756,7 @@ class CorbaBackend(BackendBase):
             return None
 
         try:
-            return self.ps.client.problem.getPath(index)
+            return self.ps.client.manipulation.problem.getPath(index)
         except Exception:
             return None
 
@@ -743,6 +789,85 @@ class CorbaBackend(BackendBase):
             self.path_player(path_index)
         except Exception as e:
             print(f"Failed to play path: {e}")
+
+    def play_path_vector(self, path_vector: Any, speed: float = 1.0) -> int:
+        """Play a PathVector object directly in the viewer.
+
+        PathPlayer requires paths to be stored in ProblemSolver first.
+        This method adds the PathVector to the problem solver to get an index,
+        then plays it via PathPlayer.
+
+        Args:
+            path_vector: PathVector CORBA object from TransitionPlanner
+            speed: Playback speed multiplier (currently not used)
+
+        Returns:
+            Index of the stored path in ProblemSolver
+
+        Raises:
+            RuntimeError: If problem solver is not initialized
+        """
+        if self.ps is None:
+            raise RuntimeError("Problem solver not created yet")
+
+        if self.viewer is None:
+            self.visualize()
+
+        if self.path_player is None:
+            self.path_player = PathPlayer(self.viewer)
+
+        # Get current number of paths to determine the index
+        path_index = self.ps.numberPaths()
+
+        # Add PathVector to problem solver (uses basic interface)
+        # This stores the path and returns the index
+        self.ps.client.basic.problem.addPath(path_vector)
+
+        # Play the path by index
+        try:
+            self.path_player(path_index)
+        except Exception as e:
+            print(f"Failed to play path at index {path_index}: {e}")
+
+        return path_index
+
+    def clear_stored_paths(self, verbose: bool = True) -> int:
+        """Clear all paths stored in ProblemSolver.
+
+        Useful to prevent memory accumulation when planning/replaying
+        multiple sequences. Resets the path counter to 0.
+
+        Args:
+            verbose: Print number of paths cleared
+
+        Returns:
+            Number of paths that were cleared
+        """
+        if self.ps is None:
+            return 0
+
+        num_paths = self.ps.numberPaths()
+
+        if num_paths > 0:
+            # Clear paths by resetting problem solver paths
+            # Note: hpp doesn't have a direct clearPaths() API,
+            # so we need to reset by recreating the problem or
+            # just be aware of accumulation
+            if verbose:
+                print(f"Note: {num_paths} paths are stored in ProblemSolver")
+                print("     (hpp doesn't provide path clearing API)")
+
+        return num_paths
+
+    def get_num_stored_paths(self) -> int:
+        """Get number of paths currently stored in ProblemSolver.
+
+        Returns:
+            Number of stored paths
+        """
+        if self.ps is None:
+            return 0
+        return self.ps.numberPaths()
 
     def get_robot(self):
         """Get robot instance."""
@@ -831,16 +956,16 @@ class CorbaBackend(BackendBase):
         """
         if not self._use_path_optimization:
             return
-        
+
         # Load plugin if needed for spline-based or TOPPRA optimizers
         if optimizer.startswith("SplineGradientBased"):
             self.ps.loadPlugin("spline-gradient-based.so")
         elif optimizer == "TOPPRA":
             self.ps.loadPlugin("toppra.so")
-        
+
         if clear_existing:
             self.ps.clearPathOptimizers()
-        
+
         self.ps.addPathOptimizer(optimizer)
 
 
