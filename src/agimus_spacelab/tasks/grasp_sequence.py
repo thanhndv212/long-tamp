@@ -178,6 +178,31 @@ class GraspSequencePlanner:
                                 f"     Graph has {len(new_graph.edges)} edges"
                             )
 
+                # Update ConfigGenerator's graph reference (or initialize it)
+                # ConfigGenerator needs current graph for edge-based config generation
+                if self.config_gen is None:
+                    # First phase: initialize ConfigGenerator with phase graph
+                    from agimus_spacelab.planning import ConfigGenerator
+
+                    self.config_gen = ConfigGenerator(
+                        self.graph_builder.robot,
+                        new_graph,
+                        self.planner,
+                        self.graph_builder.ps,
+                        backend=self.backend,
+                    )
+                    if verbose:
+                        print(
+                            "  \u2713 Initialized ConfigGenerator with phase graph"
+                        )
+                elif hasattr(self.config_gen, "update_graph"):
+                    # Subsequent phases: update graph reference
+                    self.config_gen.update_graph(new_graph)
+                    if verbose:
+                        print(
+                            "  \u2713 Updated ConfigGenerator graph reference"
+                        )
+
             except Exception as e:
                 raise RuntimeError(
                     f"Phase {phase_idx + 1}: Failed to build graph: {e}"
