@@ -208,6 +208,7 @@ class ManipulationTask:
         validation_step: float = 0.01,
         projector_step: float = 0.1,
         freeze_joint_substrings: Optional[List[str]] = None,
+        skip_graph: bool = False,
     ):
         """
         Complete task setup: scene, constraints, graph.
@@ -217,6 +218,9 @@ class ManipulationTask:
             projector_step: Path projector step
             freeze_joint_substrings: Joint name patterns to lock globally.
                 Creates locked joint constraints added before graph init.
+            skip_graph: If True, skip graph creation and ConfigGenerator init.
+                Use this when GraspSequencePlanner will build phase graphs.
+                Saves time by avoiding wasteful full graph creation.
         """
         # Store for later use
         self._freeze_joint_substrings = freeze_joint_substrings
@@ -271,14 +275,34 @@ class ManipulationTask:
                     )
                     graph_constraints = constraint_names
 
-        # 5. Create graph (with global constraints added before init)
-        print("\n3. Creating constraint graph...")
-        self.graph = self.create_graph(graph_constraints=graph_constraints)
+        # Store for use by GraspSequencePlanner (phase graph rebuilding)
+        self._graph_constraints = graph_constraints
 
-        # 6. Initialize configuration generator
-        self.config_gen = ConfigGenerator(
-            self.robot, self.graph, self.planner, self.ps, backend=self.backend
-        )
+        if skip_graph:
+            # Skip graph creation for grasp sequence mode
+            # GraspSequencePlanner will build minimal phase graphs
+            print("\n3. Skipping graph creation (will be built by planner)")
+            print("   ✓ Scene and constraints ready for phase graph building")
+            # Initialize GraphBuilder without creating graph yet
+            self.graph_builder = GraphBuilder(
+                self.planner, self.robot, self.ps, backend=self.backend
+            )
+            # ConfigGenerator will be initialized after first phase graph
+            self.graph = None
+            self.config_gen = None
+        else:
+            # 5. Create graph (with global constraints added before init)
+            print("\n3. Creating constraint graph...")
+            self.graph = self.create_graph(graph_constraints=graph_constraints)
+
+            # 6. Initialize configuration generator
+            self.config_gen = ConfigGenerator(
+                self.robot,
+                self.graph,
+                self.planner,
+                self.ps,
+                backend=self.backend,
+            )
 
         print("\n   ✓ Task setup complete")
 
