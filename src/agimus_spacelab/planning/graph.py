@@ -1027,5 +1027,123 @@ class GraphBuilder:
         """Get dictionary of edge names to (from, to) tuples."""
         return self.edge_topology.copy()
 
+    def build_phase_graph(
+        self,
+        config: BaseTaskConfig,
+        held_grasps: Dict[str, str],
+        next_grasp: Tuple[str, str],
+        pyhpp_constraints: Optional[Dict[str, Any]] = None,
+        graph_constraints: Optional[List[str]] = None,
+    ) -> Any:
+        """Build a minimal phase graph for incremental multi-grasp planning.
+        
+        This method creates a drastically reduced constraint graph containing
+        only the states and edges needed for a single grasp transition. It
+        uses setPossibleGrasps to restrict the factory to:
+        - Already-held gripper→handle pairs (must remain valid)
+        - The single new gripper→handle pair for the next grasp
+        
+        This reduces graph size from O(grippers! × handles!) to O(grippers)
+        for sequential multi-grasp tasks.
+        
+        Args:
+            config: Task configuration (GRIPPERS, OBJECTS, etc.)
+            held_grasps: Currently held grasps {gripper: handle}
+            next_grasp: Next grasp to achieve (gripper, handle)
+            pyhpp_constraints: PyHPP constraint objects (for pyhpp backend)
+            graph_constraints: Optional list of constraint names to add
+                globally (e.g., locked joint constraints)
+        
+        Returns:
+            Newly created ConstraintGraph or Graph instance
+        
+        Example:
+            >>> # Start free, grasp handle1 with gripper1
+            >>> graph = builder.build_phase_graph(
+            ...     config, held_grasps={}, next_grasp=("gripper1", "handle1")
+            ... )
+            >>> # Now hold handle1, grasp handle2 with gripper2
+            >>> graph = builder.build_phase_graph(
+            ...     config,
+            ...     held_grasps={"gripper1": "handle1"},
+            ...     next_grasp=("gripper2", "handle2"),
+            ... )
+        """
+        print(
+            f"\n    Building phase graph: held={held_grasps}, "
+            f"next={next_grasp}"
+        )
+        
+        # Delete existing graph to allow recreation (CORBA stores by name)
+        if self.graph is not None:
+            try:
+                if self.backend == "corba":
+                    # CORBA: delete graph by name on server
+                    graph_name = "graph"
+                    self.ps.client.manipulation.graph.deleteGraph(graph_name)
+                    print(f"    ✓ Deleted existing graph '{graph_name}'")
+                    
+                    # CORBA: also reset cached TransitionPlanner
+                    # It holds a reference to the old graph
+                    if hasattr(self.planner, 'reset_transition_planner'):
+                        self.planner.reset_transition_planner()
+                        print(f"    ✓ Reset TransitionPlanner")
+                else:
+                    # PyHPP: graph is local object, just clear reference
+                    print("    ✓ Clearing existing graph reference")
+                
+                # Clear internal state
+                self.graph = None
+                self.factory = None
+                self.states = {}
+                self.edges = {}
+                self.edge_topology = {}
+            except Exception as e:
+                # Graph might not exist, that's ok
+                print(f"    ⓘ Note: {e}")
+        
+        # Build minimal VALID_PAIRS for this phase
+        phase_valid_pairs = {}
+        
+        # Include already-held grasps (must remain valid in graph)
+        for gripper, handle in held_grasps.items():
+            if gripper not in phase_valid_pairs:
+                phase_valid_pairs[gripper] = []
+            if handle not in phase_valid_pairs[gripper]:
+                phase_valid_pairs[gripper].append(handle)
+        
+        # Include the next grasp transition
+        next_gripper, next_handle = next_grasp
+        if next_gripper not in phase_valid_pairs:
+            phase_valid_pairs[next_gripper] = []
+        if next_handle not in phase_valid_pairs[next_gripper]:
+            phase_valid_pairs[next_gripper].append(next_handle)
+        
+        print(f"    Phase VALID_PAIRS: {phase_valid_pairs}")
+        
+        # Create a derived config with filtered VALID_PAIRS
+        # Use a simple namespace to avoid full class copying
+        from types import SimpleNamespace
+        phase_config = SimpleNamespace()
+        
+        # Copy required attributes from original config
+        for attr in dir(config):
+            if not attr.startswith("_") and not callable(getattr(config, attr)):
+                setattr(phase_config, attr, getattr(config, attr))
+        
+        # Override VALID_PAIRS for this phase
+        phase_config.VALID_PAIRS = phase_valid_pairs
+        
+        # Also override RULES to None (setPossibleGrasps takes precedence)
+        phase_config.RULES = None
+        
+        # Use the factory graph creation with restricted pairs
+        # This will call factory.setPossibleGrasps(phase_valid_pairs)
+        return self.create_factory_graph(
+            phase_config,
+            pyhpp_constraints=pyhpp_constraints,
+            graph_constraints=graph_constraints,
+        )
+
 
 __all__ = ["GraphBuilder"]
