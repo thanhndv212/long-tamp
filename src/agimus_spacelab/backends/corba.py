@@ -53,19 +53,40 @@ class CorbaBackend(BackendBase):
 
         # TransitionPlanner (edge-scoped planning)
         self._transition_planner = None
-        self._transition_time_out = 60.0  # Increased for waypoint edges
-        self._transition_max_iterations = 10000  # More iterations for RRT*
+        self._transition_time_out = 60.0  # Base timeout for planning
+        self._transition_max_iterations = 10000  # Base iterations for RRT*
         self._transition_path_projector: Optional[Tuple[str, float]] = (
             "Progressive",
             0.2,
         )
-        # Default path optimizers to add
+        
+        # Optimizer profiles for different edge types
+        # Transit edges (free motion): Use spline optimization
+        self._transit_edge_optimizers = [
+            "SplineGradientBased_bezier3",
+            "EnforceTransitionSemantic",
+            "SimpleTimeParameterization",
+        ]
+        # Waypoint edges (constrained motion): Skip spline, just time parameterize
+        self._waypoint_edge_optimizers = [
+            "EnforceTransitionSemantic",
+            "SimpleTimeParameterization",
+        ]
+        # Default fallback
         self._transition_default_optimizers = [
             "EnforceTransitionSemantic",
             "SimpleTimeParameterization",
         ]
         # Per-edge optimizer list (edge_id -> optimizer names)
         self._transition_optimizers_by_edge_id: Dict[int, List[str]] = {}
+        
+        # Time parameterization parameters
+        self._time_param_order = 2
+        self._time_param_max_accel = 0.2
+        
+        # Distance-based auto-tuning
+        self._enable_distance_tuning = True
+        self._distance_scale_factor = 0.5  # Scale timeout/iterations by distance
 
     def model(self):
         """Get the Pinocchio model."""
@@ -441,6 +462,42 @@ class CorbaBackend(BackendBase):
                 if int(eid) == int(edge):
                     return name
         raise ValueError(f"Edge ID {edge} not found in graph")
+    
+    def _is_waypoint_edge(self, edge_name: str) -> bool:
+        """Check if edge is a waypoint edge (constrained motion).
+        
+        Waypoint edges (_01, _12, _21, _10) represent constrained motion
+        like pregrasp->grasp transitions. They benefit less from spline
+        optimization compared to free-space transit edges.
+        """
+        return any(suffix in edge_name for suffix in ["_01", "_12", "_21", "_10"])
+    
+    def _compute_config_distance(self, q1: Sequence[float], q2: Sequence[float]) -> float:
+        """Compute configuration space distance for auto-tuning."""
+        return float(np.linalg.norm(np.array(q1) - np.array(q2)))
+    
+    def _compute_planning_budget(
+        self, q1: Sequence[float], q2: Sequence[float]
+    ) -> Tuple[float, int]:
+        """Compute timeout and max_iterations based on distance.
+        
+        Returns:
+            (timeout, max_iterations) scaled by configuration distance
+        """
+        if not self._enable_distance_tuning:
+            return self._transition_time_out, self._transition_max_iterations
+        
+        distance = self._compute_config_distance(q1, q2)
+        # Normalize by typical arm reach (~2.0 rad per joint)
+        # For 20 DOF system, typical max distance ~40
+        normalized_distance = distance / 40.0
+        scale = 1.0 + (normalized_distance * self._distance_scale_factor)
+        
+        # Apply scaling with floor values
+        timeout = max(10.0, self._transition_time_out * scale)
+        max_iter = max(1000, int(self._transition_max_iterations * scale))
+        
+        return timeout, max_iter
 
     def _load_path_optimizer_plugin_if_needed(self, optimizer: str) -> None:
         if self.ps is None:
@@ -457,8 +514,17 @@ class CorbaBackend(BackendBase):
         time_out: Optional[float] = None,
         max_iterations: Optional[int] = None,
         path_projector: Optional[Tuple[str, float]] = None,
+        enable_distance_tuning: Optional[bool] = None,
+        distance_scale_factor: Optional[float] = None,
     ) -> None:
         """Configure defaults for the TransitionPlanner.
+
+        Args:
+            time_out: Base timeout in seconds (scaled by distance if tuning enabled)
+            max_iterations: Base max iterations (scaled by distance if tuning enabled)
+            path_projector: Path projector type and tolerance
+            enable_distance_tuning: Enable distance-based timeout/iteration scaling
+            distance_scale_factor: Scale factor for distance-based tuning
 
         Notes:
         - In practice, TransitionPlanner should have both timeOut and
@@ -471,10 +537,47 @@ class CorbaBackend(BackendBase):
             self._transition_max_iterations = int(max_iterations)
         if path_projector is not None:
             self._transition_path_projector = path_projector
+        if enable_distance_tuning is not None:
+            self._enable_distance_tuning = enable_distance_tuning
+        if distance_scale_factor is not None:
+            self._distance_scale_factor = distance_scale_factor
 
         tp = self._transition_planner
         if tp is not None:
             self._apply_transition_planner_defaults(tp)
+    
+    def configure_time_parameterization(
+        self,
+        order: Optional[int] = None,
+        max_acceleration: Optional[float] = None,
+    ) -> None:
+        """Configure SimpleTimeParameterization parameters.
+        
+        Args:
+            order: Polynomial order for time parameterization (default 2)
+            max_acceleration: Maximum acceleration limit (default 0.2)
+        """
+        if order is not None:
+            self._time_param_order = int(order)
+        if max_acceleration is not None:
+            self._time_param_max_accel = float(max_acceleration)
+        
+        # Apply to existing transition planner if created
+        tp = self._transition_planner
+        if tp is not None and self.ps is not None:
+            try:
+                from CORBA import Any, TC_long, TC_double
+                problem = self.ps.client.basic.problem.getProblem()
+                problem.setParameter(
+                    "SimpleTimeParameterization/order",
+                    Any(TC_long, self._time_param_order)
+                )
+                problem.setParameter(
+                    "SimpleTimeParameterization/maxAcceleration",
+                    Any(TC_double, self._time_param_max_accel)
+                )
+            except Exception:
+                pass
 
     def _apply_transition_planner_defaults(self, tp: Any) -> None:
         try:
@@ -498,6 +601,40 @@ class CorbaBackend(BackendBase):
                 tp.addPathOptimizer(opt)
             except Exception:
                 pass
+        
+        # Apply time parameterization settings
+        try:
+            from CORBA import Any as CorbaAny, TC_long, TC_double
+            problem = self.ps.client.basic.problem.getProblem()
+            problem.setParameter(
+                "SimpleTimeParameterization/order",
+                CorbaAny(TC_long, self._time_param_order)
+            )
+            problem.setParameter(
+                "SimpleTimeParameterization/maxAcceleration",
+                CorbaAny(TC_double, self._time_param_max_accel)
+            )
+        except Exception:
+            pass
+
+    def set_inner_problem_parameter(self, key: str, value: Any) -> None:
+        """Set parameter on TransitionPlanner's inner problem.
+        
+        Useful for tuning BiRrtStar parameters like:
+        - "kRRT*": Growth factor for RRT*
+        - "kPRM*": k-nearest parameter
+        
+        Args:
+            key: Parameter name
+            value: Parameter value (will be wrapped in CORBA Any)
+        """
+        tp = self.ensure_transition_planner()
+        try:
+            from CORBA import Any as CorbaAny, TC_double
+            # Most parameters are doubles
+            tp.setParameter(key, CorbaAny(TC_double, float(value)))
+        except Exception as exc:
+            raise RuntimeError(f"Failed to set parameter '{key}': {exc}")
 
     def ensure_transition_planner(self) -> Any:
         """Create (or return cached) TransitionPlanner CORBA object."""
@@ -566,7 +703,7 @@ class CorbaBackend(BackendBase):
         self._transition_optimizers_by_edge_id.pop(edge_id, None)
 
     def _configure_transition_planner_for_edge(
-        self, tp: Any, edge_id: int
+        self, tp: Any, edge_id: int, edge_name: Optional[str] = None
     ) -> None:
         try:
             tp.setEdge(int(edge_id))
@@ -576,22 +713,34 @@ class CorbaBackend(BackendBase):
                 f"Failed to set TransitionPlanner edge {edge_id}: {exc}"
             )
 
-        # Only clear and set custom optimizers if edge-specific ones exist
+        # Determine which optimizers to use
         if edge_id in self._transition_optimizers_by_edge_id:
-            try:
-                tp.clearPathOptimizers()
-                print(
-                    f"      [TP] Cleared path optimizers (using edge-specific)"
-                )
-            except Exception:
-                pass
-
-            for opt in self._transition_optimizers_by_edge_id[edge_id]:
-                self._load_path_optimizer_plugin_if_needed(opt)
-                tp.addPathOptimizer(opt)
-                print(f"      [TP] Added optimizer: {opt}")
+            # Explicit per-edge configuration
+            optimizers = self._transition_optimizers_by_edge_id[edge_id]
+            print(f"      [TP] Using edge-specific optimizers")
+        elif edge_name and self._is_waypoint_edge(edge_name):
+            # Waypoint edge: skip spline, just time parameterize
+            optimizers = self._waypoint_edge_optimizers
+            print(f"      [TP] Using waypoint edge optimizers (no spline)")
+        elif edge_name:
+            # Transit edge: use spline optimization
+            optimizers = self._transit_edge_optimizers
+            print(f"      [TP] Using transit edge optimizers (with spline)")
         else:
+            # Fallback
+            optimizers = self._transition_default_optimizers
             print(f"      [TP] Using default optimizers")
+        
+        # Clear and set optimizers
+        try:
+            tp.clearPathOptimizers()
+        except Exception:
+            pass
+        
+        for opt in optimizers:
+            self._load_path_optimizer_plugin_if_needed(opt)
+            tp.addPathOptimizer(opt)
+            print(f"      [TP] Added optimizer: {opt}")
 
     def plan_transition_edge(
         self,
@@ -605,7 +754,11 @@ class CorbaBackend(BackendBase):
         store: bool = False,
     ) -> Union[int, Any]:
         """Plan a transition along a specific graph edge.
-
+        
+        Strategy:
+        - Waypoint edges (_01, _12, _21, _10): Skip directPath, use planPath (BiRrtStar)
+        - Transit edges: Try directPath first, fallback to planPath if it fails
+        
         Returns:
             PathVector CORBA object (store parameter ignored for TransitionPlanner).
         """
@@ -614,64 +767,86 @@ class CorbaBackend(BackendBase):
 
         tp = self.ensure_transition_planner()
         edge_id = self._resolve_edge_id(edge)
-        self._configure_transition_planner_for_edge(tp, edge_id)
+        edge_name = self._resolve_edge_name(edge)
+        
+        # Configure optimizers based on edge type
+        self._configure_transition_planner_for_edge(tp, edge_id, edge_name)
 
         q1_list = list(q1)
         q2_list = list(q2)
-        # validate configurations
+        
+        # Compute planning budget based on distance
+        timeout, max_iter = self._compute_planning_budget(q1_list, q2_list)
+        tp.timeOut(timeout)
+        tp.maxIterations(max_iter)
+        print(f"      [TP] Planning budget: timeout={timeout:.1f}s, max_iter={max_iter}")
+        
+        # Validate configurations
         q1_ok, msg1 = tp.validateConfiguration(q1_list, edge_id)
         q2_ok, msg2 = tp.validateConfiguration(q2_list, edge_id)
         print(f"      [TP] Validate q1: {q1_ok}, msg: {msg1}")
         print(f"      [TP] Validate q2: {q2_ok}, msg: {msg2}")
-
-        # For waypoint edges, skip directPath validation since
-        # straight-line paths often go through collision
-        # Let planPath (RRT*) find collision-free paths
-        use_direct = validate
-        edge_str = self._resolve_edge_name(edge)
-        if (
-            "_01" in edge_str
-            or "_12" in edge_str
-            or "_21" in edge_str
-            or "_10" in edge_str
-        ):
-            use_direct = False
-            print(
-                f"      [TP] Waypoint edge detected, skipping directPath validation"
-            )
-
-        try:
-            path, success, status = tp.directPath(
-                q1_list, q2_list, bool(use_direct)
-            )
-            if not success and status:
-                print(f"      [TP] directPath failed: {status}")
-        except Exception as exc:
-            raise RuntimeError(f"TransitionPlanner.directPath failed: {exc}")
-
+        
+        # Check if this is a waypoint edge
+        is_waypoint = self._is_waypoint_edge(edge_name)
+        
         pv: Any
-        if success:
-            try:
-                pv = tp.optimizePath(path)
-            except Exception:
-                try:
-                    pv = path.asVector()
-                except Exception as exc:
-                    raise RuntimeError(
-                        "Failed to convert directPath result to PathVector: %s"
-                        % exc
-                    )
-        else:
+        if is_waypoint:
+            # Waypoint edges: Skip directPath, go straight to sampling-based planning
+            # These edges have constrained motion and directPath rarely succeeds
+            print(f"      [TP] Waypoint edge detected, using planPath (BiRrtStar)")
             try:
                 pv = tp.planPath(q1_list, [q2_list], bool(reset_roadmap))
+                print(f"      [TP] planPath succeeded")
             except Exception as exc:
                 raise RuntimeError(
-                    (
-                        "TransitionPlanner failed (directPath status: %s). "
-                        "planPath error: %s"
-                    )
-                    % (status, exc)
+                    f"TransitionPlanner.planPath failed for waypoint edge: {exc}"
                 )
+        else:
+            # Transit edges: Try directPath first (fast), fallback to planPath
+            print(f"      [TP] Transit edge, trying directPath first")
+            try:
+                path, success, status = tp.directPath(
+                    q1_list, q2_list, bool(validate)
+                )
+                if success:
+                    print(f"      [TP] directPath succeeded")
+                    try:
+                        pv = tp.optimizePath(path)
+                    except Exception:
+                        try:
+                            pv = path.asVector()
+                        except Exception as exc:
+                            raise RuntimeError(
+                                "Failed to convert directPath result to PathVector: %s"
+                                % exc
+                            )
+                else:
+                    # directPath failed, fallback to planPath
+                    print(f"      [TP] directPath failed: {status}")
+                    print(f"      [TP] Falling back to planPath (BiRrtStar)")
+                    try:
+                        pv = tp.planPath(q1_list, [q2_list], bool(reset_roadmap))
+                        print(f"      [TP] planPath succeeded")
+                    except Exception as exc:
+                        raise RuntimeError(
+                            (
+                                "Both directPath and planPath failed. "
+                                "directPath status: %s. planPath error: %s"
+                            )
+                            % (status, exc)
+                        )
+            except Exception as exc:
+                # directPath itself threw an exception
+                print(f"      [TP] directPath threw exception: {exc}")
+                print(f"      [TP] Falling back to planPath (BiRrtStar)")
+                try:
+                    pv = tp.planPath(q1_list, [q2_list], bool(reset_roadmap))
+                    print(f"      [TP] planPath succeeded")
+                except Exception as exc2:
+                    raise RuntimeError(
+                        f"TransitionPlanner failed completely: {exc2}"
+                    )
 
         if time_parameterize:
             try:
