@@ -59,31 +59,31 @@ class CorbaBackend(BackendBase):
             "Progressive",
             0.2,
         )
-        
+
         # Optimizer profiles for different edge types
         # Transit edges (free motion): Use spline optimization
         self._transit_edge_optimizers = [
             "SplineGradientBased_bezier3",
-            "EnforceTransitionSemantic",
-            "SimpleTimeParameterization",
         ]
-        # Waypoint edges (constrained motion): Skip spline, just time parameterize
-        self._waypoint_edge_optimizers = [
-            "EnforceTransitionSemantic",
+        # Waypoint edges (constrained motion): Use spline optimization
+        self._waypoint_pregrasp_optimizers = [
+            "SplineGradientBased_bezier3",
+        ]
+        # Waypoint edges (constrained motion): No spline optimization
+        self._waypoint_grasp_optimizers = [
             "SimpleTimeParameterization",
         ]
         # Default fallback
         self._transition_default_optimizers = [
-            "EnforceTransitionSemantic",
             "SimpleTimeParameterization",
         ]
         # Per-edge optimizer list (edge_id -> optimizer names)
         self._transition_optimizers_by_edge_id: Dict[int, List[str]] = {}
-        
+
         # Time parameterization parameters
         self._time_param_order = 2
         self._time_param_max_accel = 0.2
-        
+
         # Distance-based auto-tuning
         self._enable_distance_tuning = True
         self._distance_scale_factor = 0.5  # Scale timeout/iterations by distance
@@ -462,20 +462,29 @@ class CorbaBackend(BackendBase):
                 if int(eid) == int(edge):
                     return name
         raise ValueError(f"Edge ID {edge} not found in graph")
-    
-    def _is_waypoint_edge(self, edge_name: str) -> bool:
-        """Check if edge is a waypoint edge (constrained motion).
+
+    def _is_pregrasp_edge(self, edge_name: str) -> bool:
+        """Check if edge is a pregrasp edge (constrained motion).
         
-        Waypoint edges (_01, _12, _21, _10) represent constrained motion
+        Pregrasp edges (_01, _10) represent constrained motion
         like pregrasp->grasp transitions. They benefit less from spline
         optimization compared to free-space transit edges.
         """
-        return any(suffix in edge_name for suffix in ["_01", "_12", "_21", "_10"])
-    
+        return any(suffix in edge_name for suffix in ["_01","_10"])
+
+    def _is_grasp_edge(self, edge_name: str) -> bool:
+        """Check if edge is a grasp edge (constrained motion).
+        
+        Grasp edges (_12, _21) represent constrained motion
+        like grasp->pregrasp transitions. They benefit less from spline
+        optimization compared to free-space transit edges.
+        """
+        return any(suffix in edge_name for suffix in ["_12","_21"])
+
     def _compute_config_distance(self, q1: Sequence[float], q2: Sequence[float]) -> float:
         """Compute configuration space distance for auto-tuning."""
         return float(np.linalg.norm(np.array(q1) - np.array(q2)))
-    
+
     def _compute_planning_budget(
         self, q1: Sequence[float], q2: Sequence[float]
     ) -> Tuple[float, int]:
@@ -486,17 +495,17 @@ class CorbaBackend(BackendBase):
         """
         if not self._enable_distance_tuning:
             return self._transition_time_out, self._transition_max_iterations
-        
+
         distance = self._compute_config_distance(q1, q2)
         # Normalize by typical arm reach (~2.0 rad per joint)
         # For 20 DOF system, typical max distance ~40
         normalized_distance = distance / 40.0
         scale = 1.0 + (normalized_distance * self._distance_scale_factor)
-        
+
         # Apply scaling with floor values
         timeout = max(10.0, self._transition_time_out * scale)
         max_iter = max(1000, int(self._transition_max_iterations * scale))
-        
+
         return timeout, max_iter
 
     def _load_path_optimizer_plugin_if_needed(self, optimizer: str) -> None:
@@ -545,7 +554,7 @@ class CorbaBackend(BackendBase):
         tp = self._transition_planner
         if tp is not None:
             self._apply_transition_planner_defaults(tp)
-    
+
     def configure_time_parameterization(
         self,
         order: Optional[int] = None,
@@ -561,7 +570,7 @@ class CorbaBackend(BackendBase):
             self._time_param_order = int(order)
         if max_acceleration is not None:
             self._time_param_max_accel = float(max_acceleration)
-        
+
         # Apply to existing transition planner if created
         tp = self._transition_planner
         if tp is not None and self.ps is not None:
@@ -601,7 +610,7 @@ class CorbaBackend(BackendBase):
                 tp.addPathOptimizer(opt)
             except Exception:
                 pass
-        
+
         # Apply time parameterization settings
         try:
             from CORBA import Any as CorbaAny, TC_long, TC_double
@@ -718,10 +727,14 @@ class CorbaBackend(BackendBase):
             # Explicit per-edge configuration
             optimizers = self._transition_optimizers_by_edge_id[edge_id]
             print(f"      [TP] Using edge-specific optimizers")
-        elif edge_name and self._is_waypoint_edge(edge_name):
-            # Waypoint edge: skip spline, just time parameterize
-            optimizers = self._waypoint_edge_optimizers
-            print(f"      [TP] Using waypoint edge optimizers (no spline)")
+        elif edge_name and self._is_pregrasp_edge(edge_name):
+            # Pregrasp edge: use spline optimization
+            optimizers = self._waypoint_pregrasp_optimizers
+            print(f"      [TP] Using pregrasp edge optimizers (with spline)")
+        elif edge_name and self._is_grasp_edge(edge_name):
+            # Grasp edge: use no spline optimization
+            optimizers = self._waypoint_grasp_optimizers
+            print(f"      [TP] Using grasp edge optimizers (no spline)")
         elif edge_name:
             # Transit edge: use spline optimization
             optimizers = self._transit_edge_optimizers
@@ -730,13 +743,13 @@ class CorbaBackend(BackendBase):
             # Fallback
             optimizers = self._transition_default_optimizers
             print(f"      [TP] Using default optimizers")
-        
+
         # Clear and set optimizers
         try:
             tp.clearPathOptimizers()
         except Exception:
             pass
-        
+
         for opt in optimizers:
             self._load_path_optimizer_plugin_if_needed(opt)
             tp.addPathOptimizer(opt)
@@ -768,33 +781,33 @@ class CorbaBackend(BackendBase):
         tp = self.ensure_transition_planner()
         edge_id = self._resolve_edge_id(edge)
         edge_name = self._resolve_edge_name(edge)
-        
+
         # Configure optimizers based on edge type
         self._configure_transition_planner_for_edge(tp, edge_id, edge_name)
 
         q1_list = list(q1)
         q2_list = list(q2)
-        
+
         # Compute planning budget based on distance
         timeout, max_iter = self._compute_planning_budget(q1_list, q2_list)
         tp.timeOut(timeout)
         tp.maxIterations(max_iter)
         print(f"      [TP] Planning budget: timeout={timeout:.1f}s, max_iter={max_iter}")
-        
+
         # Validate configurations
         q1_ok, msg1 = tp.validateConfiguration(q1_list, edge_id)
         q2_ok, msg2 = tp.validateConfiguration(q2_list, edge_id)
         print(f"      [TP] Validate q1: {q1_ok}, msg: {msg1}")
         print(f"      [TP] Validate q2: {q2_ok}, msg: {msg2}")
-        
-        # Check if this is a waypoint edge
-        is_waypoint = self._is_waypoint_edge(edge_name)
-        
+
+        # Check if this is a waypoint pregraspedge
+        is_waypoint_pregrasp = self._is_pregrasp_edge(edge_name)
+
         pv: Any
-        if is_waypoint:
+        if is_waypoint_pregrasp:
             # Waypoint edges: Skip directPath, go straight to sampling-based planning
             # These edges have constrained motion and directPath rarely succeeds
-            print(f"      [TP] Waypoint edge detected, using planPath (BiRrtStar)")
+            print(f"      [TP] Waypoint pregrasp edge detected, using planPath (BiRrtStar)")
             try:
                 pv = tp.planPath(q1_list, [q2_list], bool(reset_roadmap))
                 print(f"      [TP] planPath succeeded")
@@ -809,7 +822,7 @@ class CorbaBackend(BackendBase):
                 )
         else:
             # Transit edges: Try directPath first (fast), fallback to planPath
-            print(f"      [TP] Transit edge, trying directPath first")
+            print(f"      [TP] Transit edge or waypoint grasp edge, trying directPath first")
             try:
                 path, success, status = tp.directPath(
                     q1_list, q2_list, bool(validate)
