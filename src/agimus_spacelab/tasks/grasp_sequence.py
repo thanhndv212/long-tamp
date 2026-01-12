@@ -880,9 +880,16 @@ class GraspSequencePlanner:
                 lines.append(f"  State: {phase.get('state_after', 'unknown')}")
 
         lines.append("-" * 50)
-        lines.append(
-            f"Final state: " f"{self.phase_results[-1]['state_after']}"
-        )
+        
+        # Show final state only if last phase is complete
+        if self.phase_results:
+            last_phase = self.phase_results[-1]
+            if last_phase.get("complete", True):
+                lines.append(
+                    f"Final state: {last_phase.get('state_after', 'unknown')}"
+                )
+            else:
+                lines.append("Final state: Incomplete (planning failed)")
 
         return "\n".join(lines)
 
