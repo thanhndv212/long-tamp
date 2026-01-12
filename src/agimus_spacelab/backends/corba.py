@@ -798,6 +798,11 @@ class CorbaBackend(BackendBase):
             try:
                 pv = tp.planPath(q1_list, [q2_list], bool(reset_roadmap))
                 print(f"      [TP] planPath succeeded")
+                try:
+                    pv = tp.optimizePath(pv)
+                    print(f"      [TP] Path optimized")
+                except Exception:
+                    print(f"      [TP] Optimization failed, using unoptimized path")
             except Exception as exc:
                 raise RuntimeError(
                     f"TransitionPlanner.planPath failed for waypoint edge: {exc}"
@@ -828,6 +833,11 @@ class CorbaBackend(BackendBase):
                     try:
                         pv = tp.planPath(q1_list, [q2_list], bool(reset_roadmap))
                         print(f"      [TP] planPath succeeded")
+                        try:
+                            pv = tp.optimizePath(pv)
+                            print(f"      [TP] Path optimized")
+                        except Exception:
+                            print(f"      [TP] Optimization failed, using unoptimized path")
                     except Exception as exc:
                         raise RuntimeError(
                             (
@@ -843,6 +853,11 @@ class CorbaBackend(BackendBase):
                 try:
                     pv = tp.planPath(q1_list, [q2_list], bool(reset_roadmap))
                     print(f"      [TP] planPath succeeded")
+                    try:
+                        pv = tp.optimizePath(pv)
+                        print(f"      [TP] Path optimized")
+                    except Exception:
+                        print(f"      [TP] Optimization failed, using unoptimized path")
                 except Exception as exc2:
                     raise RuntimeError(
                         f"TransitionPlanner failed completely: {exc2}"
