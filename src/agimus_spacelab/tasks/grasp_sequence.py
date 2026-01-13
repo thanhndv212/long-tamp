@@ -83,10 +83,65 @@ class GraspSequencePlanner:
 
         # Store phase results for debugging/replay
         self.phase_results = []
-        
+
         # Track last failure for resume capability
         self.last_failure_info = None
         self.original_sequence = None  # Store full sequence for resume
+
+        # Arm-to-gripper mapping for locked joint filtering
+        # Maps arm keyword -> gripper name pattern
+        self.ARM_GRIPPER_MAP = {
+            "ur10": "g_ur10",
+            "vispa_": "g_vispa_",
+            "vispa2": "g_vispa2",
+        }
+        self.ALL_ARM_KEYWORDS = ["ur10", "vispa_", "vispa2"]
+
+        # Callback for interactive arm selection (set by UI layer)
+        self.interactive_arm_selector_callback = None
+
+    def compute_phase_locked_joints(
+        self,
+        active_gripper: str,
+        mode: str = "auto",
+        manual_arms: Optional[List[str]] = None,
+    ) -> List[str]:
+        """Compute which arms should be frozen for current phase.
+
+        Args:
+            active_gripper: Gripper performing grasp in this phase
+            mode: "auto" (freeze all except active),
+                  "manual" (use manual_arms), "none" (no locked joints)
+            manual_arms: List of arm keywords to freeze (for manual mode)
+
+        Returns:
+            List of arm keywords to freeze
+                (for create_locked_joint_constraints)
+        """
+        if mode == "none":
+            return []
+
+        if mode == "manual":
+            if manual_arms is None:
+                return []
+            return manual_arms
+
+        # Auto mode: freeze all arms except the active gripper's arm
+        frozen_arms = []
+        active_arm = None
+
+        # Find which arm the active gripper belongs to
+        for arm_keyword, gripper_pattern in self.ARM_GRIPPER_MAP.items():
+            if gripper_pattern in active_gripper.lower():
+                active_arm = arm_keyword
+                break
+
+        # Freeze all other arms
+        for arm_keyword in self.ALL_ARM_KEYWORDS:
+            if arm_keyword != active_arm:
+                frozen_arms.append(arm_keyword)
+
+        return frozen_arms
 
     def plan_sequence(
         self,
@@ -97,6 +152,8 @@ class GraspSequencePlanner:
         time_parameterize: bool = True,
         max_iterations_per_edge: int = 5000,
         timeout_per_edge: float = 60.0,
+        frozen_arms_mode: str = "auto",
+        per_phase_frozen_arms: Optional[Dict[int, List[str]]] = None,
         verbose: bool = True,
     ) -> Dict[str, Any]:
         """Plan a sequence of grasp transitions.
@@ -109,7 +166,26 @@ class GraspSequencePlanner:
             time_parameterize: Apply time parameterization to paths
             max_iterations_per_edge: Max iterations per edge planning
             timeout_per_edge: Timeout in seconds for each edge planning
+            frozen_arms_mode: "auto" (freeze all except active arm),
+                "manual" (use per_phase_frozen_arms), "none" (no locking),
+                "interactive" (use callback for selection per phase),
+                or "global" (use self.graph_constraints from task.setup())
+            per_phase_frozen_arms: Dict mapping phase_idx -> list of
+                arm keywords. Used when frozen_arms_mode="manual".
+                Example: {0: ["vispa_", "vispa2"]}
             verbose: Print progress messages
+
+        Note:
+            For interactive mode, set frozen_arms_mode="interactive" and
+            assign self.interactive_arm_selector_callback before calling.
+            Callback signature: callback(phase_idx, gripper, arm_keywords)
+                -> List[str] of selected arm keywords
+
+        Note:
+            For interactive mode, set frozen_arms_mode="interactive" and
+            set self.interactive_arm_selector_callback before calling.
+            Callback signature: callback(phase_idx, gripper, arm_keywords)
+                -> List[str] of selected arm keywords
 
         Returns:
             Dictionary with:
@@ -130,7 +206,9 @@ class GraspSequencePlanner:
             )
             if verbose:
                 print(
-                    f"Configured TransitionPlanner: timeout={timeout_per_edge}s, max_iterations={max_iterations_per_edge}"
+                    f"Configured TransitionPlanner: "
+                    f"timeout={timeout_per_edge}s, "
+                    f"max_iterations={max_iterations_per_edge}"
                 )
 
         if verbose:
@@ -162,13 +240,88 @@ class GraspSequencePlanner:
             }
             print(f"  Held grasps: {held_grasps}")
 
+            # Compute phase-specific locked joint constraints
+            phase_graph_constraints = None
+
+            if frozen_arms_mode == "global":
+                # Use global constraints from task.setup()
+                phase_graph_constraints = self.graph_constraints
+                if verbose and phase_graph_constraints:
+                    print("  Using global locked joint constraints")
+            elif frozen_arms_mode != "none":
+                # Determine which arms to freeze for this phase
+                if frozen_arms_mode == "interactive":
+                    # Interactive mode: use callback if available
+                    if self.interactive_arm_selector_callback:
+                        try:
+                            frozen_arms = (
+                                self.interactive_arm_selector_callback(
+                                    phase_idx, gripper, self.ALL_ARM_KEYWORDS
+                                )
+                            )
+                        except Exception as e:
+                            # Fallback to auto if callback fails
+                            if verbose:
+                                print(
+                                    f"  \u26a0 Interactive selection failed: "
+                                    f"{e}, using auto mode"
+                                )
+                            frozen_arms = self.compute_phase_locked_joints(
+                                gripper, "auto"
+                            )
+                    else:
+                        # No callback set, fall back to auto
+                        if verbose:
+                            print(
+                                "  \u26a0 Interactive mode requested but no "
+                                "callback set, using auto mode"
+                            )
+                        frozen_arms = self.compute_phase_locked_joints(
+                            gripper, "auto"
+                        )
+                elif frozen_arms_mode == "manual" and per_phase_frozen_arms:
+                    # Manual mode with explicit specification
+                    frozen_arms = per_phase_frozen_arms.get(phase_idx, [])
+                else:
+                    # Auto mode: freeze all except active gripper's arm
+                    frozen_arms = self.compute_phase_locked_joints(
+                        gripper, "auto"
+                    )
+
+                # Create locked joint constraints for this phase
+                if frozen_arms:
+                    if verbose:
+                        print(f"  Freezing arms: {frozen_arms}")
+
+                    from agimus_spacelab.planning.constraints import (
+                        ConstraintBuilder,
+                    )
+
+                    constraint_names, joint_names = (
+                        ConstraintBuilder.create_locked_joint_constraints(
+                            self.graph_builder.ps,
+                            self.graph_builder.robot,
+                            q_current,  # Use current config for joint values
+                            frozen_arms,
+                        )
+                    )
+
+                    if constraint_names:
+                        phase_graph_constraints = constraint_names
+                        if verbose:
+                            joint_list = ", ".join(sorted(joint_names))
+                            print(
+                                f"  \u2713 Created {len(joint_names)} "
+                                f"locked joint constraints: {joint_list}"
+                            )
+
             try:
                 self.graph_builder.build_phase_graph(
                     config=self.task_config,
                     held_grasps=held_grasps,
                     next_grasp=(gripper, handle),
                     pyhpp_constraints=self.pyhpp_constraints,
-                    graph_constraints=self.graph_constraints,
+                    graph_constraints=phase_graph_constraints,
                 )
 
                 # Update planner backend's graph reference after rebuild
@@ -363,7 +516,7 @@ class GraspSequencePlanner:
                         "error_message": str(e),
                     }
                     self.phase_results.append(partial_phase_result)
-                    
+
                     # Store failure info for resume
                     self.last_failure_info = {
                         "phase_idx": phase_idx,
@@ -372,10 +525,10 @@ class GraspSequencePlanner:
                         "q_current": q_current,
                         "error": str(e),
                     }
-                    
+
                     if verbose:
                         print(f"\n  ⚠ Stored partial phase result: {len(phase_paths)} edges completed")
-                    
+
                     raise RuntimeError(
                         f"Phase {phase_idx + 1}, edge {edge_idx + 1}: "
                         f"Planning failed for '{edge_name}': {e}"
@@ -440,7 +593,7 @@ class GraspSequencePlanner:
         """
         if not self.last_failure_info or not self.phase_results:
             return None
-        
+
         # Find incomplete phase
         incomplete_phase = None
         completed_phases = 0
@@ -449,10 +602,10 @@ class GraspSequencePlanner:
                 incomplete_phase = phase
                 break
             completed_phases += 1
-        
+
         if incomplete_phase is None:
             return None
-        
+
         return {
             "phase_idx": incomplete_phase["phase"] - 1,  # 0-based
             "edge_idx": incomplete_phase["failed_edge_idx"],
@@ -463,32 +616,36 @@ class GraspSequencePlanner:
             "q_current": incomplete_phase.get("last_q_start"),
             "error": incomplete_phase.get("error_message", "unknown"),
         }
-    
+
     def resume_sequence(
         self,
         retry_from_edge: int = 0,
         max_iterations_per_edge: Optional[int] = None,
         timeout_per_edge: Optional[float] = None,
+        frozen_arms_mode: Optional[str] = None,
+        per_phase_frozen_arms: Optional[Dict[int, List[str]]] = None,
         validate: bool = True,
         reset_roadmap: bool = True,
         time_parameterize: bool = True,
         verbose: bool = True,
     ) -> Dict[str, Any]:
         """Resume planning from last failure point.
-        
+
         Args:
             retry_from_edge: Edge index to retry from (0 = start of failed phase,
                            -1 = retry only the failed edge)
             max_iterations_per_edge: Override max iterations (None = use previous)
             timeout_per_edge: Override timeout (None = use previous)
+            frozen_arms_mode: Override frozen arms mode (None = use "global")
+            per_phase_frozen_arms: Per-phase manual arm specification
             validate: Validate paths after planning
             reset_roadmap: Reset roadmap between phases
             time_parameterize: Apply time parameterization
             verbose: Print progress messages
-        
+
         Returns:
             Same as plan_sequence()
-        
+
         Raises:
             RuntimeError: If no resumable state exists or if planning fails again
         """
@@ -498,7 +655,7 @@ class GraspSequencePlanner:
                 "No resumable state found. "
                 "Use plan_sequence() to start a new sequence."
             )
-        
+
         if verbose:
             print("\n" + "=" * 70)
             print("Resuming Grasp Sequence Planning")
@@ -509,7 +666,7 @@ class GraspSequencePlanner:
             print(f"Completed phases: {resume_state['completed_phases']}")
             print(f"Completed edges in current phase: "
                   f"{resume_state['completed_edges_in_phase']}")
-        
+
         # Configure TransitionPlanner if new params provided
         if max_iterations_per_edge or timeout_per_edge:
             if hasattr(self.planner, "configure_transition_planner"):
@@ -521,7 +678,7 @@ class GraspSequencePlanner:
                 self.planner.configure_transition_planner(**kwargs)
                 if verbose:
                     print(f"Updated TransitionPlanner config: {kwargs}")
-        
+
         # Restore grasp tracker state from completed phases
         # Reset to free state first
         self.grasp_tracker = GraspStateTracker(
@@ -529,29 +686,29 @@ class GraspSequencePlanner:
             handles=self.grasp_tracker.handles,
             initial_grasps=None,
         )
-        
+
         # Replay completed grasps to restore state
         for phase in self.phase_results:
             if phase.get("complete", False):
                 self.grasp_tracker.update_grasp(
                     phase["gripper"], phase["handle"]
                 )
-        
+
         if verbose:
             print(f"Restored state: {self.grasp_tracker.get_current_state_name()}")
-        
+
         # Remove incomplete phase from results (will be recreated)
         incomplete_phase_idx = resume_state["phase_idx"]
         self.phase_results = [
             p for p in self.phase_results if p.get("complete", True)
         ]
-        
+
         # Get remaining sequence starting from failed phase
         remaining_sequence = self.original_sequence[incomplete_phase_idx:]
-        
+
         if verbose:
             print(f"Remaining sequence: {remaining_sequence}")
-        
+
         # Determine starting config
         if self.phase_results:
             # Continue from last completed phase
@@ -559,19 +716,19 @@ class GraspSequencePlanner:
         else:
             # No completed phases, use the stored q_current from failure
             q_current = resume_state["q_current"]
-        
+
         # Continue planning from failed phase
         # Use similar logic to plan_sequence but start from failed phase
         for phase_idx_offset, (gripper, handle) in enumerate(remaining_sequence):
             phase_idx = incomplete_phase_idx + phase_idx_offset
-            
+
             if verbose:
                 print("\n" + "-" * 70)
                 print(f"\n--- Phase {phase_idx + 1}/{len(self.original_sequence)} ---")
                 print(f"  Grasp '{handle}' with '{gripper}'")
                 current_state = self.grasp_tracker.get_current_state_name()
                 print(f"  Current state: {current_state}")
-            
+
             # Build minimal phase graph
             held_grasps = {
                 g: h
@@ -580,19 +737,94 @@ class GraspSequencePlanner:
             }
             print(f"  Held grasps: {held_grasps}")
 
+            # Compute phase-specific locked joint constraints (reuse original mode if not overridden)
+            use_frozen_mode = (
+                frozen_arms_mode if frozen_arms_mode is not None else "global"
+            )
+            phase_graph_constraints = None
+
+            if use_frozen_mode == "global":
+                # Use global constraints from task.setup()
+                phase_graph_constraints = self.graph_constraints
+                if verbose and phase_graph_constraints:
+                    print("  Using global locked joint constraints")
+            elif use_frozen_mode != "none":
+                # Determine which arms to freeze for this phase
+                if use_frozen_mode == "interactive":
+                    # Interactive mode: use callback if available
+                    if self.interactive_arm_selector_callback:
+                        try:
+                            frozen_arms = (
+                                self.interactive_arm_selector_callback(
+                                    phase_idx, gripper, self.ALL_ARM_KEYWORDS
+                                )
+                            )
+                        except Exception as e:
+                            if verbose:
+                                print(
+                                    f"  \u26a0 Interactive selection failed: "
+                                    f"{e}, using auto mode"
+                                )
+                            frozen_arms = self.compute_phase_locked_joints(
+                                gripper, "auto"
+                            )
+                    else:
+                        if verbose:
+                            print(
+                                "  \u26a0 Interactive mode requested but no "
+                                "callback set, using auto mode"
+                            )
+                        frozen_arms = self.compute_phase_locked_joints(
+                            gripper, "auto"
+                        )
+                elif use_frozen_mode == "manual" and per_phase_frozen_arms:
+                    frozen_arms = per_phase_frozen_arms.get(phase_idx, [])
+                else:
+                    # Auto mode
+                    frozen_arms = self.compute_phase_locked_joints(
+                        gripper, "auto"
+                    )
+
+                # Create locked joint constraints
+                if frozen_arms:
+                    if verbose:
+                        print(f"  Freezing arms: {frozen_arms}")
+
+                    from agimus_spacelab.planning.constraints import (
+                        ConstraintBuilder,
+                    )
+
+                    constraint_names, joint_names = (
+                        ConstraintBuilder.create_locked_joint_constraints(
+                            self.graph_builder.ps,
+                            self.graph_builder.robot,
+                            q_current,
+                            frozen_arms,
+                        )
+                    )
+
+                    if constraint_names:
+                        phase_graph_constraints = constraint_names
+                        if verbose:
+                            joint_list = ", ".join(sorted(joint_names))
+                            print(
+                                f"  \u2713 Created {len(joint_names)} "
+                                f"locked joint constraints: {joint_list}"
+                            )
+
             try:
                 self.graph_builder.build_phase_graph(
                     config=self.task_config,
                     held_grasps=held_grasps,
                     next_grasp=(gripper, handle),
                     pyhpp_constraints=self.pyhpp_constraints,
-                    graph_constraints=self.graph_constraints,
+                    graph_constraints=phase_graph_constraints,
                 )
-                
+
                 new_graph = self.graph_builder.get_graph()
                 if hasattr(self.planner, "graph"):
                     self.planner.graph = new_graph
-                
+
                 if self.config_gen and hasattr(self.config_gen, "update_graph"):
                     self.config_gen.update_graph(new_graph)
                 elif self.config_gen is None:
@@ -604,12 +836,12 @@ class GraspSequencePlanner:
                         self.graph_builder.ps,
                         backend=self.backend,
                     )
-                
+
             except Exception as e:
                 raise RuntimeError(
                     f"Phase {phase_idx + 1}: Failed to build graph: {e}"
                 ) from e
-            
+
             # Get edge sequence
             try:
                 edge_sequence = self.grasp_tracker.get_grasp_edge_sequence(
@@ -620,10 +852,10 @@ class GraspSequencePlanner:
                     f"Phase {phase_idx + 1}: "
                     f"Failed to compute edge sequence: {e}"
                 ) from e
-            
+
             if verbose:
                 print(f"  Edge sequence: {edge_sequence}")
-            
+
             # Project config
             source_state = self.grasp_tracker.get_current_state_name()
             try:
@@ -635,24 +867,24 @@ class GraspSequencePlanner:
                         error_threshold=1e-4,
                     )
                 )
-                
+
                 if not success:
                     raise RuntimeError(
                         f"Failed to project q_current onto state "
                         f"'{source_state}' (error={error:.6f})"
                     )
-                
+
                 q_current = list(q_projected)
-                
+
             except Exception as e:
                 raise RuntimeError(
                     f"Phase {phase_idx + 1}: State projection failed: {e}"
                 ) from e
-            
+
             # Plan edges (with selective retry)
             phase_paths = []
             q_start = q_current
-            
+
             # For first phase in resume, decide where to start
             start_edge_idx = 0
             if phase_idx_offset == 0 and retry_from_edge >= 0:
@@ -662,17 +894,17 @@ class GraspSequencePlanner:
                     # Reuse previously completed paths in this phase
                     # (though this is complex - for now just restart phase)
                     pass
-            
+
             for edge_idx in range(start_edge_idx, len(edge_sequence)):
                 edge_name = edge_sequence[edge_idx]
-                
+
                 if verbose:
                     print(
                         f"  Planning waypoint edge "
                         f"{edge_idx + 1}/{len(edge_sequence)}: "
                         f"{edge_name}"
                     )
-                
+
                 # Generate target
                 try:
                     ok, q_target = self.config_gen.generate_via_edge(
@@ -689,7 +921,7 @@ class GraspSequencePlanner:
                         f"Phase {phase_idx + 1}, edge {edge_idx + 1}: "
                         f"Target generation failed: {e}"
                     ) from e
-                
+
                 # Plan edge
                 try:
                     path = self.planner.plan_transition_edge(
@@ -697,24 +929,24 @@ class GraspSequencePlanner:
                         q1=q_start,
                         q2=q_target,
                     )
-                    
+
                     if path is None:
                         raise RuntimeError(
                             f"Planning failed for edge '{edge_name}'"
                         )
-                    
+
                     phase_paths.append(path)
-                    
+
                     if hasattr(path, "getInitialConfig") and hasattr(
                         path, "getEndConfig"
                     ):
                         q_start = list(path.getEndConfig())
                     else:
                         q_start = q_target
-                    
+
                     if verbose:
                         print(f"     \u2713 Path found")
-                
+
                 except Exception as e:
                     # Store partial result again
                     partial_phase_result = {
@@ -738,15 +970,15 @@ class GraspSequencePlanner:
                         "q_current": q_current,
                         "error": str(e),
                     }
-                    
+
                     raise RuntimeError(
                         f"Resume failed at Phase {phase_idx + 1}, edge {edge_idx + 1}: {e}"
                     ) from e
-            
+
             # Phase completed successfully
             q_current = q_start
             self.grasp_tracker.update_grasp(gripper, handle)
-            
+
             phase_result = {
                 "phase": phase_idx + 1,
                 "gripper": gripper,
@@ -758,18 +990,18 @@ class GraspSequencePlanner:
                 "state_after": self.grasp_tracker.get_current_state_name(),
             }
             self.phase_results.append(phase_result)
-            
+
             if verbose:
                 print(f"  \u2713 Completed phase {phase_idx + 1}")
-        
+
         # Clear failure info on success
         self.last_failure_info = None
-        
+
         if verbose:
             print("\n" + "=" * 70)
             print("Resume Complete - All Phases Succeeded")
             print("=" * 70)
-        
+
         return {
             "success": True,
             "paths": (
@@ -813,18 +1045,18 @@ class GraspSequencePlanner:
         for phase in self.phase_results:
             is_complete = phase.get("complete", True)
             status = "✓" if is_complete else "⚠ INCOMPLETE"
-            
+
             print(
                 f"\nPhase {phase['phase']}: "
                 f"{phase['gripper']} grasps {phase['handle']} [{status}]"
             )
             print(f"  Edges: {', '.join(phase['edges'])}")
-            
+
             if not is_complete:
                 failed_edge = phase.get('failed_edge_idx', -1)
                 print(f"  ⚠ Failed at edge {failed_edge + 1}: {phase.get('failed_edge_name', 'unknown')}")
                 print(f"  Error: {phase.get('error_message', 'unknown')}")
-            
+
             print(f"  Playing {len(phase['paths'])} waypoint paths...")
 
             try:
@@ -868,13 +1100,13 @@ class GraspSequencePlanner:
         for phase in self.phase_results:
             is_complete = phase.get("complete", True)
             status = "✓" if is_complete else "⚠ INCOMPLETE"
-            
+
             lines.append(
                 f"Phase {phase['phase']}: "
                 f"{phase['gripper']} → {phase['handle']} [{status}]"
             )
             lines.append(f"  Edges: {', '.join(phase['edges'])}")
-            
+
             if not is_complete:
                 failed_edge = phase.get('failed_edge_idx', -1)
                 lines.append(f"  ⚠ Failed at edge {failed_edge + 1}: {phase.get('failed_edge_name', 'unknown')}")
@@ -884,7 +1116,7 @@ class GraspSequencePlanner:
                 lines.append(f"  State: {phase.get('state_after', 'unknown')}")
 
         lines.append("-" * 50)
-        
+
         # Show final state only if last phase is complete
         if self.phase_results:
             last_phase = self.phase_results[-1]
