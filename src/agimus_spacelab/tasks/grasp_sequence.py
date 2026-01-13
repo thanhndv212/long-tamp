@@ -148,6 +148,7 @@ class GraspSequencePlanner:
 
         for phase_idx, (gripper, handle) in enumerate(grasp_sequence):
             if verbose:
+                print("\n" + "-" * 70)
                 print(f"\n--- Phase {phase_idx + 1}/{len(grasp_sequence)} ---")
                 print(f"  Grasp '{handle}' with '{gripper}'")
                 current_state = self.grasp_tracker.get_current_state_name()
@@ -159,6 +160,7 @@ class GraspSequencePlanner:
                 for g, h in self.grasp_tracker.current_grasps.items()
                 if h is not None
             }
+            print(f"  Held grasps: {held_grasps}")
 
             try:
                 self.graph_builder.build_phase_graph(
@@ -564,6 +566,7 @@ class GraspSequencePlanner:
             phase_idx = incomplete_phase_idx + phase_idx_offset
             
             if verbose:
+                print("\n" + "-" * 70)
                 print(f"\n--- Phase {phase_idx + 1}/{len(self.original_sequence)} ---")
                 print(f"  Grasp '{handle}' with '{gripper}'")
                 current_state = self.grasp_tracker.get_current_state_name()
@@ -575,7 +578,8 @@ class GraspSequencePlanner:
                 for g, h in self.grasp_tracker.current_grasps.items()
                 if h is not None
             }
-            
+            print(f"  Held grasps: {held_grasps}")
+
             try:
                 self.graph_builder.build_phase_graph(
                     config=self.task_config,
