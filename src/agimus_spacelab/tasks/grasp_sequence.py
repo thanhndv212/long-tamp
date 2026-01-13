@@ -88,12 +88,15 @@ class GraspSequencePlanner:
         self.last_failure_info = None
         self.original_sequence = None  # Store full sequence for resume
 
-        # Arm-to-gripper mapping for locked joint filtering
-        # Maps arm keyword -> gripper name pattern
-        self.ARM_GRIPPER_MAP = {
-            "ur10": "g_ur10",
-            "vispa_": "g_vispa_",
-            "vispa2": "g_vispa2",
+        # Gripper-to-arm mapping for locked joint filtering
+        # Maps gripper name pattern -> arm keyword
+        # Multiple grippers can belong to the same arm
+        self.GRIPPER_TO_ARM_MAP = {
+            "g_ur10": "ur10",
+            "g_FG": "ur10",      # UR10 with Frame Gripper
+            "g_vispa_": "vispa_",
+            "g_SD": "vispa_",    # Vispa with Screw Driver
+            "g_vispa2": "vispa2",
         }
         self.ALL_ARM_KEYWORDS = ["ur10", "vispa_", "vispa2"]
 
@@ -105,6 +108,7 @@ class GraspSequencePlanner:
         active_gripper: str,
         mode: str = "auto",
         manual_arms: Optional[List[str]] = None,
+        verbose: bool = True,
     ) -> List[str]:
         """Compute which arms should be frozen for current phase.
 
@@ -131,10 +135,14 @@ class GraspSequencePlanner:
         active_arm = None
 
         # Find which arm the active gripper belongs to
-        for arm_keyword, gripper_pattern in self.ARM_GRIPPER_MAP.items():
-            if gripper_pattern in active_gripper.lower():
+        gripper_lower = active_gripper.lower()
+        for gripper_pattern, arm_keyword in self.GRIPPER_TO_ARM_MAP.items():
+            if gripper_pattern.lower() in gripper_lower:
                 active_arm = arm_keyword
                 break
+        
+        if verbose:
+            print(f"Active gripper '{active_gripper}' uses arm '{active_arm}'")
 
         # Freeze all other arms
         for arm_keyword in self.ALL_ARM_KEYWORDS:
