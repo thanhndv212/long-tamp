@@ -61,8 +61,10 @@ class PyHPPBackend(BackendBase):
 
         # TransitionPlanner (edge-scoped planning)
         self._transition_planner = None
-        self._transition_time_out = 3.0
-        self._transition_max_iterations = 3000
+        # Base timeout for planning (aligned with CORBA)
+        self._transition_time_out = 60.0
+        # Base iterations for RRT* (aligned with CORBA)
+        self._transition_max_iterations = 10000
         # (projector_type, step). If None, fall back to problem.pathProjector()
         self._transition_path_projector: Optional[Tuple[str, float]] = (
             "Progressive",
@@ -70,6 +72,33 @@ class PyHPPBackend(BackendBase):
         )
         # Per-edge optimizer list (edge_name -> optimizer names)
         self._transition_optimizers_by_edge_name: Dict[str, List[str]] = {}
+
+        # Optimizer profiles for different edge types
+        # Transit edges (free motion): Use random shortcut optimization
+        self._transit_edge_optimizers = [
+            "RandomShortcut",
+        ]
+        # Waypoint edges (constrained motion): Use random shortcut optimization
+        self._waypoint_pregrasp_optimizers = [
+            "RandomShortcut",
+        ]
+        # Waypoint edges (constrained motion): Simple time param only
+        self._waypoint_grasp_optimizers = [
+            "SimpleTimeParameterization",
+        ]
+        # Default fallback
+        self._transition_default_optimizers = [
+            "SimpleTimeParameterization",
+        ]
+
+        # Time parameterization parameters
+        self._time_param_order = 2
+        self._time_param_max_accel = 0.2
+
+        # Distance-based auto-tuning
+        self._enable_distance_tuning = True
+        # Scale timeout/iterations by distance
+        self._distance_scale_factor = 0.5
 
         # Configuration options for path validation and projection
         self._use_pathvalidation = True
@@ -421,6 +450,14 @@ class PyHPPBackend(BackendBase):
         self._stored_paths.append(path)
         return len(self._stored_paths) - 1
 
+    def get_num_stored_paths(self) -> int:
+        """Get number of paths currently stored locally.
+
+        Returns:
+            Number of stored paths
+        """
+        return len(self._stored_paths)
+
     def get_robot(self):
         """Get device object."""
         return self.device
@@ -574,24 +611,134 @@ class PyHPPBackend(BackendBase):
     # TransitionPlanner integration (edge-scoped planning)
     # ---------------------------------------------------------------------
 
+    def _is_pregrasp_edge(self, edge_name: str) -> bool:
+        """Check if edge is a pregrasp edge (constrained motion).
+        
+        Pregrasp edges (_01, _10) represent constrained motion
+        like pregrasp->grasp transitions. They benefit less from spline
+        optimization compared to free-space transit edges.
+        """
+        return any(suffix in edge_name for suffix in ["_01", "_10"])
+
+    def _is_grasp_edge(self, edge_name: str) -> bool:
+        """Check if edge is a grasp edge (constrained motion).
+        
+        Grasp edges (_12, _21) represent constrained motion
+        like grasp->pregrasp transitions. They benefit less from spline
+        optimization compared to free-space transit edges.
+        """
+        return any(suffix in edge_name for suffix in ["_12", "_21"])
+
+    def _compute_config_distance(
+        self, q1: Sequence[float], q2: Sequence[float]
+    ) -> float:
+        """Compute configuration space distance for auto-tuning."""
+        return float(np.linalg.norm(np.array(q1) - np.array(q2)))
+
+    def _compute_planning_budget(
+        self, q1: Sequence[float], q2: Sequence[float]
+    ) -> Tuple[float, int]:
+        """Compute timeout and max_iterations based on distance.
+        
+        Returns:
+            (timeout, max_iterations) scaled by configuration distance
+        """
+        if not self._enable_distance_tuning:
+            return (self._transition_time_out, self._transition_max_iterations)
+
+        distance = self._compute_config_distance(q1, q2)
+        # Normalize by typical arm reach (~2.0 rad per joint)
+        # For 20 DOF system, typical max distance ~40
+        normalized_dist = min(distance / 40.0, 1.0)
+        scale = 1.0 + normalized_dist * self._distance_scale_factor
+        
+        timeout = self._transition_time_out * scale
+        iterations = int(self._transition_max_iterations * scale)
+        return (timeout, iterations)
+
     def configure_transition_planner(
         self,
         *,
         time_out: Optional[float] = None,
         max_iterations: Optional[int] = None,
         path_projector: Optional[Tuple[str, float]] = None,
+        enable_distance_tuning: Optional[bool] = None,
+        distance_scale_factor: Optional[float] = None,
     ) -> None:
-        """Configure defaults for TransitionPlanner edge-scoped planning."""
+        """Configure defaults for TransitionPlanner edge-scoped planning.
+        
+        Args:
+            time_out: Base timeout in seconds
+            max_iterations: Base maximum iterations
+            path_projector: (projector_type, step) tuple
+            enable_distance_tuning: Enable auto-scaling timeout/iterations
+                by distance
+            distance_scale_factor: Scale factor for distance-based tuning
+        """
         if time_out is not None:
             self._transition_time_out = float(time_out)
         if max_iterations is not None:
             self._transition_max_iterations = int(max_iterations)
         if path_projector is not None:
             self._transition_path_projector = path_projector
+        if enable_distance_tuning is not None:
+            self._enable_distance_tuning = bool(enable_distance_tuning)
+        if distance_scale_factor is not None:
+            self._distance_scale_factor = float(distance_scale_factor)
 
         tp = self._transition_planner
         if tp is not None:
             self._apply_transition_planner_defaults(tp)
+
+    def configure_time_parameterization(
+        self,
+        order: Optional[int] = None,
+        max_acceleration: Optional[float] = None,
+    ) -> None:
+        """Configure time parameterization parameters.
+        
+        Args:
+            order: Polynomial order for time parameterization
+            max_acceleration: Maximum acceleration limit
+        
+        Note:
+            In PyHPP, time parameterization is typically set when creating
+            the SimpleTimeParameterization optimizer instance. These settings
+            are stored for future use when creating optimizers.
+        """
+        if order is not None:
+            self._time_param_order = int(order)
+        if max_acceleration is not None:
+            self._time_param_max_accel = float(max_acceleration)
+
+    def set_inner_problem_parameter(self, key: str, value: Any) -> None:
+        """Set parameter on TransitionPlanner's inner problem.
+        
+        Args:
+            key: Parameter name (e.g., "kRRT*")
+            value: Parameter value
+        
+        Note:
+            In PyHPP, parameters are typically set differently than in CORBA.
+            This method attempts to set parameters on the problem if the
+            TransitionPlanner exposes it, otherwise stores for later use.
+        """
+        tp = self.ensure_transition_planner()
+        try:
+            # Try to access inner problem if TransitionPlanner exposes it
+            if hasattr(tp, 'problem'):
+                inner_problem = tp.problem()
+                if hasattr(inner_problem, 'setParameter'):
+                    inner_problem.setParameter(key, value)
+            # Fallback: set on main problem
+            elif self.problem is not None:
+                if hasattr(self.problem, 'setParameter'):
+                    self.problem.setParameter(key, value)
+        except Exception as e:
+            print(
+                f"Warning: Could not set inner problem parameter "
+                f"'{key}': {e}"
+            )
 
     def _apply_transition_planner_defaults(self, tp: Any) -> None:
         try:
@@ -679,10 +826,17 @@ class PyHPPBackend(BackendBase):
         self._transition_optimizers_by_edge_name.pop(edge_name, None)
 
     def _configure_transition_planner_for_edge(self, tp: Any, tr: Any) -> None:
+        """Configure TransitionPlanner for a specific edge.
+        
+        Applies edge-type-aware optimizer selection based on edge
+        naming patterns.
+        """
+        edge_name = tr.name() if hasattr(tr, "name") else str(tr)
+        
         try:
             tp.setEdge(tr)
+            print(f"      [TP] Set edge: {edge_name}")
         except Exception as exc:
-            edge_name = getattr(tr, "name", lambda: str(tr))()
             raise RuntimeError(
                 f"Failed to set TransitionPlanner edge {edge_name}: {exc}"
             )
@@ -691,11 +845,32 @@ class PyHPPBackend(BackendBase):
             tp.clearPathOptimizers()
         except Exception:
             pass
-
-        edge_name = tr.name() if hasattr(tr, "name") else str(tr)
-        for opt_name in self._transition_optimizers_by_edge_name.get(
-            edge_name, []
-        ):
+        
+        # Determine which optimizer list to use based on edge type
+        if edge_name in self._transition_optimizers_by_edge_name:
+            # Use explicit per-edge override if set
+            optimizer_names = (
+                self._transition_optimizers_by_edge_name[edge_name]
+            )
+            print("      [TP] Using edge-specific optimizers")
+        elif self._is_pregrasp_edge(edge_name):
+            # Pregrasp edges: constrained motion
+            optimizer_names = self._waypoint_pregrasp_optimizers
+            print("      [TP] Using pregrasp edge optimizers")
+        elif self._is_grasp_edge(edge_name):
+            # Grasp edges: constrained motion
+            optimizer_names = self._waypoint_grasp_optimizers
+            print("      [TP] Using grasp edge optimizers")
+        elif "Loop" in edge_name or "transit" in edge_name.lower():
+            # Transit edges: free-space motion
+            optimizer_names = self._transit_edge_optimizers
+            print("      [TP] Using transit edge optimizers")
+        else:
+            # Default fallback
+            optimizer_names = self._transition_default_optimizers
+            print("      [TP] Using default optimizers")
+        
+        for opt_name in optimizer_names:
             opt_instance = self._create_path_optimizer_instance(opt_name)
             if opt_instance is None:
                 available = sorted(self._path_optimizer_factories().keys())
@@ -703,6 +878,7 @@ class PyHPPBackend(BackendBase):
                     f"Unknown optimizer: {opt_name}. Available: {available}"
                 )
             tp.addPathOptimizer(opt_instance)
+            print(f"      [TP] Added optimizer: {opt_name}")
 
     def plan_transition_edge(
         self,
@@ -716,6 +892,12 @@ class PyHPPBackend(BackendBase):
         store: bool = True,
     ) -> Union[int, Any]:
         """Plan a transition along a specific graph edge.
+        
+        Implements smart planning strategy:
+        - Applies distance-based timeout/iteration scaling
+        - Skips directPath for waypoint pregrasp/grasp edges
+        - Validates configuration before planning
+        - Tries directPath first for transit edges, falls back to planPath
 
         Returns:
             If store=True: local stored path id (int).
@@ -726,47 +908,119 @@ class PyHPPBackend(BackendBase):
 
         tp = self.ensure_transition_planner()
         tr = self._resolve_transition(edge)
+        edge_name = tr.name() if hasattr(tr, "name") else str(edge)
+        
+        # Apply distance-based timeout/iteration scaling
+        timeout, max_iter = self._compute_planning_budget(q1, q2)
+        try:
+            tp.timeOut(timeout)
+            tp.maxIterations(max_iter)
+        except Exception:
+            pass
+        print(
+            f"      [TP] Planning budget: "
+            f"timeout={timeout:.1f}s, max_iter={max_iter}"
+        )
+        
         self._configure_transition_planner_for_edge(tp, tr)
 
         q1_list = list(q1)
         q2_list = list(q2)
-
-        pv: Any
-        try:
-            success, path, status = tp.directPath(
-                q1_list, q2_list, bool(validate)
-            )
-        except Exception as exc:
-            raise RuntimeError(f"TransitionPlanner.directPath failed: {exc}")
-
-        if success:
+        
+        # Validate configurations if possible
+        if validate and hasattr(tp, 'validateConfiguration'):
             try:
-                pv = tp.optimizePath(path)
-            except Exception:
-                pv = path
+                valid_q1, msg1 = tp.validateConfiguration(q1_list)
+                valid_q2, msg2 = tp.validateConfiguration(q2_list)
+                print(f"      [TP] Validate q1: {valid_q1}, msg: {msg1}")
+                print(f"      [TP] Validate q2: {valid_q2}, msg: {msg2}")
+                if not (valid_q1 and valid_q2):
+                    raise RuntimeError(
+                        f"Configuration validation failed for edge {edge_name}"
+                    )
+            except AttributeError:
+                # validateConfiguration not available in this PyHPP version
+                print(
+                    "      [TP] validateConfiguration not available "
+                    "in this PyHPP version"
+                )
+            except Exception as e:
+                print(
+                    f"      [TP] Warning: Configuration validation "
+                    f"failed: {e}"
+                )
+
+        # Smart planning strategy based on edge type
+        is_waypoint_pregrasp = self._is_pregrasp_edge(edge_name)
+        is_waypoint_grasp = self._is_grasp_edge(edge_name)
+        skip_direct_path = is_waypoint_pregrasp or is_waypoint_grasp
+        
+        pv: Any = None
+        
+        # Try directPath first for transit edges (unless it's a waypoint edge)
+        if not skip_direct_path:
+            print("      [TP] Transit or grasp edge, trying directPath first")
+            try:
+                success, path, status = tp.directPath(
+                    q1_list, q2_list, bool(validate)
+                )
+                if success:
+                    print("      [TP] directPath succeeded")
+                    try:
+                        pv = tp.optimizePath(path)
+                        print("      [TP] Path optimized")
+                    except Exception:
+                        print(
+                            "      [TP] Optimization failed, "
+                            "using unoptimized path"
+                        )
+                        pv = path
+                else:
+                    print(f"      [TP] directPath failed: {status}")
+            except Exception as exc:
+                # directPath failed, will fall back to planPath
+                print(f"      [TP] directPath threw exception: {exc}")
         else:
+            print(
+                "      [TP] Waypoint pregrasp edge detected, "
+                "skipping directPath"
+            )
+        
+        # Fall back to planPath if directPath didn't work or was skipped
+        if pv is None:
+            print("      [TP] Falling back to planPath")
             try:
                 # planPath expects a matrix of goals (list of lists)
                 pv = tp.planPath(q1_list, [q2_list], bool(reset_roadmap))
-            except Exception as exc:
-                raise RuntimeError(
-                    (
-                        "TransitionPlanner failed (directPath status: %s). "
-                        "planPath error: %s"
+                print("      [TP] planPath succeeded")
+                try:
+                    pv = tp.optimizePath(pv)
+                    print("      [TP] Path optimized")
+                except Exception:
+                    print(
+                        "      [TP] Optimization failed, "
+                        "using unoptimized path"
                     )
-                    % (status, exc)
+            except Exception as exc:
+                edge_type = "waypoint" if skip_direct_path else "transit"
+                raise RuntimeError(
+                    f"TransitionPlanner.planPath failed for {edge_type} edge "
+                    f"{edge_name}: {exc}"
                 )
 
         if time_parameterize:
             try:
                 pv = tp.timeParameterization(pv)
-            except Exception:
-                pass
+                print("      [TP] Path time-parameterized")
+            except Exception as e:
+                print(f"      [TP] Time parameterization failed: {e}")
 
         if not store:
             return pv
 
-        return self.store_path(pv)
+        path_id = self.store_path(pv)
+        print(f"      [TP] Path stored with ID: {path_id}")
+        return path_id
 
     def plan_transition_sequence(
         self,
