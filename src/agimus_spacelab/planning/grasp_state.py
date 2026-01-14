@@ -45,6 +45,10 @@ class GraspStateTracker:
         """
         self.grippers = grippers
         self.handles = handles
+        
+        # Store gripper order to match ConstraintGraphFactory ordering
+        # This is critical for state name generation
+        self.gripper_order = list(grippers)
 
         # Build index mappings for abbreviated state encoding
         self.gripper_to_idx = {g: i for i, g in enumerate(grippers)}
@@ -265,18 +269,23 @@ class GraspStateTracker:
         Returns:
             State name, e.g., "free" or
             "gripper1 grasps handle1 : gripper2 grasps handle2"
+            
+        Note:
+            Uses gripper_order (from GRIPPERS list) to match
+            ConstraintGraphFactory._stateName() ordering convention.
         """
-        held = [
-            (g, h) for g, h in self.current_grasps.items() if h is not None
-        ]
+        # Build list of held grasps in gripper_order (not alphabetical)
+        # This matches ConstraintGraphFactory._stateName() which uses
+        # enumerate(grasps) to preserve gripper list order
+        parts = []
+        for gripper in self.gripper_order:
+            handle = self.current_grasps.get(gripper)
+            if handle is not None:
+                parts.append(f"{gripper} grasps {handle}")
 
-        if not held:
+        if not parts:
             return "free"
 
-        # Sort by gripper name for canonical ordering
-        held.sort(key=lambda x: x[0])
-
-        parts = [f"{g} grasps {h}" for g, h in held]
         return " : ".join(parts)
 
     def get_held_handles(self) -> List[str]:
