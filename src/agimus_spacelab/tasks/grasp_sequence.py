@@ -158,7 +158,7 @@ class GraspSequencePlanner:
         validate: bool = True,
         reset_roadmap: bool = True,
         time_parameterize: bool = True,
-        max_iterations_per_edge: int = 5000,
+        max_iterations_per_edge: int = 10000,
         timeout_per_edge: float = 60.0,
         frozen_arms_mode: str = "auto",
         per_phase_frozen_arms: Optional[Dict[int, List[str]]] = None,
