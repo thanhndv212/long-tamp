@@ -53,6 +53,9 @@ class CorbaBackend(BackendBase):
 
         # TransitionPlanner (edge-scoped planning)
         self._transition_planner = None
+        self._transition_inner_planner_type = (
+            None  # None = use TransitionPlanner default (BiRRT*)
+        )
         self._transition_time_out = 60.0  # Base timeout for planning
         self._transition_max_iterations = 10000  # Base iterations for RRT*
         self._transition_path_projector: Optional[Tuple[str, float]] = (
@@ -520,6 +523,7 @@ class CorbaBackend(BackendBase):
     def configure_transition_planner(
         self,
         *,
+        inner_planner_type: Optional[str] = None,
         time_out: Optional[float] = None,
         max_iterations: Optional[int] = None,
         path_projector: Optional[Tuple[str, float]] = None,
@@ -529,6 +533,7 @@ class CorbaBackend(BackendBase):
         """Configure defaults for the TransitionPlanner.
 
         Args:
+            inner_planner_type: Inner planner type (e.g., "DiffusingPlanner", "BiRRT*", "BiRRTPlanner")
             time_out: Base timeout in seconds (scaled by distance if tuning enabled)
             max_iterations: Base max iterations (scaled by distance if tuning enabled)
             path_projector: Path projector type and tolerance
@@ -540,6 +545,8 @@ class CorbaBackend(BackendBase):
           maxIterations set.
         - This only affects edge-scoped planning, not ProblemSolver.solve().
         """
+        if inner_planner_type is not None:
+            self._transition_inner_planner_type = str(inner_planner_type)
         if time_out is not None:
             self._transition_time_out = float(time_out)
         if max_iterations is not None:
@@ -589,6 +596,38 @@ class CorbaBackend(BackendBase):
                 pass
 
     def _apply_transition_planner_defaults(self, tp: Any) -> None:
+        # Set inner planner type (e.g., DiffusingPlanner, BiRRT*, etc.)
+        # Note: This requires hpp-manipulation-corba with setInnerPlannerType support
+        # If None, use TransitionPlanner's default (BiRRT*)
+        if self._transition_inner_planner_type is not None:
+            try:
+                tp.setInnerPlannerType(self._transition_inner_planner_type)
+                print(
+                    f"      [TP] Set inner planner type: {self._transition_inner_planner_type}"
+                )
+            except AttributeError:
+                print(
+                    f"      [TP] Warning: setInnerPlannerType not available (using default BiRRT*)"
+                )
+                print(
+                    f"      [TP] To change planner, restart hpp-manipulation-corba server"
+                )
+            except Exception as e:
+                # BAD_OPERATION means the CORBA server doesn't have this method yet
+                if "BAD_OPERATION" in str(
+                    e
+                ) or "UnRecognisedOperationName" in str(e):
+                    print(
+                        f"      [TP] Warning: setInnerPlannerType not available in server (using default BiRRT*)"
+                    )
+                    print(
+                        f"      [TP] Server needs to be restarted with updated hpp-manipulation-corba"
+                    )
+                else:
+                    print(f"      [TP] Failed to set inner planner type: {e}")
+        else:
+            print(f"      [TP] Using default inner planner type (BiRRT*)")
+
         try:
             tp.timeOut(self._transition_time_out)
         except Exception:
@@ -807,7 +846,9 @@ class CorbaBackend(BackendBase):
         if is_waypoint_pregrasp:
             # Waypoint edges: Skip directPath, go straight to sampling-based planning
             # These edges have constrained motion and directPath rarely succeeds
-            print(f"      [TP] Waypoint pregrasp edge detected, using planPath (BiRrtStar)")
+            print(
+                f"      [TP] Waypoint pregrasp edge detected, using planPath."
+            )
             try:
                 pv = tp.planPath(q1_list, [q2_list], bool(reset_roadmap))
                 print(f"      [TP] planPath succeeded")
