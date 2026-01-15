@@ -512,14 +512,21 @@ class GraphBuilder:
         # Set grasp restrictions
         if config.RULES is not None:
             self.factory.setRules(config.RULES)
-            print("    \u2713 Set custom rules")
+            print("    ✓ Set custom rules")
         elif config.VALID_PAIRS is not None:
             self.factory.setPossibleGrasps(config.VALID_PAIRS)
-            print("    \u2713 Set possible grasps from valid_pairs")
+            print("    ✓ Set possible grasps from valid_pairs")
+
+        # Apply sequential filter if provided (strict 2-state limit)
+        if hasattr(config, '_SEQUENTIAL_FILTER'):
+            seq_filter = config._SEQUENTIAL_FILTER
+            self.factory.graspIsAllowed.append(seq_filter)
+            print("    ✓ Applied SequentialGraspFilter")
+            print("      Will limit graph to current→next state only")
 
         # Generate graph
         self.factory.generate()
-        print("    \u2713 Generated graph structure")
+        print("    ✓ Generated graph structure")
 
         # Add global constraints before initialization (e.g., locked joints)
         if graph_constraints:
@@ -1034,16 +1041,27 @@ class GraphBuilder:
         next_grasp: Tuple[str, str],
         pyhpp_constraints: Optional[Dict[str, Any]] = None,
         graph_constraints: Optional[List[str]] = None,
+        use_sequential_filter: bool = True,
     ) -> Any:
         """Build a minimal phase graph for incremental multi-grasp planning.
         
         This method creates a drastically reduced constraint graph containing
-        only the states and edges needed for a single grasp transition. It
-        uses setPossibleGrasps to restrict the factory to:
-        - Already-held gripper→handle pairs (must remain valid)
-        - The single new gripper→handle pair for the next grasp
+        only the states and edges needed for a single grasp transition.
         
-        This reduces graph size from O(grippers! × handles!) to O(grippers)
+        Two filtering strategies are available:
+        1. setPossibleGrasps (use_sequential_filter=False):
+           - Restricts which gripper-handle pairs are valid
+           - Still generates intermediate states (e.g., free, A, B, A+B)
+           - Results in ~4-10 states per phase
+        
+        2. SequentialGraspFilter (use_sequential_filter=True, default):
+           - Only allows current state and immediate next state
+           - Prevents all intermediate/parallel grasp combinations
+           - Results in exactly 2 states + waypoints per phase
+           - Dramatically reduces graph from O(N!) to O(1) states per
+             transition
+        
+        This reduces graph size from combinatorial explosion to linear growth
         for sequential multi-grasp tasks.
         
         Args:
@@ -1053,6 +1071,9 @@ class GraphBuilder:
             pyhpp_constraints: PyHPP constraint objects (for pyhpp backend)
             graph_constraints: Optional list of constraint names to add
                 globally (e.g., locked joint constraints)
+            use_sequential_filter: If True, uses SequentialGraspFilter to
+                strictly limit to current→next state transition only.
+                If False, uses setPossibleGrasps (allows intermediate states).
         
         Returns:
             Newly created ConstraintGraph or Graph instance
@@ -1074,6 +1095,11 @@ class GraphBuilder:
             f"next={next_grasp}"
         )
         
+        if use_sequential_filter:
+            print("    Using SequentialGraspFilter (strict 2-state limit)")
+        else:
+            print("    Using setPossibleGrasps (allows intermediate states)")
+        
         # Delete existing graph to allow recreation (CORBA stores by name)
         if self.graph is not None:
             try:
@@ -1087,7 +1113,7 @@ class GraphBuilder:
                     # It holds a reference to the old graph
                     if hasattr(self.planner, 'reset_transition_planner'):
                         self.planner.reset_transition_planner()
-                        print(f"    ✓ Reset TransitionPlanner")
+                        print("    ✓ Reset TransitionPlanner")
                 else:
                     # PyHPP: graph is local object, just clear reference
                     print("    ✓ Clearing existing graph reference")
@@ -1128,7 +1154,9 @@ class GraphBuilder:
         
         # Copy required attributes from original config
         for attr in dir(config):
-            if not attr.startswith("_") and not callable(getattr(config, attr)):
+            is_private = attr.startswith("_")
+            is_callable = callable(getattr(config, attr))
+            if not is_private and not is_callable:
                 setattr(phase_config, attr, getattr(config, attr))
         
         # Override VALID_PAIRS for this phase
@@ -1137,8 +1165,53 @@ class GraphBuilder:
         # Also override RULES to None (setPossibleGrasps takes precedence)
         phase_config.RULES = None
         
+        # Apply sequential filter to enforce strict 2-state limit
+        # This prevents the factory from generating intermediate states
+        if use_sequential_filter:
+            # Import the sequential filter
+            try:
+                from agimus_spacelab.planning.sequential_grasp_filter import (
+                    SequentialGraspFilter,
+                    grasps_dict_to_tuple,
+                )
+                
+                # Get gripper and handle lists from config
+                grippers = list(getattr(config, "GRIPPERS", []))
+                handles = []
+                handles_per_obj = getattr(config, "HANDLES_PER_OBJECT", [])
+                for obj_handles in handles_per_obj:
+                    handles.extend(obj_handles)
+                
+                # Build current grasps dict (all grippers, not just held ones)
+                current_grasps_full = {g: None for g in grippers}
+                current_grasps_full.update(held_grasps)
+                
+                # Create the sequential filter
+                seq_filter = SequentialGraspFilter(
+                    grippers=grippers,
+                    handles=handles,
+                    current_grasps=current_grasps_full,
+                    next_grasp=next_grasp,
+                )
+                
+                print("    ✓ Created SequentialGraspFilter:")
+                current_tuple = grasps_dict_to_tuple(
+                    current_grasps_full, grippers, handles
+                )
+                print(f"      Current: {current_tuple}")
+                print(f"      Next: {seq_filter.next_grasps}")
+                
+                # Store filter for factory injection
+                phase_config._SEQUENTIAL_FILTER = seq_filter
+                
+            except ImportError as e:
+                print(f"    ⚠ SequentialGraspFilter not available: {e}")
+                print("    ⚠ Falling back to setPossibleGrasps")
+                use_sequential_filter = False
+        
         # Use the factory graph creation with restricted pairs
         # This will call factory.setPossibleGrasps(phase_valid_pairs)
+        # and optionally factory.graspIsAllowed.append(seq_filter)
         return self.create_factory_graph(
             phase_config,
             pyhpp_constraints=pyhpp_constraints,

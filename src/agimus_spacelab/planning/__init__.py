@@ -7,6 +7,8 @@ This module provides the core planning functionality:
 - GraphBuilder: Constraint graph construction (manual or factory)
 - ConstraintBuilder: Transformation constraint creation
 - ConfigGenerator: Configuration generation and validation
+- SequentialGraspFilter: State filtering for sequential grasp planning
+- SequentialGraphFactory: Factory for minimal sequential constraint graphs
 
 Usage:
     from agimus_spacelab.planning import (
@@ -15,6 +17,7 @@ Usage:
         GraphBuilder,
         ConstraintBuilder,
         ConfigGenerator,
+        SequentialGraspFilter,
     )
 """
 
@@ -23,6 +26,14 @@ from .scene import SceneBuilder
 from .graph import GraphBuilder
 from .constraints import ConstraintBuilder, FactoryConstraintRegistry
 from .config import ConfigGenerator, bfs_edge_path, freeze_joints_by_substrings
+from .sequential_grasp_filter import (
+    SequentialGraspFilter,
+    SequentialTransitionFilter,
+    grasps_dict_to_tuple,
+    grasps_tuple_to_dict,
+    next_grasp_to_indices,
+)
+from .sequential_graph_factory import SequentialConstraintGraphFactory
 
 
 __all__ = [
@@ -35,4 +46,11 @@ __all__ = [
     "ConfigGenerator",
     "bfs_edge_path",
     "freeze_joints_by_substrings",
+    "SequentialGraspFilter",
+    "SequentialTransitionFilter",
+    "grasps_dict_to_tuple",
+    "grasps_tuple_to_dict",
+    "next_grasp_to_indices",
+    "SequentialConstraintGraphFactory",
 ]
+
