@@ -70,10 +70,15 @@ class CorbaBackend(BackendBase):
         ]
         # Waypoint edges (constrained motion): Use spline optimization
         self._waypoint_pregrasp_optimizers = [
+            "RandomShortcut",
             "SplineGradientBased_bezier3",
+            "SimpleTimeParameterization",
+            # "TOPPRA",
         ]
         # Waypoint edges (constrained motion): No spline optimization
         self._waypoint_grasp_optimizers = [
+            "RandomShortcut",
+            "SplineGradientBased_bezier3",
             "SimpleTimeParameterization",
         ]
         # Default fallback
