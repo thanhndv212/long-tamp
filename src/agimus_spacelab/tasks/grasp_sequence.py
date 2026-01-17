@@ -140,7 +140,7 @@ class GraspSequencePlanner:
             if gripper_pattern.lower() in gripper_lower:
                 active_arm = arm_keyword
                 break
-        
+
         if verbose:
             print(f"Active gripper '{active_gripper}' uses arm '{active_arm}'")
 
@@ -435,27 +435,39 @@ class GraspSequencePlanner:
                     "paths": [],  # No paths yet in this phase
                     "complete": False,
                     "failed_edge_idx": 0,
-                    "failed_edge_name": edge_sequence[0] if edge_sequence else None,
+                    "failed_edge_name": (
+                        edge_sequence[0] if edge_sequence else None
+                    ),
                     "last_q_start": q_current,
                     "failed_q_target": None,
                     "error_message": f"State projection failed: {e}",
                 }
                 self.phase_results.append(partial_phase_result)
-                
+
                 # Store failure info
                 self.last_failure_info = {
                     "phase_idx": phase_idx,
                     "edge_idx": 0,
-                    "edge_name": edge_sequence[0] if edge_sequence else "unknown",
+                    "edge_name": (
+                        edge_sequence[0] if edge_sequence else "unknown"
+                    ),
                     "q_current": q_current,
                     "error": f"State projection failed: {e}",
-                    "completed_phases": len([p for p in self.phase_results if p.get("complete", False)]),
+                    "completed_phases": len(
+                        [
+                            p
+                            for p in self.phase_results
+                            if p.get("complete", False)
+                        ]
+                    ),
                     "completed_edges_in_phase": 0,
                 }
-                
+
                 if verbose:
-                    print(f"\n  ⚠ Stored partial phase result: projection failed at phase start")
-                
+                    print(
+                        f"\n  ⚠ Stored partial phase result: projection failed at phase start"
+                    )
+
                 raise RuntimeError(
                     f"Phase {phase_idx + 1}: State projection failed: {e}"
                 ) from e
@@ -510,7 +522,7 @@ class GraspSequencePlanner:
                         "error_message": f"Target generation failed: {e}",
                     }
                     self.phase_results.append(partial_phase_result)
-                    
+
                     # Store failure info for resume
                     self.last_failure_info = {
                         "phase_idx": phase_idx,
@@ -518,13 +530,21 @@ class GraspSequencePlanner:
                         "edge_name": edge_name,
                         "q_current": q_current,
                         "error": f"Target generation failed: {e}",
-                        "completed_phases": len([p for p in self.phase_results if p.get("complete", False)]),
+                        "completed_phases": len(
+                            [
+                                p
+                                for p in self.phase_results
+                                if p.get("complete", False)
+                            ]
+                        ),
                         "completed_edges_in_phase": len(phase_paths),
                     }
-                    
+
                     if verbose:
-                        print(f"\n  ⚠ Stored partial phase result: {len(phase_paths)} edges completed")
-                    
+                        print(
+                            f"\n  ⚠ Stored partial phase result: {len(phase_paths)} edges completed"
+                        )
+
                     raise RuntimeError(
                         f"Phase {phase_idx + 1}, edge {edge_idx + 1}: "
                         f"Target generation failed: {e}"
@@ -593,7 +613,13 @@ class GraspSequencePlanner:
                         "edge_name": edge_name,
                         "q_current": q_current,
                         "error": str(e),
-                        "completed_phases": len([p for p in self.phase_results if p.get("complete", False)]),
+                        "completed_phases": len(
+                            [
+                                p
+                                for p in self.phase_results
+                                if p.get("complete", False)
+                            ]
+                        ),
                         "completed_edges_in_phase": len(phase_paths),
                     }
 
@@ -957,26 +983,38 @@ class GraspSequencePlanner:
                     "paths": [],
                     "complete": False,
                     "failed_edge_idx": 0,
-                    "failed_edge_name": edge_sequence[0] if edge_sequence else None,
+                    "failed_edge_name": (
+                        edge_sequence[0] if edge_sequence else None
+                    ),
                     "last_q_start": q_current,
                     "failed_q_target": None,
                     "error_message": f"State projection failed: {e}",
                 }
                 self.phase_results.append(partial_phase_result)
-                
+
                 self.last_failure_info = {
                     "phase_idx": phase_idx,
                     "edge_idx": 0,
-                    "edge_name": edge_sequence[0] if edge_sequence else "unknown",
+                    "edge_name": (
+                        edge_sequence[0] if edge_sequence else "unknown"
+                    ),
                     "q_current": q_current,
                     "error": f"State projection failed: {e}",
-                    "completed_phases": len([p for p in self.phase_results if p.get("complete", False)]),
+                    "completed_phases": len(
+                        [
+                            p
+                            for p in self.phase_results
+                            if p.get("complete", False)
+                        ]
+                    ),
                     "completed_edges_in_phase": 0,
                 }
-                
+
                 if verbose:
-                    print(f"\n  ⚠ Stored partial phase result: projection failed at phase start")
-                
+                    print(
+                        f"\n  ⚠ Stored partial phase result: projection failed at phase start"
+                    )
+
                 raise RuntimeError(
                     f"Phase {phase_idx + 1}: State projection failed: {e}"
                 ) from e
@@ -1033,20 +1071,28 @@ class GraspSequencePlanner:
                         "error_message": f"Target generation failed: {e}",
                     }
                     self.phase_results.append(partial_phase_result)
-                    
+
                     self.last_failure_info = {
                         "phase_idx": phase_idx,
                         "edge_idx": edge_idx,
                         "edge_name": edge_name,
                         "q_current": q_current,
                         "error": f"Target generation failed: {e}",
-                        "completed_phases": len([p for p in self.phase_results if p.get("complete", False)]),
+                        "completed_phases": len(
+                            [
+                                p
+                                for p in self.phase_results
+                                if p.get("complete", False)
+                            ]
+                        ),
                         "completed_edges_in_phase": len(phase_paths),
                     }
-                    
+
                     if verbose:
-                        print(f"\n  ⚠ Stored partial phase result: {len(phase_paths)} edges completed")
-                    
+                        print(
+                            f"\n  ⚠ Stored partial phase result: {len(phase_paths)} edges completed"
+                        )
+
                     raise RuntimeError(
                         f"Phase {phase_idx + 1}, edge {edge_idx + 1}: "
                         f"Target generation failed: {e}"
@@ -1099,7 +1145,13 @@ class GraspSequencePlanner:
                         "edge_name": edge_name,
                         "q_current": q_current,
                         "error": str(e),
-                        "completed_phases": len([p for p in self.phase_results if p.get("complete", False)]),
+                        "completed_phases": len(
+                            [
+                                p
+                                for p in self.phase_results
+                                if p.get("complete", False)
+                            ]
+                        ),
                         "completed_edges_in_phase": len(phase_paths),
                     }
 
@@ -1202,7 +1254,7 @@ class GraspSequencePlanner:
                 edge_names = phase.get("edges", [])
                 for idx, path in enumerate(phase["paths"]):
                     edge_name = edge_names[idx] if idx < len(edge_names) else None
-                    
+
                     print(
                         f"    Path {idx + 1}/{len(phase['paths'])}: ", end=""
                     )
