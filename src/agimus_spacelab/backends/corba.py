@@ -71,14 +71,14 @@ class CorbaBackend(BackendBase):
         # Waypoint edges (constrained motion): Use spline optimization
         self._waypoint_pregrasp_optimizers = [
             "RandomShortcut",
-            "SplineGradientBased_bezier3",
+            # "SplineGradientBased_bezier3",
             "SimpleTimeParameterization",
             # "TOPPRA",
         ]
         # Waypoint edges (constrained motion): No spline optimization
         self._waypoint_grasp_optimizers = [
             "RandomShortcut",
-            "SplineGradientBased_bezier3",
+            # "SplineGradientBased_bezier3",
             "SimpleTimeParameterization",
         ]
         # Default fallback
@@ -877,6 +877,7 @@ class CorbaBackend(BackendBase):
                     print(f"      [TP] directPath succeeded")
                     try:
                         pv = tp.optimizePath(path)
+                        print(f"      [TP] Path optimized")
                     except Exception:
                         try:
                             pv = path.asVector()
