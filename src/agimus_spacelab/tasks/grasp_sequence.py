@@ -9,6 +9,7 @@ graph explosion by rebuilding minimal graphs for each phase.
 
 from __future__ import annotations
 
+import time
 from typing import Dict, List, Optional, Tuple, Any, Sequence
 
 from agimus_spacelab.planning.grasp_state import GraspStateTracker
@@ -87,6 +88,11 @@ class GraspSequencePlanner:
         # Track last failure for resume capability
         self.last_failure_info = None
         self.original_sequence = None  # Store full sequence for resume
+
+        # Edge-level timing and resume attempt statistics
+        self.edge_stats = {}  # (phase_idx, edge_idx) -> timing info
+        self.total_planning_time = 0.0
+        self.resume_attempt_count = 0
 
         # Gripper-to-arm mapping for locked joint filtering
         # Maps gripper name pattern -> arm keyword
@@ -476,9 +482,21 @@ class GraspSequencePlanner:
             # Each edge in sequence has its own path constraints
             # that are easier to satisfy
             phase_paths = []
+            edge_stats_list = []  # Per-edge timing stats for this phase
             q_start = q_current
 
             for edge_idx, edge_name in enumerate(edge_sequence):
+                edge_start_time = time.time()
+                edge_stat = {
+                    "edge_idx": edge_idx,
+                    "edge_name": edge_name,
+                    "attempt": 1,
+                    "gen_time": 0.0,
+                    "plan_time": 0.0,
+                    "total_time": 0.0,
+                    "success": False,
+                }
+
                 if verbose:
                     print(
                         f"  Planning waypoint edge "
@@ -487,6 +505,7 @@ class GraspSequencePlanner:
                     )
 
                 # Generate target configuration via this edge
+                gen_start = time.time()
                 q_target = None
                 try:
                     ok, q_target = self.config_gen.generate_via_edge(
@@ -499,14 +518,19 @@ class GraspSequencePlanner:
                             f"Failed to generate target via edge "
                             f"'{edge_name}'"
                         )
+                    edge_stat["gen_time"] = time.time() - gen_start
 
                     if verbose:
                         print(
                             f"     ✓ Generated target config "
-                            f"(first 5): {q_target[:5]}"
+                            f"({edge_stat['gen_time']:.2f}s)"
                         )
 
                 except Exception as e:
+                    edge_stat["gen_time"] = time.time() - gen_start
+                    edge_stat["total_time"] = time.time() - edge_start_time
+                    edge_stats_list.append(edge_stat)
+
                     # Store partial phase result
                     partial_phase_result = {
                         "phase": phase_idx + 1,
@@ -514,6 +538,7 @@ class GraspSequencePlanner:
                         "handle": handle,
                         "edges": edge_sequence,
                         "paths": phase_paths,
+                        "edge_stats": edge_stats_list,
                         "complete": False,
                         "failed_edge_idx": edge_idx,
                         "failed_edge_name": edge_name,
@@ -551,11 +576,10 @@ class GraspSequencePlanner:
                     ) from e
 
                 # Plan transition using TransitionPlanner
+                plan_start = time.time()
                 try:
                     if verbose:
                         print("     Planning: q_start -> q_target")
-                        print(f"     q_start (first 5): {q_start[:5]}")
-                        print(f"     q_target (first 5): {q_target[:5]}")
 
                     path = self.planner.plan_transition_edge(
                         edge=edge_name,
@@ -567,6 +591,13 @@ class GraspSequencePlanner:
                         raise RuntimeError(
                             f"Planning failed for edge '{edge_name}'"
                         )
+
+                    edge_stat["plan_time"] = time.time() - plan_start
+                    edge_stat["total_time"] = time.time() - edge_start_time
+                    edge_stat["success"] = True
+                    edge_stats_list.append(edge_stat)
+                    self.total_planning_time += edge_stat["total_time"]
+                    self.edge_stats[(phase_idx, edge_idx)] = edge_stat
 
                     phase_paths.append(path)
 
@@ -581,15 +612,16 @@ class GraspSequencePlanner:
 
                     if verbose:
                         print(
-                            f"     ✓ Path found for edge "
-                            f"{edge_idx + 1}/{len(edge_sequence)}"
-                        )
-                        print(
-                            f"     Updated q_start (first 5): "
-                            f"{q_start[:5]}"
+                            f"     ✓ Path found ({edge_stat['plan_time']:.2f}s plan, "
+                            f"{edge_stat['total_time']:.2f}s total)"
                         )
 
                 except Exception as e:
+                    edge_stat["plan_time"] = time.time() - plan_start
+                    edge_stat["total_time"] = time.time() - edge_start_time
+                    edge_stats_list.append(edge_stat)
+                    self.total_planning_time += edge_stat["total_time"]
+
                     # Store partial phase result before raising
                     partial_phase_result = {
                         "phase": phase_idx + 1,
@@ -597,11 +629,12 @@ class GraspSequencePlanner:
                         "handle": handle,
                         "edges": edge_sequence,
                         "paths": phase_paths,  # Successfully completed edges
+                        "edge_stats": edge_stats_list,
                         "complete": False,
                         "failed_edge_idx": edge_idx,
                         "failed_edge_name": edge_name,
                         "last_q_start": q_start,
-                        "failed_q_target": q_target if 'q_target' in locals() else None,
+                        "failed_q_target": q_target,
                         "error_message": str(e),
                     }
                     self.phase_results.append(partial_phase_result)
@@ -634,20 +667,32 @@ class GraspSequencePlanner:
             # Update current config to end of sequence
             q_current = q_start
 
+            # Compute phase timing totals
+            phase_total_time = sum(s["total_time"] for s in edge_stats_list)
+            phase_plan_time = sum(s["plan_time"] for s in edge_stats_list)
+            phase_gen_time = sum(s["gen_time"] for s in edge_stats_list)
+
             if verbose:
                 print(f"  ✓ Completed {len(edge_sequence)}-edge sequence")
-                print(f"     Final q_current (first 5): {q_current[:5]}")
+                print(
+                    f"     Phase timing: {phase_total_time:.2f}s total "
+                    f"(gen: {phase_gen_time:.2f}s, plan: {phase_plan_time:.2f}s)"
+                )
 
             # Update grasp state after successful planning
             self.grasp_tracker.update_grasp(gripper, handle)
 
-            # Store phase result with all edge paths
+            # Store phase result with all edge paths and timing stats
             phase_result = {
                 "phase": phase_idx + 1,
                 "gripper": gripper,
                 "handle": handle,
                 "edges": edge_sequence,
                 "paths": phase_paths,
+                "edge_stats": edge_stats_list,
+                "phase_time": phase_total_time,
+                "phase_plan_time": phase_plan_time,
+                "phase_gen_time": phase_gen_time,
                 "complete": True,
                 "final_config": q_current,
                 "state_after": self.grasp_tracker.get_current_state_name(),
@@ -662,6 +707,7 @@ class GraspSequencePlanner:
                 f"Final state: {self.grasp_tracker.get_current_state_name()}"
             )
             print(f"Completed {len(self.phase_results)} phases")
+            print(f"Total planning time: {self.total_planning_time:.2f}s")
 
         # Return combined result
         return {
@@ -753,9 +799,14 @@ class GraspSequencePlanner:
                 "Use plan_sequence() to start a new sequence."
             )
 
+        # Increment resume attempt counter
+        self.resume_attempt_count += 1
+
         if verbose:
             print("\n" + "=" * 70)
-            print("Resuming Grasp Sequence Planning")
+            print(
+                f"Resuming Grasp Sequence Planning (attempt #{self.resume_attempt_count})"
+            )
             print("=" * 70)
             print(f"Resuming from Phase {resume_state['phase_idx'] + 1}, "
                   f"Edge {resume_state['edge_idx'] + 1}")
@@ -1021,6 +1072,7 @@ class GraspSequencePlanner:
 
             # Plan edges (with selective retry)
             phase_paths = []
+            edge_stats_list = []  # Per-edge timing stats for this phase
             q_start = q_current
 
             # For first phase in resume, decide where to start
@@ -1035,15 +1087,35 @@ class GraspSequencePlanner:
 
             for edge_idx in range(start_edge_idx, len(edge_sequence)):
                 edge_name = edge_sequence[edge_idx]
+                edge_start_time = time.time()
 
+                # Get previous attempt count for this edge
+                prev_stat = self.edge_stats.get((phase_idx, edge_idx))
+                attempt_num = (prev_stat["attempt"] + 1) if prev_stat else 1
+
+                edge_stat = {
+                    "edge_idx": edge_idx,
+                    "edge_name": edge_name,
+                    "attempt": attempt_num,
+                    "gen_time": 0.0,
+                    "plan_time": 0.0,
+                    "total_time": 0.0,
+                    "success": False,
+                    "is_resume": True,
+                }
+
+                attempt_str = (
+                    f" (attempt #{attempt_num})" if attempt_num > 1 else ""
+                )
                 if verbose:
                     print(
                         f"  Planning waypoint edge "
                         f"{edge_idx + 1}/{len(edge_sequence)}: "
-                        f"{edge_name}"
+                        f"{edge_name}{attempt_str}"
                     )
 
                 # Generate target
+                gen_start = time.time()
                 q_target = None
                 try:
                     ok, q_target = self.config_gen.generate_via_edge(
@@ -1055,7 +1127,12 @@ class GraspSequencePlanner:
                         raise RuntimeError(
                             f"Failed to generate target via edge '{edge_name}'"
                         )
+                    edge_stat["gen_time"] = time.time() - gen_start
                 except Exception as e:
+                    edge_stat["gen_time"] = time.time() - gen_start
+                    edge_stat["total_time"] = time.time() - edge_start_time
+                    edge_stats_list.append(edge_stat)
+
                     # Store partial result
                     partial_phase_result = {
                         "phase": phase_idx + 1,
@@ -1063,6 +1140,7 @@ class GraspSequencePlanner:
                         "handle": handle,
                         "edges": edge_sequence,
                         "paths": phase_paths,
+                        "edge_stats": edge_stats_list,
                         "complete": False,
                         "failed_edge_idx": edge_idx,
                         "failed_edge_name": edge_name,
@@ -1099,6 +1177,7 @@ class GraspSequencePlanner:
                     ) from e
 
                 # Plan edge
+                plan_start = time.time()
                 try:
                     path = self.planner.plan_transition_edge(
                         edge=edge_name,
@@ -1111,6 +1190,13 @@ class GraspSequencePlanner:
                             f"Planning failed for edge '{edge_name}'"
                         )
 
+                    edge_stat["plan_time"] = time.time() - plan_start
+                    edge_stat["total_time"] = time.time() - edge_start_time
+                    edge_stat["success"] = True
+                    edge_stats_list.append(edge_stat)
+                    self.total_planning_time += edge_stat["total_time"]
+                    self.edge_stats[(phase_idx, edge_idx)] = edge_stat
+
                     phase_paths.append(path)
 
                     if hasattr(path, "getInitialConfig") and hasattr(
@@ -1121,9 +1207,17 @@ class GraspSequencePlanner:
                         q_start = q_target
 
                     if verbose:
-                        print(f"     \u2713 Path found")
+                        print(
+                            f"     ✓ Path found ({edge_stat['plan_time']:.2f}s plan, "
+                            f"{edge_stat['total_time']:.2f}s total)"
+                        )
 
                 except Exception as e:
+                    edge_stat["plan_time"] = time.time() - plan_start
+                    edge_stat["total_time"] = time.time() - edge_start_time
+                    edge_stats_list.append(edge_stat)
+                    self.total_planning_time += edge_stat["total_time"]
+
                     # Store partial result again
                     partial_phase_result = {
                         "phase": phase_idx + 1,
@@ -1131,14 +1225,22 @@ class GraspSequencePlanner:
                         "handle": handle,
                         "edges": edge_sequence,
                         "paths": phase_paths,
+                        "edge_stats": edge_stats_list,
                         "complete": False,
                         "failed_edge_idx": edge_idx,
                         "failed_edge_name": edge_name,
                         "last_q_start": q_start,
-                        "failed_q_target": q_target if 'q_target' in locals() else None,
+                        "failed_q_target": q_target,
                         "error_message": str(e),
                     }
                     self.phase_results.append(partial_phase_result)
+
+                    if verbose:
+                        print(
+                            f"     ⚠ Failed after {edge_stat['total_time']:.2f}s "
+                            f"(attempt #{attempt_num})"
+                        )
+
                     self.last_failure_info = {
                         "phase_idx": phase_idx,
                         "edge_idx": edge_idx,
@@ -1163,12 +1265,21 @@ class GraspSequencePlanner:
             q_current = q_start
             self.grasp_tracker.update_grasp(gripper, handle)
 
+            # Compute phase timing totals
+            phase_total_time = sum(s["total_time"] for s in edge_stats_list)
+            phase_plan_time = sum(s["plan_time"] for s in edge_stats_list)
+            phase_gen_time = sum(s["gen_time"] for s in edge_stats_list)
+
             phase_result = {
                 "phase": phase_idx + 1,
                 "gripper": gripper,
                 "handle": handle,
                 "edges": edge_sequence,
                 "paths": phase_paths,
+                "edge_stats": edge_stats_list,
+                "phase_time": phase_total_time,
+                "phase_plan_time": phase_plan_time,
+                "phase_gen_time": phase_gen_time,
                 "complete": True,
                 "final_config": q_current,
                 "state_after": self.grasp_tracker.get_current_state_name(),
@@ -1176,7 +1287,10 @@ class GraspSequencePlanner:
             self.phase_results.append(phase_result)
 
             if verbose:
-                print(f"  \u2713 Completed phase {phase_idx + 1}")
+                print(
+                    f"  ✓ Completed phase {phase_idx + 1} "
+                    f"({phase_total_time:.2f}s total)"
+                )
 
         # Clear failure info on success
         self.last_failure_info = None
@@ -1184,6 +1298,8 @@ class GraspSequencePlanner:
         if verbose:
             print("\n" + "=" * 70)
             print("Resume Complete - All Phases Succeeded")
+            print(f"Total planning time: {self.total_planning_time:.2f}s")
+            print(f"Resume attempts: {self.resume_attempt_count}")
             print("=" * 70)
 
         return {
@@ -1289,46 +1405,102 @@ class GraspSequencePlanner:
             print(f"Total paths now in ProblemSolver: {final_count}")
 
     def get_phase_summary(self) -> str:
-        """Get human-readable summary of all phases.
+        """Get human-readable summary of all phases with timing statistics.
 
         Returns:
-            Multi-line summary string
+            Multi-line summary string including per-edge timing breakdown
         """
         if not self.phase_results:
             return "No phases executed"
 
         lines = ["\nGrasp Sequence Summary:"]
-        lines.append("-" * 50)
+        lines.append("=" * 60)
+
+        total_time = 0.0
+        total_gen_time = 0.0
+        total_plan_time = 0.0
 
         for phase in self.phase_results:
             is_complete = phase.get("complete", True)
             status = "✓" if is_complete else "⚠ INCOMPLETE"
 
+            # Phase header with timing
+            phase_time = phase.get("phase_time", 0.0)
+            total_time += phase_time
+            total_gen_time += phase.get("phase_gen_time", 0.0)
+            total_plan_time += phase.get("phase_plan_time", 0.0)
+
+            time_str = f" ({phase_time:.2f}s)" if phase_time > 0 else ""
             lines.append(
-                f"Phase {phase['phase']}: "
-                f"{phase['gripper']} → {phase['handle']} [{status}]"
+                f"\nPhase {phase['phase']}: "
+                f"{phase['gripper']} → {phase['handle']} [{status}]{time_str}"
             )
-            lines.append(f"  Edges: {', '.join(phase['edges'])}")
+
+            # Edge details with timing
+            edge_stats = phase.get("edge_stats", [])
+            if edge_stats:
+                lines.append("  Edge breakdown:")
+                for stat in edge_stats:
+                    edge_idx = stat.get("edge_idx", 0)
+                    edge_name = stat.get("edge_name", "unknown")
+                    attempt = stat.get("attempt", 1)
+                    gen_t = stat.get("gen_time", 0.0)
+                    plan_t = stat.get("plan_time", 0.0)
+                    total_t = stat.get("total_time", 0.0)
+                    success = stat.get("success", False)
+                    is_resume = stat.get("is_resume", False)
+
+                    status_icon = "✓" if success else "✗"
+                    attempt_str = (
+                        f" (attempt #{attempt})" if attempt > 1 else ""
+                    )
+                    resume_str = " [resume]" if is_resume else ""
+
+                    lines.append(
+                        f"    {status_icon} Edge {edge_idx + 1}: "
+                        f"{edge_name}{attempt_str}{resume_str}"
+                    )
+                    lines.append(
+                        f"       gen: {gen_t:.2f}s | "
+                        f"plan: {plan_t:.2f}s | total: {total_t:.2f}s"
+                    )
+            else:
+                # Fallback for phases without edge_stats
+                lines.append(f"  Edges: {', '.join(phase['edges'])}")
 
             if not is_complete:
                 failed_edge = phase.get('failed_edge_idx', -1)
-                lines.append(f"  ⚠ Failed at edge {failed_edge + 1}: {phase.get('failed_edge_name', 'unknown')}")
-                lines.append(f"  Completed paths: {len(phase['paths'])} of {len(phase['edges'])}")
+                lines.append(
+                    f"  ⚠ Failed at edge {failed_edge + 1}: "
+                    f"{phase.get('failed_edge_name', 'unknown')}"
+                )
+                lines.append(
+                    f"  Completed paths: {len(phase['paths'])} "
+                    f"of {len(phase['edges'])}"
+                )
             else:
                 lines.append(f"  Paths: {len(phase['paths'])} waypoint paths")
                 lines.append(f"  State: {phase.get('state_after', 'unknown')}")
 
-        lines.append("-" * 50)
+        lines.append("\n" + "=" * 60)
+
+        # Summary statistics
+        lines.append("Timing Summary:")
+        lines.append(f"  Total computation time: {total_time:.2f}s")
+        lines.append(f"    - Config generation: {total_gen_time:.2f}s")
+        lines.append(f"    - Path planning:     {total_plan_time:.2f}s")
+        if self.resume_attempt_count > 0:
+            lines.append(f"  Resume attempts: {self.resume_attempt_count}")
 
         # Show final state only if last phase is complete
         if self.phase_results:
             last_phase = self.phase_results[-1]
             if last_phase.get("complete", True):
                 lines.append(
-                    f"Final state: {last_phase.get('state_after', 'unknown')}"
+                    f"\nFinal state: {last_phase.get('state_after', 'unknown')}"
                 )
             else:
-                lines.append("Final state: Incomplete (planning failed)")
+                lines.append("\nFinal state: Incomplete (planning failed)")
 
         return "\n".join(lines)
 
@@ -1342,6 +1514,9 @@ class GraspSequencePlanner:
         self.phase_results = []
         self.last_failure_info = None
         self.original_sequence = None
+        self.edge_stats = {}
+        self.total_planning_time = 0.0
+        self.resume_attempt_count = 0
 
 
 __all__ = ["GraspSequencePlanner"]
