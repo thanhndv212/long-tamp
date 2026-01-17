@@ -426,6 +426,36 @@ class GraspSequencePlanner:
                     print(f"     q_projected (first 5): {q_current[:5]}")
 
             except Exception as e:
+                # Store partial phase result for projection failure
+                partial_phase_result = {
+                    "phase": phase_idx + 1,
+                    "gripper": gripper,
+                    "handle": handle,
+                    "edges": edge_sequence,
+                    "paths": [],  # No paths yet in this phase
+                    "complete": False,
+                    "failed_edge_idx": 0,
+                    "failed_edge_name": edge_sequence[0] if edge_sequence else None,
+                    "last_q_start": q_current,
+                    "failed_q_target": None,
+                    "error_message": f"State projection failed: {e}",
+                }
+                self.phase_results.append(partial_phase_result)
+                
+                # Store failure info
+                self.last_failure_info = {
+                    "phase_idx": phase_idx,
+                    "edge_idx": 0,
+                    "edge_name": edge_sequence[0] if edge_sequence else "unknown",
+                    "q_current": q_current,
+                    "error": f"State projection failed: {e}",
+                    "completed_phases": len([p for p in self.phase_results if p.get("complete", False)]),
+                    "completed_edges_in_phase": 0,
+                }
+                
+                if verbose:
+                    print(f"\n  ⚠ Stored partial phase result: projection failed at phase start")
+                
                 raise RuntimeError(
                     f"Phase {phase_idx + 1}: State projection failed: {e}"
                 ) from e
@@ -445,6 +475,7 @@ class GraspSequencePlanner:
                     )
 
                 # Generate target configuration via this edge
+                q_target = None
                 try:
                     ok, q_target = self.config_gen.generate_via_edge(
                         edge_name=edge_name,
@@ -464,6 +495,36 @@ class GraspSequencePlanner:
                         )
 
                 except Exception as e:
+                    # Store partial phase result
+                    partial_phase_result = {
+                        "phase": phase_idx + 1,
+                        "gripper": gripper,
+                        "handle": handle,
+                        "edges": edge_sequence,
+                        "paths": phase_paths,
+                        "complete": False,
+                        "failed_edge_idx": edge_idx,
+                        "failed_edge_name": edge_name,
+                        "last_q_start": q_start,
+                        "failed_q_target": None,
+                        "error_message": f"Target generation failed: {e}",
+                    }
+                    self.phase_results.append(partial_phase_result)
+                    
+                    # Store failure info for resume
+                    self.last_failure_info = {
+                        "phase_idx": phase_idx,
+                        "edge_idx": edge_idx,
+                        "edge_name": edge_name,
+                        "q_current": q_current,
+                        "error": f"Target generation failed: {e}",
+                        "completed_phases": len([p for p in self.phase_results if p.get("complete", False)]),
+                        "completed_edges_in_phase": len(phase_paths),
+                    }
+                    
+                    if verbose:
+                        print(f"\n  ⚠ Stored partial phase result: {len(phase_paths)} edges completed")
+                    
                     raise RuntimeError(
                         f"Phase {phase_idx + 1}, edge {edge_idx + 1}: "
                         f"Target generation failed: {e}"
@@ -532,6 +593,8 @@ class GraspSequencePlanner:
                         "edge_name": edge_name,
                         "q_current": q_current,
                         "error": str(e),
+                        "completed_phases": len([p for p in self.phase_results if p.get("complete", False)]),
+                        "completed_edges_in_phase": len(phase_paths),
                     }
 
                     if verbose:
@@ -885,6 +948,35 @@ class GraspSequencePlanner:
                 q_current = list(q_projected)
 
             except Exception as e:
+                # Store partial phase result for projection failure
+                partial_phase_result = {
+                    "phase": phase_idx + 1,
+                    "gripper": gripper,
+                    "handle": handle,
+                    "edges": edge_sequence,
+                    "paths": [],
+                    "complete": False,
+                    "failed_edge_idx": 0,
+                    "failed_edge_name": edge_sequence[0] if edge_sequence else None,
+                    "last_q_start": q_current,
+                    "failed_q_target": None,
+                    "error_message": f"State projection failed: {e}",
+                }
+                self.phase_results.append(partial_phase_result)
+                
+                self.last_failure_info = {
+                    "phase_idx": phase_idx,
+                    "edge_idx": 0,
+                    "edge_name": edge_sequence[0] if edge_sequence else "unknown",
+                    "q_current": q_current,
+                    "error": f"State projection failed: {e}",
+                    "completed_phases": len([p for p in self.phase_results if p.get("complete", False)]),
+                    "completed_edges_in_phase": 0,
+                }
+                
+                if verbose:
+                    print(f"\n  ⚠ Stored partial phase result: projection failed at phase start")
+                
                 raise RuntimeError(
                     f"Phase {phase_idx + 1}: State projection failed: {e}"
                 ) from e
@@ -914,6 +1006,7 @@ class GraspSequencePlanner:
                     )
 
                 # Generate target
+                q_target = None
                 try:
                     ok, q_target = self.config_gen.generate_via_edge(
                         edge_name=edge_name,
@@ -925,6 +1018,35 @@ class GraspSequencePlanner:
                             f"Failed to generate target via edge '{edge_name}'"
                         )
                 except Exception as e:
+                    # Store partial result
+                    partial_phase_result = {
+                        "phase": phase_idx + 1,
+                        "gripper": gripper,
+                        "handle": handle,
+                        "edges": edge_sequence,
+                        "paths": phase_paths,
+                        "complete": False,
+                        "failed_edge_idx": edge_idx,
+                        "failed_edge_name": edge_name,
+                        "last_q_start": q_start,
+                        "failed_q_target": None,
+                        "error_message": f"Target generation failed: {e}",
+                    }
+                    self.phase_results.append(partial_phase_result)
+                    
+                    self.last_failure_info = {
+                        "phase_idx": phase_idx,
+                        "edge_idx": edge_idx,
+                        "edge_name": edge_name,
+                        "q_current": q_current,
+                        "error": f"Target generation failed: {e}",
+                        "completed_phases": len([p for p in self.phase_results if p.get("complete", False)]),
+                        "completed_edges_in_phase": len(phase_paths),
+                    }
+                    
+                    if verbose:
+                        print(f"\n  ⚠ Stored partial phase result: {len(phase_paths)} edges completed")
+                    
                     raise RuntimeError(
                         f"Phase {phase_idx + 1}, edge {edge_idx + 1}: "
                         f"Target generation failed: {e}"
@@ -977,6 +1099,8 @@ class GraspSequencePlanner:
                         "edge_name": edge_name,
                         "q_current": q_current,
                         "error": str(e),
+                        "completed_phases": len([p for p in self.phase_results if p.get("complete", False)]),
+                        "completed_edges_in_phase": len(phase_paths),
                     }
 
                     raise RuntimeError(
