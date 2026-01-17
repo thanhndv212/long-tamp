@@ -148,7 +148,7 @@ class LiveConstraintGraphVisualizer:
 
             self.vertex_halo[v] = False
             self.vertex_halo_color[v] = [0, 0, 0, 0]
-            self.vertex_size[v] = 45  # Base size
+            self.vertex_size[v] = 10  # Small circle size
 
         # Add edges
         edges_added = 0
@@ -258,6 +258,26 @@ class LiveConstraintGraphVisualizer:
 
         print("Opening interactive graph window...")
 
+        # Initialize GTK
+        import gi
+        import threading
+
+        gi.require_version("Gtk", "3.0")
+        from gi.repository import Gtk, GLib
+
+        if not blocking:
+            # Start GTK main loop in background thread BEFORE creating window
+            def gtk_main_loop():
+                """Run GTK main loop in background."""
+                Gtk.main()
+
+            self.gtk_thread = threading.Thread(
+                target=gtk_main_loop, daemon=True
+            )
+            self.gtk_thread.start()
+            # Give GTK time to initialize
+            time.sleep(0.2)
+
         # Create interactive window
         self.window = GraphWindow(
             self.gt_graph,
@@ -277,35 +297,21 @@ class LiveConstraintGraphVisualizer:
             output_size=self.window_size,
         )
 
+        # Explicitly show the window
+        if hasattr(self.window, "show_all"):
+            self.window.show_all()
+        elif hasattr(self.window, "show"):
+            self.window.show()
+
         print(
             "Graph window opened. You can now zoom, pan, and interact with the graph."
         )
 
         if blocking:
-            import gi
-
-            gi.require_version("Gtk", "3.0")
-            from gi.repository import Gtk
-
             self.window.connect("delete_event", lambda *args: Gtk.main_quit())
             Gtk.main()
         else:
-            # Run GTK main loop in background thread to keep window responsive
-            import gi
-            import threading
-
-            gi.require_version("Gtk", "3.0")
-            from gi.repository import Gtk, GLib
-
-            def gtk_main_loop():
-                """Run GTK main loop in background."""
-                Gtk.main()
-
-            # Start GTK main loop in daemon thread
-            self.gtk_thread = threading.Thread(target=gtk_main_loop, daemon=True)
-            self.gtk_thread.start()
-
-            # Give window time to appear
+            # Give window time to render
             time.sleep(0.5)
 
     def highlight_state(self, state_name: str) -> None:
@@ -331,7 +337,7 @@ class LiveConstraintGraphVisualizer:
                     self.state_to_vertex[self.current_state]
                 )
                 self.vertex_halo[old_v] = False
-                self.vertex_size[old_v] = 45
+                self.vertex_size[old_v] = 10
 
             # Set new highlight
             self.current_state = state_name
@@ -339,7 +345,7 @@ class LiveConstraintGraphVisualizer:
                 v = self.gt_graph.vertex(self.state_to_vertex[state_name])
                 self.vertex_halo[v] = True
                 self.vertex_halo_color[v] = self.colors["halo_current"]
-                self.vertex_size[v] = 60  # Larger for current state
+                self.vertex_size[v] = 12  # Larger for current state
 
                 print(f"Current state: {state_name}")
 
@@ -383,7 +389,7 @@ class LiveConstraintGraphVisualizer:
             # Reset all vertices
             for v in self.gt_graph.vertices():
                 self.vertex_halo[v] = False
-                self.vertex_size[v] = 45
+                self.vertex_size[v] = 10
 
             # Reset all edges
             for e in self.gt_graph.edges():
