@@ -4,11 +4,13 @@ Visualization utilities for agimus_spacelab manipulation tasks.
 This module provides visualization functions:
 - print_joint_info: Display joint information
 - visualize_handle_frames: Add handle frame visualization
-- visualize_constraint_graph: Generate graph diagrams
+- visualize_constraint_graph: Generate static graph diagrams
+- visualize_constraint_graph_interactive: Create live interactive graph windows
 
 Usage:
     from agimus_spacelab.visualization import (
         visualize_constraint_graph,
+        visualize_constraint_graph_interactive,
         visualize_handle_frames,
         print_joint_info,
     )
@@ -17,6 +19,7 @@ Usage:
 from .viz import (
     print_joint_info,
     visualize_constraint_graph,
+    visualize_constraint_graph_interactive,
     displayHandleApproach,
     displayGripperApproach,
     displayHandle,
@@ -34,6 +37,7 @@ from .viz import (
 __all__ = [
     "print_joint_info",
     "visualize_constraint_graph",
+    "visualize_constraint_graph_interactive",
     "displayHandleApproach",
     "displayGripperApproach",
     "displayHandle",

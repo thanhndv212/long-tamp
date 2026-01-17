@@ -1080,6 +1080,70 @@ class CorbaBackend(BackendBase):
 
         return path_index
 
+    def play_path_vector_with_viz(
+        self,
+        path_vector: Any,
+        graph_builder: Optional[Any] = None,
+        edge_name: Optional[str] = None,
+        visualizer: Optional[Any] = None,
+        speed: float = 1.0,
+    ) -> int:
+        """Play a PathVector with live graph visualization.
+
+        Args:
+            path_vector: PathVector CORBA object from TransitionPlanner
+            graph_builder: GraphBuilder instance for state detection
+            edge_name: Optional edge name being traversed
+            visualizer: Optional LiveConstraintGraphVisualizer instance
+            speed: Playback speed multiplier
+
+        Returns:
+            Index of the stored path in ProblemSolver
+
+        Raises:
+            RuntimeError: If problem solver is not initialized
+        """
+        if self.ps is None:
+            raise RuntimeError("Problem solver not created yet")
+
+        if self.viewer is None:
+            self.visualize()
+
+        if self.path_player is None:
+            self.path_player = PathPlayer(self.viewer)
+
+        # Get current number of paths to determine the index
+        path_index = self.ps.numberPaths()
+
+        # Add PathVector to problem solver
+        self.ps.client.basic.problem.addPath(path_vector)
+
+        # Play with visualization if visualizer provided
+        if visualizer and graph_builder:
+            try:
+                from agimus_spacelab.visualization.live_graph_viz import (
+                    LivePathPlayer,
+                )
+
+                live_player = LivePathPlayer(
+                    self.path_player,
+                    graph_builder,
+                    visualizer=visualizer,
+                )
+                live_player.play_with_visualization(path_index, edge_name)
+            except Exception as e:
+                print(f"Failed to play path with visualization: {e}")
+                print("Falling back to standard playback")
+                self.path_player(path_index)
+        else:
+            # Standard playback without visualization
+            try:
+                self.path_player(path_index)
+            except Exception as e:
+                print(f"Failed to play path at index {path_index}: {e}")
+
+        return path_index
+
     def clear_stored_paths(self, verbose: bool = True) -> int:
         """Clear all paths stored in ProblemSolver.
 

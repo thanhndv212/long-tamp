@@ -1021,13 +1021,17 @@ class GraspSequencePlanner:
         }
 
     def replay_sequence(
-        self, speed: float = 1.0, clear_paths_first: bool = False
+        self,
+        speed: float = 1.0,
+        clear_paths_first: bool = False,
+        visualizer: Optional[Any] = None,
     ) -> None:
         """Replay all phase paths in sequence.
 
         Args:
             speed: Playback speed multiplier
             clear_paths_first: If True, warn about accumulated paths before replay
+            visualizer: Optional LiveConstraintGraphVisualizer for real-time graph updates
         """
         if not self.phase_results:
             print("No phases to replay (run plan_sequence first)")
@@ -1035,6 +1039,8 @@ class GraspSequencePlanner:
 
         print("\n" + "=" * 70)
         print("Replaying Grasp Sequence")
+        if visualizer:
+            print("Live graph visualization: ENABLED")
         print("=" * 70)
 
         # Check for path accumulation
@@ -1069,12 +1075,25 @@ class GraspSequencePlanner:
 
             try:
                 # Play each waypoint path in the sequence
+                edge_names = phase.get("edges", [])
                 for idx, path in enumerate(phase["paths"]):
+                    edge_name = edge_names[idx] if idx < len(edge_names) else None
+                    
                     print(
                         f"    Path {idx + 1}/{len(phase['paths'])}: ", end=""
                     )
 
-                    if hasattr(self.planner, "play_path_vector"):
+                    if visualizer and hasattr(self.planner, "play_path_vector_with_viz"):
+                        # Use visualization-enabled playback
+                        path_idx = self.planner.play_path_vector_with_viz(
+                            path,
+                            edge_name=edge_name,
+                            visualizer=visualizer,
+                            speed=speed,
+                        )
+                        print(f"✓ Played with visualization (stored as index {path_idx})")
+                    elif hasattr(self.planner, "play_path_vector"):
+                        # Standard playback without visualization
                         path_idx = self.planner.play_path_vector(
                             path, speed=speed
                         )

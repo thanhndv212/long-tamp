@@ -19,7 +19,6 @@ def print_joint_info(robot):
         print(f"  {i:3d}. {joint} (config rank: {rank})")
 
 
-
 import numpy as np
 from typing import List, Optional
 from pinocchio import SE3, Quaternion
@@ -97,7 +96,6 @@ def displayHandle(
     except Exception as e:
         print(f"  Warning: Could not display handle {handle_name}: {e}")
         return False
-
 
 
 def displayGripper(
@@ -648,8 +646,82 @@ def visualize_constraint_graph(
         return None
 
 
+def visualize_constraint_graph_interactive(
+    graph_builder: "GraphBuilder",
+    window_size: Tuple[int, int] = (1200, 800),
+    neighborhood_hops: Optional[int] = None,
+    show_window: bool = True,
+    blocking: bool = False,
+) -> Optional[Any]:
+    """
+    Create an interactive constraint graph visualization using graph-tool.
+
+    This function creates a live, interactive graph visualization that can be
+    updated in real-time during path playback. The graph window supports:
+    - Zooming and panning
+    - Dragging nodes
+    - Real-time state/edge highlighting
+
+    Args:
+        graph_builder: GraphBuilder instance with populated states/edges
+        window_size: Window size (width, height) in pixels
+        neighborhood_hops: If set, filter to show only N-hop neighborhood
+        show_window: If True, display the window immediately
+        blocking: If True, block until window is closed
+
+    Returns:
+        LiveConstraintGraphVisualizer instance, or None if graph-tool unavailable
+
+    Example:
+        >>> from agimus_spacelab.visualization.viz import visualize_constraint_graph_interactive
+        >>> viz = visualize_constraint_graph_interactive(graph_builder)
+        >>> # Later, during path playback:
+        >>> planner.replay_sequence(visualizer=viz)
+    """
+    try:
+        from agimus_spacelab.visualization.live_graph_viz import (
+            LiveConstraintGraphVisualizer,
+            HAS_GRAPH_TOOL,
+        )
+
+        if not HAS_GRAPH_TOOL:
+            print("⚠ graph-tool not available. Install with:")
+            print("  conda install -c conda-forge graph-tool")
+            print("  Falling back to static visualization...")
+            return None
+
+        # Create visualizer
+        visualizer = LiveConstraintGraphVisualizer(
+            graph_builder,
+            window_size=window_size,
+            neighborhood_hops=neighborhood_hops,
+        )
+
+        # Build the graph
+        visualizer.build_graph()
+
+        # Show window if requested
+        if show_window:
+            visualizer.show(blocking=blocking)
+
+        return visualizer
+
+    except ImportError as e:
+        print(f"⚠ Failed to import live graph visualization: {e}")
+        print("  Ensure graph-tool is installed:")
+        print("  conda install -c conda-forge graph-tool")
+        return None
+    except Exception as e:
+        print(f"⚠ Failed to create interactive visualization: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return None
+
+
 __all__ = [
     "print_joint_info",
     "visualize_handle_frames",
     "visualize_constraint_graph",
+    "visualize_constraint_graph_interactive",
 ]
