@@ -10,11 +10,57 @@ graph explosion by rebuilding minimal graphs for each phase.
 from __future__ import annotations
 
 import time
+import signal
+import os
 from typing import Dict, List, Optional, Tuple, Any, Sequence
 
 from agimus_spacelab.planning.grasp_state import GraspStateTracker
 from agimus_spacelab.planning.graph import GraphBuilder
 from agimus_spacelab.planning.config import ConfigGenerator
+
+
+# =============================================================================
+# Graceful Stop Signal Handler
+# =============================================================================
+
+_stop_requested = False
+
+
+def _request_stop_signal_handler(signum, frame):
+    """Signal handler for graceful stop via Ctrl+C.
+    
+    First Ctrl+C: Sets stop flag (waits for current edge to complete).
+    Second Ctrl+C: Forces immediate exit.
+    """
+    global _stop_requested
+    if not _stop_requested:
+        _stop_requested = True
+        print("\n🛑 Stop requested - will halt after current edge completes...")
+        print("   (Press Ctrl+C again to force quit)")
+    else:
+        print("\n⚠️  Force quit!")
+        os._exit(1)
+
+
+def enable_graceful_stop():
+    """Enable graceful stop via Ctrl+C signal handler."""
+    signal.signal(signal.SIGINT, _request_stop_signal_handler)
+
+
+def disable_graceful_stop():
+    """Restore default Ctrl+C behavior."""
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+
+def clear_stop_request():
+    """Clear the stop flag (useful for resuming after stop)."""
+    global _stop_requested
+    _stop_requested = False
+
+
+def is_stop_requested() -> bool:
+    """Check if stop has been requested."""
+    return _stop_requested
 
 
 class GraspSequencePlanner:
@@ -363,6 +409,11 @@ class GraspSequencePlanner:
             print(
                 f"Initial state: {self.grasp_tracker.get_current_state_name()}"
             )
+            print("\nℹ️  Press Ctrl+C to stop gracefully (saves progress)")
+
+        # Enable graceful stop and clear any previous stop request
+        clear_stop_request()
+        enable_graceful_stop()
 
         self.phase_results = []
         self.original_sequence = list(grasp_sequence)  # Store for resume
@@ -617,6 +668,48 @@ class GraspSequencePlanner:
             q_start = q_current
 
             for edge_idx, edge_name in enumerate(edge_sequence):
+                # Check for stop request
+                if is_stop_requested():
+                    if verbose:
+                        print("\n  ⚠️  Stop requested - saving progress...")
+                    # Save partial result
+                    partial_phase_result = {
+                        "phase": phase_idx + 1,
+                        "gripper": gripper,
+                        "handle": handle,
+                        "edges": edge_sequence,
+                        "paths": phase_paths,
+                        "edge_stats": edge_stats_list,
+                        "complete": False,
+                        "failed_edge_idx": edge_idx,
+                        "failed_edge_name": edge_name,
+                        "last_q_start": q_start,
+                        "stopped": True,
+                        "error_message": "Stopped by user request",
+                    }
+                    self.phase_results.append(partial_phase_result)
+
+                    self.last_failure_info = {
+                        "phase_idx": phase_idx,
+                        "edge_idx": edge_idx,
+                        "edge_name": edge_name,
+                        "q_current": q_current,
+                        "error": "Stopped by user request (Ctrl+C)",
+                        "completed_phases": len(
+                            [p for p in self.phase_results if p.get("complete", False)]
+                        ),
+                        "completed_edges_in_phase": len(phase_paths),
+                        "stopped": True,
+                    }
+
+                    if verbose:
+                        print(f"\n  ⚠️  Stored partial phase result: {len(phase_paths)} edges completed")
+                        print(f"     You can resume from Phase {phase_idx + 1}, Edge {edge_idx + 1}")
+
+                    # Disable signal handler before raising
+                    disable_graceful_stop()
+                    raise KeyboardInterrupt("Planning stopped by user request")
+
                 edge_start_time = time.time()
                 edge_stat = {
                     "edge_idx": edge_idx,
@@ -854,6 +947,9 @@ class GraspSequencePlanner:
             print(f"Completed {len(self.phase_results)} phases")
             print(f"Total planning time: {self.total_planning_time:.2f}s")
 
+        # Disable signal handler before returning
+        disable_graceful_stop()
+
         # Return combined result
         return {
             "success": True,
@@ -959,6 +1055,11 @@ class GraspSequencePlanner:
             print(f"Completed phases: {resume_state['completed_phases']}")
             print(f"Completed edges in current phase: "
                   f"{resume_state['completed_edges_in_phase']}")
+            print("\nℹ️  Press Ctrl+C to stop gracefully (saves progress)")
+
+        # Enable graceful stop and clear any previous stop request
+        clear_stop_request()
+        enable_graceful_stop()
 
         # Configure TransitionPlanner if new params provided
         if max_iterations_per_edge or timeout_per_edge:
@@ -1232,6 +1333,48 @@ class GraspSequencePlanner:
                     pass
 
             for edge_idx in range(start_edge_idx, len(edge_sequence)):
+                # Check for stop request
+                if is_stop_requested():
+                    if verbose:
+                        print("\n  ⚠️  Stop requested - saving progress...")
+                    # Save partial result
+                    partial_phase_result = {
+                        "phase": phase_idx + 1,
+                        "gripper": gripper,
+                        "handle": handle,
+                        "edges": edge_sequence,
+                        "paths": phase_paths,
+                        "edge_stats": edge_stats_list,
+                        "complete": False,
+                        "failed_edge_idx": edge_idx,
+                        "failed_edge_name": edge_name,
+                        "last_q_start": q_start,
+                        "stopped": True,
+                        "error_message": "Stopped by user request",
+                    }
+                    self.phase_results.append(partial_phase_result)
+
+                    self.last_failure_info = {
+                        "phase_idx": phase_idx,
+                        "edge_idx": edge_idx,
+                        "edge_name": edge_name,
+                        "q_current": q_current,
+                        "error": "Stopped by user request (Ctrl+C)",
+                        "completed_phases": len(
+                            [p for p in self.phase_results if p.get("complete", False)]
+                        ),
+                        "completed_edges_in_phase": len(phase_paths),
+                        "stopped": True,
+                    }
+
+                    if verbose:
+                        print(f"\n  ⚠️  Stored partial phase result: {len(phase_paths)} edges completed")
+                        print(f"     You can resume from Phase {phase_idx + 1}, Edge {edge_idx + 1}")
+
+                    # Disable signal handler before raising
+                    disable_graceful_stop()
+                    raise KeyboardInterrupt("Planning stopped by user request")
+
                 edge_name = edge_sequence[edge_idx]
                 edge_start_time = time.time()
 
@@ -1462,6 +1605,9 @@ class GraspSequencePlanner:
             print(f"Total planning time: {self.total_planning_time:.2f}s")
             print(f"Resume attempts: {self.resume_attempt_count}")
             print("=" * 70)
+
+        # Disable signal handler before returning
+        disable_graceful_stop()
 
         return {
             "success": True,
