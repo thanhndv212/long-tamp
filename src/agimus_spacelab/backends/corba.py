@@ -70,20 +70,21 @@ class CorbaBackend(BackendBase):
         ]
         # Waypoint edges (constrained motion): Use spline optimization
         self._waypoint_pregrasp_optimizers = [
-            "RandomShortcut",
-            # "SplineGradientBased_bezier3",
-            "SimpleTimeParameterization",
+            # "RandomShortcut",
+            "SplineGradientBased_bezier3",
+            # "SimpleTimeParameterization",
             # "TOPPRA",
         ]
         # Waypoint edges (constrained motion): No spline optimization
         self._waypoint_grasp_optimizers = [
             "RandomShortcut",
             # "SplineGradientBased_bezier3",
-            "SimpleTimeParameterization",
+            # "SimpleTimeParameterization",
         ]
         # Default fallback
         self._transition_default_optimizers = [
-            "SimpleTimeParameterization",
+            "RandomShortcut",
+            # "SimpleTimeParameterization",
         ]
         # Per-edge optimizer list (edge_id -> optimizer names)
         self._transition_optimizers_by_edge_id: Dict[int, List[str]] = {}
@@ -774,15 +775,15 @@ class CorbaBackend(BackendBase):
         elif edge_name and self._is_pregrasp_edge(edge_name):
             # Pregrasp edge: use spline optimization
             optimizers = self._waypoint_pregrasp_optimizers
-            print(f"      [TP] Using pregrasp edge optimizers (with spline)")
+            print(f"      [TP] Using pregrasp edge optimizers")
         elif edge_name and self._is_grasp_edge(edge_name):
             # Grasp edge: use no spline optimization
             optimizers = self._waypoint_grasp_optimizers
-            print(f"      [TP] Using grasp edge optimizers (no spline)")
+            print(f"      [TP] Using grasp edge optimizers")
         elif edge_name:
             # Transit edge: use spline optimization
             optimizers = self._transit_edge_optimizers
-            print(f"      [TP] Using transit edge optimizers (with spline)")
+            print(f"      [TP] Using transit edge optimizers")
         else:
             # Fallback
             optimizers = self._transition_default_optimizers
