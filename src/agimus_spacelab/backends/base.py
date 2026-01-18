@@ -42,11 +42,11 @@ class BackendBase(ABC):
         graph: The constraint graph (backend-specific type)
         viewer: The visualization viewer (backend-specific type)
     """
-    
+
     # =========================================================================
     # Model Access
     # =========================================================================
-    
+
     @abstractmethod
     def model(self) -> Any:
         """Get the Pinocchio model.
@@ -58,7 +58,7 @@ class BackendBase(ABC):
             RuntimeError: If robot not loaded yet
         """
         pass
-    
+
     @abstractmethod
     def data(self) -> Any:
         """Get the Pinocchio data.
@@ -70,7 +70,7 @@ class BackendBase(ABC):
             RuntimeError: If robot not loaded yet
         """
         pass
-    
+
     @property
     @abstractmethod
     def nq(self) -> int:
@@ -80,7 +80,7 @@ class BackendBase(ABC):
             Size of configuration vector
         """
         pass
-    
+
     @property
     @abstractmethod
     def nv(self) -> int:
@@ -90,7 +90,7 @@ class BackendBase(ABC):
             Number of degrees of freedom
         """
         pass
-    
+
     @abstractmethod
     def neutral_config(self) -> np.ndarray:
         """Get neutral/home configuration.
@@ -99,7 +99,7 @@ class BackendBase(ABC):
             Neutral configuration as numpy array
         """
         pass
-    
+
     @abstractmethod
     def random_config(self) -> np.ndarray:
         """Generate a random valid configuration.
@@ -108,11 +108,11 @@ class BackendBase(ABC):
             Random configuration as numpy array
         """
         pass
-    
+
     # =========================================================================
     # Loading Methods
     # =========================================================================
-    
+
     @abstractmethod
     def load_robot(
         self,
@@ -135,7 +135,7 @@ class BackendBase(ABC):
             Backend-specific robot object
         """
         pass
-    
+
     @abstractmethod
     def load_environment(
         self,
@@ -154,7 +154,7 @@ class BackendBase(ABC):
             Backend-specific environment object or config
         """
         pass
-    
+
     @abstractmethod
     def load_object(
         self,
@@ -175,7 +175,7 @@ class BackendBase(ABC):
             Backend-specific object config
         """
         pass
-    
+
     @abstractmethod
     def set_joint_bounds(self, joint_name: str, bounds: List[float]) -> None:
         """Set bounds for a joint.
@@ -185,11 +185,11 @@ class BackendBase(ABC):
             bounds: List of [lower, upper] bounds for each DOF
         """
         pass
-    
+
     # =========================================================================
     # Configuration Methods
     # =========================================================================
-    
+
     @abstractmethod
     def set_initial_config(self, q: np.ndarray) -> None:
         """Set initial configuration for planning.
@@ -198,7 +198,7 @@ class BackendBase(ABC):
             q: Initial configuration vector
         """
         pass
-    
+
     @abstractmethod
     def add_goal_config(self, q: np.ndarray) -> None:
         """Add a goal configuration for planning.
@@ -207,11 +207,11 @@ class BackendBase(ABC):
             q: Goal configuration vector
         """
         pass
-    
+
     # =========================================================================
     # Constraint Graph Methods
     # =========================================================================
-    
+
     @abstractmethod
     def create_state(
         self,
@@ -230,7 +230,7 @@ class BackendBase(ABC):
             State ID
         """
         pass
-    
+
     @abstractmethod
     def create_edge(
         self,
@@ -253,7 +253,7 @@ class BackendBase(ABC):
             Edge ID
         """
         pass
-    
+
     @abstractmethod
     def apply_state_constraints(
         self,
@@ -274,11 +274,11 @@ class BackendBase(ABC):
             ConstraintResult with success, projected config, and error
         """
         pass
-    
+
     # =========================================================================
     # Planning Methods
     # =========================================================================
-    
+
     @abstractmethod
     def solve(self, max_iterations: int = 10000) -> bool:
         """Solve the planning problem.
@@ -290,7 +290,7 @@ class BackendBase(ABC):
             True if solution found, False otherwise
         """
         pass
-    
+
     @abstractmethod
     def get_path(self, index: int = 0) -> Optional[Any]:
         """Get computed path.
@@ -302,7 +302,7 @@ class BackendBase(ABC):
             Backend-specific path object, or None if no path
         """
         pass
-    
+
     @abstractmethod
     def configure_path_validation(
         self,
@@ -319,11 +319,11 @@ class BackendBase(ABC):
             Self for method chaining
         """
         pass
-    
+
     # =========================================================================
     # Visualization Methods
     # =========================================================================
-    
+
     @abstractmethod
     def visualize(self, q: Optional[np.ndarray] = None) -> None:
         """Visualize a configuration.
@@ -332,7 +332,7 @@ class BackendBase(ABC):
             q: Configuration to display. If None, shows current/initial config.
         """
         pass
-    
+
     @abstractmethod
     def play_path(self, path_index: int = 0) -> None:
         """Play/animate a path in the viewer.
@@ -341,11 +341,62 @@ class BackendBase(ABC):
             path_index: Index of the path to play
         """
         pass
-    
+
+    # =========================================================================
+    # Path Serialization Methods
+    # =========================================================================
+
+    @abstractmethod
+    def save_path(self, path_index: int, filename: str) -> None:
+        """Save a path to file (binary format).
+
+        Args:
+            path_index: Index of the path in ProblemSolver to save
+            filename: Output file path
+
+        Raises:
+            RuntimeError: If path doesn't exist or save fails
+        """
+        pass
+
+    @abstractmethod
+    def load_path(self, filename: str) -> int:
+        """Load a path from file (binary format).
+
+        Args:
+            filename: Input file path
+
+        Returns:
+            Index of the loaded path in ProblemSolver
+
+        Raises:
+            RuntimeError: If file doesn't exist or load fails
+
+        Note:
+            The robot must be loaded first with the same name used
+            when the path was serialized.
+        """
+        pass
+
+    def save_path_vector(self, path_vector: Any, filename: str) -> None:
+        """Save a PathVector object directly to file.
+
+        Default implementation adds to problem solver first, then saves.
+        Subclasses may override for more efficient direct serialization.
+
+        Args:
+            path_vector: Backend-specific PathVector object
+            filename: Output file path
+        """
+        # Default: not implemented, subclasses should override
+        raise NotImplementedError(
+            "save_path_vector not implemented for this backend"
+        )
+
     # =========================================================================
     # Accessor Methods
     # =========================================================================
-    
+
     @abstractmethod
     def get_robot(self) -> Any:
         """Get the robot object.
@@ -354,7 +405,7 @@ class BackendBase(ABC):
             Backend-specific robot object
         """
         pass
-    
+
     @abstractmethod
     def get_problem(self) -> Any:
         """Get the problem solver/problem object.
@@ -363,7 +414,7 @@ class BackendBase(ABC):
             Backend-specific problem object
         """
         pass
-    
+
     @abstractmethod
     def get_graph(self) -> Any:
         """Get the constraint graph.

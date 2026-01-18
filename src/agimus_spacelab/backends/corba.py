@@ -809,15 +809,26 @@ class CorbaBackend(BackendBase):
         reset_roadmap: bool = True,
         time_parameterize: bool = True,
         store: bool = False,
-    ) -> Union[int, Any]:
+    ) -> Tuple[Any, Any]:
         """Plan a transition along a specific graph edge.
-        
+
         Strategy:
         - Waypoint edges (_01, _12, _21, _10): Skip directPath, use planPath (BiRrtStar)
         - Transit edges: Try directPath first, fallback to planPath if it fails
-        
+
+        Args:
+            edge: Edge ID or name
+            q1: Start configuration
+            q2: End configuration
+            validate: Whether to validate the path
+            reset_roadmap: Whether to reset the roadmap
+            time_parameterize: Whether to apply time parameterization
+            store: Ignored for TransitionPlanner
+
         Returns:
-            PathVector CORBA object (store parameter ignored for TransitionPlanner).
+            Tuple of (timed_path, geometric_path) where:
+            - timed_path: PathVector with time parameterization applied (if enabled)
+            - geometric_path: PathVector without time parameterization (for serialization)
         """
         if self.ps is None:
             raise RuntimeError("Problem solver not created yet")
@@ -923,15 +934,17 @@ class CorbaBackend(BackendBase):
                         f"TransitionPlanner failed completely: {exc2}"
                     )
 
+        # Store geometric path before time parameterization (for serialization)
+        pv_geometric = pv
+
         if time_parameterize:
             try:
                 pv = tp.timeParameterization(pv)
             except Exception:
                 pass
 
-        # Return PathVector directly - TransitionPlanner paths aren't stored
-        # in ProblemSolver's path list, they're used directly
-        return pv
+        # Always return tuple (timed_path, geometric_path)
+        return pv, pv_geometric
 
     def plan_transition_sequence(
         self,
@@ -956,7 +969,7 @@ class CorbaBackend(BackendBase):
 
         pv_total: Optional[Any] = None
         for i, edge in enumerate(edges):
-            pv_i = self.plan_transition_edge(
+            pv_i, _ = self.plan_transition_edge(
                 edge,
                 waypoints[i],
                 waypoints[i + 1],
@@ -1009,6 +1022,288 @@ class CorbaBackend(BackendBase):
             return self.ps.client.manipulation.problem.getPath(index)
         except Exception:
             return None
+
+    # =========================================================================
+    # Path Serialization Methods
+    # =========================================================================
+
+    def save_path(self, path_index: int, filename: str) -> None:
+        """Save a path to file (binary format).
+
+        Uses hpp-corbaserver's built-in path serialization which writes
+        the path in binary format using boost::serialization.
+
+        Args:
+            path_index: Index of the path in ProblemSolver to save
+            filename: Output file path
+
+        Raises:
+            RuntimeError: If path doesn't exist or save fails
+        """
+        if self.ps is None:
+            raise RuntimeError("Problem solver not created yet")
+
+        num_paths = self.ps.numberPaths()
+        if path_index < 0 or path_index >= num_paths:
+            raise RuntimeError(
+                f"Invalid path index {path_index}, "
+                f"only {num_paths} paths available"
+            )
+
+        try:
+            # Get the path CORBA object
+            path = self.ps.client.basic.problem.getPath(path_index)
+            # Use hpp-corbaserver's savePath method
+            self.ps.client.basic.problem.savePath(path, filename)
+        except Exception as e:
+            raise RuntimeError(f"Failed to save path: {e}") from e
+
+    def load_path(self, filename: str) -> int:
+        """Load a path from file (binary format).
+
+        Uses hpp-corbaserver's built-in path deserialization.
+
+        Args:
+            filename: Input file path
+
+        Returns:
+            Index of the loaded path in ProblemSolver
+
+        Raises:
+            RuntimeError: If file doesn't exist or load fails
+
+        Note:
+            The robot must be loaded first with the same name used
+            when the path was serialized. Paths with graph edge constraints
+            require the constraint graph to be set up before loading.
+        """
+        if self.ps is None:
+            raise RuntimeError("Problem solver not created yet")
+
+        try:
+            # loadPath returns a Path CORBA object
+            path = self.ps.client.basic.problem.loadPath(filename)
+
+            # Add path to problem solver to get an index
+            # addPath expects a PathVector, so wrap if needed
+            path_index = self.ps.client.basic.problem.addPath(path.asVector())
+
+            return path_index
+        except Exception as e:
+            error_msg = str(e)
+            if (
+                "deserialize edges" in error_msg.lower()
+                or "graph" in error_msg.lower()
+            ):
+                raise RuntimeError(
+                    f"Failed to load path from {filename}: Path contains constraint "
+                    f"graph edge references but the graph is not set up. To load these "
+                    f"paths, you need to recreate the same constraint graph that was "
+                    f"used during planning. Original error: {e}"
+                ) from e
+            raise RuntimeError(
+                f"Failed to load path from {filename}: {e}"
+            ) from e
+
+    def save_path_vector(self, path_vector: Any, filename: str) -> None:
+        """Save a PathVector object directly to file.
+
+        This method can save a PathVector CORBA object without adding it
+        to the problem solver first.
+
+        Args:
+            path_vector: PathVector CORBA object
+            filename: Output file path
+        """
+        if self.ps is None:
+            raise RuntimeError("Problem solver not created yet")
+
+        try:
+            self.ps.client.basic.problem.savePath(path_vector, filename)
+        except Exception as e:
+            raise RuntimeError(f"Failed to save path vector: {e}") from e
+
+    def load_paths_from_directory(
+        self,
+        directory: str,
+        pattern: str = "phase_*.path",
+        sort: bool = True,
+    ) -> List[int]:
+        """Load multiple paths from a directory.
+
+        Args:
+            directory: Directory containing path files
+            pattern: Glob pattern for path files (default: phase_*.path)
+            sort: If True, sort files by name before loading
+
+        Returns:
+            List of path indices in ProblemSolver
+        """
+        import glob
+        import os
+
+        search_path = os.path.join(directory, pattern)
+        files = glob.glob(search_path)
+
+        if sort:
+            files.sort()
+
+        indices = []
+        for filepath in files:
+            try:
+                idx = self.load_path(filepath)
+                indices.append(idx)
+                print(f"  Loaded {os.path.basename(filepath)} -> index {idx}")
+            except Exception as e:
+                print(f"  Failed to load {filepath}: {e}")
+
+        return indices
+
+    def save_path_as_waypoints(
+        self,
+        path_vector: Any,
+        filename: str,
+        num_samples: int = 100,
+    ) -> None:
+        """Save a path as waypoints in JSON format (portable across sessions).
+
+        This method samples configurations along the path and saves them as
+        a JSON file. This format is portable and can be loaded even without
+        the constraint graph.
+
+        Args:
+            path_vector: PathVector CORBA object
+            filename: Output file path (will add .json if not present)
+            num_samples: Number of waypoints to sample along the path
+
+        Raises:
+            RuntimeError: If path is invalid or save fails
+        """
+        import json
+        import os
+
+        if self.ps is None:
+            raise RuntimeError("Problem solver not created yet")
+
+        # Ensure .json extension
+        if not filename.endswith(".json"):
+            filename = filename + ".json"
+
+        try:
+            # Get path length
+            path_length = path_vector.length()
+
+            # Sample configurations along the path
+            waypoints = []
+            for i in range(num_samples):
+                t = (i / max(1, num_samples - 1)) * path_length
+                # Call path at time t to get configuration
+                q = path_vector.call(t)[0]  # Returns (config, success)
+                waypoints.append(q)
+
+            # Create data structure
+            data = {
+                "format_version": "1.0",
+                "path_length": path_length,
+                "num_samples": num_samples,
+                "waypoints": waypoints,
+            }
+
+            # Write to file
+            with open(filename, "w") as f:
+                json.dump(data, f, indent=2)
+
+        except Exception as e:
+            raise RuntimeError(f"Failed to save path as waypoints: {e}") from e
+
+    def load_path_from_waypoints(
+        self,
+        filename: str,
+        add_to_problem: bool = True,
+    ) -> int:
+        """Load a path from JSON waypoints file.
+
+        Reconstructs a path by interpolating between waypoints using the
+        steering method. The path is added to the problem solver.
+
+        Args:
+            filename: Input JSON file path
+            add_to_problem: If True, add the path to ProblemSolver and return index
+
+        Returns:
+            Index of the loaded path in ProblemSolver (if add_to_problem=True)
+
+        Raises:
+            RuntimeError: If file doesn't exist, invalid format, or reconstruction fails
+        """
+        import json
+        import os
+
+        if self.ps is None:
+            raise RuntimeError("Problem solver not created yet")
+
+        if not os.path.exists(filename):
+            raise RuntimeError(f"File not found: {filename}")
+
+        try:
+            # Read waypoints
+            with open(filename, "r") as f:
+                data = json.load(f)
+
+            waypoints = data["waypoints"]
+            if len(waypoints) < 2:
+                raise RuntimeError(
+                    "Need at least 2 waypoints to reconstruct path"
+                )
+
+            # Create path segments between consecutive waypoints
+            # Use the steering method to interpolate
+            path_segments = []
+
+            for i in range(len(waypoints) - 1):
+                q1 = waypoints[i]
+                q2 = waypoints[i + 1]
+
+                # Use steer to create a path between q1 and q2
+                # steer returns a Path CORBA object
+                try:
+                    segment = self.ps.client.basic.problem.directPath(
+                        q1, q2, True  # validate = True
+                    )
+                    if segment is not None:
+                        path_segments.append(segment)
+                except Exception as e:
+                    # If direct path fails, skip this segment
+                    print(
+                        f"Warning: Failed to create segment {i} -> {i+1}: {e}"
+                    )
+                    continue
+
+            if not path_segments:
+                raise RuntimeError("Failed to create any valid path segments")
+
+            # Concatenate all segments into a PathVector
+            path_vector = path_segments[0].asVector()
+            for segment in path_segments[1:]:
+                path_vector.appendPath(segment)
+
+            if add_to_problem:
+                # Add to problem solver
+                path_index = self.ps.client.basic.problem.addPath(path_vector)
+                return path_index
+            else:
+                return path_vector
+
+        except json.JSONDecodeError as e:
+            raise RuntimeError(
+                f"Invalid JSON format in {filename}: {e}"
+            ) from e
+        except KeyError as e:
+            raise RuntimeError(f"Missing required field in JSON: {e}") from e
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to load path from waypoints: {e}"
+            ) from e
 
     def visualize(self, q: Optional[np.ndarray] = None):
         """Visualize configuration."""

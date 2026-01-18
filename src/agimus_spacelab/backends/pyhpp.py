@@ -458,6 +458,265 @@ class PyHPPBackend(BackendBase):
         """
         return len(self._stored_paths)
 
+    # =========================================================================
+    # Path Serialization Methods
+    # =========================================================================
+
+    def save_path(self, path_index: int, filename: str) -> None:
+        """Save a path to file (binary format).
+        
+        Uses pyhpp's built-in path serialization via hpp::core::path::Vector.
+        
+        Args:
+            path_index: Index of the path in stored paths to save
+            filename: Output file path
+            
+        Raises:
+            RuntimeError: If path doesn't exist or save fails
+        """
+        if path_index < 0 or path_index >= len(self._stored_paths):
+            raise RuntimeError(
+                f"Invalid path index {path_index}, "
+                f"only {len(self._stored_paths)} paths available"
+            )
+        
+        path = self._stored_paths[path_index]
+        
+        try:
+            # pyhpp PathVector has save() method
+            if hasattr(path, 'save'):
+                path.save(filename)
+            else:
+                raise RuntimeError(
+                    "Path object does not support serialization. "
+                    "Ensure pyhpp is built with serialization support."
+                )
+        except Exception as e:
+            raise RuntimeError(f"Failed to save path: {e}") from e
+
+    def load_path(self, filename: str) -> int:
+        """Load a path from file (binary format).
+        
+        Uses pyhpp's built-in path deserialization.
+        
+        Args:
+            filename: Input file path
+            
+        Returns:
+            Index of the loaded path in stored paths
+            
+        Raises:
+            RuntimeError: If file doesn't exist or load fails
+        """
+        try:
+            # Import the PathVector class
+            from pyhpp.core.path import Vector as PathVector
+            
+            # Load using static method
+            if hasattr(PathVector, 'load'):
+                path = PathVector.load(filename)
+            else:
+                raise RuntimeError(
+                    "PathVector.load() not available. "
+                    "Ensure pyhpp is built with serialization support."
+                )
+            
+            # Store and return index
+            return self.store_path(path)
+        except Exception as e:
+            raise RuntimeError(f"Failed to load path from {filename}: {e}") from e
+
+    def save_path_vector(self, path_vector: Any, filename: str) -> None:
+        """Save a PathVector object directly to file.
+        
+        Args:
+            path_vector: PathVector object
+            filename: Output file path
+        """
+        try:
+            if hasattr(path_vector, 'save'):
+                path_vector.save(filename)
+            else:
+                raise RuntimeError(
+                    "PathVector object does not support serialization"
+                )
+        except Exception as e:
+            raise RuntimeError(f"Failed to save path vector: {e}") from e
+
+    def load_paths_from_directory(
+        self,
+        directory: str,
+        pattern: str = "phase_*.path",
+        sort: bool = True,
+    ) -> List[int]:
+        """Load multiple paths from a directory.
+        
+        Args:
+            directory: Directory containing path files
+            pattern: Glob pattern for path files (default: phase_*.path)
+            sort: If True, sort files by name before loading
+            
+        Returns:
+            List of path indices in stored paths
+        """
+        import glob
+        import os
+        
+        search_path = os.path.join(directory, pattern)
+        files = glob.glob(search_path)
+        
+        if sort:
+            files.sort()
+        
+        indices = []
+        for filepath in files:
+            try:
+                idx = self.load_path(filepath)
+                indices.append(idx)
+                print(f"  Loaded {os.path.basename(filepath)} -> index {idx}")
+            except Exception as e:
+                print(f"  Failed to load {filepath}: {e}")
+        
+        return indices
+
+    def save_path_as_waypoints(
+        self,
+        path_vector: Any,
+        filename: str,
+        num_samples: int = 100,
+    ) -> None:
+        """Save a path as waypoints in JSON format (portable across sessions).
+        
+        This method samples configurations along the path and saves them as
+        a JSON file. This format is portable and can be loaded even without
+        the constraint graph.
+        
+        Args:
+            path_vector: PathVector object
+            filename: Output file path (will add .json if not present)
+            num_samples: Number of waypoints to sample along the path
+            
+        Raises:
+            RuntimeError: If path is invalid or save fails
+        """
+        import json
+        import os
+        
+        # Ensure .json extension
+        if not filename.endswith('.json'):
+            filename = filename + '.json'
+        
+        try:
+            # Get path length
+            path_length = path_vector.length()
+            
+            # Sample configurations along the path
+            waypoints = []
+            for i in range(num_samples):
+                t = (i / max(1, num_samples - 1)) * path_length
+                # Call path at time t to get configuration
+                q, success = path_vector.call(t)
+                if success:
+                    waypoints.append(list(q))
+                else:
+                    # If call fails, skip this waypoint
+                    continue
+            
+            # Create data structure
+            data = {
+                "format_version": "1.0",
+                "path_length": path_length,
+                "num_samples": num_samples,
+                "waypoints": waypoints,
+            }
+            
+            # Write to file
+            with open(filename, 'w') as f:
+                json.dump(data, f, indent=2)
+                
+        except Exception as e:
+            raise RuntimeError(f"Failed to save path as waypoints: {e}") from e
+
+    def load_path_from_waypoints(
+        self,
+        filename: str,
+        add_to_problem: bool = True,
+    ) -> int:
+        """Load a path from JSON waypoints file.
+        
+        Reconstructs a path by interpolating between waypoints using the
+        steering method. The path is added to the stored paths.
+        
+        Args:
+            filename: Input JSON file path
+            add_to_problem: If True, add the path to stored paths and return index
+            
+        Returns:
+            Index of the loaded path in stored paths (if add_to_problem=True)
+            
+        Raises:
+            RuntimeError: If file doesn't exist, invalid format, or reconstruction fails
+        """
+        import json
+        import os
+        
+        if not os.path.exists(filename):
+            raise RuntimeError(f"File not found: {filename}")
+        
+        try:
+            # Read waypoints
+            with open(filename, 'r') as f:
+                data = json.load(f)
+            
+            waypoints = data["waypoints"]
+            if len(waypoints) < 2:
+                raise RuntimeError("Need at least 2 waypoints to reconstruct path")
+            
+            # Create path segments between consecutive waypoints
+            # Use the steering method to interpolate
+            path_segments = []
+            
+            if self.problem is None:
+                raise RuntimeError("Problem not initialized")
+            
+            for i in range(len(waypoints) - 1):
+                q1 = waypoints[i]
+                q2 = waypoints[i + 1]
+                
+                # Use steer to create a path between q1 and q2
+                try:
+                    steeringMethod = self.problem.steeringMethod()
+                    segment = steeringMethod.call(q1, q2)
+                    if segment is not None:
+                        path_segments.append(segment)
+                except Exception as e:
+                    # If steering fails, skip this segment
+                    print(f"Warning: Failed to create segment {i} -> {i+1}: {e}")
+                    continue
+            
+            if not path_segments:
+                raise RuntimeError("Failed to create any valid path segments")
+            
+            # Concatenate all segments into a PathVector
+            # Create a PathVector and append all segments
+            path_vector = path_segments[0].asVector()
+            for segment in path_segments[1:]:
+                path_vector.appendPath(segment)
+            
+            if add_to_problem:
+                # Add to stored paths
+                path_index = self.store_path(path_vector)
+                return path_index
+            else:
+                return path_vector
+                
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"Invalid JSON format in {filename}: {e}") from e
+        except KeyError as e:
+            raise RuntimeError(f"Missing required field in JSON: {e}") from e
+        except Exception as e:
+            raise RuntimeError(f"Failed to load path from waypoints: {e}") from e
+
     def get_robot(self):
         """Get device object."""
         return self.device
@@ -890,7 +1149,7 @@ class PyHPPBackend(BackendBase):
         reset_roadmap: bool = True,
         time_parameterize: bool = True,
         store: bool = True,
-    ) -> Union[int, Any]:
+    ) -> Tuple[Union[int, Any], Any]:
         """Plan a transition along a specific graph edge.
         
         Implements smart planning strategy:
@@ -900,8 +1159,10 @@ class PyHPPBackend(BackendBase):
         - Tries directPath first for transit edges, falls back to planPath
 
         Returns:
-            If store=True: local stored path id (int).
-            If store=False: a PathVector object.
+            Tuple of (timed_path, geometric_path) where:
+            - timed_path: If store=True, local stored path id (int).
+                         If store=False, a PathVector object.
+            - geometric_path: PathVector without time parameterization (for serialization)
         """
         if self.problem is None:
             raise RuntimeError("Problem not created yet")
@@ -1008,6 +1269,9 @@ class PyHPPBackend(BackendBase):
                     f"{edge_name}: {exc}"
                 )
 
+        # Store geometric path before time parameterization (for serialization)
+        pv_geometric = pv
+        
         if time_parameterize:
             try:
                 pv = tp.timeParameterization(pv)
@@ -1016,11 +1280,11 @@ class PyHPPBackend(BackendBase):
                 print(f"      [TP] Time parameterization failed: {e}")
 
         if not store:
-            return pv
+            return pv, pv_geometric
 
         path_id = self.store_path(pv)
         print(f"      [TP] Path stored with ID: {path_id}")
-        return path_id
+        return path_id, pv_geometric
 
     def plan_transition_sequence(
         self,
@@ -1041,7 +1305,7 @@ class PyHPPBackend(BackendBase):
 
         pv_total: Optional[Any] = None
         for i, edge in enumerate(edges):
-            pv_i = self.plan_transition_edge(
+            pv_i, _ = self.plan_transition_edge(
                 edge,
                 waypoints[i],
                 waypoints[i + 1],

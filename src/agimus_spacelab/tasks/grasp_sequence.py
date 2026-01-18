@@ -41,6 +41,7 @@ class GraspSequencePlanner:
         backend: str = "corba",
         pyhpp_constraints: Optional[Dict[str, Any]] = None,
         graph_constraints: Optional[List[str]] = None,
+        auto_save_dir: Optional[str] = None,
     ):
         """Initialize grasp sequence planner.
 
@@ -52,6 +53,9 @@ class GraspSequencePlanner:
             backend: "corba" or "pyhpp"
             pyhpp_constraints: PyHPP constraint objects (for pyhpp backend)
             graph_constraints: Optional list of global constraints
+            auto_save_dir: If set, automatically save paths to this directory
+                          after each successful phase. Files are named
+                          phase_NN_edge_MM.path (binary format).
         """
         self.graph_builder = graph_builder
         self.config_gen = config_gen
@@ -60,6 +64,10 @@ class GraspSequencePlanner:
         self.backend = backend.lower()
         self.pyhpp_constraints = pyhpp_constraints
         self.graph_constraints = graph_constraints
+
+        # Auto-save configuration
+        self.auto_save_dir = auto_save_dir
+        self.saved_path_files: List[str] = []  # Track saved file paths
 
         # Extract gripper and handle lists from config
         grippers = getattr(task_config, "GRIPPERS", [])
@@ -108,6 +116,128 @@ class GraspSequencePlanner:
 
         # Callback for interactive arm selection (set by UI layer)
         self.interactive_arm_selector_callback = None
+
+    def _auto_save_phase_paths(
+        self,
+        phase_idx: int,
+        phase_paths: List[Any],
+        edge_names: List[str],
+        verbose: bool = True,
+        phase_geometric_paths: Optional[List[Any]] = None,
+    ) -> List[str]:
+        """Auto-save phase paths to files if auto_save_dir is configured.
+        
+        Args:
+            phase_idx: 0-based phase index
+            phase_paths: List of path objects from this phase (may have time param)
+            edge_names: List of edge names corresponding to paths
+            verbose: Print status messages
+            phase_geometric_paths: Optional list of geometric paths (no time param)
+                                   for serialization. If None, uses phase_paths.
+            
+        Returns:
+            List of saved file paths
+        """
+        if not self.auto_save_dir:
+            return []
+
+        # Use geometric paths for saving if provided, otherwise fall back to regular paths
+        paths_to_save = phase_geometric_paths if phase_geometric_paths is not None else phase_paths
+
+        import os
+
+        # Create directory if it doesn't exist
+        os.makedirs(self.auto_save_dir, exist_ok=True)
+
+        saved_files = []
+
+        for edge_idx, path in enumerate(paths_to_save):
+            # Generate base filename: phase_01_edge_01_edgename
+            edge_name_safe = edge_names[edge_idx].replace("/", "_").replace(" ", "_")
+            base_filename = f"phase_{phase_idx + 1:02d}_edge_{edge_idx + 1:02d}_{edge_name_safe}"
+
+            # Try to save as portable JSON waypoints (always works)
+            if hasattr(self.planner, "save_path_as_waypoints"):
+                json_filepath = os.path.join(self.auto_save_dir, base_filename + ".json")
+                try:
+                    self.planner.save_path_as_waypoints(path, json_filepath, num_samples=100)
+                    saved_files.append(json_filepath)
+                    if verbose:
+                        print(f"       ✓ Auto-saved (portable): {base_filename}.json")
+                except Exception as e:
+                    if verbose:
+                        print(f"       ⚠ Failed to save JSON waypoints: {e}")
+
+            # Also try to save native .path format (may fail for graph paths, but worth trying)
+            if hasattr(self.planner, "save_path_vector"):
+                path_filepath = os.path.join(self.auto_save_dir, base_filename + ".path")
+                try:
+                    self.planner.save_path_vector(path, path_filepath)
+                    saved_files.append(path_filepath)
+                    if verbose:
+                        print(f"       ✓ Auto-saved (native): {base_filename}.path")
+                except Exception as e:
+                    # Native format may fail, but JSON should have succeeded
+                    if verbose:
+                        error_msg = str(e)
+                        if "time parameterization" in error_msg.lower():
+                            print(f"       ⚠ Native format skipped: Time-parameterized paths not serializable")
+                        elif "graph" in error_msg.lower() or "edge" in error_msg.lower():
+                            print(f"       ⚠ Native format skipped: Graph-constrained paths (JSON format works)")
+                        else:
+                            print(f"       ⚠ Native format failed: {e}")
+                else:
+                    if verbose:
+                        print(f"       ⚠ Failed to save {filename}: {e}")
+
+        self.saved_path_files.extend(saved_files)
+        return saved_files
+
+    def get_saved_path_files(self) -> List[str]:
+        """Get list of all auto-saved path files.
+        
+        Returns:
+            List of file paths that were saved during planning
+            
+        Note:
+            Paths saved by TransitionPlanner contain constraint graph edge
+            references and can only be loaded in the same session or with
+            the same graph structure. For cross-session replay, use
+            replay_sequence() within the same planning session.
+        """
+        return list(self.saved_path_files)
+
+    def load_saved_paths(self, verbose: bool = True) -> List[int]:
+        """Load all previously auto-saved paths.
+        
+        This is useful for replaying a sequence after restarting.
+        
+        Args:
+            verbose: Print status messages
+            
+        Returns:
+            List of path indices in ProblemSolver
+            
+        Warning:
+            Paths saved from TransitionPlanner contain graph edge constraints.
+            Loading will fail unless the same constraint graph is recreated.
+            For reliable replay, use replay_sequence() in the same session.
+        """
+        if not self.auto_save_dir:
+            if verbose:
+                print("No auto_save_dir configured")
+            return []
+
+        if hasattr(self.planner, "load_paths_from_directory"):
+            return self.planner.load_paths_from_directory(
+                self.auto_save_dir,
+                pattern="phase_*.path",
+                sort=True,
+            )
+        else:
+            if verbose:
+                print("Backend does not support path loading")
+            return []
 
     def compute_phase_locked_joints(
         self,
@@ -482,6 +612,7 @@ class GraspSequencePlanner:
             # Each edge in sequence has its own path constraints
             # that are easier to satisfy
             phase_paths = []
+            phase_geometric_paths = []  # Geometric paths (no time param) for saving
             edge_stats_list = []  # Per-edge timing stats for this phase
             q_start = q_current
 
@@ -581,11 +712,15 @@ class GraspSequencePlanner:
                     if verbose:
                         print("     Planning: q_start -> q_target")
 
-                    path = self.planner.plan_transition_edge(
+                    path, geometric_path = self.planner.plan_transition_edge(
                         edge=edge_name,
                         q1=q_start,
                         q2=q_target,
                     )
+                    
+                    # Store geometric path if auto-save is enabled
+                    if self.auto_save_dir:
+                        phase_geometric_paths.append(geometric_path)
 
                     if path is None:
                         raise RuntimeError(
@@ -682,6 +817,15 @@ class GraspSequencePlanner:
             # Update grasp state after successful planning
             self.grasp_tracker.update_grasp(gripper, handle)
 
+            # Auto-save paths after successful phase
+            saved_files = self._auto_save_phase_paths(
+                phase_idx=phase_idx,
+                phase_paths=phase_paths,
+                edge_names=edge_sequence,
+                verbose=verbose,
+                phase_geometric_paths=phase_geometric_paths if self.auto_save_dir else None,
+            )
+
             # Store phase result with all edge paths and timing stats
             phase_result = {
                 "phase": phase_idx + 1,
@@ -696,6 +840,7 @@ class GraspSequencePlanner:
                 "complete": True,
                 "final_config": q_current,
                 "state_after": self.grasp_tracker.get_current_state_name(),
+                "saved_files": saved_files,  # Track saved path files
             }
             self.phase_results.append(phase_result)
 
@@ -1072,6 +1217,7 @@ class GraspSequencePlanner:
 
             # Plan edges (with selective retry)
             phase_paths = []
+            phase_geometric_paths = []  # Geometric paths for saving
             edge_stats_list = []  # Per-edge timing stats for this phase
             q_start = q_current
 
@@ -1179,11 +1325,16 @@ class GraspSequencePlanner:
                 # Plan edge
                 plan_start = time.time()
                 try:
-                    path = self.planner.plan_transition_edge(
+                    # Always get both timed and geometric paths
+                    path, geometric_path = self.planner.plan_transition_edge(
                         edge=edge_name,
                         q1=q_start,
                         q2=q_target,
                     )
+
+                    # Store geometric path if auto-save is enabled
+                    if self.auto_save_dir:
+                        phase_geometric_paths.append(geometric_path)
 
                     if path is None:
                         raise RuntimeError(
@@ -1270,6 +1421,15 @@ class GraspSequencePlanner:
             phase_plan_time = sum(s["plan_time"] for s in edge_stats_list)
             phase_gen_time = sum(s["gen_time"] for s in edge_stats_list)
 
+            # Auto-save paths after successful phase (resume)
+            saved_files = self._auto_save_phase_paths(
+                phase_idx=phase_idx,
+                phase_paths=phase_paths,
+                edge_names=edge_sequence,
+                verbose=verbose,
+                phase_geometric_paths=phase_geometric_paths if self.auto_save_dir else None,
+            )
+
             phase_result = {
                 "phase": phase_idx + 1,
                 "gripper": gripper,
@@ -1283,6 +1443,7 @@ class GraspSequencePlanner:
                 "complete": True,
                 "final_config": q_current,
                 "state_after": self.grasp_tracker.get_current_state_name(),
+                "saved_files": saved_files,  # Track saved path files
             }
             self.phase_results.append(phase_result)
 
