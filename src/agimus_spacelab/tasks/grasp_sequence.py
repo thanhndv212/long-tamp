@@ -234,7 +234,7 @@ class GraspSequencePlanner:
                             print(f"       ⚠ Native format failed: {e}")
                 else:
                     if verbose:
-                        print(f"       ⚠ Failed to save {filename}: {e}")
+                        print(f"       ⚠ Failed to save {base_filename}: {e}")
 
         self.saved_path_files.extend(saved_files)
         return saved_files
