@@ -1441,6 +1441,109 @@ class CorbaBackend(BackendBase):
 
         return path_index
 
+    def play_and_record_path(
+        self,
+        path_index: int = 0,
+        video_name: Optional[str] = None,
+        output_dir: str = "/home/dvtnguyen/devel/demos",
+        framerate: int = 25,
+        dt: float = 0.01,
+        speed: float = 1.0,
+    ) -> str:
+        """
+        Play path and record it as a video.
+        
+        Args:
+            path_index: Index of the path to play
+            video_name: Custom name for the output video (without extension).
+                       If None, a name will be auto-generated with timestamp.
+            output_dir: Directory for video output (default: /home/dvtnguyen/devel/demos)
+            framerate: Video framerate in fps (default: 25)
+            dt: Time step for path sampling (default: 0.01)
+            speed: Playback speed multiplier (default: 1.0)
+            
+        Returns:
+            The path to the generated video file
+        """
+        if self.viewer is None:
+            self.visualize()
+
+        if self.path_player is None:
+            from hpp.gepetto import PathPlayer
+            self.path_player = PathPlayer(self.viewer)
+
+        # Import video recorder
+        from agimus_spacelab.visualization.video_recorder import record_path_playback
+        
+        # Configure path player
+        self.path_player.setDt(dt)
+        self.path_player.setSpeed(speed)
+        
+        # Record the playback
+        video_file = record_path_playback(
+            self.viewer,
+            self.path_player,
+            path_index,
+            video_name=video_name,
+            output_dir=output_dir,
+            framerate=framerate,
+            dt=dt,
+            speed=speed,
+        )
+        
+        return video_file
+
+    def play_and_record_path_vector(
+        self,
+        path_vector: Any,
+        video_name: Optional[str] = None,
+        output_dir: str = "/home/dvtnguyen/devel/demos",
+        framerate: int = 25,
+        dt: float = 0.01,
+        speed: float = 1.0,
+    ) -> Tuple[int, str]:
+        """
+        Play a PathVector object and record it as a video.
+        
+        Args:
+            path_vector: PathVector CORBA object from TransitionPlanner
+            video_name: Custom name for the output video (without extension)
+            output_dir: Directory for video output
+            framerate: Video framerate in fps
+            dt: Time step for path sampling
+            speed: Playback speed multiplier
+            
+        Returns:
+            Tuple of (path_index, video_file_path)
+        """
+        if self.ps is None:
+            raise RuntimeError("Problem solver not created yet")
+
+        if self.viewer is None:
+            self.visualize()
+
+        if self.path_player is None:
+            from hpp.gepetto import PathPlayer
+            self.path_player = PathPlayer(self.viewer)
+
+        # Get current number of paths to determine the index
+        path_index = self.ps.numberPaths()
+
+        # Add PathVector to problem solver
+        self.ps.client.basic.problem.addPath(path_vector)
+
+        # Record the playback
+        video_file = self.play_and_record_path(
+            path_index=path_index,
+            video_name=video_name,
+            output_dir=output_dir,
+            framerate=framerate,
+            dt=dt,
+            speed=speed,
+        )
+
+        return path_index, video_file
+
     def clear_stored_paths(self, verbose: bool = True) -> int:
         """Clear all paths stored in ProblemSolver.
 

@@ -1624,13 +1624,26 @@ class GraspSequencePlanner:
         speed: float = 1.0,
         clear_paths_first: bool = False,
         visualizer: Optional[Any] = None,
-    ) -> None:
+        record: bool = True,
+        output_dir: str = "/home/dvtnguyen/devel/demos",
+        video_prefix: Optional[str] = None,
+        framerate: int = 25,
+        dt: float = 0.01,
+    ) -> Optional[List[str]]:
         """Replay all phase paths in sequence.
 
         Args:
             speed: Playback speed multiplier
             clear_paths_first: If True, warn about accumulated paths before replay
             visualizer: Optional LiveConstraintGraphVisualizer for real-time graph updates
+            record: If True, record video of the replay (default: True)
+            output_dir: Directory for video output (default: /home/dvtnguyen/devel/demos)
+            video_prefix: Optional prefix for video filenames
+            framerate: Video framerate in fps (default: 25)
+            dt: Time step for path sampling (default: 0.01)
+            
+        Returns:
+            List of video file paths if recording enabled, None otherwise
         """
         if not self.phase_results:
             print("No phases to replay (run plan_sequence first)")
@@ -1640,7 +1653,11 @@ class GraspSequencePlanner:
         print("Replaying Grasp Sequence")
         if visualizer:
             print("Live graph visualization: ENABLED")
+        if record:
+            print(f"Video recording: ENABLED (output: {output_dir})")
         print("=" * 70)
+        
+        recorded_videos = []
 
         # Check for path accumulation
         if hasattr(self.planner, "get_num_stored_paths"):
@@ -1682,7 +1699,29 @@ class GraspSequencePlanner:
                         f"    Path {idx + 1}/{len(phase['paths'])}: ", end=""
                     )
 
-                    if visualizer and hasattr(self.planner, "play_path_vector_with_viz"):
+                    # Generate video name if recording
+                    video_name_for_path = None
+                    if record:
+                        if video_prefix:
+                            video_name_for_path = f"{video_prefix}_phase_{phase['phase']:02d}_path_{idx + 1:02d}"
+                        else:
+                            video_name_for_path = f"phase_{phase['phase']:02d}_path_{idx + 1:02d}"
+                        if edge_name:
+                            video_name_for_path += f"_{edge_name.replace('/', '_')}"
+
+                    if record and hasattr(self.planner, "play_and_record_path_vector"):
+                        # Record the playback
+                        path_idx, video_file = self.planner.play_and_record_path_vector(
+                            path,
+                            video_name=video_name_for_path,
+                            output_dir=output_dir,
+                            framerate=framerate,
+                            dt=dt,
+                            speed=speed,
+                        )
+                        print(f"✓ Recorded (index {path_idx}): {video_file}")
+                        recorded_videos.append(video_file)
+                    elif visualizer and hasattr(self.planner, "play_path_vector_with_viz"):
                         # Use visualization-enabled playback
                         path_idx = self.planner.play_path_vector_with_viz(
                             path,
@@ -1710,6 +1749,11 @@ class GraspSequencePlanner:
             final_count = self.planner.get_num_stored_paths()
             print(f"\n{'='*70}")
             print(f"Total paths now in ProblemSolver: {final_count}")
+        
+        if record and recorded_videos:
+            print(f"\n📹 Recorded {len(recorded_videos)} videos to {output_dir}")
+            return recorded_videos
+        return None
 
     def get_phase_summary(self) -> str:
         """Get human-readable summary of all phases with timing statistics.

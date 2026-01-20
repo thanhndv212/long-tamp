@@ -343,6 +343,10 @@ class ManipulationTask:
         transition_edges: Optional[Sequence[str]] = None,
         transition_waypoints: Optional[Sequence[Sequence[float]]] = None,
         generate_waypoints_via_edges: bool = False,
+        record: bool = True,
+        output_dir: str = "/home/dvtnguyen/devel/demos",
+        video_name: Optional[str] = None,
+        framerate: int = 25,
     ) -> Dict[str, Any]:
         """
         Run the complete task workflow.
@@ -351,6 +355,10 @@ class ManipulationTask:
             visualize: Whether to visualize configurations
             solve: Whether to solve the planning problem
             preferred_configs: List of intermediate config keys in order
+            record: If True, record video of path playback (default: True)
+            output_dir: Directory for video output (default: /home/dvtnguyen/devel/demos)
+            video_name: Optional custom name for video file
+            framerate: Video framerate in fps (default: 25)
 
         Returns:
             Dictionary with configs, paths, and other results
@@ -550,8 +558,18 @@ class ManipulationTask:
                 if success and visualize:
                     print("\n7. Playing solution path...")
                     try:
-                        self.planner.play_path(0)
-                        print("   ✓ Path playback complete")
+                        if record and hasattr(self.planner, "play_and_record_path"):
+                            video_file = self.planner.play_and_record_path(
+                                path_index=0,
+                                video_name=video_name,
+                                output_dir=output_dir,
+                                framerate=framerate,
+                            )
+                            print(f"   ✓ Path playback complete")
+                            print(f"   📹 Video recorded: {video_file}")
+                        else:
+                            self.planner.play_path(0)
+                            print("   ✓ Path playback complete")
                     except Exception as e:
                         print(f"   ⚠ Path playback failed: {e}")
             else:
@@ -602,8 +620,18 @@ class ManipulationTask:
                     if visualize:
                         print("\n7. Playing solution path...")
                         try:
-                            self.planner.play_path(int(path_id))
-                            print("   ✓ Path playback complete")
+                            if record and hasattr(self.planner, "play_and_record_path"):
+                                video_file = self.planner.play_and_record_path(
+                                    path_index=int(path_id),
+                                    video_name=video_name,
+                                    output_dir=output_dir,
+                                    framerate=framerate,
+                                )
+                                print(f"   ✓ Path playback complete")
+                                print(f"   📹 Video recorded: {video_file}")
+                            else:
+                                self.planner.play_path(int(path_id))
+                                print("   ✓ Path playback complete")
                         except Exception as e:
                             print(f"   ⚠ Path playback failed: {e}")
 
@@ -661,8 +689,18 @@ class ManipulationTask:
                     try:
                         # Use concatenated path when known, otherwise 0.
                         pid = path_ids[0] if path_ids else 0
-                        self.planner.play_path(pid)
-                        print("   ✓ Path playback complete")
+                        if record and hasattr(self.planner, "play_and_record_path"):
+                            video_file = self.planner.play_and_record_path(
+                                path_index=pid,
+                                video_name=video_name,
+                                output_dir=output_dir,
+                                framerate=framerate,
+                            )
+                            print(f"   ✓ Path playback complete")
+                            print(f"   📹 Video recorded: {video_file}")
+                        else:
+                            self.planner.play_path(pid)
+                            print("   ✓ Path playback complete")
                     except Exception as e:
                         print(f"   ⚠ Path playback failed: {e}")
 
