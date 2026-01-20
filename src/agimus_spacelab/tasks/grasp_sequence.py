@@ -12,7 +12,7 @@ from __future__ import annotations
 import time
 import signal
 import os
-from typing import Dict, List, Optional, Tuple, Any, Sequence
+from typing import Dict, List, Optional, Tuple, Any, Sequence, Set
 
 from agimus_spacelab.planning.grasp_state import GraspStateTracker
 from agimus_spacelab.planning.graph import GraphBuilder
@@ -198,6 +198,10 @@ class GraspSequencePlanner:
         saved_files = []
 
         for edge_idx, path in enumerate(paths_to_save):
+            # Skip None paths (from skipped phases)
+            if path is None:
+                continue
+                
             # Generate base filename: phase_01_edge_01_edgename
             edge_name_safe = edge_names[edge_idx].replace("/", "_").replace(" ", "_")
             base_filename = f"phase_{phase_idx + 1:02d}_edge_{edge_idx + 1:02d}_{edge_name_safe}"
@@ -344,6 +348,7 @@ class GraspSequencePlanner:
         timeout_per_edge: float = 60.0,
         frozen_arms_mode: str = "auto",
         per_phase_frozen_arms: Optional[Dict[int, List[str]]] = None,
+        skip_phases: Optional[Set[int]] = None,
         verbose: bool = True,
     ) -> Dict[str, Any]:
         """Plan a sequence of grasp transitions.
@@ -363,6 +368,9 @@ class GraspSequencePlanner:
             per_phase_frozen_arms: Dict mapping phase_idx -> list of
                 arm keywords. Used when frozen_arms_mode="manual".
                 Example: {0: ["vispa_", "vispa2"]}
+            skip_phases: Optional set of 0-based phase indices to skip motion
+                planning for. Skipped phases will still generate target configs
+                and update grasp state, but will not call plan_transition_edge().
             verbose: Print progress messages
 
         Note:
@@ -799,6 +807,32 @@ class GraspSequencePlanner:
                         f"Target generation failed: {e}"
                     ) from e
 
+                # Check if this phase should skip motion planning
+                if skip_phases and phase_idx in skip_phases:
+                    # Skip motion planning, use q_target directly
+                    edge_stat["total_time"] = time.time() - edge_start_time
+                    edge_stat["skipped"] = True
+                    edge_stat["success"] = True
+                    edge_stats_list.append(edge_stat)
+                    self.total_planning_time += edge_stat["total_time"]
+                    self.edge_stats[(phase_idx, edge_idx)] = edge_stat
+
+                    # Use q_target as next start config
+                    q_start = q_target
+                    
+                    # Append None placeholder for skipped path
+                    phase_paths.append(None)
+                    if self.auto_save_dir:
+                        phase_geometric_paths.append(None)
+
+                    if verbose:
+                        print(
+                            f"     ⏭ Skipped motion planning "
+                            f"({edge_stat['total_time']:.2f}s total)"
+                        )
+                    
+                    continue
+
                 # Plan transition using TransitionPlanner
                 plan_start = time.time()
                 try:
@@ -931,6 +965,7 @@ class GraspSequencePlanner:
                 "phase_plan_time": phase_plan_time,
                 "phase_gen_time": phase_gen_time,
                 "complete": True,
+                "skipped": skip_phases and phase_idx in skip_phases,
                 "final_config": q_current,
                 "state_after": self.grasp_tracker.get_current_state_name(),
                 "saved_files": saved_files,  # Track saved path files
@@ -1008,6 +1043,7 @@ class GraspSequencePlanner:
         timeout_per_edge: Optional[float] = None,
         frozen_arms_mode: Optional[str] = None,
         per_phase_frozen_arms: Optional[Dict[int, List[str]]] = None,
+        skip_phases: Optional[Set[int]] = None,
         validate: bool = True,
         reset_roadmap: bool = True,
         time_parameterize: bool = True,
@@ -1022,6 +1058,8 @@ class GraspSequencePlanner:
             timeout_per_edge: Override timeout (None = use previous)
             frozen_arms_mode: Override frozen arms mode (None = use "global")
             per_phase_frozen_arms: Per-phase manual arm specification
+            skip_phases: Optional set of 0-based phase indices to skip motion
+                planning for (same as plan_sequence)
             validate: Validate paths after planning
             reset_roadmap: Reset roadmap between phases
             time_parameterize: Apply time parameterization
@@ -1465,6 +1503,32 @@ class GraspSequencePlanner:
                         f"Target generation failed: {e}"
                     ) from e
 
+                # Check if this phase should skip motion planning
+                if skip_phases and phase_idx in skip_phases:
+                    # Skip motion planning, use q_target directly
+                    edge_stat["total_time"] = time.time() - edge_start_time
+                    edge_stat["skipped"] = True
+                    edge_stat["success"] = True
+                    edge_stats_list.append(edge_stat)
+                    self.total_planning_time += edge_stat["total_time"]
+                    self.edge_stats[(phase_idx, edge_idx)] = edge_stat
+
+                    # Use q_target as next start config
+                    q_start = q_target
+                    
+                    # Append None placeholder for skipped path
+                    phase_paths.append(None)
+                    if self.auto_save_dir:
+                        phase_geometric_paths.append(None)
+
+                    if verbose:
+                        print(
+                            f"     ⏭ Skipped motion planning "
+                            f"({edge_stat['total_time']:.2f}s total)"
+                        )
+                    
+                    continue
+
                 # Plan edge
                 plan_start = time.time()
                 try:
@@ -1584,6 +1648,7 @@ class GraspSequencePlanner:
                 "phase_plan_time": phase_plan_time,
                 "phase_gen_time": phase_gen_time,
                 "complete": True,
+                "skipped": skip_phases and phase_idx in skip_phases,
                 "final_config": q_current,
                 "state_after": self.grasp_tracker.get_current_state_name(),
                 "saved_files": saved_files,  # Track saved path files
@@ -1682,17 +1747,24 @@ class GraspSequencePlanner:
             )
             print(f"  Edges: {', '.join(phase['edges'])}")
 
+            # Check if phase was skipped
+            if phase.get("skipped"):
+                print(f"  ⏭ Phase skipped (no paths to replay)")
+                continue
+
             if not is_complete:
                 failed_edge = phase.get('failed_edge_idx', -1)
                 print(f"  ⚠ Failed at edge {failed_edge + 1}: {phase.get('failed_edge_name', 'unknown')}")
                 print(f"  Error: {phase.get('error_message', 'unknown')}")
 
-            print(f"  Playing {len(phase['paths'])} waypoint paths...")
+            # Filter out None paths from skipped edges
+            valid_paths = [(idx, path) for idx, path in enumerate(phase["paths"]) if path is not None]
+            print(f"  Playing {len(valid_paths)} waypoint paths...")
 
             try:
                 # Play each waypoint path in the sequence
                 edge_names = phase.get("edges", [])
-                for idx, path in enumerate(phase["paths"]):
+                for idx, path in valid_paths:
                     edge_name = edge_names[idx] if idx < len(edge_names) else None
 
                     print(
@@ -1782,9 +1854,10 @@ class GraspSequencePlanner:
             total_plan_time += phase.get("phase_plan_time", 0.0)
 
             time_str = f" ({phase_time:.2f}s)" if phase_time > 0 else ""
+            skip_marker = " [SKIPPED]" if phase.get("skipped") else ""
             lines.append(
                 f"\nPhase {phase['phase']}: "
-                f"{phase['gripper']} → {phase['handle']} [{status}]{time_str}"
+                f"{phase['gripper']} → {phase['handle']} [{status}]{time_str}{skip_marker}"
             )
 
             # Edge details with timing
@@ -1800,8 +1873,9 @@ class GraspSequencePlanner:
                     total_t = stat.get("total_time", 0.0)
                     success = stat.get("success", False)
                     is_resume = stat.get("is_resume", False)
+                    is_skipped = stat.get("skipped", False)
 
-                    status_icon = "✓" if success else "✗"
+                    status_icon = "⏭" if is_skipped else ("✓" if success else "✗")
                     attempt_str = (
                         f" (attempt #{attempt})" if attempt > 1 else ""
                     )
@@ -1811,10 +1885,15 @@ class GraspSequencePlanner:
                         f"    {status_icon} Edge {edge_idx + 1}: "
                         f"{edge_name}{attempt_str}{resume_str}"
                     )
-                    lines.append(
-                        f"       gen: {gen_t:.2f}s | "
-                        f"plan: {plan_t:.2f}s | total: {total_t:.2f}s"
-                    )
+                    if is_skipped:
+                        lines.append(
+                            f"       skipped (gen: {gen_t:.2f}s)"
+                        )
+                    else:
+                        lines.append(
+                            f"       gen: {gen_t:.2f}s | "
+                            f"plan: {plan_t:.2f}s | total: {total_t:.2f}s"
+                        )
             else:
                 # Fallback for phases without edge_stats
                 lines.append(f"  Edges: {', '.join(phase['edges'])}")
