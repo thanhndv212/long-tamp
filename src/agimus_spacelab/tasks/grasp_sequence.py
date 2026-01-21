@@ -20,6 +20,47 @@ from agimus_spacelab.planning.config import ConfigGenerator
 
 
 # =============================================================================
+# Filename Utilities
+# =============================================================================
+
+
+def sanitize_filename(name: str) -> str:
+    """Sanitize a string for use in filenames.
+    
+    Replaces characters that are problematic for file paths and shell commands:
+    - / (path separator)
+    - > (shell redirection)
+    - | (shell pipe)
+    - < (shell redirection)
+    - : (Windows drive separator, problematic in some contexts)
+    - " (quotes)
+    - * and ? (wildcards)
+    - spaces
+    
+    Args:
+        name: String to sanitize
+        
+    Returns:
+        Sanitized string safe for use in filenames
+    """
+    replacements = {
+        '/': '_',
+        '>': '_gt_',
+        '<': '_lt_',
+        '|': '_or_',
+        ':': '_',
+        '"': '_',
+        '*': '_',
+        '?': '_',
+        ' ': '_',
+    }
+    result = name
+    for char, replacement in replacements.items():
+        result = result.replace(char, replacement)
+    return result
+
+
+# =============================================================================
 # Graceful Stop Signal Handler
 # =============================================================================
 
@@ -1695,7 +1736,7 @@ class GraspSequencePlanner:
         speed: float = 1.0,
         clear_paths_first: bool = False,
         visualizer: Optional[Any] = None,
-        record: bool = True,
+        record: bool = False,
         output_dir: str = "/home/dvtnguyen/devel/demos",
         video_prefix: Optional[str] = None,
         framerate: int = 25,
@@ -1785,7 +1826,7 @@ class GraspSequencePlanner:
                         else:
                             video_name_for_path = f"phase_{phase['phase']:02d}_path_{idx + 1:02d}"
                         if edge_name:
-                            video_name_for_path += f"_{edge_name.replace('/', '_')}"
+                            video_name_for_path += f"_{sanitize_filename(edge_name)}"
 
                     if record and hasattr(self.planner, "play_and_record_path_vector"):
                         # Record the playback

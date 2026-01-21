@@ -122,7 +122,8 @@ class VideoRecorder:
     def _encode_video(self):
         """Encode captured frames into a video file using ffmpeg."""
         # Find all captured frames
-        frame_pattern = f"{self._frame_prefix}_%06d.{self.frame_extension}"
+        # Note: gepetto-viewer generates frames without zero-padding (0, 1, 2, ... not 000000, 000001)
+        frame_pattern = f"{self._frame_prefix}_%d.{self.frame_extension}"
         
         # Check if ffmpeg is available
         try:
