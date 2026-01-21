@@ -70,7 +70,7 @@ class CorbaBackend(BackendBase):
         ]
         # Waypoint edges (constrained motion): Use spline optimization
         self._waypoint_pregrasp_optimizers = [
-            # "RandomShortcut",
+            "RandomShortcut",
             "SplineGradientBased_bezier3",
             # "SimpleTimeParameterization",
             # "TOPPRA",
@@ -925,11 +925,11 @@ class CorbaBackend(BackendBase):
                 try:
                     pv = tp.planPath(q1_list, [q2_list], bool(reset_roadmap))
                     print(f"      [TP] planPath succeeded")
-                    try:
-                        pv = tp.optimizePath(pv)
-                        print(f"      [TP] Path optimized")
-                    except Exception:
-                        print(f"      [TP] Optimization failed, using unoptimized path")
+                    # try:
+                    #     pv = tp.optimizePath(pv)
+                    #     print(f"      [TP] Path optimized")
+                    # except Exception:
+                    #     print(f"      [TP] Optimization failed, using unoptimized path")
                 except Exception as exc2:
                     raise RuntimeError(
                         f"TransitionPlanner failed completely: {exc2}"
