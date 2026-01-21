@@ -1025,6 +1025,84 @@ class CorbaBackend(BackendBase):
             return None
 
     # =========================================================================
+    # Graph Metadata Extraction
+    # =========================================================================
+
+    def extract_graph_metadata(self) -> Dict[str, Any]:
+        """Extract constraint graph metadata for serialization.
+        
+        Returns a dictionary containing graph structure information that can
+        be used to reconstruct a minimal graph for path loading.
+        
+        Returns:
+            Dictionary with graph metadata:
+            - states: List of state names
+            - edges: List of (edge_name, from_state, to_state)
+            - robot_name: Name of the robot
+            - objects: List of object names (if available)
+            
+        Raises:
+            RuntimeError: If graph is not initialized
+        """
+        if self.graph is None:
+            raise RuntimeError("Constraint graph not initialized")
+            
+        metadata = {
+            "format_version": "1.0",
+            "robot_name": self.robot.name if self.robot else None,
+            "states": [],
+            "edges": [],
+            "objects": [],
+        }
+        
+        # Extract states
+        try:
+            # Try to get nodes from graph
+            if hasattr(self.graph, "nodes"):
+                nodes = self.graph.nodes
+                if isinstance(nodes, dict):
+                    metadata["states"] = list(nodes.keys())
+                elif isinstance(nodes, list):
+                    metadata["states"] = [str(n) for n in nodes]
+        except Exception as e:
+            print(f"Warning: Could not extract states: {e}")
+            
+        # Extract edges
+        try:
+            if hasattr(self.graph, "edges"):
+                edges = self.graph.edges
+                if isinstance(edges, dict):
+                    # edges is typically {name: id}
+                    for edge_name, edge_id in edges.items():
+                        # Try to get edge info
+                        try:
+                            # Get edge endpoints
+                            # This is graph-implementation specific
+                            # For now, just store edge names
+                            metadata["edges"].append({
+                                "name": edge_name,
+                                "id": int(edge_id) if edge_id is not None else None,
+                            })
+                        except Exception:
+                            metadata["edges"].append({"name": edge_name})
+        except Exception as e:
+            print(f"Warning: Could not extract edges: {e}")
+            
+        # Extract object names if available
+        try:
+            if hasattr(self.robot, "robotNames"):
+                all_names = self.robot.robotNames
+                # Filter out the main robot name
+                robot_name = metadata["robot_name"]
+                metadata["objects"] = [
+                    n for n in all_names if n != robot_name
+                ]
+        except Exception as e:
+            print(f"Warning: Could not extract object names: {e}")
+            
+        return metadata
+
+    # =========================================================================
     # Path Serialization Methods
     # =========================================================================
 
@@ -1165,20 +1243,37 @@ class CorbaBackend(BackendBase):
         path_vector: Any,
         filename: str,
         num_samples: int = 100,
+        edge_name: Optional[str] = None,
     ) -> None:
         """Save a path as waypoints in JSON format (portable across sessions).
 
         This method samples configurations along the path and saves them as
-        a JSON file. This format is portable and can be loaded even without
-        the constraint graph.
+        a JSON file. The waypoints can be loaded in a new session, but
+        REQUIRES the constraint graph to be reconstructed identically.
+
+        IMPORTANT: To load these paths later, you MUST:
+        1. Load the same robot/objects (same URDF/SRDF)
+        2. Recreate the constraint graph with identical structure
+        3. Then call load_path_from_waypoints()
 
         Args:
             path_vector: PathVector CORBA object
             filename: Output file path (will add .json if not present)
             num_samples: Number of waypoints to sample along the path
+            edge_name: Optional edge name for reconstruction context
 
         Raises:
             RuntimeError: If path is invalid or save fails
+            
+        Example:
+            # Planning session
+            graph = setup_constraint_graph(backend, robot, objects)
+            path, _ = backend.plan_transition_edge(...)
+            backend.save_path_as_waypoints(path, "my_phase.json")
+            
+            # Loading session (new process)
+            graph = setup_constraint_graph(backend, robot, objects)  # Same setup!
+            path_idx = backend.load_path_from_waypoints("my_phase.json")
         """
         import json
         import os
@@ -1202,12 +1297,22 @@ class CorbaBackend(BackendBase):
                 q = path_vector.call(t)[0]  # Returns (config, success)
                 waypoints.append(q)
 
+            # Extract graph metadata for reconstruction
+            graph_metadata = None
+            try:
+                graph_metadata = self.extract_graph_metadata()
+            except Exception as e:
+                print(f"Warning: Could not extract graph metadata: {e}")
+                print("Path can still be saved but may require manual graph setup to load.")
+
             # Create data structure
             data = {
                 "format_version": "1.0",
                 "path_length": path_length,
                 "num_samples": num_samples,
                 "waypoints": waypoints,
+                "edge_name": edge_name,
+                "graph_metadata": graph_metadata,
             }
 
             # Write to file
@@ -1221,21 +1326,93 @@ class CorbaBackend(BackendBase):
         self,
         filename: str,
         add_to_problem: bool = True,
+        auto_setup_graph: bool = False,
     ) -> int:
         """Load a path from JSON waypoints file.
 
         Reconstructs a path by interpolating between waypoints using the
         steering method. The path is added to the problem solver.
 
+        GRAPH RECONSTRUCTION:
+        If the JSON file contains graph metadata (format_version 1.0+), you have
+        two options:
+        
+        Option 1 (Recommended): Set up the graph manually before loading
+        - Load robot/objects with the same setup as when path was saved
+        - Create constraint graph with same structure
+        - Call load_path_from_waypoints()
+        
+        Option 2: Use auto_setup_graph=True (Experimental)
+        - Validates that graph metadata is present
+        - Checks if current graph matches saved metadata
+        - Provides clear error if graph doesn't match
+
         Args:
             filename: Input JSON file path
             add_to_problem: If True, add the path to ProblemSolver and return index
+            auto_setup_graph: If True, validate graph metadata matches current setup
 
         Returns:
             Index of the loaded path in ProblemSolver (if add_to_problem=True)
 
         Raises:
             RuntimeError: If file doesn't exist, invalid format, or reconstruction fails
+            RuntimeError: If graph metadata doesn't match current setup
+            
+        Example:
+            # Option 1: Manual setup (recommended)
+            graph = setup_constraint_graph(backend, robot, objects)
+            path_idx = backend.load_path_from_waypoints("my_phase.json")
+            
+            # Option 2: With validation
+            graph = setup_constraint_graph(backend, robot, objects)
+            path_idx = backend.load_path_from_waypoints(
+                "my_phase.json", 
+                auto_setup_graph=True  # Validates match
+            )
+        """
+        """Load a path from JSON waypoints file.
+
+        Reconstructs a path by interpolating between waypoints using the
+        steering method. The path is added to the problem solver.
+
+        GRAPH RECONSTRUCTION:
+        If the JSON file contains graph metadata (format_version 1.0+), you have
+        two options:
+        
+        Option 1 (Recommended): Set up the graph manually before loading
+        - Load robot/objects with the same setup as when path was saved
+        - Create constraint graph with same structure
+        - Call load_path_from_waypoints()
+        
+        Option 2: Use auto_setup_graph=True (Experimental)
+        - Validates that graph metadata is present
+        - Checks if current graph matches saved metadata
+        - Provides clear error if graph doesn't match
+
+        Args:
+            filename: Input JSON file path
+            add_to_problem: If True, add the path to ProblemSolver and return index
+            auto_setup_graph: If True, validate graph metadata matches current setup
+
+        Returns:
+            Index of the loaded path in ProblemSolver (if add_to_problem=True)
+
+        Raises:
+            RuntimeError: If file doesn't exist, invalid format, or reconstruction fails
+            RuntimeError: If graph metadata doesn't match current setup
+            
+        Example:
+            # Option 1: Manual setup (recommended)
+            graph = setup_constraint_graph(backend, robot, objects)
+            path_idx = backend.load_path_from_waypoints("my_phase.json")
+            
+            # Option 2: With validation
+            graph = setup_constraint_graph(backend, robot, objects)
+            path_idx = backend.load_path_from_waypoints(
+                "my_phase.json", 
+                auto_setup_graph=True  # Validates match
+            )
         """
         import json
         import os
@@ -1250,6 +1427,52 @@ class CorbaBackend(BackendBase):
             # Read waypoints
             with open(filename, "r") as f:
                 data = json.load(f)
+                
+            # Check for graph metadata and validate if requested
+            graph_metadata = data.get("graph_metadata")
+            
+            if auto_setup_graph:
+                if not graph_metadata:
+                    raise RuntimeError(
+                        f"Cannot auto-setup graph: No graph metadata in {filename}. "
+                        "This file was saved without graph metadata. You must manually "
+                        "set up the constraint graph before loading."
+                    )
+                    
+                # Validate current graph matches metadata
+                self._validate_graph_metadata(graph_metadata)
+                print("✓ Graph metadata validated successfully")
+            elif graph_metadata:
+                # Metadata present but not validating - provide helpful info
+                num_states = len(graph_metadata.get("states", []))
+                robot_name = graph_metadata.get("robot_name", "unknown")
+                if num_states > 0:
+                    print(
+                        f"Note: File contains graph metadata for robot '{robot_name}' "
+                        f"with {num_states} states. Make sure your graph setup matches."
+                    )
+                
+            # Check for graph metadata and validate if requested
+            graph_metadata = data.get("graph_metadata")
+            
+            if auto_setup_graph:
+                if not graph_metadata:
+                    raise RuntimeError(
+                        f"Cannot auto-setup graph: No graph metadata in {filename}. "
+                        "This file was saved without graph metadata. You must manually "
+                        "set up the constraint graph before loading."
+                    )
+                    
+                # Validate current graph matches metadata
+                self._validate_graph_metadata(graph_metadata)
+                print("✓ Graph metadata validated successfully")
+            elif graph_metadata:
+                # Metadata present but not validating - provide helpful info
+                print(
+                    f"Note: File contains graph metadata for robot '{graph_metadata.get('robot_name')}' "
+                    f"with {len(graph_metadata.get('states', []))} states. "
+                    "Make sure your graph setup matches."
+                )
 
             waypoints = data["waypoints"]
             if len(waypoints) < 2:
@@ -1265,14 +1488,18 @@ class CorbaBackend(BackendBase):
                 q1 = waypoints[i]
                 q2 = waypoints[i + 1]
 
-                # Use steer to create a path between q1 and q2
-                # steer returns a Path CORBA object
+                # Use directPath to create a path between q1 and q2
+                # directPath returns (path, success, report)
                 try:
-                    segment = self.ps.client.basic.problem.directPath(
+                    path, success, report = self.ps.client.basic.problem.directPath(
                         q1, q2, True  # validate = True
                     )
-                    if segment is not None:
-                        path_segments.append(segment)
+                    if success and path is not None:
+                        path_segments.append(path)
+                    else:
+                        print(
+                            f"Warning: directPath failed for segment {i} -> {i+1}: {report}"
+                        )
                 except Exception as e:
                     # If direct path fails, skip this segment
                     print(
@@ -1281,12 +1508,25 @@ class CorbaBackend(BackendBase):
                     continue
 
             if not path_segments:
-                raise RuntimeError("Failed to create any valid path segments")
+                raise RuntimeError(
+                    "Failed to create any valid path segments. "
+                    "This usually means the constraint graph is not set up correctly. "
+                    "Make sure to initialize the graph before loading paths that were "
+                    "planned with graph constraints."
+                )
 
             # Concatenate all segments into a PathVector
             path_vector = path_segments[0].asVector()
             for segment in path_segments[1:]:
                 path_vector.appendPath(segment)
+            
+            # Warn if some segments failed
+            expected_segments = len(waypoints) - 1
+            if len(path_segments) < expected_segments:
+                print(
+                    f"Warning: Only {len(path_segments)}/{expected_segments} segments "
+                    f"successfully created. Path may have gaps."
+                )
 
             if add_to_problem:
                 # Add to problem solver
@@ -1305,6 +1545,59 @@ class CorbaBackend(BackendBase):
             raise RuntimeError(
                 f"Failed to load path from waypoints: {e}"
             ) from e
+
+    def _validate_graph_metadata(self, saved_metadata: Dict[str, Any]) -> None:
+        """Validate current graph matches saved metadata.
+        
+        Args:
+            saved_metadata: Graph metadata from saved file
+            
+        Raises:
+            RuntimeError: If validation fails
+        """
+        if self.graph is None:
+            raise RuntimeError(
+                "Constraint graph not initialized. The saved path requires a graph "
+                f"with {len(saved_metadata.get('states', []))} states. "
+                "Set up the graph first using the same robot/objects/structure."
+            )
+            
+        # Extract current metadata
+        try:
+            current_metadata = self.extract_graph_metadata()
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to extract current graph metadata: {e}. "
+                "Cannot validate graph structure."
+            )
+            
+        # Validate robot name
+        saved_robot = saved_metadata.get("robot_name")
+        current_robot = current_metadata.get("robot_name")
+        if saved_robot and current_robot and saved_robot != current_robot:
+            print(
+                f"Warning: Robot name mismatch. Saved: '{saved_robot}', "
+                f"Current: '{current_robot}'"
+            )
+            
+        # Validate state count
+        saved_states = saved_metadata.get("states", [])
+        current_states = current_metadata.get("states", [])
+        if len(saved_states) != len(current_states):
+            raise RuntimeError(
+                f"Graph structure mismatch: Saved path has {len(saved_states)} states, "
+                f"but current graph has {len(current_states)} states. "
+                "Make sure you're using the same constraint graph structure."
+            )
+            
+        # Validate edge count (if available)
+        saved_edges = saved_metadata.get("edges", [])
+        current_edges = current_metadata.get("edges", [])
+        if saved_edges and current_edges and len(saved_edges) != len(current_edges):
+            print(
+                f"Warning: Edge count mismatch. Saved: {len(saved_edges)}, "
+                f"Current: {len(current_edges)}"
+            )
 
     def visualize(self, q: Optional[np.ndarray] = None):
         """Visualize configuration."""

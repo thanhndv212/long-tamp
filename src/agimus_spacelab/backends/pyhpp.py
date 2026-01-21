@@ -479,9 +479,9 @@ class PyHPPBackend(BackendBase):
                 f"Invalid path index {path_index}, "
                 f"only {len(self._stored_paths)} paths available"
             )
-        
+
         path = self._stored_paths[path_index]
-        
+
         try:
             # pyhpp PathVector has save() method
             if hasattr(path, 'save'):
@@ -511,7 +511,7 @@ class PyHPPBackend(BackendBase):
         try:
             # Import the PathVector class
             from pyhpp.core.path import Vector as PathVector
-            
+
             # Load using static method
             if hasattr(PathVector, 'load'):
                 path = PathVector.load(filename)
@@ -520,7 +520,7 @@ class PyHPPBackend(BackendBase):
                     "PathVector.load() not available. "
                     "Ensure pyhpp is built with serialization support."
                 )
-            
+
             # Store and return index
             return self.store_path(path)
         except Exception as e:
@@ -561,13 +561,13 @@ class PyHPPBackend(BackendBase):
         """
         import glob
         import os
-        
+
         search_path = os.path.join(directory, pattern)
         files = glob.glob(search_path)
-        
+
         if sort:
             files.sort()
-        
+
         indices = []
         for filepath in files:
             try:
@@ -576,40 +576,129 @@ class PyHPPBackend(BackendBase):
                 print(f"  Loaded {os.path.basename(filepath)} -> index {idx}")
             except Exception as e:
                 print(f"  Failed to load {filepath}: {e}")
-        
+
         return indices
+
+    # =========================================================================
+    # Graph Metadata Extraction
+    # =========================================================================
+
+    def extract_graph_metadata(self) -> Dict[str, Any]:
+        """Extract constraint graph metadata for serialization.
+
+        Returns a dictionary containing graph structure information that can
+        be used to reconstruct a minimal graph for path loading.
+
+        Returns:
+            Dictionary with graph metadata:
+            - states: List of state names
+            - edges: List of (edge_name, from_state, to_state)
+            - robot_name: Name of the robot
+            - objects: List of object names (if available)
+
+        Raises:
+            RuntimeError: If graph is not initialized
+        """
+        if self.graph is None:
+            raise RuntimeError("Constraint graph not initialized")
+
+        metadata = {
+            "format_version": "1.0",
+            "robot_name": self.device.name if self.device else None,
+            "states": [],
+            "edges": [],
+            "objects": [],
+        }
+
+        # Extract states from graph
+        try:
+            if hasattr(self.graph, "states"):
+                states = self.graph.states
+                if isinstance(states, dict):
+                    metadata["states"] = list(states.keys())
+                elif isinstance(states, list):
+                    metadata["states"] = [
+                        str(s.name() if hasattr(s, "name") else s)
+                        for s in states
+                    ]
+        except Exception as e:
+            print(f"Warning: Could not extract states: {e}")
+
+        # Extract edges from graph
+        try:
+            if hasattr(self.graph, "edges"):
+                edges = self.graph.edges
+                if isinstance(edges, dict):
+                    for edge_name, edge_obj in edges.items():
+                        edge_info = {"name": edge_name}
+                        # Try to get edge endpoints if available
+                        try:
+                            if hasattr(edge_obj, "state_from"):
+                                edge_info["from"] = str(
+                                    edge_obj.state_from.name()
+                                    if hasattr(edge_obj.state_from, "name")
+                                    else edge_obj.state_from
+                                )
+                            if hasattr(edge_obj, "state_to"):
+                                edge_info["to"] = str(
+                                    edge_obj.state_to.name()
+                                    if hasattr(edge_obj.state_to, "name")
+                                    else edge_obj.state_to
+                                )
+                        except Exception:
+                            pass
+                        metadata["edges"].append(edge_info)
+        except Exception as e:
+            print(f"Warning: Could not extract edges: {e}")
+
+        # Extract object names if available
+        try:
+            if self.device and hasattr(self.device, "robot_names"):
+                all_names = self.device.robot_names
+                # Filter out the main robot name
+                robot_name = metadata["robot_name"]
+                metadata["objects"] = [n for n in all_names if n != robot_name]
+        except Exception as e:
+            print(f"Warning: Could not extract object names: {e}")
+
+        return metadata
+
+    # =========================================================================
+    # Path Serialization Methods
+    # =========================================================================
 
     def save_path_as_waypoints(
         self,
         path_vector: Any,
         filename: str,
         num_samples: int = 100,
+        edge_name: Optional[str] = None,
     ) -> None:
         """Save a path as waypoints in JSON format (portable across sessions).
-        
+
         This method samples configurations along the path and saves them as
-        a JSON file. This format is portable and can be loaded even without
-        the constraint graph.
-        
+        a JSON file with graph metadata for validation on load.
+
         Args:
             path_vector: PathVector object
             filename: Output file path (will add .json if not present)
             num_samples: Number of waypoints to sample along the path
-            
+            edge_name: Optional edge name for reconstruction context
+
         Raises:
             RuntimeError: If path is invalid or save fails
         """
         import json
         import os
-        
+
         # Ensure .json extension
         if not filename.endswith('.json'):
             filename = filename + '.json'
-        
+
         try:
             # Get path length
             path_length = path_vector.length()
-            
+
             # Sample configurations along the path
             waypoints = []
             for i in range(num_samples):
@@ -621,19 +710,32 @@ class PyHPPBackend(BackendBase):
                 else:
                     # If call fails, skip this waypoint
                     continue
-            
+
+            # Extract graph metadata for reconstruction (if available)
+            graph_metadata = None
+            try:
+                if hasattr(self, "extract_graph_metadata"):
+                    graph_metadata = self.extract_graph_metadata()
+            except Exception as e:
+                print(f"Warning: Could not extract graph metadata: {e}")
+                print(
+                    "Path can still be saved but may require manual graph setup to load."
+                )
+
             # Create data structure
             data = {
                 "format_version": "1.0",
                 "path_length": path_length,
                 "num_samples": num_samples,
                 "waypoints": waypoints,
+                "edge_name": edge_name,
+                "graph_metadata": graph_metadata,
             }
-            
+
             # Write to file
             with open(filename, 'w') as f:
                 json.dump(data, f, indent=2)
-                
+
         except Exception as e:
             raise RuntimeError(f"Failed to save path as waypoints: {e}") from e
 
@@ -641,48 +743,89 @@ class PyHPPBackend(BackendBase):
         self,
         filename: str,
         add_to_problem: bool = True,
+        auto_setup_graph: bool = False,
     ) -> int:
         """Load a path from JSON waypoints file.
-        
+
         Reconstructs a path by interpolating between waypoints using the
         steering method. The path is added to the stored paths.
-        
+
+        GRAPH RECONSTRUCTION:
+        If the JSON file contains graph metadata (format_version 1.0+), you have
+        two options:
+
+        Option 1 (Recommended): Set up the graph manually before loading
+        - Load robot/objects with the same setup as when path was saved
+        - Create constraint graph with same structure
+        - Call load_path_from_waypoints()
+
+        Option 2: Use auto_setup_graph=True (Experimental)
+        - Validates that graph metadata is present
+        - Checks if current graph matches saved metadata
+        - Provides clear error if graph doesn't match
+
         Args:
             filename: Input JSON file path
             add_to_problem: If True, add the path to stored paths and return index
-            
+            auto_setup_graph: If True, validate graph metadata matches current setup
+
         Returns:
             Index of the loaded path in stored paths (if add_to_problem=True)
-            
+
         Raises:
             RuntimeError: If file doesn't exist, invalid format, or reconstruction fails
+            RuntimeError: If graph metadata doesn't match current setup
         """
         import json
         import os
-        
+
         if not os.path.exists(filename):
             raise RuntimeError(f"File not found: {filename}")
-        
+
         try:
             # Read waypoints
             with open(filename, 'r') as f:
                 data = json.load(f)
-            
+
+            # Check for graph metadata and validate if requested
+            graph_metadata = data.get("graph_metadata")
+
+            if auto_setup_graph:
+                if not graph_metadata:
+                    raise RuntimeError(
+                        f"Cannot auto-setup graph: No graph metadata in {filename}. "
+                        "This file was saved without graph metadata. You must manually "
+                        "set up the constraint graph before loading."
+                    )
+
+                # Validate current graph matches metadata
+                self._validate_graph_metadata(graph_metadata)
+                print("✓ Graph metadata validated successfully")
+            elif graph_metadata:
+                # Metadata present but not validating - provide helpful info
+                num_states = len(graph_metadata.get("states", []))
+                robot_name = graph_metadata.get("robot_name", "unknown")
+                if num_states > 0:
+                    print(
+                        f"Note: File contains graph metadata for robot '{robot_name}' "
+                        f"with {num_states} states. Make sure your graph setup matches."
+                    )
+
             waypoints = data["waypoints"]
             if len(waypoints) < 2:
                 raise RuntimeError("Need at least 2 waypoints to reconstruct path")
-            
+
             # Create path segments between consecutive waypoints
             # Use the steering method to interpolate
             path_segments = []
-            
+
             if self.problem is None:
                 raise RuntimeError("Problem not initialized")
-            
+
             for i in range(len(waypoints) - 1):
                 q1 = waypoints[i]
                 q2 = waypoints[i + 1]
-                
+
                 # Use steer to create a path between q1 and q2
                 try:
                     steeringMethod = self.problem.steeringMethod()
@@ -693,29 +836,86 @@ class PyHPPBackend(BackendBase):
                     # If steering fails, skip this segment
                     print(f"Warning: Failed to create segment {i} -> {i+1}: {e}")
                     continue
-            
+
             if not path_segments:
                 raise RuntimeError("Failed to create any valid path segments")
-            
+
             # Concatenate all segments into a PathVector
             # Create a PathVector and append all segments
             path_vector = path_segments[0].asVector()
             for segment in path_segments[1:]:
                 path_vector.appendPath(segment)
-            
+
             if add_to_problem:
                 # Add to stored paths
                 path_index = self.store_path(path_vector)
                 return path_index
             else:
                 return path_vector
-                
+
         except json.JSONDecodeError as e:
             raise RuntimeError(f"Invalid JSON format in {filename}: {e}") from e
         except KeyError as e:
             raise RuntimeError(f"Missing required field in JSON: {e}") from e
         except Exception as e:
             raise RuntimeError(f"Failed to load path from waypoints: {e}") from e
+
+    def _validate_graph_metadata(self, saved_metadata: Dict[str, Any]) -> None:
+        """Validate current graph matches saved metadata.
+
+        Args:
+            saved_metadata: Graph metadata from saved file
+
+        Raises:
+            RuntimeError: If validation fails
+        """
+        if self.graph is None:
+            raise RuntimeError(
+                "Constraint graph not initialized. The saved path requires a graph "
+                f"with {len(saved_metadata.get('states', []))} states. "
+                "Set up the graph first using the same robot/objects/structure."
+            )
+
+        # Extract current metadata
+        try:
+            current_metadata = self.extract_graph_metadata()
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to extract current graph metadata: {e}. "
+                "Cannot validate graph structure."
+            )
+
+        # Validate robot name
+        saved_robot = saved_metadata.get("robot_name")
+        current_robot = current_metadata.get("robot_name")
+        if saved_robot and current_robot and saved_robot != current_robot:
+            print(
+                f"Warning: Robot name mismatch. Saved: '{saved_robot}', "
+                f"Current: '{current_robot}'"
+            )
+
+        # Validate state count
+        saved_states = saved_metadata.get("states", [])
+        current_states = current_metadata.get("states", [])
+        if len(saved_states) != len(current_states):
+            raise RuntimeError(
+                f"Graph structure mismatch: Saved path has {len(saved_states)} states, "
+                f"but current graph has {len(current_states)} states. "
+                "Make sure you're using the same constraint graph structure."
+            )
+
+        # Validate edge count (if available)
+        saved_edges = saved_metadata.get("edges", [])
+        current_edges = current_metadata.get("edges", [])
+        if (
+            saved_edges
+            and current_edges
+            and len(saved_edges) != len(current_edges)
+        ):
+            print(
+                f"Warning: Edge count mismatch. Saved: {len(saved_edges)}, "
+                f"Current: {len(current_edges)}"
+            )
 
     def get_robot(self):
         """Get device object."""
@@ -910,7 +1110,7 @@ class PyHPPBackend(BackendBase):
         # For 20 DOF system, typical max distance ~40
         normalized_dist = min(distance / 40.0, 1.0)
         scale = 1.0 + normalized_dist * self._distance_scale_factor
-        
+
         timeout = self._transition_time_out * scale
         iterations = int(self._transition_max_iterations * scale)
         return (timeout, iterations)
@@ -1091,7 +1291,7 @@ class PyHPPBackend(BackendBase):
         naming patterns.
         """
         edge_name = tr.name() if hasattr(tr, "name") else str(tr)
-        
+
         try:
             tp.setEdge(tr)
             print(f"      [TP] Set edge: {edge_name}")
@@ -1104,7 +1304,7 @@ class PyHPPBackend(BackendBase):
             tp.clearPathOptimizers()
         except Exception:
             pass
-        
+
         # Determine which optimizer list to use based on edge type
         if edge_name in self._transition_optimizers_by_edge_name:
             # Use explicit per-edge override if set
@@ -1128,7 +1328,7 @@ class PyHPPBackend(BackendBase):
             # Default fallback
             optimizer_names = self._transition_default_optimizers
             print("      [TP] Using default optimizers")
-        
+
         for opt_name in optimizer_names:
             opt_instance = self._create_path_optimizer_instance(opt_name)
             if opt_instance is None:
@@ -1170,7 +1370,7 @@ class PyHPPBackend(BackendBase):
         tp = self.ensure_transition_planner()
         tr = self._resolve_transition(edge)
         edge_name = tr.name() if hasattr(tr, "name") else str(edge)
-        
+
         # Apply distance-based timeout/iteration scaling
         timeout, max_iter = self._compute_planning_budget(q1, q2)
         try:
@@ -1182,12 +1382,12 @@ class PyHPPBackend(BackendBase):
             f"      [TP] Planning budget: "
             f"timeout={timeout:.1f}s, max_iter={max_iter}"
         )
-        
+
         self._configure_transition_planner_for_edge(tp, tr)
 
         q1_list = list(q1)
         q2_list = list(q2)
-        
+
         # Validate configurations if possible
         if validate and hasattr(tp, 'validateConfiguration'):
             try:
@@ -1215,9 +1415,9 @@ class PyHPPBackend(BackendBase):
         is_waypoint_pregrasp = self._is_pregrasp_edge(edge_name)
         is_waypoint_grasp = self._is_grasp_edge(edge_name)
         skip_direct_path = is_waypoint_pregrasp or is_waypoint_grasp
-        
+
         pv: Any = None
-        
+
         # Try directPath first for transit edges (unless it's a waypoint edge)
         if not skip_direct_path:
             print("      [TP] Transit or grasp edge, trying directPath first")
@@ -1246,7 +1446,7 @@ class PyHPPBackend(BackendBase):
                 "      [TP] Waypoint pregrasp edge detected, "
                 "skipping directPath"
             )
-        
+
         # Fall back to planPath if directPath didn't work or was skipped
         if pv is None:
             print("      [TP] Falling back to planPath")
@@ -1271,7 +1471,7 @@ class PyHPPBackend(BackendBase):
 
         # Store geometric path before time parameterization (for serialization)
         pv_geometric = pv
-        
+
         if time_parameterize:
             try:
                 pv = tp.timeParameterization(pv)

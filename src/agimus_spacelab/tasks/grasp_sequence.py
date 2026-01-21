@@ -210,7 +210,13 @@ class GraspSequencePlanner:
             if hasattr(self.planner, "save_path_as_waypoints"):
                 json_filepath = os.path.join(self.auto_save_dir, base_filename + ".json")
                 try:
-                    self.planner.save_path_as_waypoints(path, json_filepath, num_samples=100)
+                    # Pass edge name for graph metadata context
+                    self.planner.save_path_as_waypoints(
+                        path,
+                        json_filepath,
+                        num_samples=100,
+                        edge_name=edge_names[edge_idx],
+                    )
                     saved_files.append(json_filepath)
                     if verbose:
                         print(f"       ✓ Auto-saved (portable): {base_filename}.json")
@@ -844,7 +850,7 @@ class GraspSequencePlanner:
                         q1=q_start,
                         q2=q_target,
                     )
-                    
+
                     # Store geometric path if auto-save is enabled
                     if self.auto_save_dir:
                         phase_geometric_paths.append(geometric_path)
