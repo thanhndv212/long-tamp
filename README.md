@@ -4,7 +4,6 @@ Multi-arm collaborative manipulation planning for SpaceLab assembly tasks using 
 
 ## Features
 
-- **Multi-arm orchestration**: Task dependency graphs with resource management
 - **Modular architecture**: Reusable tools for scene setup, constraints, and configuration
 - **Scene visualization**: Interactive 3D viewer with gepetto-viewer
 - **Dual backend support**: CORBA (hpp-manipulation-corba) and PyHPP (hpp-python)
@@ -13,21 +12,9 @@ Multi-arm collaborative manipulation planning for SpaceLab assembly tasks using 
 
 ## Quick Start
 
-### Visualize Scene
-
 ```bash
 cd script/spacelab
-python visualize_scene.py
-```
-
-### Run Example Task
-
-```bash
-# Grasp frame_gripper (refactored)
-python task_grasp_frame_gripper.py
-
-# Multi-arm collaboration (mock execution)
-python example_collaborative_assembly.py
+./task_display_states.py -i
 ```
 
 ### Installation
@@ -72,7 +59,7 @@ task.setup()
 task.run(visualize=True, solve=False)
 ```
 
-### Multi-Arm Orchestration
+<!-- ### Multi-Arm Orchestration
 
 ```python
 from agimus_spacelab.tasks import TaskOrchestrator, TaskBuilder
@@ -87,7 +74,7 @@ t2 = TaskBuilder("t2", "VISPA grasp RS2").requires_arm("VISPA").build()
 orchestrator.add_task(t1)
 orchestrator.add_task(t2)
 orchestrator.run()  # Executes in parallel
-```
+``` -->
 
 ## Package Structure
 
@@ -148,19 +135,8 @@ Motion Planning Layer (HPP)
 - `TaskOrchestrator`: Multi-arm coordination
 - `create_planner()`: Factory for backend-specific planners
 
-## Dependencies
-
-**Required:**
-- Python >= 3.8
-- NumPy
-- Pinocchio
-- hpp-pinocchio
-- hpp-manipulation-corba (CORBA backend)
-- hpp-gepetto-viewer (visualization)
-
 ## Documentation
 
-- **Architecture Guide**: `script/spacelab/MULTI_ARM_ARCHITECTURE.md`
 - **Usage Guide**: `script/spacelab/README.md`
 - **API Reference**: See docstrings in source files
 
@@ -168,10 +144,7 @@ Motion Planning Layer (HPP)
 
 LGPL-3.0 - See [LICENSE](LICENSE) file
 
-## Acknowledgments
-
-Built on [HPP](https://humanoid-path-planner.github.io/hpp-doc/), [Pinocchio](https://stack-of-tasks.github.io/pinocchio/), and [Agimus](https://gepettoweb.laas.fr/doc/agimus/agimus/master/doxygen-html/)
 
 ---
 
-**Version**: 0.2.0 | **Last Updated**: December 2025
+**Last Updated**: January 2026
