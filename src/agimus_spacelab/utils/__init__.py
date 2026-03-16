@@ -1,7 +1,8 @@
 """
 Utility functions for agimus_spacelab.
 
-This module provides transformation utilities and helper functions.
+This module provides transformation utilities, helper functions,
+and interactive terminal utilities.
 """
 
 import numpy as np
@@ -22,6 +23,14 @@ from .transforms import (
     BoundsManager,
 )
 
+from .interactive import (
+    interactive_menu,
+    clear_line,
+    move_cursor_up,
+    hide_cursor,
+    show_cursor,
+)
+
 
 __all__ = [
     # Transform functions
@@ -37,4 +46,10 @@ __all__ = [
     # Config utilities
     "ConfigBuilder",
     "BoundsManager",
+    # Interactive utilities
+    "interactive_menu",
+    "clear_line",
+    "move_cursor_up",
+    "hide_cursor",
+    "show_cursor",
 ]

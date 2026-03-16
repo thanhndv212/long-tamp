@@ -34,6 +34,13 @@ from .sequential_grasp_filter import (
     next_grasp_to_indices,
 )
 from .sequential_graph_factory import SequentialConstraintGraphFactory
+from .path_io import (
+    PathLoadError,
+    load_paths_from_directory,
+    replay_paths,
+    get_path_files,
+    get_num_paths,
+)
 
 
 __all__ = [
@@ -52,5 +59,11 @@ __all__ = [
     "grasps_tuple_to_dict",
     "next_grasp_to_indices",
     "SequentialConstraintGraphFactory",
+    # Path I/O
+    "PathLoadError",
+    "load_paths_from_directory",
+    "replay_paths",
+    "get_path_files",
+    "get_num_paths",
 ]
 

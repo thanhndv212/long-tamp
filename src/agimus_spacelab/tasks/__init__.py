@@ -35,6 +35,10 @@ from .bridge import (
     create_grasp_task,
     create_place_task,
 )
+from .grasp_sequence import (
+    GraspSequencePlanner,
+    InteractiveGraspSequenceBuilder,
+)
 
 
 __all__ = [
@@ -56,4 +60,7 @@ __all__ = [
     "PlanningBridge",
     "create_grasp_task",
     "create_place_task",
+    # Grasp sequence
+    "GraspSequencePlanner",
+    "InteractiveGraspSequenceBuilder",
 ]

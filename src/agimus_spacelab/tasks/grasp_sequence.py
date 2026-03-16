@@ -1996,4 +1996,368 @@ class GraspSequencePlanner:
         self.resume_attempt_count = 0
 
 
-__all__ = ["GraspSequencePlanner"]
+class InteractiveGraspSequenceBuilder:
+    """Interactive builder for grasp sequence planning.
+
+    Provides a menu-driven interface for:
+    - Selecting grasps from available pairs
+    - Configuring skip phases
+    - Selecting frozen arms mode
+    - Setting auto-save options
+    - Running the sequence planner with interactive resume on failure
+
+    Example:
+        >>> builder = InteractiveGraspSequenceBuilder(task, cfg)
+        >>> result = builder.run()
+        >>> if result["success"]:
+        ...     print("Sequence planning succeeded!")
+    """
+
+    def __init__(
+        self,
+        task: Any,
+        task_config: Any,
+        freeze_joint_substrings: Optional[List[str]] = None,
+    ):
+        """Initialize interactive grasp sequence builder.
+
+        Args:
+            task: ManipulationTask instance with planner, graph_builder, etc.
+            task_config: Task configuration with VALID_PAIRS.
+            freeze_joint_substrings: Default joint substrings to freeze.
+        """
+        self.task = task
+        self.task_config = task_config
+        self.freeze_joint_substrings = freeze_joint_substrings or []
+
+        # Will be populated during run()
+        self.grasp_sequence: List[Tuple[str, str]] = []
+        self.skip_phases: Set[int] = set()
+        self.skip_all_phases: bool = False
+        self.frozen_arms_mode: str = "auto"
+        self.per_phase_frozen_arms: Optional[Dict[int, List[str]]] = None
+        self.auto_save_dir: Optional[str] = None
+        self.non_stop: bool = False
+
+    def _get_available_grasps(self) -> List[Tuple[str, str]]:
+        """Get all possible grasps from config."""
+        all_grasps = []
+        valid_pairs = getattr(self.task_config, "VALID_PAIRS", {})
+        for gripper, handles in valid_pairs.items():
+            for handle in handles:
+                all_grasps.append((gripper, handle))
+        return all_grasps
+
+    def select_sequence(self) -> bool:
+        """Interactively select the grasp sequence.
+
+        Returns:
+            True if a sequence was selected, False if cancelled.
+        """
+        from agimus_spacelab.utils.interactive import interactive_menu
+
+        all_grasps = self._get_available_grasps()
+        if not all_grasps:
+            print("No valid grasps available in config.")
+            return False
+
+        # Format for display
+        grasp_options = [
+            f"{gripper} → {handle}" for gripper, handle in all_grasps
+        ] + [
+            "[Done - Start Planning]",
+            "[Done - Start Planning (non stop)]",
+        ]
+
+        self.grasp_sequence = []
+        done_non_stop_idx = len(all_grasps) + 1
+
+        while True:
+            # Show current sequence
+            if self.grasp_sequence:
+                print("\nCurrent sequence:")
+                for i, (g, h) in enumerate(self.grasp_sequence, 1):
+                    print(f"  {i}. {g} → {h}")
+            else:
+                print("\nSequence is empty. Select grasps to add.")
+
+            # Select next grasp
+            selected = interactive_menu(
+                "Select next grasp to add (or Done to plan):",
+                grasp_options,
+                multi_select=False,
+            )
+
+            if not selected:
+                return False
+
+            if selected[0] == len(all_grasps):  # Done - Start Planning
+                break
+            if selected[0] == done_non_stop_idx:
+                self.non_stop = True
+                break
+
+            self.grasp_sequence.append(all_grasps[selected[0]])
+
+        return len(self.grasp_sequence) > 0
+
+    def configure_skip_phases(self) -> None:
+        """Configure which phases to skip."""
+        from agimus_spacelab.cli.interactive_pickers import select_skip_phases
+
+        if len(self.grasp_sequence) >= 1:
+            self.skip_phases, self.skip_all_phases = select_skip_phases(
+                self.grasp_sequence
+            )
+
+    def configure_frozen_arms(self) -> None:
+        """Configure frozen arms mode."""
+        from agimus_spacelab.cli.interactive_pickers import select_frozen_arms_mode
+
+        self.frozen_arms_mode, self.per_phase_frozen_arms = select_frozen_arms_mode(
+            self.grasp_sequence
+        )
+
+    def configure_auto_save(self) -> None:
+        """Configure auto-save directory."""
+        from agimus_spacelab.cli.interactive_pickers import select_auto_save_directory
+
+        self.auto_save_dir = select_auto_save_directory()
+
+    def _create_arm_selector_callback(self):
+        """Create interactive arm selector callback for interactive mode."""
+        from agimus_spacelab.utils.interactive import interactive_menu
+
+        def interactive_arm_selector(phase_idx, gripper, arm_keywords):
+            """Callback for interactive arm selection per phase."""
+            print(f"\n  Select arms to freeze for Phase {phase_idx + 1}:")
+            print(f"  Active gripper: {gripper}")
+
+            selected = interactive_menu(
+                "Select arm(s) to freeze:",
+                arm_keywords + ["[None - No Locking]"],
+                multi_select=True,
+            )
+
+            arm_count = len(arm_keywords)
+            if selected and selected[0] < arm_count:
+                return [arm_keywords[i] for i in selected if i < arm_count]
+            return []
+
+        return interactive_arm_selector
+
+    def run(self) -> Dict[str, Any]:
+        """Run the interactive grasp sequence planning workflow.
+
+        Returns:
+            Dictionary with 'success' and planning results.
+        """
+        print("\n=== Interactive Grasp Sequence Planning ===")
+
+        # Ensure task is ready
+        if not self._ensure_task_ready():
+            return {"success": False, "error": "Task setup failed"}
+
+        # Step 1: Select sequence
+        if not self.select_sequence():
+            return {"success": False, "error": "No grasps selected"}
+
+        print(f"\nPlanning sequence of {len(self.grasp_sequence)} grasps...")
+
+        # Step 2: Configure options
+        self.configure_skip_phases()
+        self.configure_frozen_arms()
+        self.configure_auto_save()
+
+        if self.non_stop:
+            print(
+                "Non stop mode enabled: will automatically resume on failure "
+                "(Ctrl+C to stop)."
+            )
+
+        # Step 3: Get q_init
+        q_init = self._get_q_init()
+        if q_init is None:
+            print("Error: q_init not available.")
+            return {"success": False, "error": "q_init not available"}
+
+        # Step 4: Create and run planner
+        try:
+            planner = GraspSequencePlanner(
+                graph_builder=self.task.graph_builder,
+                config_gen=self.task.config_gen,
+                planner=self.task.planner,
+                task_config=self.task_config,
+                backend=self.task.backend,
+                pyhpp_constraints=getattr(self.task, "pyhpp_constraints", {}),
+                graph_constraints=getattr(self.task, "_graph_constraints", None),
+                auto_save_dir=self.auto_save_dir,
+            )
+
+            # Set interactive callback if in interactive mode
+            if self.frozen_arms_mode == "interactive":
+                planner.interactive_arm_selector_callback = (
+                    self._create_arm_selector_callback()
+                )
+
+            result = planner.plan_sequence(
+                grasp_sequence=self.grasp_sequence,
+                q_init=q_init,
+                frozen_arms_mode=self.frozen_arms_mode,
+                per_phase_frozen_arms=self.per_phase_frozen_arms,
+                skip_phases=self.skip_phases if self.skip_phases else None,
+                verbose=True,
+            )
+
+            if result.get("success"):
+                print("\n" + "=" * 70)
+                print("Sequence planning succeeded!")
+                print(planner.get_phase_summary())
+            else:
+                self._handle_failure(planner)
+
+            return {
+                "success": result.get("success", False),
+                "planner": planner,
+                "result": result,
+            }
+
+        except Exception as e:
+            print(f"\nSequence planning error: {e}")
+            import traceback
+            traceback.print_exc()
+            return {"success": False, "error": str(e)}
+
+    def _ensure_task_ready(self) -> bool:
+        """Ensure task is set up for planning."""
+        if not hasattr(self.task, "graph_builder") or self.task.graph_builder is None:
+            print("Error: Task graph_builder not initialized.")
+            return False
+        if not hasattr(self.task, "planner") or self.task.planner is None:
+            print("Error: Task planner not initialized.")
+            return False
+        return True
+
+    def _get_q_init(self) -> Optional[List[float]]:
+        """Get initial configuration."""
+        if hasattr(self.task, "config_gen") and self.task.config_gen is not None:
+            q_init = self.task.config_gen.configs.get("q_init")
+            if q_init is not None:
+                return q_init
+        return getattr(self.task, "q_init", None)
+
+    def _handle_failure(self, planner: GraspSequencePlanner) -> None:
+        """Handle planning failure with optional resume."""
+        from agimus_spacelab.utils.interactive import interactive_menu
+
+        if not hasattr(planner, "get_resumable_state"):
+            print("Sequence planning failed.")
+            return
+
+        resume_state = planner.get_resumable_state()
+        if not resume_state:
+            print("Sequence planning failed. No resumable state.")
+            return
+
+        print("\n" + "=" * 70)
+        print("Planning Failed - Partial Progress Saved")
+        print("=" * 70)
+        print(
+            f"Failed at: Phase {resume_state['phase_idx'] + 1}, "
+            f"Edge {resume_state['edge_idx'] + 1}"
+        )
+        print(f"Completed phases: {resume_state['completed_phases']}")
+        print(f"Error: {resume_state['error']}")
+        print(planner.get_phase_summary())
+
+        if self.non_stop:
+            self._auto_resume_loop(planner)
+        else:
+            self._interactive_resume_loop(planner)
+
+    def _auto_resume_loop(self, planner: GraspSequencePlanner) -> None:
+        """Auto-resume loop for non-stop mode."""
+        print("\nNon stop mode: auto-resuming (Press Ctrl+C to stop)")
+
+        while True:
+            resume_state = planner.get_resumable_state()
+            if not resume_state:
+                break
+            try:
+                result = planner.resume_sequence(
+                    retry_from_edge=-1,
+                    timeout_per_edge=300.0,
+                    max_iterations_per_edge=1000000,
+                    frozen_arms_mode=self.frozen_arms_mode,
+                    per_phase_frozen_arms=self.per_phase_frozen_arms,
+                    skip_phases=self.skip_phases if self.skip_phases else None,
+                    verbose=True,
+                )
+                if result.get("success"):
+                    print("\n" + "=" * 70)
+                    print("Resume succeeded!")
+                    print(planner.get_phase_summary())
+                    break
+            except KeyboardInterrupt:
+                print("\nNon stop resume interrupted by user.")
+                break
+            except Exception as e:
+                print(f"\nAuto-resume failed: {e}")
+
+    def _interactive_resume_loop(self, planner: GraspSequencePlanner) -> None:
+        """Interactive resume loop with menu options."""
+        from agimus_spacelab.utils.interactive import interactive_menu
+
+        while True:
+            resume_state = planner.get_resumable_state()
+            if not resume_state:
+                break
+
+            options = [
+                "[R] Replay completed paths",
+                "[1] Retry from failed edge",
+                "[2] Retry from start of failed phase",
+                "[3] Retry with increased timeout",
+                "[4] Retry with increased max iterations",
+                "[Q] Quit to menu",
+            ]
+
+            selected = interactive_menu(
+                "Resume Options:",
+                options,
+                multi_select=False,
+            )
+
+            if not selected or selected[0] == 5:  # Quit
+                break
+
+            if selected[0] == 0:  # Replay
+                print("\nReplaying completed paths...")
+                planner.replay_sequence()
+                continue
+
+            retry_edge = -1 if selected[0] in [0, 2, 4] else 0
+            timeout = 120.0 if selected[0] == 2 else None
+            max_iters = 10000 if selected[0] == 3 else None
+
+            try:
+                result = planner.resume_sequence(
+                    retry_from_edge=retry_edge,
+                    timeout_per_edge=timeout,
+                    max_iterations_per_edge=max_iters,
+                    frozen_arms_mode=self.frozen_arms_mode,
+                    per_phase_frozen_arms=self.per_phase_frozen_arms,
+                    skip_phases=self.skip_phases if self.skip_phases else None,
+                    verbose=True,
+                )
+
+                if result.get("success"):
+                    print("\n" + "=" * 70)
+                    print("Resume succeeded!")
+                    print(planner.get_phase_summary())
+                    break
+            except Exception as e:
+                print(f"\nResume failed: {e}")
+
+
+__all__ = ["GraspSequencePlanner", "InteractiveGraspSequenceBuilder"]
