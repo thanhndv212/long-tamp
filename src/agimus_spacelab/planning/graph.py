@@ -1161,7 +1161,42 @@ class GraphBuilder:
         
         # Override VALID_PAIRS for this phase
         phase_config.VALID_PAIRS = phase_valid_pairs
-        
+
+        # ------------------------------------------------------------------
+        # Restrict GRIPPERS and OBJECTS to only phase-relevant items.
+        # The full DisplayAllStates config has 5+ grippers and 50+ handles,
+        # giving (n_handles+1)^n_grippers candidate states for the
+        # graspIsAllowed CORBA callback — that makes factory.generate() take
+        # hours.  Keep only the grippers and objects that participate in this
+        # specific phase transition.
+        # ------------------------------------------------------------------
+        phase_grippers = list(phase_valid_pairs.keys())
+        phase_config.GRIPPERS = phase_grippers
+        phase_handle_set = {
+            h for handles in phase_valid_pairs.values() for h in handles
+        }
+        _orig_objects = list(getattr(config, "OBJECTS", []))
+        _orig_handles_per_obj = list(getattr(config, "HANDLES_PER_OBJECT", []))
+        _orig_contacts_per_obj = list(
+            getattr(config, "CONTACT_SURFACES_PER_OBJECT", None)
+            or [[] for _ in _orig_objects]
+        )
+        phase_objects, phase_handles_per_obj, phase_contacts_per_obj = [], [], []
+        for obj, handles, contacts in zip(
+            _orig_objects, _orig_handles_per_obj, _orig_contacts_per_obj
+        ):
+            if any(h in phase_handle_set for h in handles):
+                phase_objects.append(obj)
+                phase_handles_per_obj.append(handles)
+                phase_contacts_per_obj.append(contacts)
+        phase_config.OBJECTS = phase_objects
+        phase_config.HANDLES_PER_OBJECT = phase_handles_per_obj
+        phase_config.CONTACT_SURFACES_PER_OBJECT = phase_contacts_per_obj
+        print(
+            f"    Phase graph restricted to "
+            f"grippers={phase_grippers} objects={phase_objects}"
+        )
+
         # Also override RULES to None (setPossibleGrasps takes precedence)
         phase_config.RULES = None
         
@@ -1174,17 +1209,21 @@ class GraphBuilder:
                     SequentialGraspFilter,
                     grasps_dict_to_tuple,
                 )
-                
-                # Get gripper and handle lists from config
-                grippers = list(getattr(config, "GRIPPERS", []))
+
+                # Use RESTRICTED gripper/handle lists to keep state-space tiny.
+                # The full config (DisplayAllStates) has 5+ grippers × 50+
+                # handles; using the restricted lists keeps the state-space at
+                # most (n_handles+1)^n_phase_grippers which is usually 2.
+                grippers = list(phase_config.GRIPPERS)
                 handles = []
-                handles_per_obj = getattr(config, "HANDLES_PER_OBJECT", [])
-                for obj_handles in handles_per_obj:
+                for obj_handles in phase_config.HANDLES_PER_OBJECT:
                     handles.extend(obj_handles)
-                
-                # Build current grasps dict (all grippers, not just held ones)
+
+                # Build current grasps dict for phase grippers only
                 current_grasps_full = {g: None for g in grippers}
-                current_grasps_full.update(held_grasps)
+                current_grasps_full.update(
+                    {g: h for g, h in held_grasps.items() if g in grippers}
+                )
                 
                 # Create the sequential filter
                 seq_filter = SequentialGraspFilter(
