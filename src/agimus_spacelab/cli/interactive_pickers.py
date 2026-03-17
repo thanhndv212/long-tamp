@@ -17,6 +17,9 @@ __all__ = [
     "select_grasp_pairs",
     "select_frozen_arms",
     "browse_configurations",
+    "select_skip_phases",
+    "select_frozen_arms_mode",
+    "select_auto_save_directory",
 ]
 
 

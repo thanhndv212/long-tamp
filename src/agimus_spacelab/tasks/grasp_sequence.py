@@ -2213,8 +2213,13 @@ class InteractiveGraspSequenceBuilder:
                 print("\n" + "=" * 70)
                 print("Sequence planning succeeded!")
                 print(planner.get_phase_summary())
+                # Offer replay or browse after success
+                self._offer_replay_or_browse(planner, q_init)
             else:
-                self._handle_failure(planner)
+                self._handle_failure(planner, q_init)
+
+            # Show saved files summary
+            self._show_saved_files_summary(planner)
 
             return {
                 "success": result.get("success", False),
@@ -2246,8 +2251,15 @@ class InteractiveGraspSequenceBuilder:
                 return q_init
         return getattr(self.task, "q_init", None)
 
-    def _handle_failure(self, planner: GraspSequencePlanner) -> None:
-        """Handle planning failure with optional resume."""
+    def _handle_failure(
+        self, planner: GraspSequencePlanner, q_init: Optional[List[float]] = None
+    ) -> None:
+        """Handle planning failure with optional resume.
+        
+        Args:
+            planner: The GraspSequencePlanner instance.
+            q_init: Initial configuration for replay/browse after resume.
+        """
         from agimus_spacelab.utils.interactive import interactive_menu
 
         if not hasattr(planner, "get_resumable_state"):
@@ -2271,12 +2283,19 @@ class InteractiveGraspSequenceBuilder:
         print(planner.get_phase_summary())
 
         if self.non_stop:
-            self._auto_resume_loop(planner)
+            self._auto_resume_loop(planner, q_init)
         else:
-            self._interactive_resume_loop(planner)
+            self._interactive_resume_loop(planner, q_init)
 
-    def _auto_resume_loop(self, planner: GraspSequencePlanner) -> None:
-        """Auto-resume loop for non-stop mode."""
+    def _auto_resume_loop(
+        self, planner: GraspSequencePlanner, q_init: Optional[List[float]] = None
+    ) -> None:
+        """Auto-resume loop for non-stop mode.
+        
+        Args:
+            planner: The GraspSequencePlanner instance.
+            q_init: Initial configuration for replay/browse after success.
+        """
         print("\nNon stop mode: auto-resuming (Press Ctrl+C to stop)")
 
         while True:
@@ -2297,6 +2316,8 @@ class InteractiveGraspSequenceBuilder:
                     print("\n" + "=" * 70)
                     print("Resume succeeded!")
                     print(planner.get_phase_summary())
+                    # Offer replay after successful resume
+                    self._offer_replay_or_browse(planner, q_init)
                     break
             except KeyboardInterrupt:
                 print("\nNon stop resume interrupted by user.")
@@ -2304,8 +2325,15 @@ class InteractiveGraspSequenceBuilder:
             except Exception as e:
                 print(f"\nAuto-resume failed: {e}")
 
-    def _interactive_resume_loop(self, planner: GraspSequencePlanner) -> None:
-        """Interactive resume loop with menu options."""
+    def _interactive_resume_loop(
+        self, planner: GraspSequencePlanner, q_init: Optional[List[float]] = None
+    ) -> None:
+        """Interactive resume loop with menu options.
+        
+        Args:
+            planner: The GraspSequencePlanner instance.
+            q_init: Initial configuration for replay/browse after success.
+        """
         from agimus_spacelab.utils.interactive import interactive_menu
 
         while True:
@@ -2355,9 +2383,191 @@ class InteractiveGraspSequenceBuilder:
                     print("\n" + "=" * 70)
                     print("Resume succeeded!")
                     print(planner.get_phase_summary())
+                    # Offer replay/browse after successful resume
+                    self._offer_replay_or_browse(planner, q_init)
                     break
             except Exception as e:
                 print(f"\nResume failed: {e}")
+
+    def _collect_generated_configs(
+        self, planner: GraspSequencePlanner, q_init: List[float]
+    ) -> Dict[str, List[float]]:
+        """Collect all generated configurations from the planner.
+        
+        Args:
+            planner: The GraspSequencePlanner instance.
+            q_init: Initial configuration.
+            
+        Returns:
+            Dictionary mapping configuration names to configuration vectors.
+        """
+        generated_configs = {}
+
+        # Add q_init
+        generated_configs["q_init (Initial)"] = q_init
+
+        # Collect configs from each phase
+        for phase_idx, phase_result in enumerate(planner.phase_results):
+            if not phase_result:
+                continue
+
+            gripper = phase_result.get("gripper", "")
+            handle = phase_result.get("handle", "")
+            phase_label = f"Phase {phase_idx + 1}: {gripper} → {handle}"
+
+            # Add edge configs (waypoints)
+            edge_sequence = phase_result.get("edges", [])
+            for edge_idx, edge_name in enumerate(edge_sequence):
+                config_label = f"q_phase{phase_idx}_edge{edge_idx}"
+                if (
+                    planner.config_gen
+                    and config_label in planner.config_gen.configs
+                ):
+                    # Create friendly name from edge name
+                    edge_type = "waypoint"
+                    if "pregrasp" in edge_name.lower():
+                        edge_type = "pregrasp"
+                    elif (
+                        "grasp" in edge_name.lower()
+                        and "pre" not in edge_name.lower()
+                    ):
+                        edge_type = "grasp"
+                    elif "placement" in edge_name.lower():
+                        edge_type = "placement"
+
+                    friendly_name = (
+                        f"{phase_label} - Edge {edge_idx + 1} ({edge_type})"
+                    )
+                    generated_configs[friendly_name] = (
+                        planner.config_gen.configs[config_label]
+                    )
+
+            # Add final config for this phase
+            if "final_config" in phase_result:
+                final_label = f"{phase_label} - Final"
+                generated_configs[final_label] = phase_result["final_config"]
+
+        return generated_configs
+
+    def _offer_replay_or_browse(
+        self, planner: GraspSequencePlanner, q_init: Optional[List[float]]
+    ) -> None:
+        """Offer replay for non-skipped phases or browse for skipped phases.
+        
+        Args:
+            planner: The GraspSequencePlanner instance.
+            q_init: Initial configuration for browsing.
+        """
+        from agimus_spacelab.cli.interactive_pickers import browse_configurations
+        from agimus_spacelab.utils.interactive import interactive_menu
+
+        # Check if all phases were skipped (config generation only)
+        if self.skip_all_phases and planner.config_gen and q_init:
+            print("\n" + "=" * 70)
+            print("Configuration Generation Complete")
+            print("=" * 70)
+
+            generated_configs = self._collect_generated_configs(planner, q_init)
+            print(
+                f"\nGenerated {len(generated_configs)} configurations "
+                f"across {len(planner.phase_results)} phases"
+            )
+
+            options = [
+                "Browse configurations interactively",
+                "Skip",
+            ]
+            selected = interactive_menu(
+                "What would you like to do?",
+                options,
+                multi_select=False,
+            )
+
+            if selected and selected[0] == 0:
+                browse_configurations(self.task, generated_configs)
+
+        # Offer replay for non-skipped phases
+        elif not self.skip_all_phases and planner.phase_results:
+            num_phases = len(planner.phase_results)
+            total_paths = sum(
+                len(pr.get("paths", [])) for pr in planner.phase_results if pr
+            )
+
+            options = [
+                f"Replay all paths ({total_paths} paths from {num_phases} phases)",
+                "Replay individual phase",
+                "Skip replay",
+            ]
+            selected = interactive_menu(
+                "Replay completed paths?",
+                options,
+                multi_select=False,
+            )
+
+            if not selected or selected[0] == 2:
+                return
+
+            if selected[0] == 0:  # Replay all
+                print("\nReplaying all completed paths...")
+                planner.replay_sequence()
+
+            elif selected[0] == 1:  # Replay individual phase
+                phase_options = [
+                    f"Phase {i + 1}: {pr.get('gripper', '')} → {pr.get('handle', '')}"
+                    for i, pr in enumerate(planner.phase_results)
+                    if pr
+                ] + ["Back"]
+
+                while True:
+                    phase_selected = interactive_menu(
+                        "Select phase to replay:",
+                        phase_options,
+                        multi_select=False,
+                    )
+
+                    if (
+                        not phase_selected
+                        or phase_selected[0] >= len(planner.phase_results)
+                    ):
+                        break
+
+                    phase_idx = phase_selected[0]
+                    phase_result = planner.phase_results[phase_idx]
+                    if phase_result and "paths" in phase_result:
+                        print(f"\nReplaying Phase {phase_idx + 1}...")
+                        for path in phase_result["paths"]:
+                            try:
+                                planner.planner.play_path(path)
+                            except Exception as e:
+                                print(f"  Failed to replay path: {e}")
+
+    def _show_saved_files_summary(self, planner: GraspSequencePlanner) -> None:
+        """Display summary of saved path files.
+        
+        Args:
+            planner: The GraspSequencePlanner instance.
+        """
+        import os
+
+        if self.auto_save_dir and hasattr(planner, "get_saved_path_files"):
+            saved_files = planner.get_saved_path_files()
+            if saved_files:
+                print(f"\n=== Saved Path Files ({len(saved_files)} files) ===")
+                print(f"Directory: {self.auto_save_dir}")
+                for f in saved_files:
+                    print(f"  - {os.path.basename(f)}")
+                print(
+                    "\n\u26a0 Note: These paths contain graph edge constraints "
+                    "and can only be"
+                )
+                print(
+                    "  replayed within the same session using "
+                    "planner.replay_sequence()."
+                )
+                print(
+                    "  They cannot be loaded in a new session without "
+                    "recreating the graph."
+                )
 
 
 __all__ = ["GraspSequencePlanner", "InteractiveGraspSequenceBuilder"]
