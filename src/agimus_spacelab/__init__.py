@@ -39,9 +39,18 @@ from .backends import (
     get_backend,
     BackendBase,
     ConstraintResult,
-    CorbaBackend,
-    PyHPPBackend,
 )
+
+# Conditionally import backends that may not be available
+try:
+    from .backends.corba import CorbaBackend
+except ImportError:
+    CorbaBackend = None  # type: ignore[assignment,misc]
+
+try:
+    from .backends.pyhpp import PyHPPBackend
+except ImportError:
+    PyHPPBackend = None  # type: ignore[assignment,misc]
 
 from .planning import (
     create_planner,
@@ -65,7 +74,22 @@ from .visualization import (
 
 
 def check_backend(backend: str) -> bool:
-    """Check if a backend is available."""
+    """Check if a backend is available.
+
+    Args:
+        backend: Backend name to check ('corba' or 'pyhpp').
+
+    Returns:
+        True if the backend is installed and importable.
+
+    Raises:
+        ValueError: If ``backend`` is not a recognised backend name.
+    """
+    valid = {"corba", "pyhpp"}
+    if backend not in valid:
+        raise ValueError(
+            f"Invalid backend {backend!r}. Must be one of: {sorted(valid)}"
+        )
     return backend in get_available_backends()
 
 
