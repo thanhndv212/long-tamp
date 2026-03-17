@@ -104,7 +104,18 @@ class PlanningBridge:
             # Get or create planning context
             if task_id not in self.contexts:
                 # Get current robot configuration
-                q_current = self.robot.getCurrentConfig()
+                _get_config = getattr(self.robot, "getCurrentConfig", None)
+                if _get_config is not None:
+                    q_current = _get_config()
+                else:
+                    # PYHPP-GAP: pyhpp Device has no getCurrentConfig().
+                    # Fall back to problem initConfig.
+                    q_current = list(
+                        self.task.planner.problem.initConfig()
+                        if hasattr(self.task, "planner")
+                        and hasattr(self.task.planner, "problem")
+                        else []
+                    )
                 
                 context = PlanningContext(
                     task_id=task_id,
@@ -352,8 +363,16 @@ def create_place_task(
     
     # Goal config generator uses target pose
     def goal_generator():
-        q = bridge.robot.getCurrentConfig()
-        return q
+        _get_config = getattr(bridge.robot, "getCurrentConfig", None)
+        if _get_config is not None:
+            return _get_config()
+        # PYHPP-GAP: pyhpp Device has no getCurrentConfig().
+        return list(
+            bridge.task.planner.problem.initConfig()
+            if hasattr(bridge.task, "planner")
+            and hasattr(bridge.task.planner, "problem")
+            else []
+        )
     
     task = (TaskBuilder(task_id, name)
             .with_description(f"Place {object_name} at target pose")

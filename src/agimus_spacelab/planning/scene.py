@@ -183,9 +183,13 @@ class SceneBuilder:
                 remove_distance
             )
         else:
-            # PyHPP collision management is handled differently
-            # Would need to use device collision pairs API
-            print("      (PyHPP: collision management not yet implemented)")
+            # PYHPP-GAP: hpp-python Device has no removeObstacleFromJoint
+            # equivalent.  Collision pairs must be configured at the
+            # pinocchio GeometryModel level before building the problem.
+            print(
+                f"      [PYHPP-GAP] disable_collision_pair({obstacle_name!r},"
+                f" {joint_name!r}) is not yet implemented for PyHPP."
+            )
         return self
 
     def disable_collisions_between_subtrees(
@@ -219,7 +223,12 @@ class SceneBuilder:
         )
 
         if self.backend != "corba":
-            print("      (PyHPP: collision management not yet implemented)")
+            # PYHPP-GAP: No removeObstacleFromJoint equivalent in hpp-python.
+            print(
+                f"      [PYHPP-GAP] disable_collisions_between_subtrees("
+                f"{robot_frame_or_joint!r}, {obstacle_root_joint!r})"
+                " is not yet implemented for PyHPP."
+            )
             return self
 
         robot = self.planner.get_robot()
@@ -328,7 +337,13 @@ class SceneBuilder:
                 position + orientation
             )
         else:
-            print("      (PyHPP: object movement not yet implemented)")
+            # PYHPP-GAP: pyhpp Problem has no moveObstacle binding.
+            # Obstacle placement must be set before building the problem
+            # via the pinocchio model's placement map.
+            print(
+                f"      [PYHPP-GAP] move_obstacle({obstacle_name!r})"
+                " is not yet implemented for PyHPP."
+            )
         return self
 
     def get_instances(self) -> Tuple[Any, Any, Any]:

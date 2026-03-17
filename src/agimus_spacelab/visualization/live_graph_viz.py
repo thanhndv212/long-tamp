@@ -481,53 +481,109 @@ class LivePathPlayer:
         self,
         path_id: int,
         edge_name: Optional[str] = None,
+        dt: float = 0.01,
+        speed: float = 1.0,
     ) -> None:
         """
         Play path with live graph visualization updates.
 
-        Args:
-            path_id: Path index in ProblemSolver
-            edge_name: Optional edge name being traversed
-        """
-        client = self.path_player.client
-        publisher = self.path_player.publisher
-        dt = self.path_player.dt
-        speed = self.path_player.speed
+        Supports both CORBA (PathPlayer with .client) and PyHPP (backend
+        with ._stored_paths containing callable path objects).
 
+        Args:
+            path_id: Path index (in ProblemSolver for CORBA; in
+                _stored_paths for PyHPP backend).
+            edge_name: Optional edge name being traversed.
+            dt: Time step between frames (used for PyHPP; CORBA reads
+                dt from the PathPlayer instance).
+            speed: Playback speed multiplier (used for PyHPP).
+        """
         # Mark edge as active
         if edge_name:
             self._current_edge = edge_name
             self.edge_callback(edge_name, False)  # Active, not traversed
 
-        length = self.path_player.end * client.problem.pathLength(path_id)
-        t = self.path_player.start * client.problem.pathLength(path_id)
-
         states = self.graph_builder.get_states()
 
-        print(f"Playing path {path_id} (length: {length:.2f})")
+        # -----------------------------------------------------------------
+        # Detect backend: CORBA PathPlayer (has .client) or PyHPP backend
+        # (has ._stored_paths).
+        # -----------------------------------------------------------------
+        if hasattr(self.path_player, "client"):
+            # ---- CORBA path ----
+            client = self.path_player.client
+            publisher = self.path_player.publisher
+            _dt = getattr(self.path_player, "dt", dt)
+            _speed = getattr(self.path_player, "speed", speed)
+            _start = getattr(self.path_player, "start", 0.0)
+            _end = getattr(self.path_player, "end", 1.0)
 
-        while t < length:
-            start_time = time.time()
+            full_length = client.problem.pathLength(path_id)
+            length = _end * full_length
+            t = _start * full_length
 
-            # Get configuration at time t
-            q = client.problem.configAtParam(path_id, t)
+            print(f"Playing path {path_id} via CORBA (length: {length:.2f})")
 
-            # Update robot visualization
-            publisher.robotConfig = q
-            publisher.publishRobots()
-            publisher.client.gui.refresh()
+            while t < length:
+                step_start = time.time()
+                q = client.problem.configAtParam(path_id, t)
+                publisher.robotConfig = q
+                publisher.publishRobots()
+                publisher.client.gui.refresh()
 
-            # Detect and update current state
-            current_state = self._detect_state(q, states)
-            if current_state and current_state != self._last_state:
-                self.state_callback(current_state)
-                self._last_state = current_state
+                current_state = self._detect_state(q, states)
+                if current_state and current_state != self._last_state:
+                    self.state_callback(current_state)
+                    self._last_state = current_state
 
-            t += dt * speed
+                t += _dt * _speed
+                elapsed = time.time() - step_start
+                if elapsed < _dt:
+                    time.sleep(_dt - elapsed)
 
-            elapsed = time.time() - start_time
-            if elapsed < dt:
-                time.sleep(dt - elapsed)
+        elif hasattr(self.path_player, "_stored_paths"):
+            # ---- PyHPP path ----
+            stored = self.path_player._stored_paths
+            if path_id < 0 or path_id >= len(stored):
+                print(
+                    f"[LivePathPlayer] Invalid path_id {path_id} "
+                    f"(stored: {len(stored)})"
+                )
+                return
+
+            path = stored[path_id]
+            viewer = getattr(self.path_player, "viewer", None)
+            if viewer is None:
+                self.path_player.visualize()
+                viewer = self.path_player.viewer
+
+            length = path.length()
+            t = 0.0
+
+            print(f"Playing path {path_id} via PyHPP (length: {length:.2f})")
+
+            while t <= length:
+                step_start = time.time()
+                q = path(t)
+                viewer(q)
+
+                current_state = self._detect_state(q, states)
+                if current_state and current_state != self._last_state:
+                    self.state_callback(current_state)
+                    self._last_state = current_state
+
+                t += dt * speed
+                elapsed = time.time() - step_start
+                if elapsed < dt:
+                    time.sleep(dt - elapsed)
+
+        else:
+            print(
+                "[LivePathPlayer] Unsupported path_player type: "
+                f"{type(self.path_player).__name__}. "
+                "Expected CORBA PathPlayer (with .client) or "
+                "PyHPP backend (with ._stored_paths)."
+            )
 
         # Mark edge as traversed
         if edge_name:

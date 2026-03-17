@@ -31,10 +31,16 @@ try:
         SimpleTimeParameterization,
         RSTimeParameterization,
     )
-    from pyhpp.gepetto.viewer import Viewer
     HAS_PYHPP = True
 except ImportError:
     HAS_PYHPP = False
+
+try:
+    from pyhpp.gepetto.viewer import Viewer as _GepettoViewer
+    HAS_GEPETTO_VIEWER = True
+except ImportError:
+    _GepettoViewer = None
+    HAS_GEPETTO_VIEWER = False
 
 
 class PyHPPBackend(BackendBase):
@@ -99,6 +105,9 @@ class PyHPPBackend(BackendBase):
         self._enable_distance_tuning = True
         # Scale timeout/iterations by distance
         self._distance_scale_factor = 0.5
+        # Inner planner type (PYHPP-GAP: pyhpp HPPTransitionPlanner has no
+        # setInnerPlannerType binding; stored for forward-compatibility only)
+        self._transition_inner_planner_type: Optional[str] = None
 
         # Configuration options for path validation and projection
         self._use_pathvalidation = True
@@ -400,7 +409,9 @@ class PyHPPBackend(BackendBase):
         if self.viewer is None:
             if self.device is None:
                 raise RuntimeError("Must load robot first")
-            self.viewer = Viewer(self.device)
+            if not HAS_GEPETTO_VIEWER:
+                raise ImportError("Gepetto viewer not available (omniORB missing)")
+            self.viewer = _GepettoViewer(self.device)
 
         if q is not None:
             if isinstance(q, list):
@@ -994,6 +1005,22 @@ class PyHPPBackend(BackendBase):
         """
         self._use_path_optimization = enabled
 
+    def set_path_projection(self, enabled: bool) -> None:
+        """Enable or disable progressive path projection during planning."""
+        self._use_progressive_projector = bool(enabled)
+
+    def clear_stored_paths(self, verbose: bool = True) -> int:
+        """Clear all locally stored paths.
+
+        Returns:
+            Number of paths cleared.
+        """
+        count = len(self._stored_paths)
+        self._stored_paths.clear()
+        if verbose:
+            print(f"   Cleared {count} stored path(s).")
+        return count
+
     def configure_path_optimization(
         self, optimizer: str = "RandomShortcut", clear_existing: bool = True
     ):
@@ -1118,6 +1145,7 @@ class PyHPPBackend(BackendBase):
     def configure_transition_planner(
         self,
         *,
+        inner_planner_type: Optional[str] = None,
         time_out: Optional[float] = None,
         max_iterations: Optional[int] = None,
         path_projector: Optional[Tuple[str, float]] = None,
@@ -1127,6 +1155,9 @@ class PyHPPBackend(BackendBase):
         """Configure defaults for TransitionPlanner edge-scoped planning.
         
         Args:
+            inner_planner_type: Inner planner type string (e.g. "DiffusingPlanner").
+                PYHPP-GAP: pyhpp HPPTransitionPlanner has no setInnerPlannerType
+                binding; the value is stored but cannot be applied.
             time_out: Base timeout in seconds
             max_iterations: Base maximum iterations
             path_projector: (projector_type, step) tuple
@@ -1134,6 +1165,10 @@ class PyHPPBackend(BackendBase):
                 by distance
             distance_scale_factor: Scale factor for distance-based tuning
         """
+        if inner_planner_type is not None:
+            self._transition_inner_planner_type = inner_planner_type
+            # PYHPP-GAP: pyhpp HPPTransitionPlanner has no setInnerPlannerType
+            # binding. The value is stored for forward-compatibility only.
         if time_out is not None:
             self._transition_time_out = float(time_out)
         if max_iterations is not None:
@@ -1249,9 +1284,19 @@ class PyHPPBackend(BackendBase):
         """Forget cached TransitionPlanner object (best-effort cleanup)."""
         self._transition_planner = None
 
-    def _resolve_transition(self, edge: Union[str, Any]) -> Any:
+    def _resolve_transition(self, edge: Union[int, str, Any]) -> Any:
         if self.graph is None:
             raise RuntimeError("Graph not initialized")
+        if isinstance(edge, int):
+            # PYHPP-GAP: pyhpp PyWEdge has no integer ID lookup.
+            # Fall back to positional index over getTransitions().
+            transitions = self.graph.getTransitions()
+            if 0 <= edge < len(transitions):
+                return transitions[edge]
+            raise ValueError(
+                f"Transition index {edge} out of range "
+                f"(graph has {len(transitions)} transitions)"
+            )
         if isinstance(edge, str):
             return self.graph.getTransition(edge)
         return edge
@@ -1526,6 +1571,135 @@ class PyHPPBackend(BackendBase):
             return pv_total
 
         return self.store_path(pv_total)
+
+    def play_path_vector(self, path_vector: Any, speed: float = 1.0) -> int:
+        """Store a PathVector locally and play it in the viewer.
+
+        Args:
+            path_vector: PathVector to store and play.
+            speed: Playback speed multiplier (currently unused; reserved).
+
+        Returns:
+            Index of the stored path.
+        """
+        path_index = self.store_path(path_vector)
+        if self.viewer is None:
+            self.visualize()
+        self.play_path(path_index)
+        return path_index
+
+    def play_path_vector_with_viz(
+        self,
+        path_vector: Any,
+        graph_builder=None,
+        edge_name: Optional[str] = None,
+        visualizer=None,
+        speed: float = 1.0,
+    ) -> int:
+        """Store a PathVector and play it with optional live graph visualization.
+
+        Args:
+            path_vector: PathVector to store and play.
+            graph_builder: GraphBuilder instance (for LivePathPlayer).
+            edge_name: Edge name being traversed (for graph highlighting).
+            visualizer: LiveConstraintGraphVisualizer instance.
+            speed: Playback speed multiplier (reserved).
+
+        Returns:
+            Index of the stored path.
+        """
+        path_index = self.store_path(path_vector)
+        if self.viewer is None:
+            self.visualize()
+        if visualizer is not None and graph_builder is not None:
+            try:
+                from agimus_spacelab.visualization.live_graph_viz import (
+                    LivePathPlayer,
+                )
+                live_player = LivePathPlayer(
+                    self, graph_builder, visualizer=visualizer
+                )
+                live_player.play_with_visualization(path_index, edge_name)
+            except Exception as exc:
+                print(
+                    f"   Live visualization failed ({exc}); "
+                    "falling back to simple playback."
+                )
+                self.play_path(path_index)
+        else:
+            self.play_path(path_index)
+        return path_index
+
+    def play_and_record_path(
+        self,
+        path_index: int = 0,
+        video_name: Optional[str] = None,
+        output_dir: str = "/home/dvtnguyen/devel/demos",
+        framerate: int = 25,
+        dt: float = 0.01,
+        speed: float = 1.0,
+    ) -> str:
+        """Play a stored path and record it to video.
+
+        Args:
+            path_index: Index of the stored path to play.
+            video_name: Output video filename without extension.
+            output_dir: Directory for output video and frames.
+            framerate: Video framerate in fps.
+            dt: Time step for path sampling.
+            speed: Playback speed multiplier.
+
+        Returns:
+            Path to generated video file, or empty string if recording
+            is unavailable (PYHPP-GAP: gepetto capture may not be supported).
+        """
+        if self.viewer is None:
+            self.visualize()
+        from agimus_spacelab.visualization.video_recorder import VideoRecorder
+        recorder = VideoRecorder(
+            self.viewer, output_dir=output_dir, framerate=framerate
+        )
+        try:
+            video_file = recorder.start_recording(
+                video_name=video_name, path_id=path_index
+            )
+        except AttributeError as exc:
+            print(
+                f"   [PYHPP-GAP] Video capture unavailable: {exc}. "
+                "Playing path without recording."
+            )
+            self.play_path(path_index)
+            return ""
+        try:
+            self.play_path(path_index)
+        finally:
+            recorder.stop_recording()
+        return video_file
+
+    def play_and_record_path_vector(
+        self,
+        path_vector: Any,
+        video_name: Optional[str] = None,
+        output_dir: str = "/home/dvtnguyen/devel/demos",
+        framerate: int = 25,
+        dt: float = 0.01,
+        speed: float = 1.0,
+    ) -> Tuple[int, str]:
+        """Store a PathVector, play it, and record to video.
+
+        Returns:
+            Tuple of (path_index, video_file_path).
+        """
+        path_index = self.store_path(path_vector)
+        video_file = self.play_and_record_path(
+            path_index,
+            video_name=video_name,
+            output_dir=output_dir,
+            framerate=framerate,
+            dt=dt,
+            speed=speed,
+        )
+        return path_index, video_file
 
     def optimize_path(self, path):
         """Optimize a path using configured optimizers.

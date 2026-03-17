@@ -82,12 +82,18 @@ def freeze_joints_by_substrings(
     can keep them fixed during projection/shooting to avoid drift.
 
     Notes:
-    - This is a no-op for non-CORBA backends.
+    - For PyHPP, pinocchio model joint iteration would be needed to look up
+      joint configuration ranks (model.names, joints[i].idx_q, joints[i].nq).
+      This is not yet implemented; the function returns ``q`` unchanged.
+      PYHPP-GAP: implement via device.model() when needed.
     - The CORBA robot API is expected to provide `getJointNames()`,
       `rankInConfiguration[...]`, `getJointConfigSize(name)`.
     """
 
     if backend.lower() != "corba":
+        # PYHPP-GAP: pyhpp Device exposes pinocchio model via device.model().
+        # Joint ranks are available as model.joints[i].idx_q and .nq.
+        # Implementation pending; returning q unchanged.
         return q
     if robot is None:
         return q
