@@ -7,6 +7,7 @@ Provides GraphBuilder for creating constraint graphs with dual backend support.
 
 from __future__ import annotations
 
+import numpy as np
 from typing import Dict, List, Tuple, Optional, Any, Type, Union
 
 from agimus_spacelab.config.base_config import BaseTaskConfig, ConstraintDef
@@ -390,9 +391,17 @@ class GraphBuilder:
             self.graph.initialize()
             print("   ✓ CORBA graph initialized")
         else:  # pyhpp
-            # PyHPP graph initialization
-            self.graph.initialize()
+            # PyHPP graph initialization.
+            # IMPORTANT: attach to problem BEFORE initialize().
+            # Problem::constraintGraph(graph) calls graph.problem(problem)
+            # which calls Graph::invalidate(), resetting isInit_=false for
+            # all components. So we must attach first, then initialize.
+            # Similarly, maxIterations/errorThreshold setters call
+            # invalidate() — set them now before initialize().
             self._attach_graph_to_problem_if_supported()
+            self.graph.maxIterations(10000)
+            self.graph.errorThreshold(1e-4)
+            self.graph.initialize()
             print("   ✓ PyHPP graph initialized")
 
         return self.graph
@@ -532,9 +541,18 @@ class GraphBuilder:
         if graph_constraints:
             self.add_global_constraints(graph_constraints)
 
-        # Initialize graph
+        # Initialize graph.
+        # IMPORTANT for pyhpp: Problem::constraintGraph(graph) calls
+        # graph.problem(problem) -> Graph::invalidate() -> isInit_=false.
+        # And maxIterations/errorThreshold setters also call invalidate().
+        # All three must happen BEFORE graph.initialize() for pyhpp.
+        if self.backend == "pyhpp":
+            self._attach_graph_to_problem_if_supported()
+            self.graph.maxIterations(10000)
+            self.graph.errorThreshold(1e-4)
         self.graph.initialize()
-        self._attach_graph_to_problem_if_supported()
+        if self.backend == "corba":
+            self._attach_graph_to_problem_if_supported()
         print("    \u2713 Graph initialized")
 
         # Store states and edges for tracking
@@ -998,23 +1016,18 @@ class GraphBuilder:
                 state_name, list(q)
             )
         else:  # pyhpp
-            # PyHPP uses applyConstraints
-            # Store current parameters
-            old_max_iter = self.graph.maxIterations()
-            old_error = self.graph.errorThreshold()
-
-            # Set temporary parameters
-            self.graph.maxIterations(max_iterations)
-            self.graph.errorThreshold(error_threshold)
-
-            # Apply constraints
-            success, q_proj, error = self.graph.applyConstraints(
-                state_name, list(q)
+            # PyHPP uses applyStateConstraints with a State object.
+            # NOTE: Do NOT call self.graph.maxIterations() or
+            # self.graph.errorThreshold() setters here — they call
+            # Graph::invalidate() which resets isInit_=false for all
+            # components, breaking the initialized state.
+            # Projection parameters are set during graph creation (before
+            # graph.initialize() is called).
+            # Look up state object and apply constraints
+            state_obj = self.graph.getState(state_name)
+            success, q_proj, error = self.graph.applyStateConstraints(
+                state_obj, np.array(q)
             )
-
-            # Restore parameters
-            self.graph.maxIterations(old_max_iter)
-            self.graph.errorThreshold(old_error)
 
         return success, q_proj, error
 
@@ -1094,12 +1107,12 @@ class GraphBuilder:
             f"\n    Building phase graph: held={held_grasps}, "
             f"next={next_grasp}"
         )
-        
+
         if use_sequential_filter:
             print("    Using SequentialGraspFilter (strict 2-state limit)")
         else:
             print("    Using setPossibleGrasps (allows intermediate states)")
-        
+
         # Delete existing graph to allow recreation (CORBA stores by name)
         if self.graph is not None:
             try:
@@ -1108,7 +1121,7 @@ class GraphBuilder:
                     graph_name = "graph"
                     self.ps.client.manipulation.graph.deleteGraph(graph_name)
                     print(f"    ✓ Deleted existing graph '{graph_name}'")
-                    
+
                     # CORBA: also reset cached TransitionPlanner
                     # It holds a reference to the old graph
                     if hasattr(self.planner, 'reset_transition_planner'):
@@ -1117,7 +1130,7 @@ class GraphBuilder:
                 else:
                     # PyHPP: graph is local object, just clear reference
                     print("    ✓ Clearing existing graph reference")
-                
+
                 # Clear internal state
                 self.graph = None
                 self.factory = None
@@ -1127,38 +1140,38 @@ class GraphBuilder:
             except Exception as e:
                 # Graph might not exist, that's ok
                 print(f"    ⓘ Note: {e}")
-        
+
         # Build minimal VALID_PAIRS for this phase
         phase_valid_pairs = {}
-        
+
         # Include already-held grasps (must remain valid in graph)
         for gripper, handle in held_grasps.items():
             if gripper not in phase_valid_pairs:
                 phase_valid_pairs[gripper] = []
             if handle not in phase_valid_pairs[gripper]:
                 phase_valid_pairs[gripper].append(handle)
-        
+
         # Include the next grasp transition
         next_gripper, next_handle = next_grasp
         if next_gripper not in phase_valid_pairs:
             phase_valid_pairs[next_gripper] = []
         if next_handle not in phase_valid_pairs[next_gripper]:
             phase_valid_pairs[next_gripper].append(next_handle)
-        
+
         print(f"    Phase VALID_PAIRS: {phase_valid_pairs}")
-        
+
         # Create a derived config with filtered VALID_PAIRS
         # Use a simple namespace to avoid full class copying
         from types import SimpleNamespace
         phase_config = SimpleNamespace()
-        
+
         # Copy required attributes from original config
         for attr in dir(config):
             is_private = attr.startswith("_")
             is_callable = callable(getattr(config, attr))
             if not is_private and not is_callable:
                 setattr(phase_config, attr, getattr(config, attr))
-        
+
         # Override VALID_PAIRS for this phase
         phase_config.VALID_PAIRS = phase_valid_pairs
 
@@ -1199,7 +1212,7 @@ class GraphBuilder:
 
         # Also override RULES to None (setPossibleGrasps takes precedence)
         phase_config.RULES = None
-        
+
         # Apply sequential filter to enforce strict 2-state limit
         # This prevents the factory from generating intermediate states
         if use_sequential_filter:
@@ -1224,7 +1237,7 @@ class GraphBuilder:
                 current_grasps_full.update(
                     {g: h for g, h in held_grasps.items() if g in grippers}
                 )
-                
+
                 # Create the sequential filter
                 seq_filter = SequentialGraspFilter(
                     grippers=grippers,
@@ -1232,22 +1245,22 @@ class GraphBuilder:
                     current_grasps=current_grasps_full,
                     next_grasp=next_grasp,
                 )
-                
+
                 print("    ✓ Created SequentialGraspFilter:")
                 current_tuple = grasps_dict_to_tuple(
                     current_grasps_full, grippers, handles
                 )
                 print(f"      Current: {current_tuple}")
                 print(f"      Next: {seq_filter.next_grasps}")
-                
+
                 # Store filter for factory injection
                 phase_config._SEQUENTIAL_FILTER = seq_filter
-                
+
             except ImportError as e:
                 print(f"    ⚠ SequentialGraspFilter not available: {e}")
                 print("    ⚠ Falling back to setPossibleGrasps")
                 use_sequential_filter = False
-        
+
         # Use the factory graph creation with restricted pairs
         # This will call factory.setPossibleGrasps(phase_valid_pairs)
         # and optionally factory.graspIsAllowed.append(seq_filter)
