@@ -1054,10 +1054,14 @@ class PyHPPBackend(BackendBase):
 
         opt_instance = self._create_path_optimizer_instance(optimizer)
         if opt_instance is None:
-            raise ValueError(
-                f"Unknown optimizer: {optimizer}. "
-                f"Available: {sorted(self._path_optimizer_factories().keys())}"
+            available = sorted(self._path_optimizer_factories().keys())
+            print(
+                f"      [warn] Unknown optimizer: {optimizer!r} "
+                f"(not available in pyhpp; requires CORBA plugin). "
+                f"Falling back to 'RandomShortcut'. "
+                f"Available: {available}"
             )
+            opt_instance = self._create_path_optimizer_instance("RandomShortcut")
         self._path_optimizers.append(opt_instance)
 
     def _path_optimizer_factories(self) -> Dict[str, Any]:
@@ -1430,30 +1434,132 @@ class PyHPPBackend(BackendBase):
 
         self._configure_transition_planner_for_edge(tp, tr)
 
-        q1_list = list(q1)
-        q2_list = list(q2)
+        # pyhpp C++ bindings require numpy arrays, not Python lists.
+        # planPath expects q_goals as shape (numGoals, configSize).
+        q1_arr = np.asarray(q1, dtype=float)
+        q2_arr = np.asarray(q2, dtype=float)
+        # Keep list aliases for legacy call sites that still use list
+        q1_list = q1_arr
+        q2_list = q2_arr
 
-        # Validate configurations if possible
-        if validate and hasattr(tp, 'validateConfiguration'):
-            try:
-                valid_q1, msg1 = tp.validateConfiguration(q1_list)
-                valid_q2, msg2 = tp.validateConfiguration(q2_list)
-                print(f"      [TP] Validate q1: {valid_q1}, msg: {msg1}")
-                print(f"      [TP] Validate q2: {valid_q2}, msg: {msg2}")
-                if not (valid_q1 and valid_q2):
-                    raise RuntimeError(
-                        f"Configuration validation failed for edge {edge_name}"
+        # Validate configurations before planning (if requested)
+        if validate:
+            # PYHPP-WORKAROUND: Use graph.getNodesConnectedByTransition() to
+            # get the source/dest states for an edge, then validate configs
+            # with graph.getConfigErrorForState(state, q).
+            state_from = None
+            state_to = None
+
+            if self.graph is not None and hasattr(
+                self.graph, 'getNodesConnectedByTransition'
+            ):
+                try:
+                    nodes = self.graph.getNodesConnectedByTransition(tr)
+                    if nodes and len(nodes) >= 2:
+                        # getNodesConnectedByTransition returns state names (str)
+                        # — convert to PyWState objects via getState()
+                        state_from = self.graph.getState(nodes[0])
+                        state_to = self.graph.getState(nodes[1])
+                except Exception as exc:
+                    print(
+                        f"      [TP] Warning: getNodesConnectedByTransition"
+                        f"('{edge_name}') failed: {exc}"
                     )
-            except AttributeError:
-                # validateConfiguration not available in this PyHPP version
-                print(
-                    "      [TP] validateConfiguration not available "
-                    "in this PyHPP version"
+
+            has_states = state_from is not None and state_to is not None
+            if has_states:
+                state_from_name = (
+                    state_from.name()
+                    if hasattr(state_from, 'name') and callable(state_from.name)
+                    else str(state_from)
                 )
-            except Exception as e:
+                state_to_name = (
+                    state_to.name()
+                    if hasattr(state_to, 'name') and callable(state_to.name)
+                    else str(state_to)
+                )
+
+                # Validate q1 against source state
+                try:
+                    # getConfigErrorForState returns (error_vector, belongs)
+                    err_q1, belongs_q1 = self.graph.getConfigErrorForState(
+                        state_from, q1_arr
+                    )
+                    error_q1_scalar = float(np.linalg.norm(
+                        np.asarray(err_q1, dtype=float)
+                    ))
+                    threshold = float(self.graph.errorThreshold())
+                    success_q1 = error_q1_scalar < threshold
+                    print(
+                        f"      [TP] Validate q1 in state '{state_from_name}': "
+                        f"{'✓' if success_q1 else '✗'} "
+                        f"(error={error_q1_scalar:.6f}, "
+                        f"threshold={threshold:.6f})"
+                    )
+                    if not success_q1:
+                        print(
+                            f"      [TP] Warning: q1 may not satisfy "
+                            f"'{state_from_name}' constraints "
+                            f"(error={error_q1_scalar:.6f}); "
+                            "proceeding — TransitionPlanner will validate."
+                        )
+                except Exception as exc:
+                    print(f"      [TP] Warning: Could not validate q1: {exc}")
+
+                # Validate q2 against destination state
+                try:
+                    # getConfigErrorForState returns (error_vector, belongs)
+                    err_q2, belongs_q2 = self.graph.getConfigErrorForState(
+                        state_to, q2_arr
+                    )
+                    error_q2_scalar = float(np.linalg.norm(
+                        np.asarray(err_q2, dtype=float)
+                    ))
+                    threshold = float(self.graph.errorThreshold())
+                    success_q2 = error_q2_scalar < threshold
+                    print(
+                        f"      [TP] Validate q2 in state '{state_to_name}': "
+                        f"{'✓' if success_q2 else '✗'} "
+                        f"(error={error_q2_scalar:.6f}, "
+                        f"threshold={threshold:.6f})"
+                    )
+                    if not success_q2:
+                        print(
+                            f"      [TP] Warning: q2 may not satisfy "
+                            f"'{state_to_name}' constraints "
+                            f"(error={error_q2_scalar:.6f}); "
+                            "proceeding — TransitionPlanner will validate."
+                        )
+                except Exception as exc:
+                    print(f"      [TP] Warning: Could not validate q2: {exc}")
+            else:
                 print(
-                    f"      [TP] Warning: Configuration validation "
-                    f"failed: {e}"
+                    "      [TP] Warning: Cannot validate configurations "
+                    "(graph or transition states not available)"
+                )
+
+        # For waypoint edges, project q2 onto leaf constraints.
+        # pyhpp's TransitionPlanner strictly requires leaf satisfaction
+        # (CORBA does this internally, pyhpp does not).
+        if hasattr(self.graph, 'applyLeafConstraints'):
+            try:
+                # applyLeafConstraints(edge, q_rhs, q) → (success, q_proj, residual)
+                # q_rhs (q1) sets the foliation leaf; q2 is projected onto it
+                ok, q2_projected, _residual = self.graph.applyLeafConstraints(
+                    tr, q1_arr, q2_arr
+                )
+                if ok:
+                    q2_arr = np.asarray(q2_projected, dtype=float)
+                    q2_list = q2_arr
+                    print("      [TP] Applied leaf constraints to q2")
+                else:
+                    print(
+                        "      [TP] Warning: applyLeafConstraints "
+                        "returned False for q2"
+                    )
+            except Exception as exc:
+                print(
+                    f"      [TP] Warning: applyLeafConstraints failed: {exc}"
                 )
 
         # Smart planning strategy based on edge type
@@ -1496,8 +1602,10 @@ class PyHPPBackend(BackendBase):
         if pv is None:
             print("      [TP] Falling back to planPath")
             try:
-                # planPath expects a matrix of goals (list of lists)
-                pv = tp.planPath(q1_list, [q2_list], bool(reset_roadmap))
+                # planPath expects q_goals as shape (numGoals, configSize)
+                # where each row is a goal configuration.
+                q_goals = q2_arr.reshape(1, -1)
+                pv = tp.planPath(q1_arr, q_goals, bool(reset_roadmap))
                 print("      [TP] planPath succeeded")
                 try:
                     pv = tp.optimizePath(pv)

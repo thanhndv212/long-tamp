@@ -295,6 +295,10 @@ class ManipulationTask:
             print("\n3. Creating constraint graph...")
             self.graph = self.create_graph(graph_constraints=graph_constraints)
 
+            # Make graph available to backend for validation/introspection
+            if hasattr(self.planner, 'graph'):
+                self.planner.graph = self.graph
+
             # 6. Initialize configuration generator
             self.config_gen = ConfigGenerator(
                 self.robot,
