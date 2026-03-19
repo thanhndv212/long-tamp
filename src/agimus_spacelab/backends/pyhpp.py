@@ -57,7 +57,6 @@ class PyHPPBackend(BackendBase):
         self.device = None
         self.problem = None
         self.graph = None
-        self.planner = None
         self.viewer = None
         self.path = None
         self._path_optimizers = []  # List of path optimizer instances
@@ -380,12 +379,12 @@ class PyHPPBackend(BackendBase):
             # Configure path optimization (uses default RandomShortcut)
             self.configure_path_optimization(optimizer=optimizer)
 
-            self.planner = HPPManipulationPlanner(self.problem)
-            self.planner.maxIterations(max_iterations)
-            success = self.planner.solve()
+            hpp_planner = HPPManipulationPlanner(self.problem)
+            hpp_planner.maxIterations(max_iterations)
+            success = hpp_planner.solve()
 
             if success:
-                self.path = self.planner.path()
+                self.path = hpp_planner.path()
                 # Apply path optimization if configured
                 if self._path_optimizers:
                     self.path = self.optimize_path(self.path)
