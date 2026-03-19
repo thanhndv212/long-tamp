@@ -1437,9 +1437,6 @@ class PyHPPBackend(BackendBase):
         # planPath expects q_goals as shape (numGoals, configSize).
         q1_arr = np.asarray(q1, dtype=float)
         q2_arr = np.asarray(q2, dtype=float)
-        # Keep list aliases for legacy call sites that still use list
-        q1_list = q1_arr
-        q2_list = q2_arr
 
         # Validate configurations before planning (if requested)
         if validate:
@@ -1549,7 +1546,6 @@ class PyHPPBackend(BackendBase):
                 )
                 if ok:
                     q2_arr = np.asarray(q2_projected, dtype=float)
-                    q2_list = q2_arr
                     print("      [TP] Applied leaf constraints to q2")
                 else:
                     print(
@@ -1573,7 +1569,7 @@ class PyHPPBackend(BackendBase):
             print("      [TP] Transit or grasp edge, trying directPath first")
             try:
                 success, path, status = tp.directPath(
-                    q1_list, q2_list, bool(validate)
+                    q1_arr, q2_arr, bool(validate)
                 )
                 if success:
                     print("      [TP] directPath succeeded")
