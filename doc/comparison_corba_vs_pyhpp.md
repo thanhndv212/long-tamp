@@ -83,6 +83,8 @@ A comprehensive guide to understanding the differences between CORBA server-base
 | **Multi-language** | Yes (C++, Python, etc) | Python only |
 | **Debugging** | Two processes | Single process (easier) |
 | **Graph Factory** | Built-in, automatic | Manual or Python helper |
+| **Config Validation** | `validateConfiguration(q, edge_id)` | `applyConstraints(state, q)` |
+| **Edge/Transition IDs** | Integer IDs available | PyWEdge objects (no ID) |
 | **Learning Curve** | Higher (server setup) | Lower (direct Python) |
 | **Documentation** | Extensive (older) | Growing (newer) |
 | **Production Ready** | Very mature | Mature (v6.1.0+) |
@@ -389,7 +391,64 @@ while t <= path.length():
 
 ---
 
-### 8. Applying Constraints
+### 8. Configuration Validation
+
+#### CORBA Server
+```python
+# TransitionPlanner provides validateConfiguration with edge ID
+from hpp.corbaserver.manipulation import TransitionPlanner
+
+tp = TransitionPlanner(ps)
+edge_id = graph.edges["edge_name"]  # Returns integer ID
+
+# Validate configurations before planning
+q1_ok, msg1 = tp.validateConfiguration(q1, edge_id)
+q2_ok, msg2 = tp.validateConfiguration(q2, edge_id)
+
+print(f"q1 valid: {q1_ok}, message: {msg1}")
+print(f"q2 valid: {q2_ok}, message: {msg2}")
+
+if not q1_ok or not q2_ok:
+    raise RuntimeError("Invalid configurations")
+```
+
+#### PyHPP Bindings
+```python
+# PYHPP-WORKAROUND: PyWEdge objects don't expose integer component IDs,
+# so we can't use tp.validateConfiguration(q, edge_id).
+# Instead, validate against source/destination states using applyConstraints.
+
+from pyhpp.manipulation import HPPTransitionPlanner
+
+tp = HPPTransitionPlanner(problem)
+tr = graph.getTransition("edge_name")  # Returns PyWEdge object
+
+# Validate q1 against source state
+success_q1, q1_proj, error_q1 = graph.applyConstraints(
+    tr.state_from, list(q1)
+)
+print(f"q1 valid: {success_q1}, error: {error_q1:.6f}")
+
+# Validate q2 against destination state  
+success_q2, q2_proj, error_q2 = graph.applyConstraints(
+    tr.state_to, list(q2)
+)
+print(f"q2 valid: {success_q2}, error: {error_q2:.6f}")
+
+if not success_q1 or not success_q2:
+    raise RuntimeError(
+        f"Invalid configurations: q1_error={error_q1:.6f}, "
+        f"q2_error={error_q2:.6f}"
+    )
+```
+
+⚠️ **Critical Difference:**
+- **CORBA:** `graph.edges[name]` returns **integer ID** → use `tp.validateConfiguration(q, edge_id)`
+- **PyHPP:** `graph.getTransition(name)` returns **PyWEdge object** with no `.id()` method → use `graph.applyConstraints(state, q)` instead
+
+---
+
+### 9. Applying Constraints
 
 #### CORBA Server
 ```python
@@ -808,7 +867,32 @@ constraint = Transformation(..., joint_id, ...)
 
 ---
 
-### Pitfall 7: Projection Fails with High Error
+### Pitfall 7: Trying to Use `validateConfiguration` with PyWEdge
+
+**ERROR:**
+```python
+# This works in CORBA but NOT in PyHPP!
+edge_id = graph.edges["edge_name"]  # PyHPP returns PyWEdge object, not int
+tp.validateConfiguration(q, edge_id)  # TypeError!
+```
+
+**SOLUTION:**
+```python
+# ❌ Wrong (CORBA-style validation doesn't work)
+edge_id = graph.edges["edge_name"]
+tp.validateConfiguration(q, edge_id)
+
+# ✅ Correct (use state-based validation)
+tr = graph.getTransition("edge_name")
+success_q1, _, error_q1 = graph.applyConstraints(tr.state_from, q1)
+success_q2, _, error_q2 = graph.applyConstraints(tr.state_to, q2)
+```
+
+**Why:** PyWEdge objects don't expose their integer component ID, which is required by `validateConfiguration()`. Instead, validate configurations against the source/destination states.
+
+---
+
+### Pitfall 8: Projection Fails with High Error
 
 **ISSUE:**
 ```python
