@@ -183,13 +183,54 @@ class SceneBuilder:
                 remove_distance
             )
         else:
-            # PYHPP-GAP: hpp-python Device has no removeObstacleFromJoint
-            # equivalent.  Collision pairs must be configured at the
-            # pinocchio GeometryModel level before building the problem.
-            print(
-                f"      [PYHPP-GAP] disable_collision_pair({obstacle_name!r},"
-                f" {joint_name!r}) is not yet implemented for PyHPP."
-            )
+            # pyhpp: remove pairs from the pinocchio GeometryModel directly.
+            # ground_demo and objects are loaded INTO the device geomModel so
+            # addAllCollisionPairs() creates robot-vs-environment pairs; we
+            # mirror CORBA's removeObstacleFromJoint by removing them here.
+            device = self.planner.device
+            m = device.model()
+            gm = device.geomModel()
+            try:
+                from pinocchio import CollisionPair
+            except ImportError:
+                print("      [warn] pinocchio not available; cannot remove collision pairs")
+                return self
+
+            # Find obstacle geometry object indices (exact name or _N suffix)
+            obs_ids = [i for i, go in enumerate(gm.geometryObjects)
+                       if go.name == obstacle_name or
+                       (go.name.startswith(obstacle_name + "_") and
+                        go.name[len(obstacle_name) + 1:].isdigit())]
+            if not obs_ids:
+                print(f"      [warn] no geometry found matching {obstacle_name!r}")
+
+            # Resolve joint_name → pinocchio joint index
+            joint_id = None
+            if m.existJointName(joint_name):
+                joint_id = m.getJointId(joint_name)
+            elif m.existFrame(joint_name):
+                fid = m.getFrameId(joint_name)
+                joint_id = int(m.frames[fid].parentJoint)
+            if joint_id is None:
+                print(f"      [warn] {joint_name!r} not found in device model")
+                return self
+
+            # Find geometry objects directly attached to this joint
+            robot_ids = [i for i, go in enumerate(gm.geometryObjects)
+                         if go.parentJoint == joint_id]
+
+            # Remove cross-pairs from the geometry model
+            removed = 0
+            for oid in obs_ids:
+                for rid in robot_ids:
+                    if oid == rid:
+                        continue  # CollisionPair requires distinct indices
+                    cp = CollisionPair(oid, rid)
+                    if gm.existCollisionPair(cp):
+                        gm.removeCollisionPair(cp)
+                        removed += 1
+            print(f"      [pyhpp] removed {removed} collision pair(s) "
+                  f"({obstacle_name!r} <-> {joint_name!r})")
         return self
 
     def disable_collisions_between_subtrees(
@@ -222,13 +263,96 @@ class SceneBuilder:
             % (robot_frame_or_joint, obstacle_root_joint)
         )
 
-        if self.backend != "corba":
-            # PYHPP-GAP: No removeObstacleFromJoint equivalent in hpp-python.
-            print(
-                f"      [PYHPP-GAP] disable_collisions_between_subtrees("
-                f"{robot_frame_or_joint!r}, {obstacle_root_joint!r})"
-                " is not yet implemented for PyHPP."
-            )
+        if self.backend == "pyhpp":
+            # pyhpp: remove cross-pairs between subtrees from the pinocchio
+            # GeometryModel.  Both `robot_frame_or_joint` and
+            # `obstacle_root_joint` may be joint names, frame/link names, or
+            # prefixes (e.g. "ground_demo/joint_world_NYX").
+            #
+            # Environment objects (loaded as "anchor") all attach to joint 0
+            # (universe) — there are no distinct joints for them in the model.
+            # For such cases we fall back to geometry name prefix matching:
+            # the prefix is inferred as everything up to the first "/" in the
+            # argument (e.g. "ground_demo/joint_world_NYX" → "ground_demo/").
+            device = self.planner.device
+            m = device.model()
+            gm = device.geomModel()
+            try:
+                from pinocchio import CollisionPair
+            except ImportError:
+                print("      [warn] pinocchio not available; cannot remove collision pairs")
+                return self
+
+            def _resolve_joint_id(name):
+                """Return pinocchio joint index for a joint name or frame name."""
+                if m.existJointName(name):
+                    return m.getJointId(name)
+                if m.existFrame(name):
+                    fid = m.getFrameId(name)
+                    return int(m.frames[fid].parentJoint)
+                return None
+
+            def _subtree_joint_ids(root_id):
+                """Return the set of joint IDs in the subtree rooted at root_id.
+
+                Relies on pinocchio's topological ordering guarantee:
+                parents[j] < j for all j > 0.
+                """
+                subtree = {root_id}
+                for j in range(root_id + 1, m.njoints):
+                    if m.parents[j] in subtree:
+                        subtree.add(j)
+                return subtree
+
+            def _geom_ids_for(name):
+                """Return geometry indices for a joint/frame name or prefix.
+
+                Falls back to geometry name prefix matching when the name is
+                not a known joint or frame (happens for anchor-loaded URDF
+                models where all links collapse onto universe joint 0), or
+                when the resolved joint is the universe joint (id=0) which
+                would incorrectly capture ALL geometry objects.
+                """
+                jid = _resolve_joint_id(name)
+                if jid is not None and jid != 0:
+                    subtree = _subtree_joint_ids(jid)
+                    return [i for i, go in enumerate(gm.geometryObjects)
+                            if go.parentJoint in subtree]
+                # Prefix fallback: "ground_demo/joint_world_NYX" → "ground_demo/"
+                prefix = name.split("/")[0] + "/"
+                return [i for i, go in enumerate(gm.geometryObjects)
+                        if go.name.startswith(prefix)]
+
+            robot_geom_ids = _geom_ids_for(robot_frame_or_joint)
+            obs_geom_ids = _geom_ids_for(obstacle_root_joint)
+
+            if not robot_geom_ids:
+                print(f"      [warn] no geometry found for {robot_frame_or_joint!r}")
+                return self
+            if not obs_geom_ids:
+                print(f"      [warn] no geometry found for {obstacle_root_joint!r}")
+                return self
+
+            if verbose:
+                robot_names = [gm.geometryObjects[i].name for i in robot_geom_ids]
+                obs_names = [gm.geometryObjects[i].name for i in obs_geom_ids]
+                print(f"      Robot geoms ({len(robot_geom_ids)}): "
+                      f"{robot_names[:max_pairs]}")
+                print(f"      Obstacle geoms ({len(obs_geom_ids)}): "
+                      f"{obs_names[:max_pairs]}")
+
+            removed = 0
+            for rid in robot_geom_ids:
+                for oid in obs_geom_ids:
+                    if rid == oid:
+                        continue  # CollisionPair requires distinct indices
+                    cp = CollisionPair(rid, oid)
+                    if gm.existCollisionPair(cp):
+                        gm.removeCollisionPair(cp)
+                        removed += 1
+            print(f"      [pyhpp] removed {removed} collision pair(s) between "
+                  f"{robot_frame_or_joint!r} subtree and "
+                  f"{obstacle_root_joint!r} subtree")
             return self
 
         robot = self.planner.get_robot()
