@@ -1145,6 +1145,58 @@ class PyHPPBackend(BackendBase):
         iterations = int(self._transition_max_iterations * scale)
         return (timeout, iterations)
 
+    def _project_onto_leaf(
+        self,
+        edge: Any,
+        q_rhs: np.ndarray,
+        q_target: np.ndarray,
+        edge_name: str = "unknown",
+    ) -> np.ndarray:
+        """Project q_target onto the constraint leaf defined by q_rhs.
+        
+        Args:
+            edge: Transition edge object
+            q_rhs: Configuration defining the leaf (typically q1/q_init)
+            q_target: Configuration to project (typically q2/q_goal)
+            edge_name: Edge name for error messages
+            
+        Returns:
+            Projected configuration
+            
+        Raises:
+            RuntimeError: If projection unavailable or fails
+        """
+        if not hasattr(self.graph, 'applyLeafConstraints'):
+            raise RuntimeError(
+                f"PYHPP-GAP: Cannot project q_goal onto leaf for edge '{edge_name}'. "
+                "applyLeafConstraints not available in this pyhpp build. "
+                "This is required for TransitionPlanner. "
+                "Workaround: use backend='corba' or rebuild hpp-python with full bindings."
+            )
+        
+        try:
+            ok, q_projected, residual = self.graph.applyLeafConstraints(
+                edge, q_rhs, q_target
+            )
+            
+            if not ok:
+                residual_norm = float(np.linalg.norm(np.asarray(residual, dtype=float)))
+                threshold = float(self.graph.errorThreshold())
+                raise RuntimeError(
+                    f"Failed to project q_goal onto leaf for edge '{edge_name}'. "
+                    f"Residual={residual_norm:.6f}, threshold={threshold:.6f}. "
+                    "The goal configuration may be incompatible with edge constraints."
+                )
+            
+            return np.asarray(q_projected, dtype=float)
+            
+        except RuntimeError:
+            raise  # Re-raise our own errors
+        except Exception as exc:
+            raise RuntimeError(
+                f"applyLeafConstraints failed for edge '{edge_name}': {exc}"
+            ) from exc
+
     def configure_transition_planner(
         self,
         *,
@@ -1400,6 +1452,13 @@ class PyHPPBackend(BackendBase):
     ) -> Tuple[Union[int, Any], Any]:
         """Plan a transition along a specific graph edge.
         
+        PYHPP-GAP: Requires graph.applyLeafConstraints() binding.
+        - CORBA backend: Leaf projection happens internally in C++
+        - PyHPP backend: Must explicitly call applyLeafConstraints() in Python
+        
+        If applyLeafConstraints is not available, this method will raise
+        RuntimeError. Workaround: use backend='corba' or rebuild hpp-python.
+        
         Implements smart planning strategy:
         - Applies distance-based timeout/iteration scaling
         - Skips directPath for waypoint pregrasp/grasp edges
@@ -1534,28 +1593,20 @@ class PyHPPBackend(BackendBase):
                     "(graph or transition states not available)"
                 )
 
-        # For waypoint edges, project q2 onto leaf constraints.
-        # pyhpp's TransitionPlanner strictly requires leaf satisfaction
-        # (CORBA does this internally, pyhpp does not).
-        if hasattr(self.graph, 'applyLeafConstraints'):
-            try:
-                # applyLeafConstraints(edge, q_rhs, q) → (success, q_proj, residual)
-                # q_rhs (q1) sets the foliation leaf; q2 is projected onto it
-                ok, q2_projected, _residual = self.graph.applyLeafConstraints(
-                    tr, q1_arr, q2_arr
-                )
-                if ok:
-                    q2_arr = np.asarray(q2_projected, dtype=float)
-                    print("      [TP] Applied leaf constraints to q2")
-                else:
-                    print(
-                        "      [TP] Warning: applyLeafConstraints "
-                        "returned False for q2"
-                    )
-            except Exception as exc:
-                print(
-                    f"      [TP] Warning: applyLeafConstraints failed: {exc}"
-                )
+        # MANDATORY: Project q2 onto the constraint leaf defined by q1.
+        # TransitionPlanner strictly requires this (CORBA does it internally, pyhpp doesn't).
+        try:
+            q2_arr = self._project_onto_leaf(tr, q1_arr, q2_arr, edge_name)
+            print("      [TP] Projected q2 onto constraint leaf")
+        except RuntimeError as exc:
+            # Provide actionable guidance
+            raise RuntimeError(
+                f"Cannot plan edge '{edge_name}' from q1 to q2: {exc}\n"
+                "Possible solutions:\n"
+                "  1. Use backend='corba' instead of 'pyhpp'\n"
+                "  2. Rebuild hpp-python with full manipulation bindings\n"
+                "  3. Ensure q2 was generated on the correct constraint manifold"
+            ) from exc
 
         # Smart planning strategy based on edge type
         is_waypoint_pregrasp = self._is_pregrasp_edge(edge_name)
@@ -1644,7 +1695,11 @@ class PyHPPBackend(BackendBase):
         time_parameterize: bool = True,
         store: bool = True,
     ) -> Union[int, Any]:
-        """Plan a multi-edge transition sequence and concatenate results."""
+        """Plan a multi-edge transition sequence and concatenate results.
+        
+        IMPORTANT: Each waypoint is re-projected onto its edge's constraint leaf
+        to ensure leaf consistency across the sequence.
+        """
         if len(waypoints) != len(edges) + 1:
             raise ValueError(
                 "Expected len(waypoints) == len(edges) + 1, got %d and %d"
@@ -1652,11 +1707,43 @@ class PyHPPBackend(BackendBase):
             )
 
         pv_total: Optional[Any] = None
+        
+        # Pre-project all waypoints onto their respective edge leaves
+        # to ensure constraint consistency across the sequence
+        projected_waypoints = []
+        
+        for i, edge in enumerate(edges):
+            tr = self._resolve_transition(edge)
+            edge_name = tr.name() if hasattr(tr, "name") else str(edge)
+            
+            # Convert waypoints to numpy arrays
+            q1 = np.asarray(waypoints[i], dtype=float)
+            q2 = np.asarray(waypoints[i + 1], dtype=float)
+            
+            # Project both q1 and q2 onto this edge's leaf
+            # (q1 defines the leaf, q2 is projected onto it)
+            try:
+                q2_proj = self._project_onto_leaf(tr, q1, q2, edge_name)
+                
+                # Store projected configs
+                if i == 0:
+                    projected_waypoints.append(q1)  # First waypoint (initial config)
+                projected_waypoints.append(q2_proj)
+                
+                print(f"      [seq] Edge {i}: '{edge_name}' — waypoints projected")
+                
+            except RuntimeError as exc:
+                raise RuntimeError(
+                    f"Cannot project waypoints for edge {i} ('{edge_name}'): {exc}\n"
+                    "Multi-edge sequences require leaf projection support."
+                ) from exc
+        
+        # Now plan each edge with projected waypoints
         for i, edge in enumerate(edges):
             pv_i, _ = self.plan_transition_edge(
                 edge,
-                waypoints[i],
-                waypoints[i + 1],
+                projected_waypoints[i],
+                projected_waypoints[i + 1],
                 validate=validate,
                 reset_roadmap=reset_roadmap,
                 time_parameterize=time_parameterize,
