@@ -411,16 +411,21 @@ class ConstraintBuilder:
                 # Boost.Python requires an Eigen vector (numpy array), not list
                 values = np.array(q_ref[rank:rank + size], dtype=float)
 
-                # Use Equality comparison type so the RHS can be updated
-                # (equivalent to CORBA's setConstantRightHandSide(..., False))
+                # Use EqualToZero: the locked value is baked into the
+                # ConstantFunction at creation time.  Equality would make
+                # this a foliation constraint whose RHS is updated from the
+                # start config on every generateTargetConfig call, triggering
+                # the use-after-free in ExplicitConstraintSet::rightHandSideFromInput.
+                # comparisonType must have size nv (velocity DOF), not nq.
+                nv = model.joints[jid].nv
                 comp = ComparisonTypes()
-                comp[:] = tuple([ComparisonType.Equality] * size)
+                comp[:] = tuple([ComparisonType.EqualToZero] * nv)
 
                 try:
                     locked = LockedJoint(robot, jn, values, comp)
                     locked_constraints.append(locked)
                     frozen_names.append(jn)
-                    print(f"    ✓ Locked joint (PyHPP): {jn} (size={size})")
+                    print(f"    ✓ Locked joint (PyHPP): {jn} (nq={size}, nv={nv})")
                 except Exception as e:
                     print(f"   ⚠ Failed to lock {jn}: {e}")
 
@@ -458,9 +463,13 @@ class ConstraintBuilder:
                 constraint_name = f"locked_{jn}"
                 try:
                     create_locked(constraint_name, jn, values)
-                    # Make RHS non-constant so it can be updated if needed
+                    # Make RHS constant (True = EqualToZero semantics).
+                    # False would call comparisonType(name, Equality) inside
+                    # the CORBA server, making the joint a foliation constraint
+                    # whose RHS is updated per leaf — triggering the
+                    # use-after-free in ExplicitConstraintSet::rightHandSideFromInput.
                     if callable(set_rhs):
-                        set_rhs(constraint_name, False)
+                        set_rhs(constraint_name, True)
                     constraint_names.append(constraint_name)
                     frozen_names.append(jn)
                     print(f"    ✓ Locked joint: {jn} (size={size})")
