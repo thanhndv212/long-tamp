@@ -344,7 +344,29 @@ class ConfigGenerator:
                 success = res
                 config = q_target.tolist() if success else None
                 last_err = err
+
             if success:
+                # Debug: print config and check for invalid values
+                print(f"       [DEBUG] Generated config via edge '{edge_name}' (attempt {i+1}):")
+                print(f"         config = {config}")
+                if config is None:
+                    print(f"         [ERROR] Config is None!")
+                    continue
+                config_arr = np.array(config)
+                if not np.all(np.isfinite(config_arr)):
+                    print(f"         [ERROR] Config contains non-finite values: {config_arr}")
+                    # Print offending indices and values
+                    for idx, val in enumerate(config_arr):
+                        if not np.isfinite(val):
+                            print(f"           [BAD] idx={idx}, value={val}")
+                    continue
+                # Check for frame_gripper/root_joint specifically
+                joint_name = 'frame_gripper/root_joint'
+                if hasattr(self.robot, 'rankInConfiguration') and joint_name in self.robot.rankInConfiguration:
+                    idx = self.robot.rankInConfiguration[joint_name]
+                    val = config_arr[idx]
+                    if not (-2 <= val <= 2):
+                        print(f"         [ERROR] {joint_name} value out of bounds: {val}")
                 is_valid, valid_err = self.is_config_valid(config)
                 if not is_valid:
                     last_valid_err = valid_err
