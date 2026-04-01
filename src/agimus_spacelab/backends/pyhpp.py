@@ -79,21 +79,22 @@ class PyHPPBackend(BackendBase):
         self._transition_optimizers_by_edge_name: Dict[str, List[str]] = {}
 
         # Optimizer profiles for different edge types
-        # Transit edges (free motion): Use random shortcut optimization
+        # Transit edges (free motion): Use graph-aware shortcut (best available in PyHPP)
         self._transit_edge_optimizers = [
-            "RandomShortcut",
+            "GraphRandomShortcut",
         ]
-        # Waypoint edges (constrained motion): Use random shortcut optimization
+        # Waypoint edges (constrained motion): Use manipulation-aware optimizers
         self._waypoint_pregrasp_optimizers = [
-            "RandomShortcut",
+            "ManipulationRandomShortcut",
+            "EnforceTransitionSemantic",
         ]
-        # Waypoint edges (constrained motion): Simple time param only
+        # Waypoint edges (constrained motion): Use manipulation-aware shortcut
         self._waypoint_grasp_optimizers = [
-            "SimpleTimeParameterization",
+            "ManipulationRandomShortcut",
         ]
         # Default fallback
         self._transition_default_optimizers = [
-            "SimpleTimeParameterization",
+            "ManipulationRandomShortcut",
         ]
 
         # Time parameterization parameters
@@ -1173,12 +1174,12 @@ class PyHPPBackend(BackendBase):
                 "This is required for TransitionPlanner. "
                 "Workaround: use backend='corba' or rebuild hpp-python with full bindings."
             )
-        
+
         try:
             ok, q_projected, residual = self.graph.applyLeafConstraints(
                 edge, q_rhs, q_target
             )
-            
+
             if not ok:
                 residual_norm = float(np.linalg.norm(np.asarray(residual, dtype=float)))
                 threshold = float(self.graph.errorThreshold())
@@ -1187,9 +1188,9 @@ class PyHPPBackend(BackendBase):
                     f"Residual={residual_norm:.6f}, threshold={threshold:.6f}. "
                     "The goal configuration may be incompatible with edge constraints."
                 )
-            
+
             return np.asarray(q_projected, dtype=float)
-            
+
         except RuntimeError:
             raise  # Re-raise our own errors
         except Exception as exc:
@@ -1707,37 +1708,37 @@ class PyHPPBackend(BackendBase):
             )
 
         pv_total: Optional[Any] = None
-        
+
         # Pre-project all waypoints onto their respective edge leaves
         # to ensure constraint consistency across the sequence
         projected_waypoints = []
-        
+
         for i, edge in enumerate(edges):
             tr = self._resolve_transition(edge)
             edge_name = tr.name() if hasattr(tr, "name") else str(edge)
-            
+
             # Convert waypoints to numpy arrays
             q1 = np.asarray(waypoints[i], dtype=float)
             q2 = np.asarray(waypoints[i + 1], dtype=float)
-            
+
             # Project both q1 and q2 onto this edge's leaf
             # (q1 defines the leaf, q2 is projected onto it)
             try:
                 q2_proj = self._project_onto_leaf(tr, q1, q2, edge_name)
-                
+
                 # Store projected configs
                 if i == 0:
                     projected_waypoints.append(q1)  # First waypoint (initial config)
                 projected_waypoints.append(q2_proj)
-                
+
                 print(f"      [seq] Edge {i}: '{edge_name}' — waypoints projected")
-                
+
             except RuntimeError as exc:
                 raise RuntimeError(
                     f"Cannot project waypoints for edge {i} ('{edge_name}'): {exc}\n"
                     "Multi-edge sequences require leaf projection support."
                 ) from exc
-        
+
         # Now plan each edge with projected waypoints
         for i, edge in enumerate(edges):
             pv_i, _ = self.plan_transition_edge(
