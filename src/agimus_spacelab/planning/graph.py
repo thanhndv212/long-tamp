@@ -336,12 +336,11 @@ class GraphBuilder:
 
     def add_global_constraints(
         self,
-        constraint_names: List[str],
+        constraint_names: List,
     ) -> bool:
         """Add numerical constraints globally to the graph.
 
         Adds constraints to the entire graph (all nodes and edges).
-        Uses graph.addConstraints(graph=True, ...) internally.
 
         This is useful for:
         - Locked joint constraints (freeze joints during planning)
@@ -350,7 +349,8 @@ class GraphBuilder:
         Note: Must be called BEFORE the graph is initialized.
 
         Args:
-            constraint_names: List of constraint names to add
+            constraint_names: CORBA: list of constraint name strings.
+                PyHPP: list of Implicit/LockedJoint constraint objects.
 
         Returns:
             True if constraints were added successfully
@@ -365,10 +365,7 @@ class GraphBuilder:
                     constraints=Constraints(numConstraints=constraint_names),
                 )
             else:  # pyhpp
-                self.graph.addConstraints(
-                    graph=True,
-                    numConstraints=constraint_names,
-                )
+                self.graph.addNumericalConstraintsToGraph(constraint_names)
             print(f"    ✓ Added {len(constraint_names)} global constraints: ",
                   f" {constraint_names}")
             return True

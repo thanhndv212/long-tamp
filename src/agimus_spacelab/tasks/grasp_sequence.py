@@ -553,6 +553,7 @@ class GraspSequencePlanner:
                             self.graph_builder.robot,
                             q_current,  # Use current config for joint values
                             frozen_arms,
+                            backend=self.graph_builder.backend,
                         )
                     )
 
@@ -560,10 +561,8 @@ class GraspSequencePlanner:
                         phase_graph_constraints = constraint_names
                         if verbose:
                             joint_list = ", ".join(sorted(joint_names))
-                            print(
-                                f"  \u2713 Created {len(joint_names)} "
-                                f"locked joint constraints: {joint_list}"
-                            )
+                            print(f"  \u2713 Created {len(joint_names)} locked joint constraints: {joint_list}")
+                            print(f"     Constraint names: {constraint_names}")
 
             try:
                 self.graph_builder.build_phase_graph(
@@ -792,18 +791,29 @@ class GraspSequencePlanner:
                         q_from=q_start,
                         config_label=f"q_phase{phase_idx}_edge{edge_idx}",
                     )
-                    if not ok or q_target is None:
-                        raise RuntimeError(
-                            f"Failed to generate target via edge "
-                            f"'{edge_name}'"
-                        )
+                    # Print and check the generated configuration
+                    import numpy as np
                     edge_stat["gen_time"] = time.time() - gen_start
-
                     if verbose:
-                        print(
-                            f"     ✓ Generated target config "
-                            f"({edge_stat['gen_time']:.2f}s)"
+                        print(f"     ✓ Generated target config ({edge_stat['gen_time']:.2f}s)")
+                        print(f"     q_target: {q_target}")
+                        if q_target is not None:
+                            arr = np.array(q_target)
+                            print(f"     q_target finite: {np.all(np.isfinite(arr))}")
+                            print(f"     q_target min/max: {arr.min()} / {arr.max()}")
+                    # Check for NaN/inf or None
+                    if not ok or q_target is None or not np.all(np.isfinite(q_target)):
+                        raise RuntimeError(
+                            f"Failed to generate valid target via edge '{edge_name}': q_target={q_target}"
                         )
+
+                    # Visualize the configuration before planning
+                    try:
+                        print(f"     Visualizing q_target for edge '{edge_name}' before planning...")
+                        self.planner.visualize(q_target)
+                        print("     ✓ q_target sent to viewer")
+                    except Exception as e:
+                        print(f"     ⚠ Could not visualize q_target: {e}")
 
                 except Exception as e:
                     edge_stat["gen_time"] = time.time() - gen_start
@@ -1279,6 +1289,7 @@ class GraspSequencePlanner:
                             self.graph_builder.robot,
                             q_current,
                             frozen_arms,
+                            backend=self.graph_builder.backend,
                         )
                     )
 

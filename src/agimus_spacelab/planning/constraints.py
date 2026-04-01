@@ -20,6 +20,7 @@ try:
         ComparisonTypes,
         ComparisonType,
         Implicit,
+        LockedJoint,
     )
     from pinocchio import SE3, StdVec_Bool as Mask
     HAS_PYHPP_CONSTRAINTS = True
@@ -30,6 +31,7 @@ except ImportError:
     ComparisonTypes = None
     ComparisonType = None
     Implicit = None
+    LockedJoint = None
     SE3 = None
     Mask = None
 
@@ -353,24 +355,24 @@ class ConstraintBuilder:
         robot,
         q_ref: List[float],
         patterns: List[str],
+        backend: str = "corba",
     ) -> tuple:
         """Create locked joint constraints for freezing joints.
 
-        Uses ps.createLockedJoint like in tiago_hpp.py example.
         Locks joints whose names contain any of the given pattern substrings.
 
         Args:
-            ps: Problem solver instance
-            robot: Robot instance with getJointNames(), getJointConfigSize(),
-                and rankInConfiguration
+            ps: Problem solver instance (CORBA) or Problem (PyHPP)
+            robot: Robot/Device instance
             q_ref: Reference configuration to extract joint values from
             patterns: List of substrings to match against joint names
                 (case-insensitive)
+            backend: "corba" or "pyhpp"
 
         Returns:
-            Tuple of (constraint_names, joint_names):
-            - constraint_names: List of created constraint names
-            - joint_names: List of joint names that were locked
+            Tuple of (locked, joint_names):
+            - CORBA: (List[str] constraint names, List[str] joint names)
+            - PyHPP:  (List[LockedJoint] objects,  List[str] joint names)
 
         Example:
             # Lock all gripper joints
@@ -378,59 +380,94 @@ class ConstraintBuilder:
                 ps, robot, q_init, ["gripper"]
             )
         """
-        if not patterns:
-            return [], []
-
-        if robot is None or ps is None:
-            return [], []
-
-        # Check for required methods
-        get_joint_names = getattr(robot, "getJointNames", None)
-        get_size = getattr(robot, "getJointConfigSize", None)
-        rank_map = getattr(robot, "rankInConfiguration", None)
-        create_locked = getattr(ps, "createLockedJoint", None)
-        set_rhs = getattr(ps, "setConstantRightHandSide", None)
-
-        all_required = [get_joint_names, get_size, create_locked]
-        if not all(callable(f) for f in all_required):
-            return [], []
-        if rank_map is None:
+        if not patterns or robot is None or ps is None:
             return [], []
 
         patterns_l = [p.lower() for p in patterns]
-        constraint_names: List[str] = []
-        frozen_names: List[str] = []
 
-        for jn in get_joint_names():
-            jn_l = jn.lower()
-            if not any(p in jn_l for p in patterns_l):
-                continue
-            try:
-                size = int(get_size(jn))
-                rank = int(rank_map[jn])
-            except Exception:
-                continue
-            if size <= 0 or rank < 0 or rank + size > len(q_ref):
-                continue
+        if backend == "pyhpp":
+            if not HAS_PYHPP_CONSTRAINTS:
+                raise ImportError("pyhpp.constraints not available")
 
-            # Extract joint values from reference config
-            values = [float(q_ref[rank + k]) for k in range(size)]
+            model = robot.model()
+            locked_constraints = []
+            frozen_names: List[str] = []
 
-            # Create locked joint constraint
-            constraint_name = f"locked_{jn}"
-            try:
-                create_locked(constraint_name, jn, values)
-                # Make RHS non-constant so it can be updated if needed
-                if callable(set_rhs):
-                    set_rhs(constraint_name, False)
-                constraint_names.append(constraint_name)
-                frozen_names.append(jn)
-                print(f"    ✓ Locked joint: {jn} (size={size})")
-            except Exception as e:
-                print(f"   ⚠ Failed to lock {jn}: {e}")
-                continue
+            for jn in robot.getJointNames():
+                if not any(p in jn.lower() for p in patterns_l):
+                    continue
+                if not model.existJointName(jn):
+                    continue
+                try:
+                    jid = model.getJointId(jn)
+                    rank = model.joints[jid].idx_q
+                    size = model.joints[jid].nq
+                except Exception:
+                    continue
+                if size <= 0 or rank < 0 or rank + size > len(q_ref):
+                    continue
 
-        return constraint_names, frozen_names
+                import numpy as np
+                # Boost.Python requires an Eigen vector (numpy array), not list
+                values = np.array(q_ref[rank:rank + size], dtype=float)
+
+                # Use Equality comparison type so the RHS can be updated
+                # (equivalent to CORBA's setConstantRightHandSide(..., False))
+                comp = ComparisonTypes()
+                comp[:] = tuple([ComparisonType.Equality] * size)
+
+                try:
+                    locked = LockedJoint(robot, jn, values, comp)
+                    locked_constraints.append(locked)
+                    frozen_names.append(jn)
+                    print(f"    ✓ Locked joint (PyHPP): {jn} (size={size})")
+                except Exception as e:
+                    print(f"   ⚠ Failed to lock {jn}: {e}")
+
+            return locked_constraints, frozen_names
+
+        else:
+            # CORBA backend
+            get_joint_names = getattr(robot, "getJointNames", None)
+            get_size = getattr(robot, "getJointConfigSize", None)
+            rank_map = getattr(robot, "rankInConfiguration", None)
+            create_locked = getattr(ps, "createLockedJoint", None)
+            set_rhs = getattr(ps, "setConstantRightHandSide", None)
+
+            all_required = [get_joint_names, get_size, create_locked]
+            if not all(callable(f) for f in all_required):
+                return [], []
+            if rank_map is None:
+                return [], []
+
+            constraint_names: List[str] = []
+            frozen_names = []
+
+            for jn in get_joint_names():
+                if not any(p in jn.lower() for p in patterns_l):
+                    continue
+                try:
+                    size = int(get_size(jn))
+                    rank = int(rank_map[jn])
+                except Exception:
+                    continue
+                if size <= 0 or rank < 0 or rank + size > len(q_ref):
+                    continue
+
+                values = [float(q_ref[rank + k]) for k in range(size)]
+                constraint_name = f"locked_{jn}"
+                try:
+                    create_locked(constraint_name, jn, values)
+                    # Make RHS non-constant so it can be updated if needed
+                    if callable(set_rhs):
+                        set_rhs(constraint_name, False)
+                    constraint_names.append(constraint_name)
+                    frozen_names.append(jn)
+                    print(f"    ✓ Locked joint: {jn} (size={size})")
+                except Exception as e:
+                    print(f"   ⚠ Failed to lock {jn}: {e}")
+
+            return constraint_names, frozen_names
 
 
 class FactoryConstraintRegistry:

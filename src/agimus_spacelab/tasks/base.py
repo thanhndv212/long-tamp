@@ -265,7 +265,8 @@ class ManipulationTask:
             if q_ref:
                 constraint_names, frozen_names = (
                     ConstraintBuilder.create_locked_joint_constraints(
-                        self.ps, self.robot, q_ref, patterns
+                        self.ps, self.robot, q_ref, patterns,
+                        backend=self.backend,
                     )
                 )
                 if frozen_names:
