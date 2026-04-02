@@ -1,0 +1,93 @@
+# GraspBall task configuration (YAML)
+# UR5 robot grasps pokeball from box scenario.
+#
+# Consumed by: YamlTaskLoader (src/agimus_spacelab/config/yaml_loader.py)
+# Test script:  script/graspball/test_graspball_yaml.py
+
+task: graspball
+
+# ---------------------------------------------------------------------------
+# File paths (used by SceneBuilder)
+# ---------------------------------------------------------------------------
+paths:
+  robot:
+    ur5:
+      urdf: "package://hpp_practicals/urdf/ur5_gripper.urdf"
+      srdf: ""
+
+  environment:
+    ground: "package://hpp_practicals/urdf/ur_benchmark/ground.urdf"
+    box:    "package://hpp_practicals/urdf/ur_benchmark/box.urdf"
+
+  objects:
+    pokeball:
+      urdf: "package://hpp_practicals/urdf/ur_benchmark/pokeball.urdf"
+      srdf: "package://hpp_practicals/srdf/ur_benchmark/pokeball.srdf"
+
+# ---------------------------------------------------------------------------
+# Scene selection
+# ---------------------------------------------------------------------------
+robots:
+  - ur5
+
+environments:
+  - ground
+  - box
+
+# ---------------------------------------------------------------------------
+# Robot joint groups
+# Each joint entry: {joint: <name>, initial: <rad>, bounds: [lo, hi]}
+# ---------------------------------------------------------------------------
+joint_groups:
+  UR5:
+    - {joint: ur5/shoulder_pan_joint,  initial:  0.00, bounds: [-6.2832, 6.2832]}
+    - {joint: ur5/shoulder_lift_joint, initial: -1.57, bounds: [-6.2832, 6.2832]}
+    - {joint: ur5/elbow_joint,         initial:  1.57, bounds: [-6.2832, 6.2832]}
+    - {joint: ur5/wrist_1_joint,       initial:  0.00, bounds: [-6.2832, 6.2832]}
+    - {joint: ur5/wrist_2_joint,       initial:  0.00, bounds: [-6.2832, 6.2832]}
+    - {joint: ur5/wrist_3_joint,       initial:  0.00, bounds: [-6.2832, 6.2832]}
+
+# ---------------------------------------------------------------------------
+# Freeflyer bounds applied to every object root joint
+# translation: [[xmin,xmax], [ymin,ymax], [zmin,zmax]]
+# quaternion:  [[qxmin,qxmax], ...]
+# ---------------------------------------------------------------------------
+freeflyer_bounds:
+  translation: [[-0.4, 0.4], [-0.4, 0.4], [-0.1, 1.0]]
+  quaternion:  [[-1.0001, 1.0001], [-1.0001, 1.0001],
+                [-1.0001, 1.0001], [-1.0001, 1.0001]]
+
+# ---------------------------------------------------------------------------
+# Objects
+# initial_pose_xyzquat: [x, y, z, qx, qy, qz, qw]
+# ---------------------------------------------------------------------------
+objects:
+  pokeball:
+    initial_pose_xyzquat: [0.3, 0.0, 0.025, 0.0, 0.0, 0.0, 1.0]
+    handles:
+      - pokeball/handle
+    contact_surfaces: []
+
+# ---------------------------------------------------------------------------
+# Grippers (flat list of gripper frame names)
+# ---------------------------------------------------------------------------
+grippers:
+  - ur5/gripper
+
+# ---------------------------------------------------------------------------
+# Valid gripper → handle pairs (drives factory graph construction)
+# ---------------------------------------------------------------------------
+valid_pairs:
+  ur5/gripper:
+    - pokeball/handle
+
+environment_contacts: {}
+
+# ---------------------------------------------------------------------------
+# Planning defaults
+# ---------------------------------------------------------------------------
+planning:
+  validation_step: 0.01
+  projector_step: 0.1
+  max_iterations: 1000
+  max_random_attempts: 1000
