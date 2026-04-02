@@ -451,7 +451,16 @@ class PyHPPBackend(BackendBase):
         length = path.length()
 
         while t <= length:
-            q = path(t)
+            result = path(t)
+            # pyhpp path.__call__ returns (configuration, success) tuple
+            if isinstance(result, tuple):
+                q_vec, ok = result
+                if not ok:
+                    t += dt
+                    continue
+                q = np.array(q_vec)
+            else:
+                q = np.array(result)
             self.viewer(q)
             time.sleep(dt)
             t += dt
@@ -1770,13 +1779,17 @@ class PyHPPBackend(BackendBase):
         """Store a PathVector locally and play it in the viewer.
 
         Args:
-            path_vector: PathVector to store and play.
+            path_vector: PathVector object or integer path ID (already stored).
             speed: Playback speed multiplier (currently unused; reserved).
 
         Returns:
             Index of the stored path.
         """
-        path_index = self.store_path(path_vector)
+        # plan_transition_edge returns an int id when store=True; accept it directly
+        if isinstance(path_vector, int):
+            path_index = path_vector
+        else:
+            path_index = self.store_path(path_vector)
         if self.viewer is None:
             self.visualize()
         self.play_path(path_index)
@@ -1802,7 +1815,11 @@ class PyHPPBackend(BackendBase):
         Returns:
             Index of the stored path.
         """
-        path_index = self.store_path(path_vector)
+        # plan_transition_edge returns an int id when store=True; accept it directly
+        if isinstance(path_vector, int):
+            path_index = path_vector
+        else:
+            path_index = self.store_path(path_vector)
         if self.viewer is None:
             self.visualize()
         if visualizer is not None and graph_builder is not None:
@@ -1884,7 +1901,11 @@ class PyHPPBackend(BackendBase):
         Returns:
             Tuple of (path_index, video_file_path).
         """
-        path_index = self.store_path(path_vector)
+        # plan_transition_edge returns an int id when store=True; accept it directly
+        if isinstance(path_vector, int):
+            path_index = path_vector
+        else:
+            path_index = self.store_path(path_vector)
         video_file = self.play_and_record_path(
             path_index,
             video_name=video_name,
