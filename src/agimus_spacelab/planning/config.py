@@ -9,10 +9,10 @@ from collections import deque
 from typing import Dict, List, Optional, Tuple
 import numpy as np
 
-# Import from package config
-from agimus_spacelab.config.spacelab_config import InitialConfigurations
-
 # Import transformation utilities
+# NOTE: InitialConfigurations is imported lazily inside build_robot_config()
+# and build_object_configs() so that importing this module does not
+# unconditionally pull in SpaceLab-specific configuration.
 try:
     from agimus_spacelab.utils import xyzrpy_to_xyzquat
 except ImportError:
@@ -418,6 +418,7 @@ def build_robot_config(
     if joint_groups is None:
         joint_groups = ["UR10", "VISPA_BASE", "VISPA_ARM"]
 
+    from agimus_spacelab.config.spacelab_config import InitialConfigurations  # noqa: PLC0415
     q_robot = []
     for group in joint_groups:
         if hasattr(InitialConfigurations, group):
@@ -438,6 +439,7 @@ def build_object_configs(object_names: List[str]) -> List[float]:
     Returns:
         Concatenated object configurations in XYZQUAT format
     """
+    from agimus_spacelab.config.spacelab_config import InitialConfigurations  # noqa: PLC0415
     q_objects = []
 
     for obj_name in object_names:
