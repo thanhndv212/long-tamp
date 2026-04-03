@@ -794,18 +794,20 @@ class GraspSequencePlanner:
                     # Print and check the generated configuration
                     import numpy as np
                     edge_stat["gen_time"] = time.time() - gen_start
-                    if verbose:
-                        print(f"     ✓ Generated target config ({edge_stat['gen_time']:.2f}s)")
-                        print(f"     q_target: {q_target}")
-                        if q_target is not None:
-                            arr = np.array(q_target)
-                            print(f"     q_target finite: {np.all(np.isfinite(arr))}")
-                            print(f"     q_target min/max: {arr.min()} / {arr.max()}")
+
                     # Check for NaN/inf or None
                     if not ok or q_target is None or not np.all(np.isfinite(q_target)):
                         raise RuntimeError(
                             f"Failed to generate valid target via edge '{edge_name}': q_target={q_target}"
                         )
+                    else:
+                        if verbose:
+                            print(f"     ✓ Generated target config ({edge_stat['gen_time']:.2f}s)")
+                            print(f"     q_target: {q_target}")
+                            # if q_target is not None:
+                            #     arr = np.array(q_target)
+                            #     print(f"     q_target finite: {np.all(np.isfinite(arr))}")
+                            #     print(f"     q_target min/max: {arr.min()} / {arr.max()}")
 
                     # Visualize the configuration before planning
                     try:
