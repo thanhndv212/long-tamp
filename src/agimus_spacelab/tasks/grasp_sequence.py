@@ -2320,6 +2320,7 @@ class InteractiveGraspSequenceBuilder:
             return {"success": False, "error": "q_init not available"}
 
         # Step 4: Create and run planner
+        planner = None
         try:
             planner = GraspSequencePlanner(
                 graph_builder=self.task.graph_builder,
@@ -2369,7 +2370,7 @@ class InteractiveGraspSequenceBuilder:
             print(f"\nSequence planning error: {e}")
             import traceback
             traceback.print_exc()
-            return {"success": False, "error": str(e)}
+            return {"success": False, "error": str(e), "planner": planner}
 
     def _ensure_task_ready(self) -> bool:
         """Ensure task is set up for planning."""
