@@ -817,6 +817,7 @@ class FactoryConstraintRegistry:
         self,
         constraint_defs: List[tuple],
         obj_name: str,
+        skip_placement: bool = False,
     ) -> Dict[str, str]:
         """Register constraints from get_constraint_defs() with factory naming.
 
@@ -829,6 +830,15 @@ class FactoryConstraintRegistry:
             constraint_defs: List of (type, name, args) tuples from
                 config.get_constraint_defs()
             obj_name: Object name for placement constraints (e.g., "frame_gripper")
+            skip_placement: If True, skip registration of placement and
+                complement constraints.  Use this with the PyHPP backend when
+                the object has no contact surfaces: the
+                ConstraintGraphFactory.buildPlacement no-contacts path
+                internally creates LockedJoint constraints (which correctly
+                parameterise the free-state foliation).  Pre-registering a
+                RelativeTransformation placement constraint causes
+                buildPlacement to bypass that path, resulting in the wrong
+                constraint type on sub-edges and projection failures.
 
         Returns:
             Dict mapping user constraint names to factory constraint names
@@ -861,6 +871,8 @@ class FactoryConstraintRegistry:
                 name_map[user_name] = factory_name
 
             elif ctype == "placement":
+                if skip_placement:
+                    continue
                 # Placement constraint: "place_{obj_name}"
                 transform = args.get("transform")
                 mask = args.get("mask")
@@ -871,6 +883,8 @@ class FactoryConstraintRegistry:
                 name_map[user_name] = factory_name
 
             elif ctype == "complement":
+                if skip_placement:
+                    continue
                 # Complement constraint: "{base}/complement"
                 transform = args.get("transform")
                 mask = args.get("mask")

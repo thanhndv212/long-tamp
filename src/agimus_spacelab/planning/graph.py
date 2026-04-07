@@ -451,6 +451,7 @@ class GraphBuilder:
         config: BaseTaskConfig,
         pyhpp_constraints: Optional[Dict[str, Any]] = None,
         graph_constraints: Optional[List[str]] = None,
+        q_init: Optional[List[float]] = None,
     ) -> Any:
         """
         Create constraint graph using factory for both backends.
@@ -531,6 +532,18 @@ class GraphBuilder:
             print("      Will limit graph to current→next state only")
 
         # Generate graph
+        if self.backend == "pyhpp" and q_init is not None:
+            try:
+                self.robot.currentConfiguration(np.array(q_init, dtype=float))
+                print(
+                    "    ✓ Set robot current configuration for factory "
+                    "graph construction"
+                )
+            except Exception as e:
+                print(
+                    f"    ⚠ Could not set robot current config before "
+                    f"factory.generate(): {e}"
+                )
         self.factory.generate()
         print("    ✓ Generated graph structure")
 
@@ -1052,6 +1065,8 @@ class GraphBuilder:
         pyhpp_constraints: Optional[Dict[str, Any]] = None,
         graph_constraints: Optional[List[str]] = None,
         use_sequential_filter: bool = True,
+        q_init: Optional[List[float]] = None,
+        q_init_original: Optional[List[float]] = None,
     ) -> Any:
         """Build a minimal phase graph for incremental multi-grasp planning.
         
@@ -1258,6 +1273,23 @@ class GraphBuilder:
                 print("    ⚠ Falling back to setPossibleGrasps")
                 use_sequential_filter = False
 
+        # Reset free (unheld) objects to their initial scene positions in
+        # q_init.  Phase N's config generation leaves unconstrained objects
+        # at random positions.  The factory's LockedJoint foliation locks
+        # each object at robot.currentConfiguration() — so if RS1 ended up
+        # at a random position from Phase 1, Phase 2 would lock RS1 there
+        # (unreachable for the arm).  By restoring free objects to their
+        # original positions we ensure the LockedJoint locks them where they
+        # actually are in the scene.
+        if (
+            q_init is not None
+            and q_init_original is not None
+            and self.backend == "pyhpp"
+        ):
+            q_init = self._reset_free_objects_in_q_init(
+                q_init, q_init_original, phase_objects, held_grasps
+            )
+
         # Use the factory graph creation with restricted pairs
         # This will call factory.setPossibleGrasps(phase_valid_pairs)
         # and optionally factory.graspIsAllowed.append(seq_filter)
@@ -1265,7 +1297,70 @@ class GraphBuilder:
             phase_config,
             pyhpp_constraints=pyhpp_constraints,
             graph_constraints=graph_constraints,
+            q_init=q_init,
         )
+
+    def _reset_free_objects_in_q_init(
+        self,
+        q_init: List[float],
+        q_init_original: List[float],
+        phase_objects: List[str],
+        held_grasps: Dict[str, str],
+    ) -> List[float]:
+        """Restore unheld objects in q_init to their original scene positions.
+
+        Objects that are not currently grasped may have ended up at random
+        positions during previous phases' config generation (since they are
+        unconstrained in the previous phase graph).  Before building the next
+        phase's factory graph we must restore them to their real scene poses
+        so the LockedJoint foliation does not lock them at an unreachable spot.
+
+        Args:
+            q_init: Current configuration vector (will not be mutated).
+            q_init_original: Original scene configuration (before any planning).
+            phase_objects: Object names participating in this phase.
+            held_grasps: {gripper_name: handle_name} for currently held grasps.
+        Returns:
+            New configuration vector with free objects at their original poses.
+        """
+        # Determine held objects from handle names  ("obj/handle" → "obj")
+        held_objects: set = {
+            handle.split("/")[0] for handle in held_grasps.values()
+        }
+
+        # Get joint-rank mapping from robot model
+        try:
+            rank_map = dict(self.robot.rankInConfiguration)
+        except Exception:
+            return q_init  # binding not available — skip silently
+
+        q_new = list(q_init)
+
+        for obj_name in phase_objects:
+            if obj_name in held_objects:
+                continue  # position constrained by grasp — keep it
+
+            # Convention: freeflyer root joint is always "{obj}/root_joint".
+            # Both class-based and yaml-loaded configs follow this naming.
+            root_joint = f"{obj_name}/root_joint"
+            rank = rank_map.get(root_joint)
+            if rank is None:
+                continue
+
+            if rank + 7 > len(q_new) or rank + 7 > len(q_init_original):
+                continue
+
+            old_pos = q_new[rank : rank + 3]
+            q_new[rank : rank + 7] = q_init_original[rank : rank + 7]
+            print(
+                f"    ✓ Reset '{obj_name}' to scene-initial pose: "
+                f"[{old_pos[0]:.3f}, {old_pos[1]:.3f}, {old_pos[2]:.3f}]"
+                f" → [{q_init_original[rank]:.3f},"
+                f" {q_init_original[rank+1]:.3f},"
+                f" {q_init_original[rank+2]:.3f}]"
+            )
+
+        return q_new
 
 
 __all__ = ["GraphBuilder"]

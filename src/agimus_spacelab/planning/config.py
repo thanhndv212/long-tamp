@@ -322,6 +322,31 @@ class ConfigGenerator:
                 q_from_arr = np.array(q_from) if not isinstance(
                     q_from, np.ndarray) else q_from
 
+                # Keep all object freeflyer DOF from q_from in q_rand.
+                # Objects not constrained by this edge (e.g. RS1 during a
+                # Phase 1 frame_gripper-only edge) have no constraint and
+                # their DOF pass through q_rand unchanged.  If we use a
+                # fully random q_rand, those objects end up at random
+                # positions in the generated config, corrupting q_init for
+                # the next phase.  Objects that ARE constrained (e.g. a held
+                # object via LockedJoint foliation) will have their DOF
+                # projected to the correct value by the solver regardless of
+                # what q_rand contains, so overriding them here is harmless.
+                try:
+                    rank_map = dict(self.robot.rankInConfiguration)
+                    q_rand_arr = np.array(q_rand, dtype=float)
+                    for joint_name, rank in rank_map.items():
+                        if joint_name.endswith("/root_joint"):
+                            if rank + 7 <= len(q_rand_arr) and rank + 7 <= len(
+                                q_from_arr
+                            ):
+                                q_rand_arr[rank : rank + 7] = q_from_arr[
+                                    rank : rank + 7
+                                ]
+                    q_rand = q_rand_arr
+                except Exception:
+                    pass  # rankInConfiguration not available — fall back to fully random
+
                 # PyHPP bindings often expect a Transition object, not a name.
                 transition = edge_name
                 if isinstance(edge_name, str):

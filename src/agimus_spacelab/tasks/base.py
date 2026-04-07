@@ -124,10 +124,26 @@ class ManipulationTask:
         # Object name for placement constraints (e.g., "frame_gripper")
         obj_name = cfg.TOOL_NAME
 
+        # For PyHPP: when the object has no contact surfaces, the
+        # ConstraintGraphFactory.buildPlacement no-contacts path creates
+        # LockedJoint constraints internally to parameterise the free-state
+        # foliation.  Pre-registering a RelativeTransformation placement
+        # constraint causes buildPlacement to bypass that path (because
+        # placeAlreadyCreated becomes True), which puts the wrong constraint
+        # type on the f_01 sub-edge and makes projection fail with a constant
+        # residual (~0.177).  Skip placement/complement registration in that
+        # case so the factory uses its own LockedJoint foliation.
+        contacts_per_obj = getattr(cfg, "CONTACT_SURFACES_PER_OBJECT", None)
+        env_contacts = getattr(cfg, "ENVIRONMENT_CONTACTS", None)
+        has_contacts = bool(
+            contacts_per_obj and any(contacts_per_obj)
+        ) and bool(env_contacts)
+        skip_placement = (self.backend == "pyhpp") and (not has_contacts)
+
         # Register all constraints with factory naming
         # Maps user names -> factory names
         self._constraint_name_map = registry.register_from_defs(
-            constraint_defs, obj_name
+            constraint_defs, obj_name, skip_placement=skip_placement
         )
 
         # Store for PyHPP graph building
@@ -166,6 +182,7 @@ class ManipulationTask:
                 self.task_config,
                 pyhpp_constraints=self.pyhpp_constraints,
                 graph_constraints=graph_constraints,
+                q_init=self.q_init,
             )
         else:
             return self.graph_builder.create_manual_graph(
