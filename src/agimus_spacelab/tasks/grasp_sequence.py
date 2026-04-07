@@ -85,12 +85,16 @@ def _request_stop_signal_handler(signum, frame):
 
 def enable_graceful_stop():
     """Enable graceful stop via Ctrl+C signal handler."""
-    signal.signal(signal.SIGINT, _request_stop_signal_handler)
+    import threading
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGINT, _request_stop_signal_handler)
 
 
 def disable_graceful_stop():
     """Restore default Ctrl+C behavior."""
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    import threading
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 
 def clear_stop_request():
