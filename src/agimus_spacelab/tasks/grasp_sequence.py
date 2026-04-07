@@ -151,6 +151,7 @@ class GraspSequencePlanner:
         self.backend = backend.lower()
         self.pyhpp_constraints = pyhpp_constraints
         self.graph_constraints = graph_constraints
+        self._MAX_COLLISION_RETRIES = 10
 
         # Auto-save configuration
         self.auto_save_dir = auto_save_dir
@@ -242,7 +243,7 @@ class GraspSequencePlanner:
             # Skip None paths (from skipped phases)
             if path is None:
                 continue
-                
+
             # Generate base filename: phase_01_edge_01_edgename
             edge_name_safe = edge_names[edge_idx].replace("/", "_").replace(" ", "_")
             base_filename = f"phase_{phase_idx + 1:02d}_edge_{edge_idx + 1:02d}_{edge_name_safe}"
@@ -473,6 +474,11 @@ class GraspSequencePlanner:
         self.phase_results = []
         self.original_sequence = list(grasp_sequence)  # Store for resume
         q_current = list(q_init)
+        # Original scene configuration — used to restore free-object positions
+        # before each phase graph build so LockedJoint foliation locks them at
+        # their true scene positions, not at random IK-sampled positions.
+        _q_scene_init = list(q_init)
+        self._q_scene_init = _q_scene_init  # store for resume_planning
 
         for phase_idx, (gripper, handle) in enumerate(grasp_sequence):
             if verbose:
@@ -571,6 +577,8 @@ class GraspSequencePlanner:
                     next_grasp=(gripper, handle),
                     pyhpp_constraints=self.pyhpp_constraints,
                     graph_constraints=phase_graph_constraints,
+                    q_init=q_current,
+                    q_init_original=_q_scene_init,
                 )
 
                 # Update planner backend's graph reference after rebuild
@@ -878,7 +886,7 @@ class GraspSequencePlanner:
 
                     # Use q_target as next start config
                     q_start = q_target
-                    
+
                     # Append None placeholder for skipped path
                     phase_paths.append(None)
                     if self.auto_save_dir:
@@ -889,55 +897,82 @@ class GraspSequencePlanner:
                             f"     ⏭ Skipped motion planning "
                             f"({edge_stat['total_time']:.2f}s total)"
                         )
-                    
+
                     continue
 
-                # Plan transition using TransitionPlanner
+                # Plan transition using TransitionPlanner.
+                # Retry with a fresh q_target if the planner detects a
+                # collision in the generated config (ps.isConfigValid only
+                # checks joint bounds, not self-collision; the planner may
+                # still reject a kinematically valid IK solution as colliding).
+                import numpy as _np
+
                 plan_start = time.time()
-                try:
-                    if verbose:
-                        print("     Planning: q_start -> q_target")
+                last_plan_exc = None
+                path = None
+                geometric_path = None
 
-                    path, geometric_path = self.planner.plan_transition_edge(
-                        edge=edge_name,
-                        q1=q_start,
-                        q2=q_target,
-                    )
+                for _plan_attempt in range(self._MAX_COLLISION_RETRIES):
+                    try:
+                        if verbose:
+                            if _plan_attempt == 0:
+                                print("     Planning: q_start -> q_target")
+                            else:
+                                _prev_reason = (
+                                    str(last_plan_exc).split('\n')[0]
+                                    if last_plan_exc else ""
+                                )
+                                print(
+                                    f"     Planning (attempt {_plan_attempt + 1}) "
+                                    f"[prev failed: {_prev_reason}]"
+                                )
 
-                    # Store geometric path if auto-save is enabled
-                    if self.auto_save_dir:
-                        phase_geometric_paths.append(geometric_path)
-
-                    if path is None:
-                        raise RuntimeError(
-                            f"Planning failed for edge '{edge_name}'"
+                        path, geometric_path = (
+                            self.planner.plan_transition_edge(
+                                edge=edge_name,
+                                q1=q_start,
+                                q2=q_target,
+                            )
                         )
 
-                    edge_stat["plan_time"] = time.time() - plan_start
-                    edge_stat["total_time"] = time.time() - edge_start_time
-                    edge_stat["success"] = True
-                    edge_stats_list.append(edge_stat)
-                    self.total_planning_time += edge_stat["total_time"]
-                    self.edge_stats[(phase_idx, edge_idx)] = edge_stat
+                        if path is None:
+                            raise RuntimeError(
+                                f"Planning failed for edge '{edge_name}'"
+                            )
 
-                    phase_paths.append(path)
+                        last_plan_exc = None
+                        break  # success
 
-                    # Update start config for next edge
-                    # Use end of current path
-                    if hasattr(path, "getInitialConfig") and hasattr(
-                        path, "getEndConfig"
-                    ):
-                        q_start = list(path.getEndConfig())
-                    else:
-                        q_start = q_target
+                    except Exception as _plan_exc:
+                        last_plan_exc = _plan_exc
+                        if (
+                            "Collision" in str(_plan_exc)
+                            and _plan_attempt < self._MAX_COLLISION_RETRIES - 1
+                        ):
+                            if verbose:
+                                print(
+                                    f"     ⚠ Collision in q_target "
+                                    f"(attempt {_plan_attempt + 1}), "
+                                    f"regenerating target config..."
+                                )
+                            _ok2, _q_new = self.config_gen.generate_via_edge(
+                                edge_name=edge_name,
+                                q_from=q_start,
+                                config_label=(
+                                    f"q_phase{phase_idx}_edge{edge_idx}"
+                                ),
+                            )
+                            if (
+                                _ok2
+                                and _q_new is not None
+                                and _np.all(_np.isfinite(_np.array(_q_new)))
+                            ):
+                                q_target = _q_new
+                                if verbose:
+                                    print("     Regenerated target config")
 
-                    if verbose:
-                        print(
-                            f"     ✓ Path found ({edge_stat['plan_time']:.2f}s plan, "
-                            f"{edge_stat['total_time']:.2f}s total)"
-                        )
-
-                except Exception as e:
+                if last_plan_exc is not None:
+                    e = last_plan_exc
                     edge_stat["plan_time"] = time.time() - plan_start
                     edge_stat["total_time"] = time.time() - edge_start_time
                     edge_stats_list.append(edge_stat)
@@ -978,12 +1013,43 @@ class GraspSequencePlanner:
                     }
 
                     if verbose:
-                        print(f"\n  ⚠ Stored partial phase result: {len(phase_paths)} edges completed")
+                        print(
+                            f"\n  ⚠ Stored partial phase result: "
+                            f"{len(phase_paths)} edges completed"
+                        )
 
                     raise RuntimeError(
                         f"Phase {phase_idx + 1}, edge {edge_idx + 1}: "
                         f"Planning failed for '{edge_name}': {e}"
                     ) from e
+
+                # Planning succeeded — record stats and advance
+                # Store geometric path if auto-save is enabled
+                if self.auto_save_dir:
+                    phase_geometric_paths.append(geometric_path)
+
+                edge_stat["plan_time"] = time.time() - plan_start
+                edge_stat["total_time"] = time.time() - edge_start_time
+                edge_stat["success"] = True
+                edge_stats_list.append(edge_stat)
+                self.total_planning_time += edge_stat["total_time"]
+                self.edge_stats[(phase_idx, edge_idx)] = edge_stat
+
+                phase_paths.append(path)
+
+                # Update start config for next edge
+                if hasattr(path, "getInitialConfig") and hasattr(
+                    path, "getEndConfig"
+                ):
+                    q_start = list(path.getEndConfig())
+                else:
+                    q_start = q_target
+
+                if verbose:
+                    print(
+                        f"     ✓ Path found ({edge_stat['plan_time']:.2f}s plan, "
+                        f"{edge_stat['total_time']:.2f}s total)"
+                    )
 
             # Update current config to end of sequence
             q_current = q_start
@@ -1311,6 +1377,8 @@ class GraspSequencePlanner:
                     next_grasp=(gripper, handle),
                     pyhpp_constraints=self.pyhpp_constraints,
                     graph_constraints=phase_graph_constraints,
+                    q_init=q_current,
+                    q_init_original=getattr(self, "_q_scene_init", None),
                 )
 
                 new_graph = self.graph_builder.get_graph()
@@ -1575,7 +1643,7 @@ class GraspSequencePlanner:
 
                     # Use q_target as next start config
                     q_start = q_target
-                    
+
                     # Append None placeholder for skipped path
                     phase_paths.append(None)
                     if self.auto_save_dir:
@@ -1586,51 +1654,78 @@ class GraspSequencePlanner:
                             f"     ⏭ Skipped motion planning "
                             f"({edge_stat['total_time']:.2f}s total)"
                         )
-                    
+
                     continue
 
-                # Plan edge
+                # Plan edge — retry on collision in q_target
+                import numpy as _np
+
                 plan_start = time.time()
-                try:
-                    # Always get both timed and geometric paths
-                    path, geometric_path = self.planner.plan_transition_edge(
-                        edge=edge_name,
-                        q1=q_start,
-                        q2=q_target,
-                    )
+                last_plan_exc = None
+                path = None
+                geometric_path = None
 
-                    # Store geometric path if auto-save is enabled
-                    if self.auto_save_dir:
-                        phase_geometric_paths.append(geometric_path)
-
-                    if path is None:
-                        raise RuntimeError(
-                            f"Planning failed for edge '{edge_name}'"
+                for _plan_attempt in range(self._MAX_COLLISION_RETRIES):
+                    try:
+                        if verbose:
+                            if _plan_attempt == 0:
+                                pass  # label printed above
+                            else:
+                                _prev_reason = (
+                                    str(last_plan_exc).split('\n')[0]
+                                    if last_plan_exc else ""
+                                )
+                                print(
+                                    f"     Planning (attempt {_plan_attempt + 1}) "
+                                    f"[prev failed: {_prev_reason}]"
+                                )
+                        # Always get both timed and geometric paths
+                        path, geometric_path = (
+                            self.planner.plan_transition_edge(
+                                edge=edge_name,
+                                q1=q_start,
+                                q2=q_target,
+                            )
                         )
 
-                    edge_stat["plan_time"] = time.time() - plan_start
-                    edge_stat["total_time"] = time.time() - edge_start_time
-                    edge_stat["success"] = True
-                    edge_stats_list.append(edge_stat)
-                    self.total_planning_time += edge_stat["total_time"]
-                    self.edge_stats[(phase_idx, edge_idx)] = edge_stat
+                        if path is None:
+                            raise RuntimeError(
+                                f"Planning failed for edge '{edge_name}'"
+                            )
 
-                    phase_paths.append(path)
+                        last_plan_exc = None
+                        break  # success
 
-                    if hasattr(path, "getInitialConfig") and hasattr(
-                        path, "getEndConfig"
-                    ):
-                        q_start = list(path.getEndConfig())
-                    else:
-                        q_start = q_target
+                    except Exception as _plan_exc:
+                        last_plan_exc = _plan_exc
+                        if (
+                            "Collision" in str(_plan_exc)
+                            and _plan_attempt < self._MAX_COLLISION_RETRIES - 1
+                        ):
+                            if verbose:
+                                print(
+                                    f"     ⚠ Collision in q_target "
+                                    f"(attempt {_plan_attempt + 1}), "
+                                    f"regenerating target config..."
+                                )
+                            _ok2, _q_new = self.config_gen.generate_via_edge(
+                                edge_name=edge_name,
+                                q_from=q_start,
+                                config_label=(
+                                    f"q_phase{phase_idx}_edge{edge_idx}"
+                                ),
+                            )
+                            if (
+                                _ok2
+                                and _q_new is not None
+                                and _np.all(_np.isfinite(_np.array(_q_new)))
+                            ):
+                                q_target = _q_new
+                                if verbose:
+                                    print("     Regenerated target config")
 
-                    if verbose:
-                        print(
-                            f"     ✓ Path found ({edge_stat['plan_time']:.2f}s plan, "
-                            f"{edge_stat['total_time']:.2f}s total)"
-                        )
-
-                except Exception as e:
+                if last_plan_exc is not None:
+                    e = last_plan_exc
                     edge_stat["plan_time"] = time.time() - plan_start
                     edge_stat["total_time"] = time.time() - edge_start_time
                     edge_stats_list.append(edge_stat)
@@ -1678,6 +1773,32 @@ class GraspSequencePlanner:
                     raise RuntimeError(
                         f"Resume failed at Phase {phase_idx + 1}, edge {edge_idx + 1}: {e}"
                     ) from e
+
+                # Store geometric path if auto-save is enabled
+                if self.auto_save_dir:
+                    phase_geometric_paths.append(geometric_path)
+
+                edge_stat["plan_time"] = time.time() - plan_start
+                edge_stat["total_time"] = time.time() - edge_start_time
+                edge_stat["success"] = True
+                edge_stats_list.append(edge_stat)
+                self.total_planning_time += edge_stat["total_time"]
+                self.edge_stats[(phase_idx, edge_idx)] = edge_stat
+
+                phase_paths.append(path)
+
+                if hasattr(path, "getInitialConfig") and hasattr(
+                    path, "getEndConfig"
+                ):
+                    q_start = list(path.getEndConfig())
+                else:
+                    q_start = q_target
+
+                if verbose:
+                    print(
+                        f"     ✓ Path found ({edge_stat['plan_time']:.2f}s plan, "
+                        f"{edge_stat['total_time']:.2f}s total)"
+                    )
 
             # Phase completed successfully
             q_current = q_start
@@ -1781,7 +1902,7 @@ class GraspSequencePlanner:
         if record:
             print(f"Video recording: ENABLED (output: {output_dir})")
         print("=" * 70)
-        
+
         recorded_videos = []
 
         # Check for path accumulation
@@ -1881,7 +2002,7 @@ class GraspSequencePlanner:
             final_count = self.planner.get_num_stored_paths()
             print(f"\n{'='*70}")
             print(f"Total paths now in ProblemSolver: {final_count}")
-        
+
         if record and recorded_videos:
             print(f"\n📹 Recorded {len(recorded_videos)} videos to {output_dir}")
             return recorded_videos
