@@ -2370,6 +2370,21 @@ class InteractiveGraspSequenceBuilder:
             print(f"\nSequence planning error: {e}")
             import traceback
             traceback.print_exc()
+
+            # In non-stop mode, auto-resume after failure
+            if planner is not None:
+                self._handle_failure(planner, q_init)
+                self._show_saved_files_summary(planner)
+
+                # Check if auto-resume succeeded
+                resume_state = planner.get_resumable_state()
+                if resume_state is None:
+                    # No resumable state = all phases completed
+                    return {
+                        "success": True,
+                        "planner": planner,
+                    }
+
             return {"success": False, "error": str(e), "planner": planner}
 
     def _ensure_task_ready(self) -> bool:
