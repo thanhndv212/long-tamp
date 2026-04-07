@@ -3,7 +3,7 @@
 Copy this file into `script/config/<your_task>_config.py` and adapt.
 
 Design goals:
-- Canonical config lives in `src/agimus_spacelab/config/spacelab_config.py`.
+- Canonical SpaceLab config lives in `script/config/spacelab_config.py`.
 - Script-level task configs inherit canonical defaults via
     `SpacelabTaskDefaults`.
 - Avoid name collisions by using *_INFO aliases when needed.
@@ -11,9 +11,16 @@ Design goals:
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from typing import Dict, List, Tuple
 
-from agimus_spacelab.config import ManipulationConfig
+# Ensure script/config is on the path before importing spacelab_config.
+_config_dir = Path(__file__).parent.parent / "config"
+if str(_config_dir) not in sys.path:
+    sys.path.insert(0, str(_config_dir))
+
+from spacelab_config import ManipulationConfig  # noqa: E402
 
 
 class SpacelabTaskDefaults(ManipulationConfig):

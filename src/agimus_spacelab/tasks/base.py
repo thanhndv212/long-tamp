@@ -16,10 +16,7 @@ from agimus_spacelab.planning import (
     ConstraintBuilder,
     FactoryConstraintRegistry
 )
-from agimus_spacelab.planning.config import (
-    build_robot_config,
-    build_object_configs,
-)
+
 
 
 class ManipulationTask:
@@ -199,15 +196,12 @@ class ManipulationTask:
         pass
 
     def build_initial_config(self) -> List[float]:
-        """
-        Build the initial configuration.
-        Override in subclass if custom logic needed.
-        """
-        objects = self.get_objects()
-        joint_groups = self.get_joint_groups()
-        q_robot = build_robot_config(joint_groups)
-        q_objects = build_object_configs(objects)
-        return q_robot + q_objects
+        """Build the initial configuration. Must be implemented by subclass."""
+        raise NotImplementedError(
+            "Subclass must implement build_initial_config(). "
+            "Return the full initial configuration vector for all robot joints "
+            "and objects."
+        )
 
     def generate_configurations(
         self, q_init: List[float]

@@ -9,13 +9,6 @@ from typing import Dict, List, Tuple, Optional, Any
 
 from agimus_spacelab.planning import create_planner
 
-# SpaceLab defaults are imported lazily so that importing SceneBuilder does
-# not unconditionally drag in SpaceLab-specific configuration.
-# Use the explicit FILE_PATHS and joint_bounds parameters instead.
-def _spacelab_defaults():
-    """Lazy loader for SpaceLab-specific defaults (backward compatibility)."""
-    from agimus_spacelab.config.spacelab_config import JointBounds, DEFAULT_PATHS  # noqa: PLC0415
-    return JointBounds, DEFAULT_PATHS
 # Import unified backend interfaces
 try:
     from agimus_spacelab.backends import CorbaBackend, HAS_CORBA
@@ -55,16 +48,18 @@ class SceneBuilder:
         self.loaded_objects = []
 
         if FILE_PATHS is None:
-            _JointBounds, _DEFAULT_PATHS = _spacelab_defaults()
-            self.FILE_PATHS = _DEFAULT_PATHS
-        else:
-            self.FILE_PATHS = FILE_PATHS
+            raise ValueError(
+                "FILE_PATHS is required. Pass a dict with 'robot', "
+                "'environment', and 'objects' keys."
+            )
+        self.FILE_PATHS = FILE_PATHS
 
         if joint_bounds is None:
-            _JointBounds, _DEFAULT_PATHS = _spacelab_defaults()
-            self.joint_bounds = _JointBounds
-        else:
-            self.joint_bounds = joint_bounds
+            raise ValueError(
+                "joint_bounds is required. Pass a class or object that "
+                "provides joint bound information."
+            )
+        self.joint_bounds = joint_bounds
 
         if self.backend == "corba":
             if not HAS_CORBA:

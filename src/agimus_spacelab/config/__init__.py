@@ -23,18 +23,6 @@ from .base_config import (
     BaseTaskConfig,
     merge_configs,
 )
-# SpaceLab-specific exports — kept for backward compatibility with existing
-# task scripts that do ``from agimus_spacelab.config import ManipulationConfig``.
-# New code should import directly from agimus_spacelab.config.spacelab_config
-# or use YamlTaskLoader for framework-agnostic configuration.
-from .spacelab_config import (
-    DEFAULT_PATHS,
-    RobotJoints,
-    InitialConfigurations,
-    JointBounds,
-    ManipulationConfig,
-)
-
 __all__ = [
     # Base classes
     "Defaults",
@@ -47,10 +35,4 @@ __all__ = [
     # Utilities
     "merge_configs",
     "RuleGenerator",
-    # SpaceLab config (backward compatibility — prefer direct imports)
-    "DEFAULT_PATHS",
-    "RobotJoints",
-    "InitialConfigurations",
-    "JointBounds",
-    "ManipulationConfig",
 ]
