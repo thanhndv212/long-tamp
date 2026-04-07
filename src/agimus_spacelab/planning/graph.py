@@ -1222,6 +1222,12 @@ class GraphBuilder:
             f"grippers={phase_grippers} objects={phase_objects}"
         )
 
+        # Expose phase-local ordering for GraspStateTracker sync
+        self._phase_grippers = list(phase_grippers)
+        self._phase_handles = [
+            h for obj_handles in phase_handles_per_obj for h in obj_handles
+        ]
+
         # Also override RULES to None (setPossibleGrasps takes precedence)
         phase_config.RULES = None
 

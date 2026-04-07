@@ -629,6 +629,13 @@ class GraspSequencePlanner:
                     f"Phase {phase_idx + 1}: Failed to build graph: {e}"
                 ) from e
 
+            # Sync tracker indices with phase-local factory ordering
+            if hasattr(self.graph_builder, '_phase_grippers'):
+                self.grasp_tracker.set_phase_indices(
+                    self.graph_builder._phase_grippers,
+                    self.graph_builder._phase_handles,
+                )
+
             # Compute edge sequence from current state
             # Use waypoints for better constraint satisfaction
             try:
@@ -1405,6 +1412,13 @@ class GraspSequencePlanner:
                 raise RuntimeError(
                     f"Phase {phase_idx + 1}: Failed to build graph: {e}"
                 ) from e
+
+            # Sync tracker indices with phase-local factory ordering
+            if hasattr(self.graph_builder, '_phase_grippers'):
+                self.grasp_tracker.set_phase_indices(
+                    self.graph_builder._phase_grippers,
+                    self.graph_builder._phase_handles,
+                )
 
             # Get edge sequence
             try:

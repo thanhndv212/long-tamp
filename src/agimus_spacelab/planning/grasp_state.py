@@ -54,6 +54,10 @@ class GraspStateTracker:
         self.gripper_to_idx = {g: i for i, g in enumerate(grippers)}
         self.handle_to_idx = {h: i for i, h in enumerate(handles)}
 
+        # Phase-local index overrides (set per-phase via set_phase_indices)
+        self._phase_gripper_to_idx = None
+        self._phase_handle_to_idx = None
+
         # Current grasp state: gripper -> handle (or None if free)
         if initial_grasps is None:
             self.current_grasps = {g: None for g in grippers}
@@ -65,6 +69,19 @@ class GraspStateTracker:
                     raise ValueError(f"Unknown gripper: {gripper}")
                 if handle is not None and handle not in self.handle_to_idx:
                     raise ValueError(f"Unknown handle: {handle}")
+
+    def set_phase_indices(self, phase_grippers, phase_handles):
+        """Set phase-local index mappings for edge name generation.
+
+        Must be called after each build_phase_graph so that abbreviated
+        state indices match the ConstraintGraphFactory ordering.
+        """
+        self._phase_gripper_to_idx = {
+            g: i for i, g in enumerate(phase_grippers)
+        }
+        self._phase_handle_to_idx = {
+            h: i for i, h in enumerate(phase_handles)
+        }
 
     def _get_abbreviated_state(
         self, grasps: Optional[Dict[str, Optional[str]]] = None
@@ -82,11 +99,36 @@ class GraspStateTracker:
             grasps = self.current_grasps
 
         # Build list of (gripper_idx, handle_idx) for held grasps
+        # Use phase-local indices when available (set by set_phase_indices)
+        if self._phase_gripper_to_idx is not None:
+            g_idx_map = self._phase_gripper_to_idx
+        else:
+            import warnings
+            warnings.warn(
+                "Phase-local gripper indices not set — using global indices. "
+                "Call set_phase_indices() after build_phase_graph() to ensure "
+                "edge names match the ConstraintGraphFactory ordering.",
+                stacklevel=2,
+            )
+            g_idx_map = self.gripper_to_idx
+
+        if self._phase_handle_to_idx is not None:
+            h_idx_map = self._phase_handle_to_idx
+        else:
+            import warnings
+            warnings.warn(
+                "Phase-local handle indices not set — using global indices. "
+                "Call set_phase_indices() after build_phase_graph() to ensure "
+                "edge names match the ConstraintGraphFactory ordering.",
+                stacklevel=2,
+            )
+            h_idx_map = self.handle_to_idx
+
         held = []
         for gripper, handle in grasps.items():
             if handle is not None:
-                g_idx = self.gripper_to_idx[gripper]
-                h_idx = self.handle_to_idx[handle]
+                g_idx = g_idx_map[gripper]
+                h_idx = h_idx_map[handle]
                 held.append((g_idx, h_idx))
 
         if not held:
