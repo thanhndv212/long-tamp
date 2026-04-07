@@ -32,7 +32,7 @@ class ManipulationTask:
         joint_bounds=None,
         FILE_PATHS: Optional[Dict[str, Any]] = None,
         task_name: str = "Manipulation Task",
-        backend: str = "corba",
+        backend: str = "pyhpp",
     ):
         """
         Initialize manipulation task.

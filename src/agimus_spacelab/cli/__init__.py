@@ -45,9 +45,9 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--backend",
         type=str,
-        default="corba",
+        default="pyhpp",
         choices=["corba", "pyhpp"],
-        help="Backend to use (default: corba)",
+        help="Backend to use (default: pyhpp)",
     )
     parser.add_argument(
         "--no-viz",
