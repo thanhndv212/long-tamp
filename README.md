@@ -59,22 +59,7 @@ task.setup()
 task.run(visualize=True, solve=False)
 ```
 
-<!-- ### Multi-Arm Orchestration
 
-```python
-from agimus_spacelab.tasks import TaskOrchestrator, TaskBuilder
-
-orchestrator = TaskOrchestrator(max_concurrent_tasks=2)
-orchestrator.setup_resources(arms=["UR10", "VISPA"], objects=["RS1", "RS2"])
-
-# Define parallel tasks
-t1 = TaskBuilder("t1", "UR10 grasp RS1").requires_arm("UR10").build()
-t2 = TaskBuilder("t2", "VISPA grasp RS2").requires_arm("VISPA").build()
-
-orchestrator.add_task(t1)
-orchestrator.add_task(t2)
-orchestrator.run()  # Executes in parallel
-``` -->
 
 ## Package Structure
 
@@ -95,11 +80,10 @@ src/agimus_spacelab/
 │   ├── constraints.py           # ConstraintBuilder
 │   ├── graph.py                 # GraphBuilder
 │   └── config_generator.py      # ConfigGenerator
-├── tasks/                       # Task orchestration
+├── tasks/                       # Task management
 │   ├── __init__.py
 │   ├── base.py                  # ManipulationTask base class
-│   ├── orchestration.py         # TaskOrchestrator, TaskBuilder
-│   └── bridge.py                # PlanningBridge
+│   └── grasp_sequence.py       # GraspSequencePlanner
 ├── visualization/               # Visualization tools
 │   ├── __init__.py
 │   └── viz.py                   # Graph visualization, frame display
@@ -118,11 +102,11 @@ Multi-layer design for scalable manipulation planning:
 ```
 Assembly Mission
       ↓
-Behavior Tree Layer (planned)
+Behavior Tree Layer (planned by external BT planner)
       ↓
-Task Orchestration Layer
+Task Orchestration Layer (planned by external BT planner)
       ↓
-Atomic Task Layer
+Atomic Task Layer (implemented)
       ↓
 Motion Planning Layer (HPP)
 ```
@@ -132,7 +116,7 @@ Motion Planning Layer (HPP)
 - `ConstraintBuilder`: Helper for constraint creation
 - `ConfigGenerator`: Waypoint generation
 - `ManipulationTask`: Base class for tasks
-- `TaskOrchestrator`: Multi-arm coordination
+- `GraspSequencePlanner`: Multi-phase grasp sequence planning
 - `create_planner()`: Factory for backend-specific planners
 
 ## Documentation
@@ -147,4 +131,4 @@ LGPL-3.0 - See [LICENSE](LICENSE) file
 
 ---
 
-**Last Updated**: January 2026
+**Last Updated**: 07/04/2026
