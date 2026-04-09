@@ -1140,7 +1140,14 @@ class GraphBuilder:
                         self.planner.reset_transition_planner()
                         print("    ✓ Reset TransitionPlanner")
                 else:
-                    # PyHPP: graph is local object, just clear reference
+                    # PyHPP: graph is local object, just clear reference.
+                    # Also reset cached TransitionPlanner — it holds a C++
+                    # graph::GraphPtr_t to the old graph.  If not reset, the
+                    # first C++ call on the stale planner object (tp.setEdge,
+                    # tp.timeOut, …) will dereference a freed pointer → SIGSEGV.
+                    if hasattr(self.planner, 'reset_transition_planner'):
+                        self.planner.reset_transition_planner()
+                        print("    ✓ Reset TransitionPlanner (PyHPP graph rebuild)")
                     print("    ✓ Clearing existing graph reference")
 
                 # Clear internal state
