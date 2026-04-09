@@ -404,14 +404,28 @@ class PyHPPBackend(BackendBase):
                 return self._stored_paths[index]
         return self.path
 
+    def setup_viewer(self):
+        """Explicitly initialise the gepetto viewer.
+
+        Call this once before using visualize().  Connecting to the CORBA
+        gepetto-viewer server via omniORB can cause a SIGSEGV if the server
+        is not running, so viewer creation is intentionally NOT done
+        automatically inside visualize().
+        """
+        if self.device is None:
+            raise RuntimeError("Must load robot first")
+        if not HAS_GEPETTO_VIEWER:
+            raise ImportError("Gepetto viewer not available (omniORB missing)")
+        self.viewer = _GepettoViewer(self.device)
+
     def visualize(self, q: Optional[np.ndarray] = None):
-        """Visualize configuration."""
+        """Visualize configuration.
+
+        No-op (returns silently) if setup_viewer() has not been called.
+        This prevents SIGSEGV when gepetto-viewer is not running.
+        """
         if self.viewer is None:
-            if self.device is None:
-                raise RuntimeError("Must load robot first")
-            if not HAS_GEPETTO_VIEWER:
-                raise ImportError("Gepetto viewer not available (omniORB missing)")
-            self.viewer = _GepettoViewer(self.device)
+            return  # viewer not set up — skip silently
 
         if q is not None:
             if isinstance(q, list):

@@ -828,11 +828,19 @@ class GraspSequencePlanner:
                             #     print(f"     q_target finite: {np.all(np.isfinite(arr))}")
                             #     print(f"     q_target min/max: {arr.min()} / {arr.max()}")
 
-                    # Visualize the configuration before planning
+                    # Visualize the configuration before planning.
+                    # Only attempted if the backend viewer has been explicitly
+                    # set up via setup_viewer(); skipped otherwise to avoid
+                    # SIGSEGV from omniORB when gepetto-viewer is not running.
                     try:
-                        print(f"     Visualizing q_target for edge '{edge_name}' before planning...")
-                        self.planner.visualize(q_target)
-                        print("     ✓ q_target sent to viewer")
+                        if (
+                            verbose
+                            and hasattr(self.planner, 'viewer')
+                            and self.planner.viewer is not None
+                        ):
+                            print(f"     Visualizing q_target for edge '{edge_name}' before planning...")
+                            self.planner.visualize(q_target)
+                            print("     ✓ q_target sent to viewer")
                     except Exception as e:
                         print(f"     ⚠ Could not visualize q_target: {e}")
 
