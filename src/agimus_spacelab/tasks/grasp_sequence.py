@@ -964,13 +964,10 @@ class GraspSequencePlanner:
 
                     except Exception as _plan_exc:
                         last_plan_exc = _plan_exc
-                        if (
-                            "Collision" in str(_plan_exc)
-                            and _plan_attempt < self._MAX_COLLISION_RETRIES - 1
-                        ):
+                        if _plan_attempt < self._MAX_COLLISION_RETRIES - 1:
                             if verbose:
                                 print(
-                                    f"     ⚠ Collision in q_target "
+                                    f"     ⚠ Planning failed "
                                     f"(attempt {_plan_attempt + 1}), "
                                     f"regenerating target config..."
                                 )
@@ -1683,7 +1680,7 @@ class GraspSequencePlanner:
 
                     continue
 
-                # Plan edge — retry on collision in q_target
+                # Plan edge — retry with regenerated q_target on any failure
                 import numpy as _np
 
                 plan_start = time.time()
@@ -1724,13 +1721,10 @@ class GraspSequencePlanner:
 
                     except Exception as _plan_exc:
                         last_plan_exc = _plan_exc
-                        if (
-                            "Collision" in str(_plan_exc)
-                            and _plan_attempt < self._MAX_COLLISION_RETRIES - 1
-                        ):
+                        if _plan_attempt < self._MAX_COLLISION_RETRIES - 1:
                             if verbose:
                                 print(
-                                    f"     ⚠ Collision in q_target "
+                                    f"     ⚠ Planning failed "
                                     f"(attempt {_plan_attempt + 1}), "
                                     f"regenerating target config..."
                                 )
