@@ -30,6 +30,9 @@ try:
         PartialShortcut,
         SimpleTimeParameterization,
         RSTimeParameterization,
+        SplineGradientBased_bezier1,
+        SplineGradientBased_bezier3,
+        SplineGradientBased_bezier5,
     )
     HAS_PYHPP = True
 except ImportError:
@@ -86,7 +89,8 @@ class PyHPPBackend(BackendBase):
         # Waypoint edges (constrained motion): Use manipulation-aware optimizers
         self._waypoint_pregrasp_optimizers = [
             "ManipulationRandomShortcut",
-            "EnforceTransitionSemantic",
+            # "EnforceTransitionSemantic",
+            "SplineGradientBased_bezier3",
         ]
         # Waypoint edges (constrained motion): Use manipulation-aware shortcut
         self._waypoint_grasp_optimizers = [
@@ -421,11 +425,15 @@ class PyHPPBackend(BackendBase):
     def visualize(self, q: Optional[np.ndarray] = None):
         """Visualize configuration.
 
-        No-op (returns silently) if setup_viewer() has not been called.
-        This prevents SIGSEGV when gepetto-viewer is not running.
+        Auto-initialises the viewer on first call if setup_viewer() has not
+        been called yet.  If the gepetto-viewer server is not reachable the
+        call is silently skipped (no SIGSEGV, no exception propagated).
         """
         if self.viewer is None:
-            return  # viewer not set up — skip silently
+            try:
+                self.setup_viewer()
+            except Exception:
+                return  # server not running or viewer unavailable — skip silently
 
         if q is not None:
             if isinstance(q, list):
@@ -1064,6 +1072,11 @@ class PyHPPBackend(BackendBase):
                 - "EnforceTransitionSemantic": Enforces transition semantics
                 - "GraphRandomShortcut": Graph-aware random shortcut
                 - "GraphPartialShortcut": Graph-aware partial shortcut
+
+                Spline optimizers (pyhpp.core):
+                - "SplineGradientBased_bezier1": Bezier order-1 spline
+                - "SplineGradientBased_bezier3": Bezier cubic spline
+                - "SplineGradientBased_bezier5": Bezier order-5 spline
             clear_existing: Whether to clear existing optimizers first
         """
         if not self._use_path_optimization:
@@ -1111,6 +1124,10 @@ class PyHPPBackend(BackendBase):
             ),
             "GraphRandomShortcut": lambda: GraphRandomShortcut(prob),
             "GraphPartialShortcut": lambda: GraphPartialShortcut(prob),
+            # Spline gradient-based optimizers (bezier polynomial)
+            "SplineGradientBased_bezier1": lambda: SplineGradientBased_bezier1(prob),
+            "SplineGradientBased_bezier3": lambda: SplineGradientBased_bezier3(prob),
+            "SplineGradientBased_bezier5": lambda: SplineGradientBased_bezier5(prob),
         }
 
     def _create_path_optimizer_instance(self, optimizer: str):
