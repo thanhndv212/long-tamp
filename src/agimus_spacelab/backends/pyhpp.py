@@ -1016,16 +1016,16 @@ class PyHPPBackend(BackendBase):
 
         # Configure path validation if enabled
         if self._use_pathvalidation:
-            self.problem.pathValidation = Discretized(
+            self.problem.pathValidation(Discretized(
                 self.device, validation_step
-            )
+            ))
         # Configure path projection if enabled
         if self._use_progressive_projector:
-            self.problem.pathProjector = ProgressiveProjector(
+            self.problem.pathProjector(ProgressiveProjector(
                 self.problem.distance(),
                 self.problem.steeringMethod(),
                 projector_step,
-            )
+            ))
         return self
 
     def set_path_optimization(self, enabled: bool):
