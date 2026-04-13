@@ -1235,6 +1235,42 @@ class GraphBuilder:
             h for obj_handles in phase_handles_per_obj for h in obj_handles
         ]
 
+        # Lock non-participating objects' root joints so they cannot drift
+        # during planning.  Objects excluded from phase_objects have no
+        # LockedJoint produced by the factory, leaving their freeflyer DOFs
+        # completely unconstrained (they would float to random positions).
+        _nonphase_objects = [
+            o for o in _orig_objects if o not in phase_objects
+        ]
+        if _nonphase_objects and q_init is not None:
+            _lock_patterns = [f"{o}/root_joint" for o in _nonphase_objects]
+            try:
+                from agimus_spacelab.planning.constraints import (
+                    ConstraintBuilder,
+                )
+                _np_cnames, _np_jnames = (
+                    ConstraintBuilder.create_locked_joint_constraints(
+                        self.ps,
+                        self.robot,
+                        q_init,
+                        _lock_patterns,
+                        backend=self.backend,
+                    )
+                )
+                if _np_cnames:
+                    if graph_constraints is None:
+                        graph_constraints = list(_np_cnames)
+                    else:
+                        graph_constraints = list(graph_constraints) + list(
+                            _np_cnames
+                        )
+                    print(
+                        f"    \u2713 Locked {len(_np_jnames)} non-phase "
+                        f"object joints: {_nonphase_objects}"
+                    )
+            except Exception as _e:
+                print(f"    \u26a0 Could not lock non-phase objects: {_e}")
+
         # Also override RULES to None (setPossibleGrasps takes precedence)
         phase_config.RULES = None
 
@@ -1349,7 +1385,17 @@ class GraphBuilder:
 
         q_new = list(q_init)
 
-        for obj_name in phase_objects:
+        # Reset ALL free objects (including those outside this phase) so that no
+        # object drifts to a random position across phase boundaries.  Objects
+        # not in phase_objects are still part of the robot model, and their
+        # q_init values must be kept at their true scene positions.
+        all_candidate_objects = [
+            jn.split("/")[0]
+            for jn in rank_map
+            if jn.endswith("/root_joint")
+        ]
+
+        for obj_name in all_candidate_objects:
             if obj_name in held_objects:
                 continue  # position constrained by grasp — keep it
 
