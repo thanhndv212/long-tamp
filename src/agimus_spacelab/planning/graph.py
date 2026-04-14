@@ -1228,9 +1228,14 @@ class GraphBuilder:
         for obj, handles, contacts in zip(
             _orig_objects, _orig_handles_per_obj, _orig_contacts_per_obj
         ):
-            if any(h in phase_handle_set for h in handles):
+            filtered_handles = [h for h in handles if h in phase_handle_set]
+            if filtered_handles:
                 phase_objects.append(obj)
-                phase_handles_per_obj.append(handles)
+                # Only pass handles that are valid for this phase.
+                # Passing ALL handles (including CON0-3 etc) causes factory to
+                # enumerate a much larger state space (O(n_handles^n_grippers))
+                # even after setPossibleGrasps restricts the valid pairs.
+                phase_handles_per_obj.append(filtered_handles)
                 phase_contacts_per_obj.append(contacts)
         phase_config.OBJECTS = phase_objects
         phase_config.HANDLES_PER_OBJECT = phase_handles_per_obj
