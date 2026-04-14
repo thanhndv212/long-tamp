@@ -377,79 +377,163 @@ class GraspSequencePlanner:
         # from the current context, not a stale Phase-2 configuration.
         self._last_pregrasp_q[gripper] = q_pregrasp
 
-        t0 = time.time()
-        path21, _ = self.planner.plan_transition_edge(
-            edge=edge_21, q1=q_start, q2=q_pregrasp
-        )
-        t_plan1 = time.time() - t0
-        if path21 is None:
-            raise RuntimeError(
-                f"Auto-release of '{released_handle}': motion planning "
-                f"failed for edge '{edge_21}'"
+        path21 = None
+        t_plan1 = 0.0
+        plan_err_21 = None
+        try:
+            t0 = time.time()
+            path21, _ = self.planner.plan_transition_edge(
+                edge=edge_21, q1=q_start, q2=q_pregrasp
             )
-        q_start = list(path21.getEndConfig()) if hasattr(path21, "getEndConfig") else q_pregrasp
+            t_plan1 = time.time() - t0
+        except Exception as e:
+            t_plan1 = time.time() - t0
+            plan_err_21 = e
 
-        # --- Step 2: pregrasp -> free (generate_via_edge) ---
-        if verbose:
-            print(f"    Planning release edge: {edge_10}")
+        # --- Step 2 (primary): pregrasp -> free ---
+        t_gen2 = 0.0
+        t_plan2 = 0.0
+        path_direct = None
+        t_gen_direct = 0.0
+        t_plan_direct = 0.0
+        used_direct = False
 
-        t0 = time.time()
-        ok, q_free = self.config_gen.generate_via_edge(
-            edge_name=edge_10,
-            q_from=q_start,
-            config_label=f"q_autorelease_{gripper}_free",
-        )
-        t_gen2 = time.time() - t0
-        if not ok or q_free is None or not np.all(np.isfinite(q_free)):
-            raise RuntimeError(
-                f"Auto-release of '{released_handle}': failed to "
-                f"generate target config via edge '{edge_10}'"
+        if path21 is not None:
+            q_start = list(path21.getEndConfig()) if hasattr(path21, "getEndConfig") else q_pregrasp
+
+            if verbose:
+                print(f"    Planning release edge: {edge_10}")
+
+            t0 = time.time()
+            ok, q_free = self.config_gen.generate_via_edge(
+                edge_name=edge_10,
+                q_from=q_start,
+                config_label=f"q_autorelease_{gripper}_free",
             )
+            t_gen2 = time.time() - t0
+            if not ok or q_free is None or not np.all(np.isfinite(q_free)):
+                raise RuntimeError(
+                    f"Auto-release of '{released_handle}': failed to "
+                    f"generate target config via edge '{edge_10}'"
+                )
 
-        t0 = time.time()
-        path10, _ = self.planner.plan_transition_edge(
-            edge=edge_10, q1=q_start, q2=q_free
-        )
-        t_plan2 = time.time() - t0
-        if path10 is None:
-            raise RuntimeError(
-                f"Auto-release of '{released_handle}': motion planning "
-                f"failed for edge '{edge_10}'"
+            t0 = time.time()
+            path10, _ = self.planner.plan_transition_edge(
+                edge=edge_10, q1=q_start, q2=q_free
             )
-        q_start = list(path10.getEndConfig()) if hasattr(path10, "getEndConfig") else q_free
+            t_plan2 = time.time() - t0
+            if path10 is None:
+                raise RuntimeError(
+                    f"Auto-release of '{released_handle}': motion planning "
+                    f"failed for edge '{edge_10}'"
+                )
+            q_start = list(path10.getEndConfig()) if hasattr(path10, "getEndConfig") else q_free
+        else:
+            # --- Fallback: direct release edge (grasped → free, no waypoint) ---
+            #
+            # The _21 edge constrains g_FG_part to move ONLY along the approach
+            # axis (1-DOF foliation).  When the approach axis is geometrically
+            # blocked by assembly structure (e.g. NYX), no path exists within
+            # the 1-DOF manifold regardless of RRT iterations.
+            #
+            # The direct LevelSetEdge (name = edge_21 without "_21" suffix) has
+            # a looser path constraint: only vispa2's grasp fold is maintained.
+            # g_FG_part is free to escape in any direction — giving the RRT full
+            # ur10 DOFs to find a collision-free path around the structure.
+            if verbose:
+                print(
+                    f"    ⚠ _21 planning failed ({plan_err_21}), "
+                    f"trying direct release edge"
+                )
+            direct_edge = edge_21[:-3]  # strip "_21" suffix
+            if verbose:
+                print(f"    Planning direct release edge: {direct_edge}")
+
+            t0 = time.time()
+            ok_d, q_free_d = self.config_gen.generate_via_edge(
+                edge_name=direct_edge,
+                q_from=q_start,
+                config_label=f"q_autorelease_{gripper}_free_direct",
+                q_hint=None,  # random arm seeds — avoids NYX-blocked direction
+            )
+            t_gen_direct = time.time() - t0
+            if not ok_d or q_free_d is None or not np.all(np.isfinite(q_free_d)):
+                raise RuntimeError(
+                    f"Auto-release of '{released_handle}': _21 failed "
+                    f"({plan_err_21}) and direct release edge '{direct_edge}' "
+                    f"also failed to generate a free config"
+                )
+
+            t0 = time.time()
+            path_direct, _ = self.planner.plan_transition_edge(
+                edge=direct_edge, q1=q_start, q2=q_free_d
+            )
+            t_plan_direct = time.time() - t0
+            if path_direct is None:
+                raise RuntimeError(
+                    f"Auto-release of '{released_handle}': _21 failed "
+                    f"({plan_err_21}) and direct release edge '{direct_edge}' "
+                    f"also failed motion planning"
+                )
+            q_start = list(path_direct.getEndConfig()) if hasattr(path_direct, "getEndConfig") else q_free_d
+            used_direct = True
+            # Placeholders so the rest of the code path is consistent
+            path10 = None
 
         # Update grasp state: gripper is now free
         self.grasp_tracker.update_grasp(gripper, None)
         if verbose:
             print(f"    ✓ Released '{released_handle}' from '{gripper}'")
 
-        phase_info = {
-            "paths": [p for p in [path21, path10] if p is not None],
-            "edges": [edge_21, edge_10],
-            "state_after": self.grasp_tracker.get_current_state_name(),
-            "final_config": q_start,
-            "edge_stats": [
-                {
-                    "edge_idx": 0,
-                    "edge_name": edge_21,
-                    "success": True,
-                    "gen_time": t_gen1,
-                    "plan_time": t_plan1,
-                    "total_time": t_gen1 + t_plan1,
-                },
-                {
-                    "edge_idx": 1,
-                    "edge_name": edge_10,
-                    "success": True,
-                    "gen_time": t_gen2,
-                    "plan_time": t_plan2,
-                    "total_time": t_gen2 + t_plan2,
-                },
-            ],
-            "phase_time": t_gen1 + t_plan1 + t_gen2 + t_plan2,
-            "phase_gen_time": t_gen1 + t_gen2,
-            "phase_plan_time": t_plan1 + t_plan2,
-        }
+        if used_direct:
+            direct_edge = edge_21[:-3]
+            phase_info = {
+                "paths": [path_direct],
+                "edges": [direct_edge],
+                "state_after": self.grasp_tracker.get_current_state_name(),
+                "final_config": q_start,
+                "edge_stats": [
+                    {
+                        "edge_idx": 0,
+                        "edge_name": direct_edge,
+                        "success": True,
+                        "gen_time": t_gen_direct,
+                        "plan_time": t_plan_direct,
+                        "total_time": t_gen_direct + t_plan_direct,
+                    },
+                ],
+                "phase_time": t_gen1 + t_plan1 + t_gen_direct + t_plan_direct,
+                "phase_gen_time": t_gen1 + t_gen_direct,
+                "phase_plan_time": t_plan1 + t_plan_direct,
+            }
+        else:
+            phase_info = {
+                "paths": [p for p in [path21, path10] if p is not None],
+                "edges": [edge_21, edge_10],
+                "state_after": self.grasp_tracker.get_current_state_name(),
+                "final_config": q_start,
+                "edge_stats": [
+                    {
+                        "edge_idx": 0,
+                        "edge_name": edge_21,
+                        "success": True,
+                        "gen_time": t_gen1,
+                        "plan_time": t_plan1,
+                        "total_time": t_gen1 + t_plan1,
+                    },
+                    {
+                        "edge_idx": 1,
+                        "edge_name": edge_10,
+                        "success": True,
+                        "gen_time": t_gen2,
+                        "plan_time": t_plan2,
+                        "total_time": t_gen2 + t_plan2,
+                    },
+                ],
+                "phase_time": t_gen1 + t_plan1 + t_gen2 + t_plan2,
+                "phase_gen_time": t_gen1 + t_gen2,
+                "phase_plan_time": t_plan1 + t_plan2,
+            }
         return q_start, phase_info
 
     def _auto_save_phase_paths(
@@ -796,12 +880,38 @@ class GraspSequencePlanner:
                         )
                         if cn:
                             release_constraints = cn
-                q_current, _release_info = self._plan_release_subphase(
-                    gripper=gripper,
-                    q_current=q_current,
-                    phase_graph_constraints=release_constraints,
-                    verbose=verbose,
-                )
+                try:
+                    q_current, _release_info = self._plan_release_subphase(
+                        gripper=gripper,
+                        q_current=q_current,
+                        phase_graph_constraints=release_constraints,
+                        verbose=verbose,
+                    )
+                except Exception as e:
+                    self.phase_results.append({
+                        "phase": phase_idx + 1,
+                        "gripper": gripper,
+                        "handle": None,
+                        "released": currently_held,
+                        "edges": [],
+                        "paths": [],
+                        "complete": False,
+                        "error_message": f"Release failed: {e}",
+                    })
+                    self.last_failure_info = {
+                        "phase_idx": phase_idx,
+                        "edge_idx": 0,
+                        "edge_name": "release_subphase",
+                        "q_current": q_current,
+                        "error": f"Release failed: {e}",
+                        "completed_phases": len(
+                            [p for p in self.phase_results if p.get("complete", False)]
+                        ),
+                        "completed_edges_in_phase": 0,
+                    }
+                    if verbose:
+                        print(f"\n  \u26a0 Release failed, partial result stored for resume")
+                    raise
                 # Record phase result (with full path/timing tracking)
                 self.phase_results.append({
                     "phase": phase_idx + 1,
@@ -866,12 +976,38 @@ class GraspSequencePlanner:
                         )
                         if cn:
                             release_constraints = cn
-                q_current, _ = self._plan_release_subphase(
-                    gripper=gripper,
-                    q_current=q_current,
-                    phase_graph_constraints=release_constraints,
-                    verbose=verbose,
-                )
+                try:
+                    q_current, _ = self._plan_release_subphase(
+                        gripper=gripper,
+                        q_current=q_current,
+                        phase_graph_constraints=release_constraints,
+                        verbose=verbose,
+                    )
+                except Exception as e:
+                    self.phase_results.append({
+                        "phase": phase_idx + 1,
+                        "gripper": gripper,
+                        "handle": handle,
+                        "released": currently_held,
+                        "edges": [],
+                        "paths": [],
+                        "complete": False,
+                        "error_message": f"Auto-release failed: {e}",
+                    })
+                    self.last_failure_info = {
+                        "phase_idx": phase_idx,
+                        "edge_idx": 0,
+                        "edge_name": "auto_release_subphase",
+                        "q_current": q_current,
+                        "error": f"Auto-release failed: {e}",
+                        "completed_phases": len(
+                            [p for p in self.phase_results if p.get("complete", False)]
+                        ),
+                        "completed_edges_in_phase": 0,
+                    }
+                    if verbose:
+                        print(f"\n  \u26a0 Auto-release failed, partial result stored for resume")
+                    raise
 
             # Build minimal phase graph
             held_grasps = {
@@ -1561,11 +1697,14 @@ class GraspSequencePlanner:
 
         return {
             "phase_idx": incomplete_phase["phase"] - 1,  # 0-based
-            "edge_idx": incomplete_phase["failed_edge_idx"],
-            "edge_name": incomplete_phase["failed_edge_name"],
+            "edge_idx": incomplete_phase.get("failed_edge_idx", 0),
+            "edge_name": incomplete_phase.get(
+                "failed_edge_name",
+                incomplete_phase.get("error_message", "unknown"),
+            ),
             "completed_phases": completed_phases,
-            "completed_edges_in_phase": len(incomplete_phase["paths"]),
-            "total_edges_in_phase": len(incomplete_phase["edges"]),
+            "completed_edges_in_phase": len(incomplete_phase.get("paths", [])),
+            "total_edges_in_phase": len(incomplete_phase.get("edges", [])),
             "q_current": incomplete_phase.get("last_q_start"),
             "error": incomplete_phase.get("error_message", "unknown"),
         }
@@ -1653,12 +1792,26 @@ class GraspSequencePlanner:
             initial_grasps=None,
         )
 
-        # Replay completed grasps to restore state
+        # Replay completed grasps to restore state.
+        # Each completed phase may involve an implicit auto-release
+        # (gripper switches from handle A to handle B without an explicit
+        # release entry).  Handle that gracefully:
         for phase in self.phase_results:
             if phase.get("complete", False):
-                self.grasp_tracker.update_grasp(
-                    phase["gripper"], phase["handle"]
-                )
+                g = phase["gripper"]
+                h = phase["handle"]
+                currently = self.grasp_tracker.current_grasps.get(g)
+                if h is None:
+                    # Explicit release
+                    if currently is not None:
+                        self.grasp_tracker.update_grasp(g, None)
+                    # else: already free, nothing to do
+                else:
+                    if currently is not None and currently != h:
+                        # Implicit auto-release happened in this phase
+                        self.grasp_tracker.update_grasp(g, None)
+                    if self.grasp_tracker.current_grasps.get(g) is None:
+                        self.grasp_tracker.update_grasp(g, h)
 
         if verbose:
             print(f"Restored state: {self.grasp_tracker.get_current_state_name()}")
@@ -1744,12 +1897,38 @@ class GraspSequencePlanner:
                         )
                         if cn:
                             release_constraints = cn
-                q_current, _release_info = self._plan_release_subphase(
-                    gripper=gripper,
-                    q_current=q_current,
-                    phase_graph_constraints=release_constraints,
-                    verbose=verbose,
-                )
+                try:
+                    q_current, _release_info = self._plan_release_subphase(
+                        gripper=gripper,
+                        q_current=q_current,
+                        phase_graph_constraints=release_constraints,
+                        verbose=verbose,
+                    )
+                except Exception as e:
+                    self.phase_results.append({
+                        "phase": phase_idx + 1,
+                        "gripper": gripper,
+                        "handle": None,
+                        "released": currently_held,
+                        "edges": [],
+                        "paths": [],
+                        "complete": False,
+                        "error_message": f"Release failed: {e}",
+                    })
+                    self.last_failure_info = {
+                        "phase_idx": phase_idx,
+                        "edge_idx": 0,
+                        "edge_name": "release_subphase",
+                        "q_current": q_current,
+                        "error": f"Release failed: {e}",
+                        "completed_phases": len(
+                            [p for p in self.phase_results if p.get("complete", False)]
+                        ),
+                        "completed_edges_in_phase": 0,
+                    }
+                    if verbose:
+                        print(f"\n  \u26a0 Release failed, partial result stored for resume")
+                    raise
                 self.phase_results.append({
                     "phase": phase_idx + 1,
                     "gripper": gripper,
@@ -1806,12 +1985,38 @@ class GraspSequencePlanner:
                         )
                         if cn:
                             release_constraints = cn
-                q_current, _ = self._plan_release_subphase(
-                    gripper=gripper,
-                    q_current=q_current,
-                    phase_graph_constraints=release_constraints,
-                    verbose=verbose,
-                )
+                try:
+                    q_current, _ = self._plan_release_subphase(
+                        gripper=gripper,
+                        q_current=q_current,
+                        phase_graph_constraints=release_constraints,
+                        verbose=verbose,
+                    )
+                except Exception as e:
+                    self.phase_results.append({
+                        "phase": phase_idx + 1,
+                        "gripper": gripper,
+                        "handle": handle,
+                        "released": currently_held,
+                        "edges": [],
+                        "paths": [],
+                        "complete": False,
+                        "error_message": f"Auto-release failed: {e}",
+                    })
+                    self.last_failure_info = {
+                        "phase_idx": phase_idx,
+                        "edge_idx": 0,
+                        "edge_name": "auto_release_subphase",
+                        "q_current": q_current,
+                        "error": f"Auto-release failed: {e}",
+                        "completed_phases": len(
+                            [p for p in self.phase_results if p.get("complete", False)]
+                        ),
+                        "completed_edges_in_phase": 0,
+                    }
+                    if verbose:
+                        print(f"\n  \u26a0 Auto-release failed, partial result stored for resume")
+                    raise
 
             # Build minimal phase graph
             held_grasps = {
