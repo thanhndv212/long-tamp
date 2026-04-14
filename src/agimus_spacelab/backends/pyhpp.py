@@ -1651,13 +1651,21 @@ class PyHPPBackend(BackendBase):
         # Smart planning strategy based on edge type
         is_waypoint_pregrasp = self._is_pregrasp_edge(edge_name)
         is_waypoint_grasp = self._is_grasp_edge(edge_name)
-        skip_direct_path = is_waypoint_pregrasp or is_waypoint_grasp
+        # Allow directPath for _21 (grasped->pregrasp = release retraction).
+        # q_pregrasp is generated with q_start as hint, so non-active-arm DOFs
+        # are unchanged -- linear interpolation is a pure arm retraction.
+        # RRT for _12 (forward approach to contact) and _01/_10 stays unchanged.
+        is_release_retract_edge = "_21" in edge_name
+        skip_direct_path = is_waypoint_pregrasp or (
+            is_waypoint_grasp and not is_release_retract_edge
+        )
 
         pv: Any = None
 
-        # Try directPath first for transit edges (unless it's a waypoint edge)
+        # Try directPath first for transit and release-retraction edges
         if not skip_direct_path:
-            print("      [TP] Transit or grasp edge, trying directPath first")
+            label = "release retract (_21)" if is_release_retract_edge else "transit"
+            print(f"      [TP] {label} edge, trying directPath first")
             try:
                 success, path, status = tp.directPath(
                     q1_arr, q2_arr, bool(validate)
@@ -1679,8 +1687,9 @@ class PyHPPBackend(BackendBase):
                 # directPath failed, will fall back to planPath
                 print(f"      [TP] directPath threw exception: {exc}")
         else:
+            edge_type = "pregrasp" if is_waypoint_pregrasp else "forward grasp (_12)"
             print(
-                "      [TP] Waypoint pregrasp edge detected, "
+                f"      [TP] Waypoint {edge_type} edge, "
                 "skipping directPath"
             )
 
