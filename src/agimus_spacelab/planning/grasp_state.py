@@ -203,6 +203,71 @@ class GraspStateTracker:
         # These represent: free -> pregrasp (_01) -> grasp (_12)
         return [f"{base_edge}_01", f"{base_edge}_12"]
 
+    def get_pregrasp_node_name(self, gripper: str) -> str:
+        """Return the pregrasp waypoint node name shared by the grasp/release sub-edges.
+
+        The factory names the waypoint:
+            "{gripper} > {handle} | {state_after_release}_pregrasp"
+        where *state_after_release* is the abbreviated state WITHOUT this
+        gripper's pair — i.e. the state the robot will be in once released.
+
+        Args:
+            gripper: Gripper name currently holding an object.
+
+        Returns:
+            Node name string, e.g.
+            "frame_gripper/g_FG_part > RS1/h_RS1_FG | 0-0:1-2_pregrasp"
+
+        Raises:
+            ValueError: If gripper is unknown or not currently holding anything.
+        """
+        if gripper not in self.current_grasps:
+            raise ValueError(f"Unknown gripper: {gripper}")
+        handle = self.current_grasps[gripper]
+        if handle is None:
+            raise ValueError(f"Gripper '{gripper}' is not holding anything")
+
+        # State after release: remove this gripper's pair from the snapshot.
+        grasps_after = {g: h for g, h in self.current_grasps.items() if g != gripper}
+        grasps_after[gripper] = None
+        state_abbrev = self._get_abbreviated_state(grasps_after)
+
+        return f"{gripper} > {handle} | {state_abbrev}_pregrasp"
+
+    def get_approach_edge_from_released(self, gripper: str) -> str:
+        """Return the _01 (approach) edge name treating this gripper as free.
+
+        Used during release planning: we generate the pregrasp config via
+        the FORWARD approach edge (released_state → pregrasp waypoint) rather
+        than via generateTargetConfig on the _21 edge.  The _21 path-fold
+        encodes "gripper at contact" (RHS from q_grasped) while the pregrasp
+        leaf requires "gripper at approach offset" — conflicting requirements
+        that make the solver diverge.  The _01 edge has no such conflict: its
+        fold only encodes the OTHER grasps, so the pregrasp leaf is free.
+
+        Args:
+            gripper: Gripper name currently holding an object.
+
+        Returns:
+            Edge name string, e.g.
+            "frame_gripper/g_FG_part > RS1/h_RS1_FG | 0-0:1-2_01"
+
+        Raises:
+            ValueError: If gripper is unknown or not currently holding anything.
+        """
+        if gripper not in self.current_grasps:
+            raise ValueError(f"Unknown gripper: {gripper}")
+        handle = self.current_grasps[gripper]
+        if handle is None:
+            raise ValueError(f"Gripper '{gripper}' is not holding anything")
+
+        grasps_after = {
+            g: h for g, h in self.current_grasps.items() if g != gripper
+        }
+        grasps_after[gripper] = None
+        state_abbrev = self._get_abbreviated_state(grasps_after)
+        return f"{gripper} > {handle} | {state_abbrev}_01"
+
     def get_release_edge(self, gripper: str) -> str:
         """Get edge name for releasing the object held by a gripper.
 
@@ -222,13 +287,11 @@ class GraspStateTracker:
         if handle is None:
             raise ValueError(f"Gripper '{gripper}' is not holding anything")
 
-        # Release edge format: "{gripper} < {handle} | {state_after_release}"
-        # The state annotation is the state AFTER the release
-        grasps_after = {
-            g: h for g, h in self.current_grasps.items() if g != gripper
-        }
-        grasps_after[gripper] = None
-        state_abbrev = self._get_abbreviated_state(grasps_after)
+        # Release edge format: "{gripper} < {handle} | {containing_state}"
+        # HPP factory convention: release edges (including _21/_10 waypoints)
+        # are annotated with the CONTAINING state = the full grasp state
+        # BEFORE release (i.e., including this gripper's hold).
+        state_abbrev = self._get_abbreviated_state()
 
         return f"{gripper} < {handle} | {state_abbrev}"
 

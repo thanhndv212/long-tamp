@@ -118,19 +118,24 @@ def grasps_tuple_to_dict(
 
 
 def next_grasp_to_indices(
-    next_grasp: Tuple[str, str],
+    next_grasp: Tuple[str, Optional[str]],
     grippers: List[str],
     handles: List[str],
-) -> Tuple[int, int]:
+) -> Tuple[int, Optional[int]]:
     """Convert (gripper_name, handle_name) to (gripper_idx, handle_idx).
 
+    Supports release transitions by accepting ``None`` as handle_name.
+
     Args:
-        next_grasp: Tuple of (gripper_name, handle_name)
+        next_grasp: Tuple of (gripper_name, handle_name or None).
+                    Pass ``None`` for handle_name to represent a release
+                    transition (gripper becomes free).
         grippers: List of all gripper names
         handles: List of all handle names
 
     Returns:
-        Tuple of (gripper_index, handle_index)
+        Tuple of (gripper_index, handle_index or None).
+        handle_index is None when handle_name is None (release).
 
     Raises:
         ValueError: If gripper or handle name not found
@@ -143,6 +148,10 @@ def next_grasp_to_indices(
             f"Gripper '{gripper_name}' not found in grippers list. "
             f"Available grippers: {grippers}"
         )
+
+    if handle_name is None:
+        # Release transition: gripper becomes free
+        return (gripper_idx, None)
 
     try:
         handle_idx = handles.index(handle_name)
@@ -206,7 +215,9 @@ class SequentialGraspFilter:
             grippers: List of all gripper names (defines ordering)
             handles: List of all handle names
             current_grasps: Current grasp state {gripper: handle or None}
-            next_grasp: Next grasp to add (gripper_name, handle_name)
+            next_grasp: Next grasp or release as (gripper_name, handle_name).
+                    Pass ``None`` as handle_name for a release transition
+                    (gripper moves from holding to free).
 
         Raises:
             ValueError: If gripper/handle names not found in lists
@@ -219,14 +230,14 @@ class SequentialGraspFilter:
             current_grasps, grippers, handles
         )
 
-        # Compute next grasps tuple
+        # Compute next grasps tuple (handle_idx may be None for release)
         gripper_idx, handle_idx = next_grasp_to_indices(
             next_grasp, grippers, handles
         )
 
-        # Build next state: current + one new grasp
+        # Build next state: current + one grasp change (add or release)
         next_list = list(self.current_grasps)
-        next_list[gripper_idx] = handle_idx
+        next_list[gripper_idx] = handle_idx  # None for release
         self.next_grasps = tuple(next_list)
 
     def __call__(self, grasps: Tuple[Optional[int], ...]) -> bool:
@@ -282,7 +293,8 @@ class SequentialTransitionFilter:
             grippers: List of all gripper names
             handles: List of all handle names
             current_grasps: Current grasp state {gripper: handle or None}
-            next_grasp: Next grasp to add (gripper_name, handle_name)
+            next_grasp: Next grasp or release as (gripper_name, handle_name).
+                    Pass ``None`` as handle_name for a release transition.
         """
         self.current_grasps = grasps_dict_to_tuple(
             current_grasps, grippers, handles
@@ -292,7 +304,7 @@ class SequentialTransitionFilter:
             next_grasp, grippers, handles
         )
         next_list = list(self.current_grasps)
-        next_list[gripper_idx] = handle_idx
+        next_list[gripper_idx] = handle_idx  # None for release
         self.next_grasps = tuple(next_list)
 
     def is_allowed(

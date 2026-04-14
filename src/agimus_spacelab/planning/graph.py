@@ -1170,12 +1170,23 @@ class GraphBuilder:
             if handle not in phase_valid_pairs[gripper]:
                 phase_valid_pairs[gripper].append(handle)
 
-        # Include the next grasp transition
+        # Include the next grasp/release transition
         next_gripper, next_handle = next_grasp
-        if next_gripper not in phase_valid_pairs:
-            phase_valid_pairs[next_gripper] = []
-        if next_handle not in phase_valid_pairs[next_gripper]:
-            phase_valid_pairs[next_gripper].append(next_handle)
+        if next_handle is not None:
+            # Grasp: add the new handle to this gripper's valid pairs
+            if next_gripper not in phase_valid_pairs:
+                phase_valid_pairs[next_gripper] = []
+            if next_handle not in phase_valid_pairs[next_gripper]:
+                phase_valid_pairs[next_gripper].append(next_handle)
+        else:
+            # Release: the factory needs the currently-held handle to generate
+            # the release (<) edge.  Include it from held_grasps.
+            released_handle = held_grasps.get(next_gripper)
+            if released_handle is not None:
+                if next_gripper not in phase_valid_pairs:
+                    phase_valid_pairs[next_gripper] = []
+                if released_handle not in phase_valid_pairs[next_gripper]:
+                    phase_valid_pairs[next_gripper].append(released_handle)
 
         print(f"    Phase VALID_PAIRS: {phase_valid_pairs}")
 

@@ -277,26 +277,34 @@ class ConfigGenerator:
     def generate_via_edge(
         self, edge_name: str, q_from: List[float],
         config_label: Optional[str] = None,
-        verbose: bool = True
+        verbose: bool = True,
+        q_hint: Optional[List[float]] = None,
     ) -> Tuple[bool, Optional[List[float]]]:
         """
         Generate target configuration by shooting random configs along edge.
-        
+
         Args:
             edge_name: Name of the edge
-            q_from: Source configuration
+            q_from: Source configuration (sets fold RHS via rightHandSideFromConfig)
             config_label: Optional label to store result
             verbose: Print progress every 200 attempts
-            
+            q_hint: Optional warm-start for the IK initial guess.  When set,
+                the first attempt uses q_hint instead of a random config.
+                Useful when a nearby solution is known (e.g. for release
+                pregrasp generation: starting from q_grasped, the IK only
+                needs to pull the arm back by the clearance distance).
+
         Returns:
             Tuple of (success, generated_config or None)
         """
         last_err = None
         last_valid_err = None
         for i in range(self.max_attempts):
-            # Generate random config
+            use_hint = (i == 0 and q_hint is not None)
+            # Generate random config (or use hint on first attempt)
             if self.backend == "corba":
-                q_rand = self.planner.random_config()
+                q_rand = (list(q_hint) if use_hint
+                          else self.planner.random_config())
 
                 # omniORB stubs expect plain Python sequences (list/tuple),
                 # not numpy arrays.
@@ -318,7 +326,8 @@ class ConfigGenerator:
                 config = q_target
                 last_err = err
             else:  # pyhpp
-                q_rand = self.planner.random_config()
+                q_rand = (np.array(q_hint, dtype=float) if use_hint
+                          else self.planner.random_config())
                 q_from_arr = np.array(q_from) if not isinstance(
                     q_from, np.ndarray) else q_from
 
@@ -332,20 +341,23 @@ class ConfigGenerator:
                 # object via LockedJoint foliation) will have their DOF
                 # projected to the correct value by the solver regardless of
                 # what q_rand contains, so overriding them here is harmless.
-                try:
-                    rank_map = dict(self.robot.rankInConfiguration)
-                    q_rand_arr = np.array(q_rand, dtype=float)
-                    for joint_name, rank in rank_map.items():
-                        if joint_name.endswith("/root_joint"):
-                            if rank + 7 <= len(q_rand_arr) and rank + 7 <= len(
-                                q_from_arr
-                            ):
-                                q_rand_arr[rank : rank + 7] = q_from_arr[
-                                    rank : rank + 7
-                                ]
-                    q_rand = q_rand_arr
-                except Exception:
-                    pass  # rankInConfiguration not available — fall back to fully random
+                # Skip when using a hint — the hint already contains the
+                # right joint values and mustn't be overwritten.
+                if not use_hint:
+                    try:
+                        rank_map = dict(self.robot.rankInConfiguration)
+                        q_rand_arr = np.array(q_rand, dtype=float)
+                        for joint_name, rank in rank_map.items():
+                            if joint_name.endswith("/root_joint"):
+                                if rank + 7 <= len(q_rand_arr) and rank + 7 <= len(
+                                    q_from_arr
+                                ):
+                                    q_rand_arr[rank : rank + 7] = q_from_arr[
+                                        rank : rank + 7
+                                    ]
+                        q_rand = q_rand_arr
+                    except Exception:
+                        pass  # rankInConfiguration not available — fall back to fully random
 
                 # PyHPP bindings often expect a Transition object, not a name.
                 transition = edge_name
@@ -401,7 +413,78 @@ class ConfigGenerator:
         if config_label and verbose:
             print(f"       ⚠ Generation via edge FAILED: {edge_name} "
                   f"({last_valid_err or last_err or 'unknown'})")
+            # Diagnostic: print solver details on failure
+            self._print_edge_failure_diagnostics(
+                edge_name, q_from, q_hint, last_err, last_valid_err
+            )
         return False, None
+
+    def _print_edge_failure_diagnostics(
+        self, edge_name, q_from, q_hint, last_err, last_valid_err,
+    ):
+        """Print diagnostic info when generate_via_edge exhausts all attempts."""
+        print(f"       --- Edge failure diagnostics for '{edge_name}' ---")
+        print(f"       Last solver residual: {last_err}")
+        print(f"       Last validity error: {last_valid_err}")
+        if q_hint is not None:
+            q_from_arr = np.array(q_from, dtype=float)
+            q_hint_arr = np.array(q_hint, dtype=float)
+            diff = np.abs(q_hint_arr - q_from_arr)
+            sig = np.where(diff > 1e-6)[0]
+            if len(sig) > 0:
+                print(f"       q_hint vs q_from differ at {len(sig)} DOFs:")
+                for idx in sig[:20]:  # cap output
+                    print(f"         [{idx}] q_from={q_from_arr[idx]:.6f}  "
+                          f"q_hint={q_hint_arr[idx]:.6f}  "
+                          f"delta={diff[idx]:.6f}")
+            else:
+                print("       q_hint == q_from (identical — cached pregrasp not available)")
+        # Try applying targetConstraint of the edge to diagnose residuals
+        # Use targetConstraint (end-state constraints) rather than
+        # pathConstraint (fold), since generateTargetConfig projects to
+        # the target state.
+        try:
+            if self.backend != "corba":
+                transition = edge_name
+                if isinstance(edge_name, str):
+                    get_t = getattr(self.graph, "getTransition", None)
+                    if callable(get_t):
+                        transition = get_t(edge_name)
+                # targetConstraint() is the end-state constraint set
+                get_tc = getattr(transition, "targetConstraint", None)
+                if callable(get_tc):
+                    tc = get_tc()
+                    get_proj = getattr(tc, "configProjector", None)
+                    if callable(get_proj):
+                        proj = get_proj()
+                        if proj is not None:
+                            q_from_arr = np.array(q_from, dtype=float)
+                            # Test 1: apply to q_from (grasped)
+                            try:
+                                q_test_from = q_from_arr.copy()
+                                proj.rightHandSideFromConfig(q_from_arr)
+                                ok_from = proj.apply(q_test_from)
+                                res_from = proj.residualError()
+                                print(f"       targetConstraint.apply(q_from):  "
+                                      f"residual={res_from:.6e}, success={ok_from}")
+                            except Exception as de:
+                                print(f"       targetConstraint.apply(q_from) failed: {de}")
+                            # Test 2: apply to q_hint if different from q_from
+                            if q_hint is not None:
+                                q_hint_arr = np.array(q_hint, dtype=float)
+                                if np.any(np.abs(q_hint_arr - q_from_arr) > 1e-6):
+                                    try:
+                                        q_test_hint = q_hint_arr.copy()
+                                        proj.rightHandSideFromConfig(q_from_arr)
+                                        ok_hint = proj.apply(q_test_hint)
+                                        res_hint = proj.residualError()
+                                        print(f"       targetConstraint.apply(q_hint): "
+                                              f"residual={res_hint:.6e}, success={ok_hint}")
+                                    except Exception as de2:
+                                        print(f"       targetConstraint.apply(q_hint) failed: {de2}")
+        except Exception as e:
+            print(f"       Could not retrieve edge constraints: {e}")
+        print("       --- End diagnostics ---")
 
 
 # Alias for backward compatibility

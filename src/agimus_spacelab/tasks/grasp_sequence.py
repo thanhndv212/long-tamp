@@ -209,6 +209,249 @@ class GraspSequencePlanner:
         # Callback for interactive arm selection (set by UI layer)
         self.interactive_arm_selector_callback = None
 
+        # Cache q_pregrasp from each grasping phase: gripper -> q_pregrasp.
+        # Used as warm-start seed when releasing that gripper later.
+        # Large-clearance handles (e.g. h_RS1_FG: 0.25 m) cause the naive
+        # q_grasped seed to fail (FG freeflyer stuck at contact position).
+        self._last_pregrasp_q: dict = {}
+
+    def _plan_release_subphase(
+        self,
+        gripper: str,
+        q_current: List,
+        phase_graph_constraints: Optional[List],
+        verbose: bool,
+    ):
+        """Plan a release sub-phase.
+
+        Builds a minimal phase graph for the release transition, plans through
+        the two waypoint edges (_21, _10), updates the grasp-state tracker,
+        and returns the resulting configuration together with tracking info.
+
+        Args:
+            gripper: Gripper name that must release its current object.
+            q_current: Current robot configuration.
+            phase_graph_constraints: Optional locked-joint constraint names.
+            verbose: Whether to print progress.
+
+        Returns:
+            Tuple (q_final, phase_info) where phase_info is a dict with keys:
+                paths, edges, edge_stats, state_after, final_config,
+                phase_time, phase_gen_time, phase_plan_time.
+        """
+        import numpy as np
+
+        released_handle = self.grasp_tracker.current_grasps[gripper]
+        release_held_grasps = {
+            g: h
+            for g, h in self.grasp_tracker.current_grasps.items()
+            if h is not None
+        }
+
+        if verbose:
+            print(
+                f"    Building release graph: '{gripper}' releases "
+                f"'{released_handle}'"
+            )
+
+        try:
+            self.graph_builder.build_phase_graph(
+                config=self.task_config,
+                held_grasps=release_held_grasps,
+                next_grasp=(gripper, None),
+                pyhpp_constraints=self.pyhpp_constraints,
+                graph_constraints=phase_graph_constraints,
+                q_init=q_current,
+                q_init_original=getattr(self, "_q_scene_init", None),
+            )
+            new_graph = self.graph_builder.get_graph()
+            if hasattr(self.planner, "graph"):
+                self.planner.graph = new_graph
+            if self.config_gen is None:
+                from agimus_spacelab.planning import ConfigGenerator
+                self.config_gen = ConfigGenerator(
+                    self.graph_builder.robot,
+                    new_graph,
+                    self.planner,
+                    self.graph_builder.ps,
+                    backend=self.backend,
+                )
+            elif hasattr(self.config_gen, "update_graph"):
+                self.config_gen.update_graph(new_graph)
+        except Exception as e:
+            raise RuntimeError(
+                f"Auto-release of '{released_handle}' from '{gripper}': "
+                f"Failed to build release graph: {e}"
+            ) from e
+
+        # Sync tracker indices with phase-local factory ordering
+        if hasattr(self.graph_builder, "_phase_grippers"):
+            self.grasp_tracker.set_phase_indices(
+                self.graph_builder._phase_grippers,
+                self.graph_builder._phase_handles,
+            )
+
+        release_edges = self.grasp_tracker.get_release_edge_sequence(gripper)
+        if verbose:
+            print(f"    Release edge sequence: {release_edges}")
+
+        # Project onto source state (current grasp state with object held)
+        source_state = self.grasp_tracker.get_current_state_name()
+        try:
+            success, q_projected, error = (
+                self.graph_builder.apply_state_constraints(
+                    state_name=source_state,
+                    q=q_current,
+                    max_iterations=10000,
+                    error_threshold=1e-4,
+                )
+            )
+            if success:
+                q_current = list(q_projected)
+                if verbose:
+                    print(
+                        f"    ✓ Projected onto '{source_state}' "
+                        f"(error={error:.2e})"
+                    )
+            elif verbose:
+                print(
+                    f"    ⚠ Projection onto '{source_state}' failed "
+                    f"(error={error:.2e}), using unprojected q"
+                )
+        except Exception as e:
+            if verbose:
+                print(f"    ⚠ State projection failed: {e}, continuing")
+
+        # Plan through release waypoint edges: _21 (grasped→pregrasp) then _10 (pregrasp→free).
+        #
+        # _21 target (q_pregrasp) cannot be found with generateTargetConfig(edge_21):
+        # the path-fold RHS = "gripper at contact" but pregrasp leaf requires
+        # "gripper at approach offset" — conflicting, solver always diverges.
+        # Also cannot use applyStateConstraints(pregrasp_node, q_grasped):
+        # rightHandSideFromConfig(q_grasped) again sets fold "at contact", same conflict.
+        #
+        # Fix: generate q_pregrasp via the FORWARD _01 edge (released_state → pregrasp).
+        # The _01 fold only encodes the OTHER grasps (no FG/RS1 fold), so the pregrasp
+        # leaf is free to position the arm at approach distance.  q_grasped is a
+        # valid q_from for _01: it already satisfies all _01 fold constraints.
+        import time
+
+        q_start = q_current
+        edge_21, edge_10 = release_edges[0], release_edges[1]
+        edge_01 = self.grasp_tracker.get_approach_edge_from_released(gripper)
+
+        # --- Step 1: generate q_pregrasp via forward approach edge (no conflict) ---
+        #
+        # SEED STRATEGY: Use the q_pregrasp cached from the previous grasping phase
+        # as the warm-start hint.  The naive seed (q_grasped = contact state) fails
+        # for large-clearance handles (e.g. h_RS1_FG has clearance=0.25 m, giving
+        # 26 cm pregrasp offset).  The IK copies frame_gripper/root_joint from
+        # q_grasped which pins FG at the contact position; then g_ur10_tool-grasps-FG
+        # fold keeps FG pinned there, making the 26 cm pregrasp unreachable via
+        # Newton-Raphson.  Using q_start as the hint keeps RS1 at its current
+        # (assembly) position: attempt 1 starts from the contact config (FG just
+        # needs to retract by the clearance distance, well within NR convergence),
+        # and attempts 2-N use random arm seeds with RS1 still at q_from's position
+        # (the root-joint copying logic in generate_via_edge guarantees this).
+        # Do NOT use a cached Phase-2 pregrasp here: it would drag RS1 from the
+        # assembly position back to the ground-level initial pose, producing a
+        # long-range path that collides with ground_demo/link_NYX_0.
+        if verbose:
+            print(f"    Planning release edge: {edge_21}")
+            print(f"      (pregrasp via forward edge '{edge_01}')")
+
+        t0 = time.time()
+        ok, q_pregrasp = self.config_gen.generate_via_edge(
+            edge_name=edge_01,
+            q_from=q_start,
+            config_label=f"q_autorelease_{gripper}_pregrasp",
+            q_hint=q_start,
+        )
+        t_gen1 = time.time() - t0
+        if not ok or q_pregrasp is None or not np.all(np.isfinite(q_pregrasp)):
+            raise RuntimeError(
+                f"Auto-release of '{released_handle}': failed to generate "
+                f"pregrasp config via forward edge '{edge_01}'"
+            )
+        # Update cache so any subsequent release of the same gripper starts
+        # from the current context, not a stale Phase-2 configuration.
+        self._last_pregrasp_q[gripper] = q_pregrasp
+
+        t0 = time.time()
+        path21, _ = self.planner.plan_transition_edge(
+            edge=edge_21, q1=q_start, q2=q_pregrasp
+        )
+        t_plan1 = time.time() - t0
+        if path21 is None:
+            raise RuntimeError(
+                f"Auto-release of '{released_handle}': motion planning "
+                f"failed for edge '{edge_21}'"
+            )
+        q_start = list(path21.getEndConfig()) if hasattr(path21, "getEndConfig") else q_pregrasp
+
+        # --- Step 2: pregrasp -> free (generate_via_edge) ---
+        if verbose:
+            print(f"    Planning release edge: {edge_10}")
+
+        t0 = time.time()
+        ok, q_free = self.config_gen.generate_via_edge(
+            edge_name=edge_10,
+            q_from=q_start,
+            config_label=f"q_autorelease_{gripper}_free",
+        )
+        t_gen2 = time.time() - t0
+        if not ok or q_free is None or not np.all(np.isfinite(q_free)):
+            raise RuntimeError(
+                f"Auto-release of '{released_handle}': failed to "
+                f"generate target config via edge '{edge_10}'"
+            )
+
+        t0 = time.time()
+        path10, _ = self.planner.plan_transition_edge(
+            edge=edge_10, q1=q_start, q2=q_free
+        )
+        t_plan2 = time.time() - t0
+        if path10 is None:
+            raise RuntimeError(
+                f"Auto-release of '{released_handle}': motion planning "
+                f"failed for edge '{edge_10}'"
+            )
+        q_start = list(path10.getEndConfig()) if hasattr(path10, "getEndConfig") else q_free
+
+        # Update grasp state: gripper is now free
+        self.grasp_tracker.update_grasp(gripper, None)
+        if verbose:
+            print(f"    ✓ Released '{released_handle}' from '{gripper}'")
+
+        phase_info = {
+            "paths": [p for p in [path21, path10] if p is not None],
+            "edges": [edge_21, edge_10],
+            "state_after": self.grasp_tracker.get_current_state_name(),
+            "final_config": q_start,
+            "edge_stats": [
+                {
+                    "edge_idx": 0,
+                    "edge_name": edge_21,
+                    "success": True,
+                    "gen_time": t_gen1,
+                    "plan_time": t_plan1,
+                    "total_time": t_gen1 + t_plan1,
+                },
+                {
+                    "edge_idx": 1,
+                    "edge_name": edge_10,
+                    "success": True,
+                    "gen_time": t_gen2,
+                    "plan_time": t_plan2,
+                    "total_time": t_gen2 + t_plan2,
+                },
+            ],
+            "phase_time": t_gen1 + t_plan1 + t_gen2 + t_plan2,
+            "phase_gen_time": t_gen1 + t_gen2,
+            "phase_plan_time": t_plan1 + t_plan2,
+        }
+        return q_start, phase_info
+
     def _auto_save_phase_paths(
         self,
         phase_idx: int,
@@ -389,6 +632,14 @@ class GraspSequencePlanner:
 
         return frozen_arms
 
+    def _get_arm_for_gripper(self, gripper_name: str) -> Optional[str]:
+        """Return the arm keyword for a gripper name, or None."""
+        gl = gripper_name.lower()
+        for pattern, arm in self.GRIPPER_TO_ARM_MAP.items():
+            if pattern.lower() in gl:
+                return arm
+        return None
+
     def plan_sequence(
         self,
         grasp_sequence: Sequence[Tuple[str, str]],
@@ -488,9 +739,139 @@ class GraspSequencePlanner:
             if verbose:
                 print("\n" + "-" * 70)
                 print(f"\n--- Phase {phase_idx + 1}/{len(grasp_sequence)} ---")
-                print(f"  Grasp '{handle}' with '{gripper}'")
+                if handle is not None:
+                    print(f"  Grasp '{handle}' with '{gripper}'")
+                else:
+                    print(f"  Release with '{gripper}'")
                 current_state = self.grasp_tracker.get_current_state_name()
                 print(f"  Current state: {current_state}")
+
+            # ----------------------------------------------------------------
+            # Handle explicit release entry: (gripper, None)
+            # ----------------------------------------------------------------
+            currently_held = self.grasp_tracker.current_grasps.get(gripper)
+
+            if handle is None:
+                # Explicit release request
+                if currently_held is None:
+                    # No-op: gripper is already free
+                    if verbose:
+                        print(f"  ⚠ '{gripper}' is already free — skipping")
+                    self.phase_results.append({
+                        "phase": phase_idx + 1,
+                        "gripper": gripper,
+                        "handle": None,
+                        "edges": [],
+                        "paths": [],
+                        "complete": True,
+                        "skipped": True,
+                    })
+                    continue
+
+                if verbose:
+                    print(
+                        f"\n  [Release] '{gripper}' releasing "
+                        f"'{currently_held}'"
+                    )
+                # Compute frozen arms for the release sub-phase
+                release_constraints = None
+                if frozen_arms_mode == "global":
+                    release_constraints = self.graph_constraints
+                elif frozen_arms_mode != "none":
+                    release_frozen = self.compute_phase_locked_joints(
+                        gripper, "auto"
+                    )
+                    if release_frozen:
+                        from agimus_spacelab.planning.constraints import (
+                            ConstraintBuilder,
+                        )
+                        cn, _ = (
+                            ConstraintBuilder.create_locked_joint_constraints(
+                                self.graph_builder.ps,
+                                self.graph_builder.robot,
+                                q_current,
+                                release_frozen,
+                                backend=self.graph_builder.backend,
+                            )
+                        )
+                        if cn:
+                            release_constraints = cn
+                q_current, _release_info = self._plan_release_subphase(
+                    gripper=gripper,
+                    q_current=q_current,
+                    phase_graph_constraints=release_constraints,
+                    verbose=verbose,
+                )
+                # Record phase result (with full path/timing tracking)
+                self.phase_results.append({
+                    "phase": phase_idx + 1,
+                    "gripper": gripper,
+                    "handle": None,
+                    "released": currently_held,
+                    **_release_info,
+                    "complete": True,
+                })
+                continue
+
+            # ----------------------------------------------------------------
+            # Auto-detect conflict: gripper holds a different object.
+            # Insert a release sub-phase before the grasp so the factory can
+            # build valid edges.
+            # ----------------------------------------------------------------
+            if currently_held is not None and currently_held != handle:
+                if verbose:
+                    print(
+                        f"\n  [Auto-release] '{gripper}' holds "
+                        f"'{currently_held}', inserting release before "
+                        f"grasping '{handle}'"
+                    )
+                # Compute frozen arms for the release sub-phase.
+                # Must NOT freeze arms that hold handles on the same
+                # object being released — otherwise the object becomes
+                # immovable and the pregrasp IK is unreachable.
+                release_constraints = None
+                if frozen_arms_mode == "global":
+                    release_constraints = self.graph_constraints
+                elif frozen_arms_mode != "none":
+                    release_frozen = self.compute_phase_locked_joints(
+                        gripper, "auto"
+                    )
+                    # Exclude arms whose grippers hold the released object
+                    released_obj = currently_held.split("/")[0]
+                    for g, h in self.grasp_tracker.current_grasps.items():
+                        if g == gripper or h is None:
+                            continue
+                        if h.split("/")[0] == released_obj:
+                            arm = self._get_arm_for_gripper(g)
+                            if arm and arm in release_frozen:
+                                release_frozen.remove(arm)
+                                if verbose:
+                                    print(
+                                        f"    (auto-release) Keeping "
+                                        f"'{arm}' unfrozen: '{g}' "
+                                        f"holds '{h}' on same object"
+                                    )
+                    if release_frozen:
+                        from agimus_spacelab.planning.constraints import (
+                            ConstraintBuilder,
+                        )
+                        cn, _ = (
+                            ConstraintBuilder.create_locked_joint_constraints(
+                                self.graph_builder.ps,
+                                self.graph_builder.robot,
+                                q_current,
+                                release_frozen,
+                                backend=self.graph_builder.backend,
+                            )
+                        )
+                        if cn:
+                            release_constraints = cn
+                q_current, _ = self._plan_release_subphase(
+                    gripper=gripper,
+                    q_current=q_current,
+                    phase_graph_constraints=release_constraints,
+                    verbose=verbose,
+                )
 
             # Build minimal phase graph
             held_grasps = {
@@ -739,6 +1120,7 @@ class GraspSequencePlanner:
             phase_geometric_paths = []  # Geometric paths (no time param) for saving
             edge_stats_list = []  # Per-edge timing stats for this phase
             q_start = q_current
+            q_pregrasp_for_cache = None  # end config of the _01 edge (pregrasp)
 
             for edge_idx, edge_name in enumerate(edge_sequence):
                 # Check for stop request
@@ -1061,6 +1443,10 @@ class GraspSequencePlanner:
                 else:
                     q_start = q_target
 
+                # Capture end config of the first (_01) edge as the pregrasp config
+                if edge_idx == 0:
+                    q_pregrasp_for_cache = list(q_start)
+
                 if verbose:
                     print(
                         f"     ✓ Path found ({edge_stat['plan_time']:.2f}s plan, "
@@ -1084,6 +1470,13 @@ class GraspSequencePlanner:
 
             # Update grasp state after successful planning
             self.grasp_tracker.update_grasp(gripper, handle)
+
+            # Cache q_pregrasp for potential future auto-release of this gripper.
+            # q_pregrasp = end config of the first (_01) edge (approach/pregrasp node).
+            if handle is not None and q_pregrasp_for_cache is not None:
+                self._last_pregrasp_q[gripper] = q_pregrasp_for_cache
+                if verbose:
+                    print(f"  ✓ Cached q_pregrasp for '{gripper}'")
 
             # Auto-save paths after successful phase
             saved_files = self._auto_save_phase_paths(
@@ -1298,9 +1691,127 @@ class GraspSequencePlanner:
             if verbose:
                 print("\n" + "-" * 70)
                 print(f"\n--- Phase {phase_idx + 1}/{len(self.original_sequence)} ---")
-                print(f"  Grasp '{handle}' with '{gripper}'")
+                if handle is not None:
+                    print(f"  Grasp '{handle}' with '{gripper}'")
+                else:
+                    print(f"  Release with '{gripper}'")
                 current_state = self.grasp_tracker.get_current_state_name()
                 print(f"  Current state: {current_state}")
+
+            # Handle explicit release entry: (gripper, None)
+            currently_held = self.grasp_tracker.current_grasps.get(gripper)
+
+            if handle is None:
+                if currently_held is None:
+                    if verbose:
+                        print(f"  ⚠ '{gripper}' is already free — skipping")
+                    self.phase_results.append({
+                        "phase": phase_idx + 1,
+                        "gripper": gripper,
+                        "handle": None,
+                        "edges": [],
+                        "paths": [],
+                        "complete": True,
+                        "skipped": True,
+                    })
+                    continue
+
+                if verbose:
+                    print(
+                        f"\n  [Release] '{gripper}' releasing "
+                        f"'{currently_held}'"
+                    )
+                release_constraints = None
+                use_fm = frozen_arms_mode if frozen_arms_mode is not None else "global"
+                if use_fm == "global":
+                    release_constraints = self.graph_constraints
+                elif use_fm != "none":
+                    release_frozen = self.compute_phase_locked_joints(
+                        gripper, "auto"
+                    )
+                    if release_frozen:
+                        from agimus_spacelab.planning.constraints import (
+                            ConstraintBuilder,
+                        )
+                        cn, _ = (
+                            ConstraintBuilder.create_locked_joint_constraints(
+                                self.graph_builder.ps,
+                                self.graph_builder.robot,
+                                q_current,
+                                release_frozen,
+                                backend=self.graph_builder.backend,
+                            )
+                        )
+                        if cn:
+                            release_constraints = cn
+                q_current, _release_info = self._plan_release_subphase(
+                    gripper=gripper,
+                    q_current=q_current,
+                    phase_graph_constraints=release_constraints,
+                    verbose=verbose,
+                )
+                self.phase_results.append({
+                    "phase": phase_idx + 1,
+                    "gripper": gripper,
+                    "handle": None,
+                    "released": currently_held,
+                    **_release_info,
+                    "complete": True,
+                })
+                continue
+
+            # Auto-release detection (same logic as plan_sequence)
+            if currently_held is not None and currently_held != handle:
+                if verbose:
+                    print(
+                        f"\n  [Auto-release] '{gripper}' holds "
+                        f"'{currently_held}', inserting release before "
+                        f"grasping '{handle}'"
+                    )
+                release_constraints = None
+                use_fm = frozen_arms_mode if frozen_arms_mode is not None else "global"
+                if use_fm == "global":
+                    release_constraints = self.graph_constraints
+                elif use_fm != "none":
+                    release_frozen = self.compute_phase_locked_joints(
+                        gripper, "auto"
+                    )
+                    # Exclude arms whose grippers hold the released object
+                    released_obj = currently_held.split("/")[0]
+                    for g, h in self.grasp_tracker.current_grasps.items():
+                        if g == gripper or h is None:
+                            continue
+                        if h.split("/")[0] == released_obj:
+                            arm = self._get_arm_for_gripper(g)
+                            if arm and arm in release_frozen:
+                                release_frozen.remove(arm)
+                                if verbose:
+                                    print(
+                                        f"    (auto-release) Keeping "
+                                        f"'{arm}' unfrozen: '{g}' "
+                                        f"holds '{h}' on same object"
+                                    )
+                    if release_frozen:
+                        from agimus_spacelab.planning.constraints import (
+                            ConstraintBuilder,
+                        )
+                        cn, _ = (
+                            ConstraintBuilder.create_locked_joint_constraints(
+                                self.graph_builder.ps,
+                                self.graph_builder.robot,
+                                q_current,
+                                release_frozen,
+                                backend=self.graph_builder.backend,
+                            )
+                        )
+                        if cn:
+                            release_constraints = cn
+                q_current, _ = self._plan_release_subphase(
+                    gripper=gripper,
+                    q_current=q_current,
+                    phase_graph_constraints=release_constraints,
+                    verbose=verbose,
+                )
 
             # Build minimal phase graph
             held_grasps = {
@@ -1510,6 +2021,7 @@ class GraspSequencePlanner:
             phase_geometric_paths = []  # Geometric paths for saving
             edge_stats_list = []  # Per-edge timing stats for this phase
             q_start = q_current
+            q_pregrasp_for_cache = None  # end config of the _01 edge (pregrasp)
 
             # For first phase in resume, decide where to start
             start_edge_idx = 0
@@ -1814,6 +2326,10 @@ class GraspSequencePlanner:
                 else:
                     q_start = q_target
 
+                # Capture end config of the first (_01) edge as the pregrasp config
+                if edge_idx == 0:
+                    q_pregrasp_for_cache = list(q_start)
+
                 if verbose:
                     print(
                         f"     ✓ Path found ({edge_stat['plan_time']:.2f}s plan, "
@@ -1837,6 +2353,12 @@ class GraspSequencePlanner:
                 verbose=verbose,
                 phase_geometric_paths=phase_geometric_paths if self.auto_save_dir else None,
             )
+
+            # Cache q_pregrasp for potential future auto-release (mirror of plan_sequence)
+            if handle is not None and q_pregrasp_for_cache is not None:
+                self._last_pregrasp_q[gripper] = q_pregrasp_for_cache
+                if verbose:
+                    print(f"  ✓ Cached q_pregrasp for '{gripper}'")
 
             phase_result = {
                 "phase": phase_idx + 1,
