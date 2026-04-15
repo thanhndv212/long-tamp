@@ -1721,6 +1721,9 @@ class PyHPPBackend(BackendBase):
                     f"{edge_name}: {exc}"
                 )
 
+        if pv is None:
+            return None, None
+
         # Store geometric path before time parameterization (for serialization)
         pv_geometric = pv
 
@@ -1730,6 +1733,8 @@ class PyHPPBackend(BackendBase):
                 print("      [TP] Path time-parameterized")
             except Exception as e:
                 print(f"      [TP] Time parameterization failed: {e}")
+        else:
+            print("      [TP] Skipping time parameterization")
 
         if not store:
             return pv, pv_geometric
