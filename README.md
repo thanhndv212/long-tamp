@@ -119,6 +119,92 @@ Motion Planning Layer (HPP)
 - `GraspSequencePlanner`: Multi-phase grasp sequence planning
 - `create_planner()`: Factory for backend-specific planners
 
+## Run Logging
+
+`agimus_spacelab` includes a structured run logger that writes a crash-safe JSONL event stream for every planning run. Use it to replay configurations, debug failures, and audit results.
+
+### Enable via `ManipulationTask`
+
+Logging is **on by default**. `log_dir` defaults to `"auto"`, which creates a directory under `/tmp/agimus_spacelab/<task_slug>_<YYYYMMDD_HHMMSS>/`. Pass an explicit path to override, or `None` to disable.
+
+```python
+# Default: auto-creates /tmp/agimus_spacelab/my_task_20260415_143022/
+task = MyTask(backend="pyhpp")
+
+# Custom directory
+task = MyTask(backend="pyhpp", log_dir="/data/runs/experiment_01")
+
+# Disable logging
+task = MyTask(backend="pyhpp", log_dir=None)
+
+task.setup()
+task.run()
+# Writes: <log_dir>/run_20260415_143022_<id>.jsonl
+#         <log_dir>/run_20260415_143022_<id>.json     (snapshot on close)
+#         <log_dir>/run_20260415_143022_<id>_replay.yaml
+```
+
+### Enable standalone
+
+```python
+from agimus_spacelab.logging import RunLogger
+
+logger = RunLogger("/tmp/runs")
+planner = GraspSequencePlanner(..., run_logger=logger)
+planner.plan_sequence(q_init, ...)
+```
+
+### Inspect logs after a run
+
+```python
+from agimus_spacelab.logging import print_run_summary, load_run_log, get_replay_config
+
+# Human-readable summary to stdout
+print_run_summary("/tmp/runs/run_20260415_143022_abc12345.jsonl")
+
+# Structured dict: run_id, events, phase_results, one key per event type
+data = load_run_log("/tmp/runs/run_20260415_143022_abc12345.jsonl")
+
+# Reproduce the run: returns backend, task_name, task_config, setup_params, sequence
+cfg = get_replay_config("/tmp/runs/run_20260415_143022_abc12345.jsonl")
+```
+
+### Configure Python logging
+
+```python
+from agimus_spacelab.logging import configure_logging
+
+# Console + file handler under the "agimus_spacelab" logger hierarchy
+configure_logging(level="DEBUG", log_dir="/tmp/runs", console=True)
+```
+
+### Event types
+
+| Event | When emitted |
+|-------|-------------|
+| `run_start` | `ManipulationTask.__init__` (with `log_dir`) |
+| `config_snapshot` | `setup()` — full `BaseTaskConfig` + setup params |
+| `sequence_start` | Start of `plan_sequence()` — all call params + `q_init` |
+| `phase_start` | Before each grasp phase — `gripper`, `handle`, `q_start` |
+| `edge_start` | Before each transition edge attempt |
+| `edge_end` | After each edge — `success`, timing, `q_to` or `error` |
+| `phase_end` | After each phase — timing, `state_after`, saved files |
+| `run_end` | On normal return or `KeyboardInterrupt` |
+
+### Package location
+
+```
+src/agimus_spacelab/
+└── logging/
+    ├── __init__.py       # Public API: RunLogger, configure_logging, get_logger,
+    │                     #   load_run_log, iter_events, get_replay_config,
+    │                     #   print_run_summary
+    ├── run_logger.py     # RunLogger — crash-safe JSONL writer
+    ├── schema.py         # TypedDict definitions for all event shapes
+    ├── setup.py          # Python logging module integration
+    └── log_loader.py     # Log inspection utilities
+```
+
 ## Documentation
 
 - **Usage Guide**: `script/spacelab/README.md`
