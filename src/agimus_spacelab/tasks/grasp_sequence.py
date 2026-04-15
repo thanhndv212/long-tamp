@@ -133,6 +133,7 @@ class GraspSequencePlanner:
         pyhpp_constraints: Optional[Dict[str, Any]] = None,
         graph_constraints: Optional[List[str]] = None,
         auto_save_dir: Optional[str] = None,
+        run_logger: Optional[Any] = None,
     ):
         """Initialize grasp sequence planner.
 
@@ -160,6 +161,9 @@ class GraspSequencePlanner:
         # Auto-save configuration
         self.auto_save_dir = auto_save_dir
         self.saved_path_files: List[str] = []  # Track saved file paths
+
+        # Structured run logger (optional)
+        self.run_logger = run_logger
 
         # Extract gripper and handle lists from config
         grippers = getattr(task_config, "GRIPPERS", [])
@@ -819,6 +823,24 @@ class GraspSequencePlanner:
         _q_scene_init = list(q_init)
         self._q_scene_init = _q_scene_init  # store for resume_planning
 
+        # Emit sequence_start with all call parameters before iteration begins.
+        if self.run_logger is not None:
+            try:
+                self.run_logger.log(
+                    "sequence_start",
+                    grasp_sequence=[[g, h] for g, h in grasp_sequence],
+                    q_init=list(q_init),
+                    validate=validate,
+                    max_iterations_per_edge=max_iterations_per_edge,
+                    timeout_per_edge=timeout_per_edge,
+                    frozen_arms_mode=frozen_arms_mode,
+                    time_parameterize=time_parameterize,
+                    reset_roadmap=reset_roadmap,
+                )
+            except Exception:
+                pass
+        _loop_start_time = time.time()
+
         for phase_idx, (gripper, handle) in enumerate(grasp_sequence):
             if verbose:
                 print("\n" + "-" * 70)
@@ -1016,6 +1038,20 @@ class GraspSequencePlanner:
                 if h is not None
             }
             print(f"  Held grasps: {held_grasps}")
+
+            # Emit phase_start with current config before graph build.
+            if self.run_logger is not None:
+                try:
+                    self.run_logger.log(
+                        "phase_start",
+                        phase=phase_idx + 1,
+                        gripper=gripper,
+                        handle=handle,
+                        q_start=list(q_current),
+                        held_grasps={g: str(h) for g, h in held_grasps.items()},
+                    )
+                except Exception:
+                    pass
 
             # Compute phase-specific locked joint constraints
             phase_graph_constraints = None
@@ -1299,6 +1335,21 @@ class GraspSequencePlanner:
 
                     # Disable signal handler before raising
                     disable_graceful_stop()
+                    # Emit run_end on user interrupt (plan_sequence only).
+                    if self.run_logger is not None:
+                        try:
+                            self.run_logger.log(
+                                "run_end",
+                                success=False,
+                                total_time=time.time() - _loop_start_time,
+                                total_planning_time=self.total_planning_time,
+                                phase_count=len(self.phase_results),
+                                final_config=None,
+                                error="user_interrupt",
+                            )
+                            self.run_logger.close()
+                        except Exception:
+                            pass
                     raise KeyboardInterrupt("Planning stopped by user request")
 
                 edge_start_time = time.time()
@@ -1311,6 +1362,18 @@ class GraspSequencePlanner:
                     "total_time": 0.0,
                     "success": False,
                 }
+
+                if self.run_logger is not None:
+                    try:
+                        self.run_logger.log(
+                            "edge_start",
+                            phase=phase_idx + 1,
+                            edge_idx=edge_idx,
+                            edge_name=edge_name,
+                            q_from=list(q_start),
+                        )
+                    except Exception:
+                        pass
 
                 if verbose:
                     print(
@@ -1366,6 +1429,23 @@ class GraspSequencePlanner:
                     edge_stat["gen_time"] = time.time() - gen_start
                     edge_stat["total_time"] = time.time() - edge_start_time
                     edge_stats_list.append(edge_stat)
+
+                    if self.run_logger is not None:
+                        try:
+                            self.run_logger.log(
+                                "edge_end",
+                                phase=phase_idx + 1,
+                                edge_idx=edge_idx,
+                                edge_name=edge_name,
+                                success=False,
+                                gen_time=edge_stat["gen_time"],
+                                plan_time=0.0,
+                                total_time=edge_stat["total_time"],
+                                q_to=None,
+                                error=str(e),
+                            )
+                        except Exception:
+                            pass
 
                     # Store partial phase result
                     partial_phase_result = {
@@ -1512,6 +1592,23 @@ class GraspSequencePlanner:
                     edge_stats_list.append(edge_stat)
                     self.total_planning_time += edge_stat["total_time"]
 
+                    if self.run_logger is not None:
+                        try:
+                            self.run_logger.log(
+                                "edge_end",
+                                phase=phase_idx + 1,
+                                edge_idx=edge_idx,
+                                edge_name=edge_name,
+                                success=False,
+                                gen_time=edge_stat["gen_time"],
+                                plan_time=edge_stat["plan_time"],
+                                total_time=edge_stat["total_time"],
+                                q_to=None,
+                                error=str(e),
+                            )
+                        except Exception:
+                            pass
+
                     # Store partial phase result before raising
                     partial_phase_result = {
                         "phase": phase_idx + 1,
@@ -1568,6 +1665,23 @@ class GraspSequencePlanner:
                 edge_stats_list.append(edge_stat)
                 self.total_planning_time += edge_stat["total_time"]
                 self.edge_stats[(phase_idx, edge_idx)] = edge_stat
+
+                if self.run_logger is not None:
+                    try:
+                        self.run_logger.log(
+                            "edge_end",
+                            phase=phase_idx + 1,
+                            edge_idx=edge_idx,
+                            edge_name=edge_name,
+                            success=True,
+                            gen_time=edge_stat["gen_time"],
+                            plan_time=edge_stat["plan_time"],
+                            total_time=edge_stat["total_time"],
+                            q_to=list(q_target) if q_target is not None else None,
+                            error=None,
+                        )
+                    except Exception:
+                        pass
 
                 phase_paths.append(path)
 
@@ -1640,6 +1754,27 @@ class GraspSequencePlanner:
                 "state_after": self.grasp_tracker.get_current_state_name(),
                 "saved_files": saved_files,  # Track saved path files
             }
+            # Emit phase_end before appending so callers can react
+            # even if they iterate self.phase_results incrementally.
+            if self.run_logger is not None:
+                try:
+                    self.run_logger.log(
+                        "phase_end",
+                        phase=phase_idx + 1,
+                        gripper=gripper,
+                        handle=handle,
+                        success=True,
+                        phase_time=phase_total_time,
+                        phase_gen_time=phase_gen_time,
+                        phase_plan_time=phase_plan_time,
+                        final_config=list(q_current),
+                        state_after=self.grasp_tracker.get_current_state_name(),
+                        saved_files=saved_files,
+                        error=None,
+                    )
+                except Exception:
+                    pass
+
             self.phase_results.append(phase_result)
 
         if verbose:
@@ -1654,6 +1789,22 @@ class GraspSequencePlanner:
 
         # Disable signal handler before returning
         disable_graceful_stop()
+
+        # Emit run_end and close logger (success path).
+        if self.run_logger is not None:
+            try:
+                self.run_logger.log(
+                    "run_end",
+                    success=True,
+                    total_time=time.time() - _loop_start_time,
+                    total_planning_time=self.total_planning_time,
+                    phase_count=len(self.phase_results),
+                    final_config=list(q_current),
+                    error=None,
+                )
+                self.run_logger.close()
+            except Exception:
+                pass
 
         # Return combined result
         return {
@@ -3074,6 +3225,7 @@ class InteractiveGraspSequenceBuilder:
                 pyhpp_constraints=getattr(self.task, "pyhpp_constraints", {}),
                 graph_constraints=getattr(self.task, "_graph_constraints", None),
                 auto_save_dir=self.auto_save_dir,
+                run_logger=getattr(self.task, "run_logger", None),
             )
 
             # Set interactive callback if in interactive mode

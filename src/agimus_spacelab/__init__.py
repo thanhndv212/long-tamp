@@ -69,6 +69,16 @@ from .visualization import (
     print_joint_info,
 )
 
+from .logging import (
+    RunLogger,
+    configure_logging,
+    get_logger,
+    load_run_log,
+    iter_events,
+    get_replay_config,
+    print_run_summary,
+)
+
 
 def check_backend(backend: str) -> bool:
     """Check if a backend is available.

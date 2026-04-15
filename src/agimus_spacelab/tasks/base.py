@@ -33,6 +33,7 @@ class ManipulationTask:
         FILE_PATHS: Optional[Dict[str, Any]] = None,
         task_name: str = "Manipulation Task",
         backend: str = "pyhpp",
+        log_dir: Optional[str] = "auto",
     ):
         """
         Initialize manipulation task.
@@ -40,6 +41,9 @@ class ManipulationTask:
         Args:
             task_name: Descriptive name for the task
             backend: "corba" or "pyhpp" - which backend to use
+            log_dir: Directory for run logs. "auto" (default) creates
+                /tmp/agimus_spacelab/<task_slug>_<YYYYMMDD_HHMMSS>/;
+                None disables logging entirely.
         """
         self.task_name = task_name
         self.backend = backend.lower()
@@ -56,6 +60,30 @@ class ManipulationTask:
         self.task_config = None
         self.use_factory = False
         self.pyhpp_constraints = {}
+
+        # Structured run logger (optional — only created when log_dir is set)
+        if log_dir == "auto":
+            import datetime
+            import os
+            slug = re.sub(r"[^a-zA-Z0-9]+", "_", task_name).strip("_").lower()
+            stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_dir = os.path.join("/tmp", "agimus_spacelab", f"{slug}_{stamp}")
+        self.run_logger = None
+        if log_dir is not None:
+            try:
+                import socket
+                import sys
+                from agimus_spacelab.logging import RunLogger
+                self.run_logger = RunLogger(log_dir)
+                self.run_logger.log(
+                    "run_start",
+                    task_name=task_name,
+                    backend=backend,
+                    hostname=socket.gethostname(),
+                    python_version=sys.version.split()[0],
+                )
+            except Exception:
+                self.run_logger = None  # Never crash on logger init
 
     def get_robot_names(self) -> List[str]:
         return self.task_config.ROBOT_NAMES
@@ -239,6 +267,25 @@ class ManipulationTask:
         print("=" * 70)
         print(f"{self.task_name}")
         print("=" * 70)
+
+        # Emit config snapshot so the full task configuration is captured
+        # before any scene loading (crash-safe: even if setup fails later,
+        # the snapshot has been flushed to the JSONL file).
+        if self.run_logger is not None:
+            try:
+                self.run_logger.log_task_config(
+                    task_config=self.task_config,
+                    setup_params={
+                        "validation_step": validation_step,
+                        "projector_step": projector_step,
+                        "freeze_joint_substrings": freeze_joint_substrings,
+                        "skip_graph": skip_graph,
+                    },
+                    backend=self.backend,
+                    task_name=self.task_name,
+                )
+            except Exception:
+                pass
 
         # 1. Scene setup
         print("\n1. Setting up scene...")
