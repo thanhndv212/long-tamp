@@ -14,7 +14,7 @@ Multi-arm collaborative manipulation planning for SpaceLab assembly tasks using 
 
 ```bash
 cd script/spacelab
-./task_display_states.py -i
+./interactive_planning.py -i
 ```
 
 ### Installation
