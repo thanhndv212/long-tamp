@@ -108,7 +108,7 @@ def add_advanced_arguments(parser: argparse.ArgumentParser) -> None:
         metavar="STATE",
         help=(
             "Target grasp state(s) to include in graph, e.g. "
-            "'spacelab/g_ur10_tool grasps frame_gripper/h_FG_tool'. "
+            "'<robot>/gripper grasps <object>/handle'. "
             "Reduces graph size by filtering VALID_PAIRS. Repeatable."
         ),
     )
@@ -119,7 +119,7 @@ def add_advanced_arguments(parser: argparse.ArgumentParser) -> None:
         metavar="GRIPPER:HANDLE",
         help=(
             "Add a gripper-handle pair to VALID_PAIRS, e.g. "
-            "'spacelab/g_ur10_tool:frame_gripper/h_FG_tool'. Repeatable. "
+            "'<robot>/gripper:<object>/handle'. Repeatable. "
             "If specified, only these pairs are included in the graph."
         ),
     )
@@ -191,8 +191,8 @@ def add_grasp_sequence_arguments(parser: argparse.ArgumentParser) -> None:
         help=(
             "Plan a sequence of grasps using incremental phase graphs. "
             "Format: GRIPPER1:HANDLE1,GRIPPER2:HANDLE2,... "
-            "Example: 'spacelab/g_ur10_tool:frame_gripper/h_FG_tool,"
-            "spacelab/g_vispa:panel/h_panel'. Uses TransitionPlanner for "
+            "Example: '<robot>/gripper1:<object1>/handle,"
+            "<robot>/gripper2:<object2>/handle'. Uses TransitionPlanner for "
             "each phase with minimal graph regeneration."
         ),
     )

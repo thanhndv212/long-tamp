@@ -341,6 +341,19 @@ class YamlTaskLoader:
 
         planning = data.get("planning", {})
 
+        # Arm groups (optional) — derive GRIPPER_TO_ARM_KEYWORD and ALL_ARM_KEYWORDS
+        # so GraspSequencePlanner auto-freeze works without any hard-coded robot names.
+        arm_groups_raw: Dict[str, Any] = data.get("arm_groups", {})
+        gripper_to_arm_keyword: Dict[str, str] = {}
+        for arm_name, arm_cfg in arm_groups_raw.items():
+            keyword = arm_cfg.get("joint_keyword", arm_name)
+            for gripper in arm_cfg.get("grippers", []):
+                gripper_to_arm_keyword[gripper] = keyword
+        all_arm_keywords: List[str] = [
+            arm_cfg.get("joint_keyword", arm_name)
+            for arm_name, arm_cfg in arm_groups_raw.items()
+        ]
+
         namespace: Dict[str, Any] = {
             # Scene
             "ROBOT_NAMES": list(data.get("robots", [])),
@@ -358,6 +371,10 @@ class YamlTaskLoader:
                 k: list(v)
                 for k, v in data.get("valid_pairs", {}).items()
             },
+            # Arm groups for auto-freeze
+            "ARM_GROUPS": dict(arm_groups_raw),
+            "GRIPPER_TO_ARM_KEYWORD": gripper_to_arm_keyword,
+            "ALL_ARM_KEYWORDS": all_arm_keywords,
             # Environment
             "ENVIRONMENT_CONTACTS": dict(
                 data.get("environment_contacts", {})

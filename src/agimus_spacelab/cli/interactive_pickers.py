@@ -81,17 +81,27 @@ def select_frozen_arms(
 
     Args:
         default_substrings: Substrings to use if user quits without selecting.
-        arm_options: Available arm substrings. Defaults to common SpaceLab arms.
+        arm_options: Available arm substrings from task_config.ALL_ARM_KEYWORDS.
+            If not provided, falls back to default_substrings as options and
+            emits a DeprecationWarning.
 
     Returns:
         List of selected substrings. Returns default_substrings if user quits.
 
     Example:
-        >>> frozen = select_frozen_arms(["vispa_"], arm_options=["vispa_", "ur10"])
+        >>> frozen = select_frozen_arms(["ur5"], arm_options=cfg.ALL_ARM_KEYWORDS)
         >>> print(f"Will freeze joints containing: {frozen}")
     """
     if arm_options is None:
-        arm_options = ["vispa_", "vispa2", "ur10"]
+        import warnings
+        warnings.warn(
+            "select_frozen_arms() called without arm_options. "
+            "Pass task_config.ALL_ARM_KEYWORDS so the menu shows the correct "
+            "arms for your robot. Falling back to default_substrings as options.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        arm_options = list(default_substrings) if default_substrings else []
 
     initial_selected = [
         i for i, opt in enumerate(arm_options) if opt in set(default_substrings)
@@ -221,12 +231,16 @@ def select_skip_phases(
 
 def select_frozen_arms_mode(
     grasp_sequence: Optional[List[tuple]] = None,
+    arm_keywords: Optional[List[str]] = None,
 ) -> tuple:
     """
     Interactively select the frozen arms mode for planning.
 
     Args:
         grasp_sequence: Optional grasp sequence for manual mode configuration.
+        arm_keywords: Arm joint keywords from task_config.ALL_ARM_KEYWORDS.
+            Required for manual and interactive modes. If not provided, a
+            DeprecationWarning is emitted and an empty list is used.
 
     Returns:
         Tuple of (mode: str, per_phase_frozen_arms: Optional[dict]).
@@ -258,7 +272,15 @@ def select_frozen_arms_mode(
     # Manual mode: collect per-phase specifications
     if frozen_arms_mode == "manual" and grasp_sequence:
         per_phase_frozen_arms = {}
-        arm_keywords = ["ur10", "vispa_", "vispa2"]
+        if arm_keywords is None:
+            import warnings
+            warnings.warn(
+                "select_frozen_arms_mode() called without arm_keywords. "
+                "Pass task_config.ALL_ARM_KEYWORDS for correct arm choices.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            arm_keywords = []
 
         for phase_idx, (gripper, handle) in enumerate(grasp_sequence):
             print(f"\nPhase {phase_idx + 1}: {gripper} → {handle}")

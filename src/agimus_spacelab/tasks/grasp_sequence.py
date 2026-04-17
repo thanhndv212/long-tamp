@@ -198,17 +198,17 @@ class GraspSequencePlanner:
         self.total_planning_time = 0.0
         self.resume_attempt_count = 0
 
-        # Gripper-to-arm mapping for locked joint filtering
-        # Maps gripper name pattern -> arm keyword
-        # Multiple grippers can belong to the same arm
-        self.GRIPPER_TO_ARM_MAP = {
-            "g_ur10": "ur10",
-            "g_FG": "ur10",      # UR10 with Frame Gripper
-            "g_vispa_": "vispa_",
-            "g_SD": "vispa_",    # Vispa with Screw Driver
-            "g_vispa2": "vispa2",
-        }
-        self.ALL_ARM_KEYWORDS = ["ur10", "vispa_", "vispa2"]
+        # Gripper-to-arm mapping for locked joint filtering.
+        # Loaded from task_config.GRIPPER_TO_ARM_KEYWORD (populated by the
+        # arm_groups section of the YAML config).  Falls back to empty when
+        # the config has no arm_groups (e.g. single-arm tasks that don't
+        # need auto-freeze).
+        self.GRIPPER_TO_ARM_MAP = dict(
+            getattr(task_config, "GRIPPER_TO_ARM_KEYWORD", {})
+        )
+        self.ALL_ARM_KEYWORDS = list(
+            getattr(task_config, "ALL_ARM_KEYWORDS", [])
+        )
 
         # Callback for interactive arm selection (set by UI layer)
         self.interactive_arm_selector_callback = None
@@ -703,12 +703,16 @@ class GraspSequencePlanner:
         frozen_arms = []
         active_arm = None
 
-        # Find which arm the active gripper belongs to
-        gripper_lower = active_gripper.lower()
-        for gripper_pattern, arm_keyword in self.GRIPPER_TO_ARM_MAP.items():
-            if gripper_pattern.lower() in gripper_lower:
-                active_arm = arm_keyword
-                break
+        # Find which arm the active gripper belongs to.
+        # Exact-match first (config stores full gripper frame names),
+        # then substring fallback for any legacy prefix-style mappings.
+        active_arm = self.GRIPPER_TO_ARM_MAP.get(active_gripper)
+        if active_arm is None:
+            gripper_lower = active_gripper.lower()
+            for gripper_pattern, arm_keyword in self.GRIPPER_TO_ARM_MAP.items():
+                if gripper_pattern.lower() in gripper_lower:
+                    active_arm = arm_keyword
+                    break
 
         if verbose:
             print(f"Active gripper '{active_gripper}' uses arm '{active_arm}'")
@@ -722,6 +726,9 @@ class GraspSequencePlanner:
 
     def _get_arm_for_gripper(self, gripper_name: str) -> Optional[str]:
         """Return the arm keyword for a gripper name, or None."""
+        arm = self.GRIPPER_TO_ARM_MAP.get(gripper_name)
+        if arm is not None:
+            return arm
         gl = gripper_name.lower()
         for pattern, arm in self.GRIPPER_TO_ARM_MAP.items():
             if pattern.lower() in gl:
@@ -3061,6 +3068,9 @@ class InteractiveGraspSequenceBuilder:
         self.task = task
         self.task_config = task_config
         self.freeze_joint_substrings = freeze_joint_substrings or []
+        self.ALL_ARM_KEYWORDS = list(
+            getattr(task_config, "ALL_ARM_KEYWORDS", [])
+        )
 
         # Will be populated during run()
         self.grasp_sequence: List[Tuple[str, str]] = []
@@ -3147,7 +3157,8 @@ class InteractiveGraspSequenceBuilder:
         from agimus_spacelab.cli.interactive_pickers import select_frozen_arms_mode
 
         self.frozen_arms_mode, self.per_phase_frozen_arms = select_frozen_arms_mode(
-            self.grasp_sequence
+            self.grasp_sequence,
+            arm_keywords=self.ALL_ARM_KEYWORDS,
         )
 
     def configure_auto_save(self) -> None:
