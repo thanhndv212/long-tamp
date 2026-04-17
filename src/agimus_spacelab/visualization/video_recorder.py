@@ -2,8 +2,10 @@
 """
 Video recording utilities for path playback.
 
-Provides functionality to record videos during path playback using
-gepetto-viewer-corba's capture capabilities and ffmpeg encoding.
+Provides functionality to record videos during path playback using either:
+
+* **gepetto-viewer-corba** — ``startCapture``/``stopCapture`` (async frame dump)
+* **viser** — ``captureImage`` (synchronous, frame-by-frame via :meth:`record_path`)
 """
 
 import glob
@@ -13,13 +15,28 @@ import time
 from datetime import datetime
 from typing import Optional
 
+import numpy as np
+
+
+def _is_viser_viewer(viewer) -> bool:
+    """Return True if *viewer* is a pyhpp_viser Viewer instance."""
+    try:
+        from pyhpp_viser import Viewer as _ViserViewer  # noqa: PLC0415
+        return isinstance(viewer, _ViserViewer)
+    except ImportError:
+        return False
+
 
 class VideoRecorder:
     """
-    Video recorder for gepetto-viewer path playback.
-    
-    Uses gepetto-viewer-corba's startCapture/stopCapture methods to record
-    frames during path playback, then encodes them to video using ffmpeg.
+    Video recorder for path playback.
+
+    Supports two capture modes:
+
+    * **gepetto** — uses ``viewer.client.gui.startCapture`` / ``stopCapture``
+      (async frame dump).  Use :meth:`start_recording` / :meth:`stop_recording`.
+    * **viser** — uses ``viewer.captureImage`` (synchronous, PIL-based).
+      Use :meth:`record_path` which handles the full capture loop in one call.
     """
 
     def __init__(
@@ -33,9 +50,9 @@ class VideoRecorder:
     ):
         """
         Initialize video recorder.
-        
+
         Args:
-            viewer: Gepetto viewer instance (from ViewerFactory)
+            viewer: Gepetto or viser viewer instance.
             output_dir: Directory for video output (default: /home/dvtnguyen/devel/demos)
             framerate: Video framerate in fps (default: 25)
             frame_extension: Frame format - 'png' or 'jpeg' (default: 'png')
@@ -48,23 +65,35 @@ class VideoRecorder:
         self.frame_extension = frame_extension
         self.video_extension = video_extension
         self.auto_cleanup = auto_cleanup
-        
+
         self._recording = False
         self._frame_prefix = None
         self._video_file = None
 
+    @property
+    def _is_viser(self) -> bool:
+        """True when the wrapped viewer is a pyhpp_viser Viewer."""
+        return _is_viser_viewer(self.viewer)
+
     def start_recording(self, video_name: Optional[str] = None, path_id: Optional[int] = None) -> str:
         """
-        Start video recording by initiating frame capture.
-        
+        Start video recording by initiating frame capture (gepetto only).
+
+        For viser viewers, use :meth:`record_path` instead.
+
         Args:
             video_name: Custom name for the output video (without extension).
                        If None, a name will be auto-generated with timestamp.
             path_id: Optional path ID for default naming
-            
+
         Returns:
             The full path to the output video file
         """
+        if self._is_viser:
+            raise TypeError(
+                "start_recording() is not supported for viser viewers. "
+                "Use VideoRecorder.record_path(path, ...) instead."
+            )
         if self._recording:
             raise RuntimeError("Recording already in progress. Call stop_recording() first.")
         
@@ -117,6 +146,75 @@ class VideoRecorder:
         # Encode video using ffmpeg
         self._encode_video()
         
+        return self._video_file
+
+    def record_path(
+        self,
+        path,
+        speed: float = 1.0,
+        video_name: Optional[str] = None,
+        path_id: Optional[int] = None,
+        width: int = 800,
+        height: int = 600,
+    ) -> str:
+        """
+        Record a path by sampling frames with ``viewer.captureImage`` (viser only).
+
+        Iterates over the path time-domain, calls ``viewer.display(q)`` then
+        ``viewer.captureImage(width, height)`` at each frame, saves frames to
+        disk, and encodes to video with ffmpeg.
+
+        Args:
+            path: HPP path object supporting ``.length()`` and ``.eval(t)``.
+            speed: Playback speed multiplier (default: 1.0).
+            video_name: Output video file base-name (no extension).
+                        Auto-generated with timestamp if *None*.
+            path_id: Optional path index used in the auto-generated name.
+            width: Capture width in pixels (default: 800).
+            height: Capture height in pixels (default: 600).
+
+        Returns:
+            Absolute path to the encoded video file.
+
+        Raises:
+            TypeError: If the viewer is not a viser viewer. Use
+                :meth:`start_recording`/:meth:`stop_recording` for gepetto.
+        """
+        if not self._is_viser:
+            raise TypeError(
+                "record_path() requires a viser viewer. "
+                "Use start_recording()/stop_recording() for gepetto."
+            )
+
+        os.makedirs(self.output_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if video_name is None:
+            base_name = f"path_{path_id}_{timestamp}" if path_id is not None else f"recording_{timestamp}"
+        else:
+            base_name = video_name
+        self._frame_prefix = os.path.join(self.output_dir, f"{base_name}_frame")
+        self._video_file = os.path.join(self.output_dir, f"{base_name}.{self.video_extension}")
+
+        total_time = path.length()
+        n_frames = max(2, int(total_time / speed * self.framerate))
+        print(f"[VideoRecorder] Capturing {n_frames} viser frames (path length {total_time:.3f} s)...")
+
+        for i, t in enumerate(np.linspace(0.0, total_time, n_frames)):
+            result = path.eval(t)
+            # result may be (q, valid) or just q depending on HPP version
+            if isinstance(result, (list, tuple)) and len(result) == 2 and isinstance(result[1], bool):
+                q, valid = result
+            else:
+                q = result
+                valid = True
+            if valid:
+                self.viewer.display(np.array(q, dtype=float))
+            img = self.viewer.captureImage(width, height)
+            frame_path = f"{self._frame_prefix}_{i}.{self.frame_extension}"
+            img.save(frame_path)
+
+        print(f"[VideoRecorder] Encoding video: {self._video_file}")
+        self._encode_video()
         return self._video_file
 
     def _encode_video(self):
@@ -183,49 +281,60 @@ class VideoRecorder:
 
 def record_path_playback(
     viewer,
-    path_player,
+    path_player_or_path,
     path_id: int,
     video_name: Optional[str] = None,
     output_dir: str = "/home/dvtnguyen/devel/demos",
     framerate: int = 25,
     dt: float = 0.01,
     speed: float = 1.0,
+    width: int = 800,
+    height: int = 600,
 ) -> str:
     """
     Convenience function to record a path playback.
-    
+
+    Dispatches automatically based on the viewer type:
+
+    * **gepetto**: uses ``startCapture``/``stopCapture``.  Pass a
+      ``PathPlayer`` instance as *path_player_or_path*.
+    * **viser**: uses ``captureImage`` frame-by-frame.  Pass an HPP path
+      object (supporting ``.length()`` / ``.eval(t)``) as *path_player_or_path*.
+
     Args:
-        viewer: Gepetto viewer instance
-        path_player: PathPlayer instance
-        path_id: Path identifier to play
-        video_name: Custom name for the output video (without extension)
-        output_dir: Directory for video output
-        framerate: Video framerate in fps
-        dt: Time step for path sampling
-        speed: Playback speed multiplier
-        
+        viewer: Gepetto or viser viewer instance.
+        path_player_or_path: For gepetto — a ``PathPlayer``; for viser — an HPP path object.
+        path_id: Path identifier (used for naming only when viewer is viser).
+        video_name: Custom name for the output video (without extension).
+        output_dir: Directory for video output.
+        framerate: Video framerate in fps.
+        dt: Time step for gepetto path sampling.
+        speed: Playback speed multiplier.
+        width: Frame width in pixels (viser only, default: 800).
+        height: Frame height in pixels (viser only, default: 600).
+
     Returns:
-        The path to the generated video file
+        The path to the generated video file.
     """
-    # Create recorder
-    recorder = VideoRecorder(
-        viewer,
-        output_dir=output_dir,
-        framerate=framerate
-    )
-    
-    # Configure path player
-    path_player.setDt(dt)
-    path_player.setSpeed(speed)
-    
-    # Start recording
-    video_file = recorder.start_recording(video_name=video_name, path_id=path_id)
-    
-    try:
-        # Play the path
-        path_player(path_id)
-    finally:
-        # Always stop recording
-        recorder.stop_recording()
-    
-    return video_file
+    recorder = VideoRecorder(viewer, output_dir=output_dir, framerate=framerate)
+
+    if _is_viser_viewer(viewer):
+        return recorder.record_path(
+            path=path_player_or_path,
+            speed=speed,
+            video_name=video_name,
+            path_id=path_id,
+            width=width,
+            height=height,
+        )
+    else:
+        # Gepetto path: path_player_or_path is a PathPlayer
+        path_player = path_player_or_path
+        path_player.setDt(dt)
+        path_player.setSpeed(speed)
+        video_file = recorder.start_recording(video_name=video_name, path_id=path_id)
+        try:
+            path_player(path_id)
+        finally:
+            recorder.stop_recording()
+        return video_file

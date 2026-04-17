@@ -33,24 +33,30 @@ class ManipulationTask:
         FILE_PATHS: Optional[Dict[str, Any]] = None,
         task_name: str = "Manipulation Task",
         backend: str = "pyhpp",
+        viewer_type: str = "auto",
         log_dir: Optional[str] = "auto",
     ):
         """
         Initialize manipulation task.
-        
+
         Args:
             task_name: Descriptive name for the task
             backend: "corba" or "pyhpp" - which backend to use
+            viewer_type: Viewer to use — "viser", "gepetto", or "auto" (default).
+                ``"auto"`` prefers viser for PyHPP and gepetto for CORBA,
+                falling back gracefully when unavailable.
             log_dir: Directory for run logs. "auto" (default) creates
                 /tmp/agimus_spacelab/<task_slug>_<YYYYMMDD_HHMMSS>/;
                 None disables logging entirely.
         """
         self.task_name = task_name
         self.backend = backend.lower()
+        self.viewer_type = viewer_type
         self.scene_builder = SceneBuilder(
             joint_bounds=joint_bounds,
             FILE_PATHS=FILE_PATHS,
             backend=backend,
+            viewer_type=viewer_type,
         )
         self.planner = None
         self.robot = None
@@ -299,6 +305,19 @@ class ManipulationTask:
         )
         # Get initial configuration
         self.q_init = self.build_initial_config()
+
+        # Apply optimizer config from task_config (overrides backend defaults).
+        # This wires YAML optimization: fields set via yaml_loader into the backend.
+        if self.task_config is not None and hasattr(self.planner, "configure_transition_planner"):
+            opt_kwargs = {}
+            for field, kwarg in (
+                ("RANDOM_SHORTCUT_LOOPS", "random_shortcut_loops"),
+                ("SPLINE_ZERO_DERIVATIVES_AT_STATE", "spline_zero_derivatives_at_state"),
+            ):
+                if hasattr(self.task_config, field):
+                    opt_kwargs[kwarg] = getattr(self.task_config, field)
+            if opt_kwargs:
+                self.planner.configure_transition_planner(**opt_kwargs)
 
         # 2. Custom collision management
         self.setup_collision_management()

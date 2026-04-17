@@ -3,6 +3,8 @@
 Visualization utilities for manipulation tasks.
 
 Provides functions for visualizing constraint graphs and handle frames.
+Both gepetto-viewer (CORBA) and pyhpp_viser (browser-based) viewers are
+supported transparently — functions detect the viewer type at call time.
 """
 
 from typing import List, Optional, Dict, Tuple, Any
@@ -20,34 +22,144 @@ def print_joint_info(robot):
 
 
 import numpy as np
-from typing import List, Optional
 from pinocchio import SE3, Quaternion
 from agimus_spacelab.utils import xyzquat_to_se3
 
 
-def compute_arrow_orientation(direction: np.ndarray) -> Quaternion:
-    """
-    Compute quaternion to orient arrow along given direction.
-    
-    Arrow default orientation is along X-axis.
-    
+# ---------------------------------------------------------------------------
+# Viewer-type detection helpers
+# ---------------------------------------------------------------------------
+
+def _is_viser_viewer(viewer) -> bool:
+    """Return True when *viewer* is a pyhpp_viser.Viewer instance."""
+    try:
+        from pyhpp_viser import Viewer as _ViserViewer
+        return isinstance(viewer, _ViserViewer)
+    except ImportError:
+        return False
+
+
+# Registry: {node_name: viser_frame_handle} for viser viewers.
+# Used by clear_* functions to remove previously added frames/meshes.
+_VISER_FRAME_REGISTRY: Dict[str, Any] = {}
+
+
+def _viser_xyzquat_to_wxyz(pose: list) -> tuple:
+    """Convert [x,y,z, qw,qx,qy,qz] HPP pose to (position, wxyz) viser style."""
+    pos = np.array(pose[:3], dtype=float)
+    # HPP pose convention: qw,qx,qy,qz
+    wxyz = np.array([pose[3], pose[4], pose[5], pose[6]], dtype=float)
+    return pos, wxyz
+
+
+def _viser_add_frame(viewer, name: str, pose: list,
+                     axes_length: float = 0.015, axes_radius: float = 0.005):
+    """Add a coordinate-frame to a viser scene and register it.
+
     Args:
-        direction: 3D direction vector (will be normalized)
-        
+        viewer: pyhpp_viser.Viewer instance
+        name: Unique name for the frame in the viser scene
+        pose: [x,y,z,qw,qx,qy,qz] in world/joint-local coordinates
+        axes_length: Length of XYZ axes
+        axes_radius: Radius of XYZ axes
+
     Returns:
-        Quaternion for arrow orientation
+        The created viser frame handle
     """
+    pos, wxyz = _viser_xyzquat_to_wxyz(pose)
+    handle = viewer.viewer.scene.add_frame(
+        name,
+        show_axes=True,
+        axes_length=axes_length,
+        axes_radius=axes_radius,
+    )
+    handle.position = pos
+    handle.wxyz = wxyz
+    _VISER_FRAME_REGISTRY[name] = handle
+    return handle
+
+
+def _make_arrow_mesh(length: float, radius: float):
+    """Build a trimesh arrow (cylinder shaft + cone tip) along the +X axis.
+
+    Returns:
+        trimesh.Trimesh combined mesh
+    """
+    import trimesh
+    shaft_len = length * 0.75
+    tip_len = length * 0.25
+    shaft = trimesh.creation.cylinder(
+        radius=radius, height=shaft_len,
+        transform=trimesh.transformations.translation_matrix([shaft_len / 2, 0, 0])
+        @ trimesh.transformations.rotation_matrix(np.pi / 2, [0, 1, 0]),
+    )
+    cone = trimesh.creation.cone(
+        radius=radius * 2.0, height=tip_len,
+        transform=trimesh.transformations.translation_matrix([shaft_len + tip_len / 2, 0, 0])
+        @ trimesh.transformations.rotation_matrix(np.pi / 2, [0, 1, 0]),
+    )
+    return trimesh.util.concatenate([shaft, cone])
+
+
+def _viser_add_arrow(viewer, name: str, pose: list, direction: np.ndarray,
+                     color: list, length: float, radius: float):
+    """Add an arrow mesh to a viser scene pointing along *direction*.
+
+    The arrow is placed at the position encoded in *pose* and oriented along
+    *direction* (in the same frame as pose).
+
+    Returns:
+        The created viser mesh handle
+    """
+    arrow_mesh = _make_arrow_mesh(length, radius)
+    pos, wxyz = _viser_xyzquat_to_wxyz(pose)
+
+    # Build transform: rotate from +X to direction
+    d = np.array(direction, dtype=float)
+    norm = np.linalg.norm(d)
+    if norm < 1e-9:
+        d = np.array([1.0, 0.0, 0.0])
+    else:
+        d = d / norm
+
+    x_axis = np.array([1.0, 0.0, 0.0])
+    cross = np.cross(x_axis, d)
+    cross_norm = np.linalg.norm(cross)
+    if cross_norm < 1e-9:
+        # Parallel: either same or opposite direction
+        R = np.eye(3) if np.dot(x_axis, d) > 0 else -np.eye(3)
+    else:
+        cross = cross / cross_norm
+        angle = np.arccos(np.clip(np.dot(x_axis, d), -1.0, 1.0))
+        import pinocchio as pin
+        R = pin.AngleAxis(angle, cross).toRotationMatrix()
+
+    import pinocchio as pin
+    arrow_wxyz = pin.Quaternion(R).coeffs()[[3, 0, 1, 2]]
+
+    rgba = color[:4] if len(color) >= 4 else color + [1.0]
+    handle = viewer.viewer.scene.add_mesh_simple(
+        name,
+        arrow_mesh.vertices.astype(np.float32),
+        arrow_mesh.faces.astype(np.int32),
+        color=rgba[:3],
+        opacity=rgba[3],
+    )
+    handle.position = pos
+    handle.wxyz = arrow_wxyz
+    _VISER_FRAME_REGISTRY[name] = handle
+    return handle
+
+
+def _compute_arrow_orientation_gepetto(direction: np.ndarray) -> Quaternion:
+    """Compute quaternion to orient a gepetto-viewer arrow along *direction*."""
     x_axis = direction / np.linalg.norm(direction)
-    z_axis = np.array([0, 0, 1])
+    z_axis = np.array([0.0, 0.0, 1.0])
     y_axis = np.cross(z_axis, x_axis)
-    
-    # Handle parallel case
     if np.linalg.norm(y_axis) < 1e-6:
-        y_axis = np.array([0, 1, 0])
-    
+        y_axis = np.array([0.0, 1.0, 0.0])
     y_axis = y_axis / np.linalg.norm(y_axis)
     z_axis = np.cross(x_axis, y_axis)
-    
     rot_matrix = np.column_stack([x_axis, y_axis, z_axis])
     return Quaternion(rot_matrix)
 
@@ -60,38 +172,42 @@ def displayHandle(
     axis_length: float = 0.015
 ) -> bool:
     """
-    Display handle frame in gepetto-gui (wrapper around hpp.gepetto.viewer method).
-    
-    Retrieves the joint and pose information of the handle in the robot model
-    and displays a frame. The frame will be attached to the robot link, so it
-    moves with the robot configuration.
-    
+    Display handle frame in the viewer.
+
+    Works with both gepetto-viewer (CORBA) and pyhpp_viser (browser).
+    For gepetto-viewer the frame is parented to the robot link so it moves
+    with the robot.  For viser a static frame is added at the handle's
+    local-joint pose; call ``viewer.display(q)`` to update geometry positions.
+
     Args:
-        viewer: Gepetto viewer instance
+        viewer: Viewer instance (gepetto or viser)
         handle_name: Full handle name (e.g., "box/handle2")
-        frame_color: RGBA color for frame [r, g, b, a] (default: [0, 1, 0, 1] green)
+        frame_color: RGBA color [r, g, b, a] (default: green [0, 1, 0, 1])
         axis_radius: Radius of XYZ axes
         axis_length: Length of XYZ axes
-        
+
     Returns:
         True if successful
     """
     if frame_color is None:
         frame_color = [0, 1, 0, 1]  # Green
-    
+
     try:
-        robot = viewer.robot
+        robot = viewer.robot if hasattr(viewer, "robot") else viewer._robot
         joint, pose = robot.getHandlePositionInJoint(handle_name)
         hname = "handle__" + handle_name.replace("/", "_")
-        viewer.client.gui.addXYZaxis(hname, frame_color, axis_radius, axis_length)
-        
-        if joint != "universe":
-            link = robot.getLinkNames(joint)[0]
-            viewer.client.gui.addToGroup(hname, robot.name + "/" + link)
+
+        if _is_viser_viewer(viewer):
+            _viser_add_frame(viewer, hname, pose,
+                             axes_length=axis_length, axes_radius=axis_radius)
         else:
-            viewer.client.gui.addToGroup(hname, robot.name)
-        
-        viewer.client.gui.applyConfiguration(hname, pose)
+            viewer.client.gui.addXYZaxis(hname, frame_color, axis_radius, axis_length)
+            if joint != "universe":
+                link = robot.getLinkNames(joint)[0]
+                viewer.client.gui.addToGroup(hname, robot.name + "/" + link)
+            else:
+                viewer.client.gui.addToGroup(hname, robot.name)
+            viewer.client.gui.applyConfiguration(hname, pose)
         return True
     except Exception as e:
         print(f"  Warning: Could not display handle {handle_name}: {e}")
@@ -106,38 +222,39 @@ def displayGripper(
     axis_length: float = 0.015
 ) -> bool:
     """
-    Display gripper frame in gepetto-gui (wrapper around hpp.gepetto.viewer method).
-    
-    Retrieves the joint and pose information of the gripper in the robot model
-    and displays a frame. The frame will be attached to the robot link, so it
-    moves with the robot configuration.
-    
+    Display gripper frame in the viewer.
+
+    Works with both gepetto-viewer (CORBA) and pyhpp_viser (browser).
+
     Args:
-        viewer: Gepetto viewer instance
+        viewer: Viewer instance (gepetto or viser)
         gripper_name: Full gripper name (e.g., "pr2/l_gripper")
-        frame_color: RGBA color for frame [r, g, b, a] (default: [0, 1, 0, 1] green)
+        frame_color: RGBA color [r, g, b, a] (default: green [0, 1, 0, 1])
         axis_radius: Radius of XYZ axes
         axis_length: Length of XYZ axes
-        
+
     Returns:
         True if successful
     """
     if frame_color is None:
         frame_color = [0, 1, 0, 1]  # Green
-    
+
     try:
-        robot = viewer.robot
+        robot = viewer.robot if hasattr(viewer, "robot") else viewer._robot
         joint, pose = robot.getGripperPositionInJoint(gripper_name)
         gname = "gripper__" + gripper_name.replace("/", "_")
-        viewer.client.gui.addXYZaxis(gname, frame_color, axis_radius, axis_length)
-        
-        if joint != "universe":
-            link = robot.getLinkNames(joint)[0]
-            viewer.client.gui.addToGroup(gname, robot.name + "/" + link)
+
+        if _is_viser_viewer(viewer):
+            _viser_add_frame(viewer, gname, pose,
+                             axes_length=axis_length, axes_radius=axis_radius)
         else:
-            viewer.client.gui.addToGroup(gname, robot.name)
-        
-        viewer.client.gui.applyConfiguration(gname, pose)
+            viewer.client.gui.addXYZaxis(gname, frame_color, axis_radius, axis_length)
+            if joint != "universe":
+                link = robot.getLinkNames(joint)[0]
+                viewer.client.gui.addToGroup(gname, robot.name + "/" + link)
+            else:
+                viewer.client.gui.addToGroup(gname, robot.name)
+            viewer.client.gui.applyConfiguration(gname, pose)
         return True
     except Exception as e:
         print(f"  Warning: Could not display gripper {gripper_name}: {e}")
@@ -172,31 +289,34 @@ def displayHandleApproach(
         arrow_color = [0, 1, 1, 1]  # Cyan
     
     try:
-        robot = viewer.robot
+        robot = viewer.robot if hasattr(viewer, "robot") else viewer._robot
         joint, pose = robot.getHandlePositionInJoint(handle_name)
-        
-        # Create arrow in handle frame
-        arrow_name = "handle__" + handle_name.replace("/", "_") + "_approach"
-        viewer.client.gui.addArrow(arrow_name, arrow_radius, arrow_length, arrow_color)
-        # Transform approach direction relative to handle frame
-        handle_T = xyzquat_to_se3(pose)
-        approach_dir = np.array(approach_direction) if approach_direction is not None else robot.getHandleApproachingDirection(handle_name)
-        approach_world = handle_T.rotation @ approach_dir
-        arrow_quat = compute_arrow_orientation(approach_world)
-        
-        # Arrow starts at handle position with computed orientation
-        arrow_pose = [pose[0], pose[1], pose[2],
-                      arrow_quat.w, arrow_quat.x, arrow_quat.y, arrow_quat.z]
-        viewer.client.gui.applyConfiguration(arrow_name, arrow_pose)
 
-        # Attach arrow to same parent as frame
-        if joint != "universe":
-            link = robot.getLinkNames(joint)[0]
-            viewer.client.gui.addToGroup(arrow_name, robot.name + "/" + link)
+        # Determine approach direction in joint-local frame
+        if approach_direction is not None:
+            approach_vec = np.array(approach_direction, dtype=float)
         else:
-            viewer.client.gui.addToGroup(arrow_name, robot.name)
-        
-        viewer.client.gui.applyConfiguration(arrow_name, pose)
+            approach_vec = np.array(robot.getHandleApproachingDirection(handle_name),
+                                    dtype=float)
+
+        arrow_name = "handle__" + handle_name.replace("/", "_") + "_approach"
+
+        if _is_viser_viewer(viewer):
+            _viser_add_arrow(viewer, arrow_name, pose, approach_vec,
+                             arrow_color, arrow_length, arrow_radius)
+        else:
+            handle_T = xyzquat_to_se3(pose)
+            approach_world = handle_T.rotation @ approach_vec
+            arrow_quat = _compute_arrow_orientation_gepetto(approach_world)
+            arrow_pose = [pose[0], pose[1], pose[2],
+                          arrow_quat.w, arrow_quat.x, arrow_quat.y, arrow_quat.z]
+            viewer.client.gui.addArrow(arrow_name, arrow_radius, arrow_length, arrow_color)
+            viewer.client.gui.applyConfiguration(arrow_name, arrow_pose)
+            if joint != "universe":
+                link = robot.getLinkNames(joint)[0]
+                viewer.client.gui.addToGroup(arrow_name, robot.name + "/" + link)
+            else:
+                viewer.client.gui.addToGroup(arrow_name, robot.name)
         return True
     except Exception as e:
         print(f"  Warning: Could not display approach arrow for {handle_name}: {e}")
@@ -230,36 +350,35 @@ def displayGripperApproach(
     """
     if arrow_color is None:
         arrow_color = [1, 0.5, 0, 1]  # Orange
-    
-    try:
-        robot = viewer.robot
-        joint, pose = robot.getGripperPositionInJoint(gripper_name)
-        
-        # Create arrow in gripper frame
-        arrow_name = "gripper__" + gripper_name.replace("/", "_") + "_approach"
-        viewer.client.gui.addArrow(arrow_name, arrow_radius, arrow_length, arrow_color)
-        
-        # Transform approach direction relative to gripper frame
-        gripper_T = xyzquat_to_se3(pose)
 
-        # default approach direction is X-axis
-        approach_vec = np.array(approach_direction) if approach_direction is not None else np.array([1, 0, 0])
-        approach_world = gripper_T.rotation @ approach_vec
-        arrow_quat = compute_arrow_orientation(approach_world)
-        
-        # Arrow starts at gripper position with computed orientation
-        arrow_pose = [pose[0], pose[1], pose[2],
-                      arrow_quat.w, arrow_quat.x, arrow_quat.y, arrow_quat.z]
-        
-        viewer.client.gui.applyConfiguration(arrow_name, arrow_pose)
-        
-        # Attach arrow to same parent as frame
-        if joint != "universe":
-            link = robot.getLinkNames(joint)[0]
-            viewer.client.gui.addToGroup(arrow_name, robot.name + "/" + link)
+    try:
+        robot = viewer.robot if hasattr(viewer, "robot") else viewer._robot
+        joint, pose = robot.getGripperPositionInJoint(gripper_name)
+
+        approach_vec = (
+            np.array(approach_direction, dtype=float)
+            if approach_direction is not None
+            else np.array([1.0, 0.0, 0.0])
+        )
+
+        arrow_name = "gripper__" + gripper_name.replace("/", "_") + "_approach"
+
+        if _is_viser_viewer(viewer):
+            _viser_add_arrow(viewer, arrow_name, pose, approach_vec,
+                             arrow_color, arrow_length, arrow_radius)
         else:
-            viewer.client.gui.addToGroup(arrow_name, robot.name)
-        
+            gripper_T = xyzquat_to_se3(pose)
+            approach_world = gripper_T.rotation @ approach_vec
+            arrow_quat = _compute_arrow_orientation_gepetto(approach_world)
+            arrow_pose = [pose[0], pose[1], pose[2],
+                          arrow_quat.w, arrow_quat.x, arrow_quat.y, arrow_quat.z]
+            viewer.client.gui.addArrow(arrow_name, arrow_radius, arrow_length, arrow_color)
+            viewer.client.gui.applyConfiguration(arrow_name, arrow_pose)
+            if joint != "universe":
+                link = robot.getLinkNames(joint)[0]
+                viewer.client.gui.addToGroup(arrow_name, robot.name + "/" + link)
+            else:
+                viewer.client.gui.addToGroup(arrow_name, robot.name)
         return True
     except Exception as e:
         print(f"  Warning: Could not display approach arrow for {gripper_name}: {e}")
@@ -323,7 +442,8 @@ def visualize_all_handles(
         else:
             print("    ✗ Failed")
     
-    viewer.client.gui.refresh()
+    if not _is_viser_viewer(viewer):
+        viewer.client.gui.refresh()
     print(f"\nSuccessfully displayed {success_count}/{len(handle_names)} handles")
     return success_count
 
@@ -388,7 +508,8 @@ def visualize_all_grippers(
         else:
             print("    ✗ Failed")
     
-    viewer.client.gui.refresh()
+    if not _is_viser_viewer(viewer):
+        viewer.client.gui.refresh()
     print(f"\nSuccessfully displayed {success_count}/{len(gripper_names)} grippers")
     return success_count
 
@@ -448,48 +569,64 @@ def remove_visualization(viewer, name: str) -> bool:
 def clear_handle_visualizations(viewer) -> int:
     """
     Clear all handle visualization elements (handle__ prefix).
-    
+
     Args:
-        viewer: Gepetto viewer instance
-        
+        viewer: Gepetto viewer or viser viewer instance
+
     Returns:
         Number of elements removed
     """
     count = 0
-    try:
-        nodes = viewer.client.gui.getNodeList()
-        for node in nodes:
-            if node.startswith("handle__"):
-                if remove_visualization(viewer, node):
-                    count += 1
-        viewer.client.gui.refresh()
-    except Exception as e:
-        print(f"Warning: Could not clear handle visualizations: {e}")
-    
+    if _is_viser_viewer(viewer):
+        to_remove = [k for k in list(_VISER_FRAME_REGISTRY.keys()) if k.startswith("handle__")]
+        for name in to_remove:
+            try:
+                _VISER_FRAME_REGISTRY.pop(name).remove()
+                count += 1
+            except Exception:
+                pass
+    else:
+        try:
+            nodes = viewer.client.gui.getNodeList()
+            for node in nodes:
+                if node.startswith("handle__"):
+                    if remove_visualization(viewer, node):
+                        count += 1
+            viewer.client.gui.refresh()
+        except Exception as e:
+            print(f"Warning: Could not clear handle visualizations: {e}")
     return count
 
 
 def clear_gripper_visualizations(viewer) -> int:
     """
     Clear all gripper visualization elements (gripper__ prefix).
-    
+
     Args:
-        viewer: Gepetto viewer instance
-        
+        viewer: Gepetto viewer or viser viewer instance
+
     Returns:
         Number of elements removed
     """
     count = 0
-    try:
-        nodes = viewer.client.gui.getNodeList()
-        for node in nodes:
-            if node.startswith("gripper__"):
-                if remove_visualization(viewer, node):
-                    count += 1
-        viewer.client.gui.refresh()
-    except Exception as e:
-        print(f"Warning: Could not clear gripper visualizations: {e}")
-    
+    if _is_viser_viewer(viewer):
+        to_remove = [k for k in list(_VISER_FRAME_REGISTRY.keys()) if k.startswith("gripper__")]
+        for name in to_remove:
+            try:
+                _VISER_FRAME_REGISTRY.pop(name).remove()
+                count += 1
+            except Exception:
+                pass
+    else:
+        try:
+            nodes = viewer.client.gui.getNodeList()
+            for node in nodes:
+                if node.startswith("gripper__"):
+                    if remove_visualization(viewer, node):
+                        count += 1
+            viewer.client.gui.refresh()
+        except Exception as e:
+            print(f"Warning: Could not clear gripper visualizations: {e}")
     return count
 
 

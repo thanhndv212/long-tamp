@@ -45,18 +45,32 @@ except ImportError:
     _GepettoViewer = None
     HAS_GEPETTO_VIEWER = False
 
+try:
+    from pyhpp_viser import Viewer as _ViserViewer
+    HAS_VISER = True
+except ImportError:
+    _ViserViewer = None
+    HAS_VISER = False
+
 
 class PyHPPBackend(BackendBase):
     """PyHPP backend implementation for manipulation planning."""
 
-    def __init__(self):
-        """Initialize PyHPP backend."""
+    def __init__(self, viewer_type: str = "auto"):
+        """Initialize PyHPP backend.
+
+        Args:
+            viewer_type: Viewer to use for visualize() / play_path():
+                ``"viser"`` (browser, no X11), ``"gepetto"`` (Qt/CORBA),
+                ``"auto"`` (tries viser first, falls back to gepetto).
+        """
         if not HAS_PYHPP:
             raise ImportError(
                 "PyHPP backend not available. "
                 "Please install hpp-python."
             )
 
+        self._viewer_type = viewer_type
         self.device = None
         self.problem = None
         self.graph = None
@@ -84,26 +98,41 @@ class PyHPPBackend(BackendBase):
         # Optimizer profiles for different edge types
         # Transit edges (free motion): Use graph-aware shortcut (best available in PyHPP)
         self._transit_edge_optimizers = [
+            "EnforceTransitionSemantic",
             "GraphRandomShortcut",
+            "GraphPartialShortcut",
+            "SplineGradientBased_bezier3",
         ]
         # Waypoint edges (constrained motion): Use manipulation-aware optimizers
         self._waypoint_pregrasp_optimizers = [
+            "EnforceTransitionSemantic",
             "ManipulationRandomShortcut",
-            # "EnforceTransitionSemantic",
+            "GraphPartialShortcut",
             "SplineGradientBased_bezier3",
         ]
         # Waypoint edges (constrained motion): Use manipulation-aware shortcut
         self._waypoint_grasp_optimizers = [
+            "EnforceTransitionSemantic",
             "ManipulationRandomShortcut",
+            "GraphPartialShortcut",
         ]
         # Default fallback
         self._transition_default_optimizers = [
+            "EnforceTransitionSemantic",
             "ManipulationRandomShortcut",
+            "GraphPartialShortcut",
         ]
 
         # Time parameterization parameters
         self._time_param_order = 2
         self._time_param_max_accel = 0.2
+
+        # RandomShortcut: number of shortcut attempts per optimization pass.
+        # HPP core default is 5; increasing to 50 gives much better convergence.
+        self._random_shortcut_loops: int = 50
+        # SplineGradientBased: whether to enforce zero velocity at state junctions.
+        # Setting False allows the spline optimizer to carry momentum through waypoints.
+        self._spline_zero_derivatives_at_state: bool = False
 
         # Distance-based auto-tuning
         self._enable_distance_tuning = True
@@ -408,47 +437,89 @@ class PyHPPBackend(BackendBase):
                 return self._stored_paths[index]
         return self.path
 
-    def setup_viewer(self):
-        """Explicitly initialise the gepetto viewer.
+    def setup_viewer(self, viewer_type: str = "auto") -> None:
+        """Explicitly initialise the viewer.
 
-        Call this once before using visualize().  Connecting to the CORBA
-        gepetto-viewer server via omniORB can cause a SIGSEGV if the server
-        is not running, so viewer creation is intentionally NOT done
-        automatically inside visualize().
+        Args:
+            viewer_type: ``"viser"``, ``"gepetto"``, or ``"auto"``.
+                Overrides the value set in ``__init__`` for this call only.
+                Calling ``setup_viewer()`` without an argument re-uses the
+                type passed to ``__init__``.
+
+        Raises:
+            RuntimeError: If robot is not loaded yet.
+            ImportError: If the requested viewer library is not installed.
         """
         if self.device is None:
             raise RuntimeError("Must load robot first")
-        if not HAS_GEPETTO_VIEWER:
-            raise ImportError("Gepetto viewer not available (omniORB missing)")
-        self.viewer = _GepettoViewer(self.device)
+
+        resolved = viewer_type if viewer_type != "auto" else self._viewer_type
+
+        if resolved == "viser":
+            if not HAS_VISER:
+                raise ImportError(
+                    "pyhpp_viser not available. "
+                    "Install with: pip install viser trimesh pycollada"
+                )
+            problem = getattr(self, "problem", None)
+            self.viewer = _ViserViewer(self.device, problem)
+            self.viewer.start(open=False)
+        elif resolved == "gepetto":
+            if not HAS_GEPETTO_VIEWER:
+                raise ImportError(
+                    "Gepetto viewer not available (omniORB / gepetto-viewer missing)"
+                )
+            self.viewer = _GepettoViewer(self.device)
+        else:  # "auto"
+            if HAS_VISER:
+                problem = getattr(self, "problem", None)
+                self.viewer = _ViserViewer(self.device, problem)
+                self.viewer.start(open=False)
+            elif HAS_GEPETTO_VIEWER:
+                self.viewer = _GepettoViewer(self.device)
+            else:
+                raise ImportError(
+                    "No viewer available. "
+                    "Install pyhpp_viser (pip install viser trimesh pycollada) "
+                    "or gepetto-viewer-corba."
+                )
 
     def visualize(self, q: Optional[np.ndarray] = None):
         """Visualize configuration.
 
-        Auto-initialises the viewer on first call if setup_viewer() has not
-        been called yet.  If the gepetto-viewer server is not reachable the
-        call is silently skipped (no SIGSEGV, no exception propagated).
+        Auto-initialises the viewer on first call if ``setup_viewer()`` has
+        not been called yet.  If no viewer server is reachable the call is
+        silently skipped (no SIGSEGV, no exception propagated).
         """
         if self.viewer is None:
             try:
                 self.setup_viewer()
             except Exception:
-                return  # server not running or viewer unavailable — skip silently
+                return  # viewer unavailable — skip silently
 
         if q is not None:
             if isinstance(q, list):
                 q = np.array(q)
-            self.viewer(q)
+            self.viewer.display(q) if hasattr(self.viewer, "display") else self.viewer(q)
         else:
-            # Display current config or initial
             try:
                 q_init = self.problem.initConfig()
-                self.viewer(q_init)
+                q_arr = np.array(q_init)
+                self.viewer.display(q_arr) if hasattr(self.viewer, "display") else self.viewer(q_arr)
             except Exception:
                 pass
 
     def play_path(self, path_index: int = 0):
-        """Play path in viewer."""
+        """Play / animate a stored path in the viewer.
+
+        If the active viewer is a `pyhpp_viser.Viewer`, the path is loaded
+        into the GUI path-player dropdown (non-blocking) and returned
+        immediately.  For gepetto-viewer the existing blocking animation loop
+        is used.
+
+        Args:
+            path_index: Index into the locally stored paths list.
+        """
         path = None
         if self._stored_paths:
             if path_index < 0:
@@ -466,7 +537,13 @@ class PyHPPBackend(BackendBase):
         if self.viewer is None:
             self.visualize()
 
-        # Animate path
+        # Viser viewer: load into GUI path-player (non-blocking)
+        if HAS_VISER and isinstance(self.viewer, _ViserViewer):
+            name = f"path_{path_index}"
+            self.viewer.loadPath(path, name=name)
+            return
+
+        # Gepetto viewer: blocking animation loop
         import time
         t = 0.0
         dt = 0.01
@@ -1247,6 +1324,8 @@ class PyHPPBackend(BackendBase):
         path_projector: Optional[Tuple[str, float]] = None,
         enable_distance_tuning: Optional[bool] = None,
         distance_scale_factor: Optional[float] = None,
+        random_shortcut_loops: Optional[int] = None,
+        spline_zero_derivatives_at_state: Optional[bool] = None,
     ) -> None:
         """Configure defaults for TransitionPlanner edge-scoped planning.
         
@@ -1260,6 +1339,10 @@ class PyHPPBackend(BackendBase):
             enable_distance_tuning: Enable auto-scaling timeout/iterations
                 by distance
             distance_scale_factor: Scale factor for distance-based tuning
+            random_shortcut_loops: Number of shortcut attempts per pass
+                (HPP default 5; recommended 50+)
+            spline_zero_derivatives_at_state: Enforce zero velocity at state
+                junctions in SplineGradientBased (default False = allow momentum)
         """
         if inner_planner_type is not None:
             self._transition_inner_planner_type = inner_planner_type
@@ -1275,6 +1358,10 @@ class PyHPPBackend(BackendBase):
             self._enable_distance_tuning = bool(enable_distance_tuning)
         if distance_scale_factor is not None:
             self._distance_scale_factor = float(distance_scale_factor)
+        if random_shortcut_loops is not None:
+            self._random_shortcut_loops = int(random_shortcut_loops)
+        if spline_zero_derivatives_at_state is not None:
+            self._spline_zero_derivatives_at_state = bool(spline_zero_derivatives_at_state)
 
         tp = self._transition_planner
         if tp is not None:
@@ -1337,6 +1424,23 @@ class PyHPPBackend(BackendBase):
             pass
         try:
             tp.maxIterations(self._transition_max_iterations)
+        except Exception:
+            pass
+
+        # Apply HPP-level parameters on the Problem for path optimizers.
+        # These are global to the problem and affect all optimizers in the TP.
+        try:
+            self.problem.setParameter(
+                "PathOptimization/RandomShortcut/NumberOfLoops",
+                self._random_shortcut_loops,
+            )
+        except Exception:
+            pass
+        try:
+            self.problem.setParameter(
+                "SplineGradientBased/zeroDerivativesAtStateIntersection",
+                self._spline_zero_derivatives_at_state,
+            )
         except Exception:
             pass
 
