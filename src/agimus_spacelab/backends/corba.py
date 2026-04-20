@@ -64,14 +64,15 @@ class CorbaBackend(BackendBase):
         )
 
         # Optimizer profiles for different edge types
-        # Transit edges (free motion): Use spline optimization
+        # Transit edges (free motion): shortcut first, then spline smoothing
         self._transit_edge_optimizers = [
-            "SplineGradientBased_bezier3",
+            "Graph-PartialShortcut",
+            "SplineGradientBased_bezier5",
         ]
         # Waypoint edges (constrained motion): Use spline optimization
         self._waypoint_pregrasp_optimizers = [
             "RandomShortcut",
-            "SplineGradientBased_bezier3",
+            "SplineGradientBased_bezier5",
             # "SimpleTimeParameterization",
             # "TOPPRA",
         ]
@@ -91,7 +92,8 @@ class CorbaBackend(BackendBase):
 
         # Time parameterization parameters
         self._time_param_order = 2
-        self._time_param_max_accel = 0.2
+        self._time_param_max_accel = 1.0
+        self._time_param_safety: float = 0.95
 
         # Distance-based auto-tuning
         self._enable_distance_tuning = True
@@ -572,17 +574,22 @@ class CorbaBackend(BackendBase):
         self,
         order: Optional[int] = None,
         max_acceleration: Optional[float] = None,
+        safety: Optional[float] = None,
     ) -> None:
         """Configure SimpleTimeParameterization parameters.
-        
+
         Args:
             order: Polynomial order for time parameterization (default 2)
-            max_acceleration: Maximum acceleration limit (default 0.2)
+            max_acceleration: Maximum acceleration limit (default 1.0)
+            safety: Fraction of joint velocity limits to use (0–1).
+                Lower values slow down execution. Default 0.95.
         """
         if order is not None:
             self._time_param_order = int(order)
         if max_acceleration is not None:
             self._time_param_max_accel = float(max_acceleration)
+        if safety is not None:
+            self._time_param_safety = float(safety)
 
         # Apply to existing transition planner if created
         tp = self._transition_planner
@@ -597,6 +604,10 @@ class CorbaBackend(BackendBase):
                 problem.setParameter(
                     "SimpleTimeParameterization/maxAcceleration",
                     Any(TC_double, self._time_param_max_accel)
+                )
+                problem.setParameter(
+                    "SimpleTimeParameterization/safety",
+                    Any(TC_double, self._time_param_safety),
                 )
             except Exception:
                 pass
@@ -636,25 +647,33 @@ class CorbaBackend(BackendBase):
 
         try:
             tp.timeOut(self._transition_time_out)
-        except Exception:
-            pass
+            print(f"      [TP] ✓ timeOut={self._transition_time_out:.1f}s")
+        except Exception as e:
+            print(f"      [TP] ✗ timeOut failed: {e}")
         try:
             tp.maxIterations(self._transition_max_iterations)
-        except Exception:
-            pass
+            print(
+                f"      [TP] ✓ maxIterations={self._transition_max_iterations}"
+            )
+        except Exception as e:
+            print(f"      [TP] ✗ maxIterations failed: {e}")
         if self._transition_path_projector is not None:
             proj_type, tol = self._transition_path_projector
             try:
                 tp.setPathProjector(proj_type, float(tol))
-            except Exception:
-                pass
+                print(f"      [TP] ✓ pathProjector={proj_type}(tol={tol})")
+            except Exception as e:
+                print(
+                    f"      [TP] ✗ pathProjector={proj_type}(tol={tol}) failed: {e}"
+                )
         # Add default path optimizers
         for opt in self._transition_default_optimizers:
             try:
                 self._load_path_optimizer_plugin_if_needed(opt)
                 tp.addPathOptimizer(opt)
-            except Exception:
-                pass
+                print(f"      [TP] ✓ addPathOptimizer={opt}")
+            except Exception as e:
+                print(f"      [TP] ✗ addPathOptimizer={opt} failed: {e}")
 
         # Apply time parameterization settings
         try:
@@ -664,12 +683,25 @@ class CorbaBackend(BackendBase):
                 "SimpleTimeParameterization/order",
                 CorbaAny(TC_long, self._time_param_order)
             )
+            print(
+                f"      [TP] ✓ SimpleTimeParameterization/order={self._time_param_order}"
+            )
             problem.setParameter(
                 "SimpleTimeParameterization/maxAcceleration",
                 CorbaAny(TC_double, self._time_param_max_accel)
             )
-        except Exception:
-            pass
+            print(
+                f"      [TP] ✓ SimpleTimeParameterization/maxAcceleration={self._time_param_max_accel}"
+            )
+            problem.setParameter(
+                "SimpleTimeParameterization/safety",
+                CorbaAny(TC_double, self._time_param_safety),
+            )
+            print(
+                f"      [TP] ✓ SimpleTimeParameterization/safety={self._time_param_safety}"
+            )
+        except Exception as e:
+            print(f"      [TP] ✗ SimpleTimeParameterization failed: {e}")
 
     def set_inner_problem_parameter(self, key: str, value: Any) -> None:
         """Set parameter on TransitionPlanner's inner problem.
@@ -1046,7 +1078,7 @@ class CorbaBackend(BackendBase):
         """
         if self.graph is None:
             raise RuntimeError("Constraint graph not initialized")
-            
+
         metadata = {
             "format_version": "1.0",
             "robot_name": self.robot.name if self.robot else None,
@@ -1054,7 +1086,7 @@ class CorbaBackend(BackendBase):
             "edges": [],
             "objects": [],
         }
-        
+
         # Extract states
         try:
             # Try to get nodes from graph
@@ -1066,7 +1098,7 @@ class CorbaBackend(BackendBase):
                     metadata["states"] = [str(n) for n in nodes]
         except Exception as e:
             print(f"Warning: Could not extract states: {e}")
-            
+
         # Extract edges
         try:
             if hasattr(self.graph, "edges"):
@@ -1087,7 +1119,7 @@ class CorbaBackend(BackendBase):
                             metadata["edges"].append({"name": edge_name})
         except Exception as e:
             print(f"Warning: Could not extract edges: {e}")
-            
+
         # Extract object names if available
         try:
             if hasattr(self.robot, "robotNames"):
@@ -1099,7 +1131,7 @@ class CorbaBackend(BackendBase):
                 ]
         except Exception as e:
             print(f"Warning: Could not extract object names: {e}")
-            
+
         return metadata
 
     # =========================================================================
@@ -1427,10 +1459,10 @@ class CorbaBackend(BackendBase):
             # Read waypoints
             with open(filename, "r") as f:
                 data = json.load(f)
-                
+
             # Check for graph metadata and validate if requested
             graph_metadata = data.get("graph_metadata")
-            
+
             if auto_setup_graph:
                 if not graph_metadata:
                     raise RuntimeError(
@@ -1438,7 +1470,7 @@ class CorbaBackend(BackendBase):
                         "This file was saved without graph metadata. You must manually "
                         "set up the constraint graph before loading."
                     )
-                    
+
                 # Validate current graph matches metadata
                 self._validate_graph_metadata(graph_metadata)
                 print("✓ Graph metadata validated successfully")
@@ -1451,10 +1483,10 @@ class CorbaBackend(BackendBase):
                         f"Note: File contains graph metadata for robot '{robot_name}' "
                         f"with {num_states} states. Make sure your graph setup matches."
                     )
-                
+
             # Check for graph metadata and validate if requested
             graph_metadata = data.get("graph_metadata")
-            
+
             if auto_setup_graph:
                 if not graph_metadata:
                     raise RuntimeError(
@@ -1462,7 +1494,7 @@ class CorbaBackend(BackendBase):
                         "This file was saved without graph metadata. You must manually "
                         "set up the constraint graph before loading."
                     )
-                    
+
                 # Validate current graph matches metadata
                 self._validate_graph_metadata(graph_metadata)
                 print("✓ Graph metadata validated successfully")
@@ -1519,7 +1551,7 @@ class CorbaBackend(BackendBase):
             path_vector = path_segments[0].asVector()
             for segment in path_segments[1:]:
                 path_vector.appendPath(segment)
-            
+
             # Warn if some segments failed
             expected_segments = len(waypoints) - 1
             if len(path_segments) < expected_segments:
@@ -1561,7 +1593,7 @@ class CorbaBackend(BackendBase):
                 f"with {len(saved_metadata.get('states', []))} states. "
                 "Set up the graph first using the same robot/objects/structure."
             )
-            
+
         # Extract current metadata
         try:
             current_metadata = self.extract_graph_metadata()
@@ -1570,7 +1602,7 @@ class CorbaBackend(BackendBase):
                 f"Failed to extract current graph metadata: {e}. "
                 "Cannot validate graph structure."
             )
-            
+
         # Validate robot name
         saved_robot = saved_metadata.get("robot_name")
         current_robot = current_metadata.get("robot_name")
@@ -1579,7 +1611,7 @@ class CorbaBackend(BackendBase):
                 f"Warning: Robot name mismatch. Saved: '{saved_robot}', "
                 f"Current: '{current_robot}'"
             )
-            
+
         # Validate state count
         saved_states = saved_metadata.get("states", [])
         current_states = current_metadata.get("states", [])
@@ -1589,7 +1621,7 @@ class CorbaBackend(BackendBase):
                 f"but current graph has {len(current_states)} states. "
                 "Make sure you're using the same constraint graph structure."
             )
-            
+
         # Validate edge count (if available)
         saved_edges = saved_metadata.get("edges", [])
         current_edges = current_metadata.get("edges", [])
@@ -1767,11 +1799,11 @@ class CorbaBackend(BackendBase):
 
         # Import video recorder
         from agimus_spacelab.visualization.video_recorder import record_path_playback
-        
+
         # Configure path player
         self.path_player.setDt(dt)
         self.path_player.setSpeed(speed)
-        
+
         # Record the playback
         video_file = record_path_playback(
             self.viewer,
@@ -1783,7 +1815,7 @@ class CorbaBackend(BackendBase):
             dt=dt,
             speed=speed,
         )
-        
+
         return video_file
 
     def play_and_record_path_vector(

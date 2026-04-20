@@ -807,6 +807,21 @@ class GraspSequencePlanner:
                     f"max_iterations={max_iterations_per_edge}"
                 )
 
+        # Apply time parameterization settings from task config
+        if hasattr(self.planner, "configure_time_parameterization"):
+            tp_kwargs = {}
+            for field, kwarg in (
+                ("TIME_PARAM_SAFETY", "safety"),
+                ("TIME_PARAM_ORDER", "order"),
+            ):
+                val = getattr(self.task_config, field, None)
+                if val is not None:
+                    tp_kwargs[kwarg] = val
+            if tp_kwargs:
+                self.planner.configure_time_parameterization(**tp_kwargs)
+                if verbose:
+                    print(f"Configured time parameterization: {tp_kwargs}")
+
         if verbose:
             print("\n" + "=" * 70)
             print("Grasp Sequence Planning")

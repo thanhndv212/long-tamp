@@ -90,7 +90,7 @@ class PyHPPBackend(BackendBase):
         self._waypoint_pregrasp_optimizers = [
             "ManipulationRandomShortcut",
             # "EnforceTransitionSemantic",
-            "SplineGradientBased_bezier3",
+            "SplineGradientBased_bezier5",
         ]
         # Waypoint edges (constrained motion): Use manipulation-aware shortcut
         self._waypoint_grasp_optimizers = [
@@ -103,7 +103,8 @@ class PyHPPBackend(BackendBase):
 
         # Time parameterization parameters
         self._time_param_order = 2
-        self._time_param_max_accel = 0.2
+        self._time_param_max_accel = 1.0
+        self._time_param_safety: float = 0.95
 
         # Distance-based auto-tuning
         self._enable_distance_tuning = True
@@ -1284,22 +1285,26 @@ class PyHPPBackend(BackendBase):
         self,
         order: Optional[int] = None,
         max_acceleration: Optional[float] = None,
+        safety: Optional[float] = None,
     ) -> None:
         """Configure time parameterization parameters.
-        
+
         Args:
             order: Polynomial order for time parameterization
             max_acceleration: Maximum acceleration limit
-        
+            safety: Fraction of joint velocity limits to use (0–1).
+                Lower values slow down execution. Default 0.95.
+
         Note:
-            In PyHPP, time parameterization is typically set when creating
-            the SimpleTimeParameterization optimizer instance. These settings
-            are stored for future use when creating optimizers.
+            In PyHPP, these settings are applied to the problem via
+            setParameter so they take effect for all subsequent planning.
         """
         if order is not None:
             self._time_param_order = int(order)
         if max_acceleration is not None:
             self._time_param_max_accel = float(max_acceleration)
+        if safety is not None:
+            self._time_param_safety = float(safety)
 
     def set_inner_problem_parameter(self, key: str, value: Any) -> None:
         """Set parameter on TransitionPlanner's inner problem.
@@ -1333,20 +1338,73 @@ class PyHPPBackend(BackendBase):
     def _apply_transition_planner_defaults(self, tp: Any) -> None:
         try:
             tp.timeOut(self._transition_time_out)
-        except Exception:
-            pass
+            print(f"      [TP] ✓ timeOut={self._transition_time_out:.1f}s")
+        except Exception as e:
+            print(f"      [TP] ✗ timeOut failed: {e}")
         try:
             tp.maxIterations(self._transition_max_iterations)
-        except Exception:
-            pass
+            print(
+                f"      [TP] ✓ maxIterations={self._transition_max_iterations}"
+            )
+        except Exception as e:
+            print(f"      [TP] ✗ maxIterations failed: {e}")
+
+        # Apply SimpleTimeParameterization parameters to the problem so they
+        # take effect when the optimizer runs during transition planning.
+        if self.problem is not None:
+            try:
+                self.problem.setParameter(
+                    "SimpleTimeParameterization/order",
+                    self._time_param_order,
+                )
+                print(
+                    "      [TP] ✓ SimpleTimeParameterization/order"
+                    f"={self._time_param_order}"
+                )
+            except Exception as e:
+                print(
+                    f"      [TP] ✗ SimpleTimeParameterization/order failed: {e}"
+                )
+            try:
+                self.problem.setParameter(
+                    "SimpleTimeParameterization/maxAcceleration",
+                    self._time_param_max_accel,
+                )
+                print(
+                    "      [TP] ✓ SimpleTimeParameterization/maxAcceleration"
+                    f"={self._time_param_max_accel}"
+                )
+            except Exception as e:
+                print(
+                    "      [TP] ✗ SimpleTimeParameterization/maxAcceleration"
+                    f" failed: {e}"
+                )
+            try:
+                self.problem.setParameter(
+                    "SimpleTimeParameterization/safety",
+                    self._time_param_safety,
+                )
+                print(
+                    "      [TP] ✓ SimpleTimeParameterization/safety"
+                    f"={self._time_param_safety}"
+                )
+            except Exception as e:
+                print(
+                    f"      [TP] ✗ SimpleTimeParameterization/safety failed: {e}"
+                )
+        else:
+            print(
+                "      [TP] ✗ SimpleTimeParameterization skipped: problem not set"
+            )
 
         # Configure path projector specifically for TransitionPlanner.
         # If not set, fall back to whatever the Problem currently uses.
         if self._transition_path_projector is None:
             try:
                 tp.pathProjector(self.problem.pathProjector())
-            except Exception:
-                pass
+                print("      [TP] ✓ pathProjector=<inherited from problem>")
+            except Exception as e:
+                print(f"      [TP] ✗ pathProjector (fallback) failed: {e}")
             return
 
         proj_type, step = self._transition_path_projector
@@ -1358,11 +1416,18 @@ class PyHPPBackend(BackendBase):
                     float(step),
                 )
                 tp.pathProjector(projector)
+                print(f"      [TP] ✓ pathProjector=Progressive(step={step})")
             else:
                 # Unknown projector type: best-effort fallback
                 tp.pathProjector(self.problem.pathProjector())
-        except Exception:
-            pass
+                print(
+                    "      [TP] ✓ pathProjector=<inherited from problem>"
+                    f" (unknown type '{proj_type}')"
+                )
+        except Exception as e:
+            print(
+                f"      [TP] ✗ pathProjector={proj_type}(step={step}) failed: {e}"
+            )
 
     def ensure_transition_planner(self) -> Any:
         """Create (or return cached) TransitionPlanner object."""

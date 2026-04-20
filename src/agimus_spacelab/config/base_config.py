@@ -24,6 +24,18 @@ class Defaults:
     MAX_ITERATIONS = 1000
     ERROR_THRESHOLD = 1e-4
     MAX_RANDOM_ATTEMPTS = 1000
+
+    # Optimizer parameters
+    # Number of shortcut attempts per RandomShortcut pass (HPP default is 5).
+    RANDOM_SHORTCUT_LOOPS: int = 50
+    # When False the SplineGradientBased optimizer is free to carry velocity
+    # through state junctions, producing smoother, shorter splines.
+    SPLINE_ZERO_DERIVATIVES_AT_STATE: bool = False
+    # SimpleTimeParameterization: fraction of velocity limits used during
+    # time parameterization.  Lower = slower execution.  Range [0, 1].
+    TIME_PARAM_SAFETY: float = 0.95
+    # Polynomial order: 1=linear, 2=cubic (zero-vel ends), 3=quintic (zero-vel+accel)
+    TIME_PARAM_ORDER: int = 2
     
     # Constraint masks (6 DOF: x, y, z, roll, pitch, yaw)
     MASK_ALL = [True, True, True, True, True, True]
@@ -187,6 +199,10 @@ class BaseTaskConfig(ABC):
     MAX_ITERATIONS: int = Defaults.MAX_ITERATIONS
     ERROR_THRESHOLD: float = Defaults.ERROR_THRESHOLD
     MAX_RANDOM_ATTEMPTS: int = Defaults.MAX_RANDOM_ATTEMPTS
+    RANDOM_SHORTCUT_LOOPS: int = Defaults.RANDOM_SHORTCUT_LOOPS
+    SPLINE_ZERO_DERIVATIVES_AT_STATE: bool = Defaults.SPLINE_ZERO_DERIVATIVES_AT_STATE
+    TIME_PARAM_SAFETY: float = Defaults.TIME_PARAM_SAFETY
+    TIME_PARAM_ORDER: int = Defaults.TIME_PARAM_ORDER
     
     # ==========================================================================
     # Graph Definition (Override in subclass)

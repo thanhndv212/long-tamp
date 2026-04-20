@@ -43,6 +43,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
+from agimus_spacelab.config.base_config import Defaults
 from agimus_spacelab.utils.transforms import xyzrpy_to_xyzquat
 
 
@@ -340,6 +341,7 @@ class YamlTaskLoader:
         }
 
         planning = data.get("planning", {})
+        optimization = data.get("optimization", {})
 
         # Arm groups (optional) — derive GRIPPER_TO_ARM_KEYWORD and ALL_ARM_KEYWORDS
         # so GraspSequencePlanner auto-freeze works without any hard-coded robot names.
@@ -387,6 +389,20 @@ class YamlTaskLoader:
             "PATH_PROJECTOR_STEP": planning.get("projector_step", 0.1),
             "MAX_ITERATIONS": planning.get("max_iterations", 1000),
             "MAX_RANDOM_ATTEMPTS": planning.get("max_random_attempts", 1000),
+            # Optimizer defaults (overridable via optimization: yaml section)
+            "RANDOM_SHORTCUT_LOOPS": optimization.get(
+                "random_shortcut_loops", Defaults.RANDOM_SHORTCUT_LOOPS
+            ),
+            "SPLINE_ZERO_DERIVATIVES_AT_STATE": optimization.get(
+                "spline_zero_derivatives_at_state",
+                Defaults.SPLINE_ZERO_DERIVATIVES_AT_STATE,
+            ),
+            "TIME_PARAM_SAFETY": float(optimization.get(
+                "time_param_safety", Defaults.TIME_PARAM_SAFETY
+            )),
+            "TIME_PARAM_ORDER": int(optimization.get(
+                "time_param_order", Defaults.TIME_PARAM_ORDER
+            )),
             # Classmethods
             "get_constraint_defs": classmethod(_yaml_get_constraint_defs),
             "init_poses": classmethod(_yaml_init_poses),
