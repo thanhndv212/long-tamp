@@ -317,6 +317,12 @@ class ManipulationConfig:
     PATH_PROJECTOR_STEP = 0.1
     MAX_RANDOM_ATTEMPTS = 1000  # Increased for better success rate
 
+    # Optimizer tuning — mirror of optimization: section in graspball_config.yaml.
+    RANDOM_SHORTCUT_LOOPS: int = 50
+    SPLINE_ZERO_DERIVATIVES_AT_STATE: bool = False
+    TIME_PARAM_SAFETY: float = 0.95
+    TIME_PARAM_ORDER: int = 2
+
 
 __all__ = [
     "RobotJoints",
