@@ -465,6 +465,8 @@ class PyHPPBackend(BackendBase):
             problem = getattr(self, "problem", None)
             self.viewer = _ViserViewer(self.device, problem)
             self.viewer.start(open=False)
+            url = getattr(self.viewer, "url", None) or "http://localhost:8080"
+            print(f"Viser viewer started — open {url} in your browser")
         elif resolved == "gepetto":
             if not HAS_GEPETTO_VIEWER:
                 raise ImportError(
@@ -476,6 +478,8 @@ class PyHPPBackend(BackendBase):
                 problem = getattr(self, "problem", None)
                 self.viewer = _ViserViewer(self.device, problem)
                 self.viewer.start(open=False)
+                url = getattr(self.viewer, "url", None) or "http://localhost:8080"
+                print(f"Viser viewer started — open {url} in your browser")
             elif HAS_GEPETTO_VIEWER:
                 self.viewer = _GepettoViewer(self.device)
             else:
@@ -495,8 +499,9 @@ class PyHPPBackend(BackendBase):
         if self.viewer is None:
             try:
                 self.setup_viewer()
-            except Exception:
-                return  # viewer unavailable — skip silently
+            except Exception as exc:
+                print(f"⚠ Viewer unavailable: {exc}")
+                return
 
         if q is not None:
             if isinstance(q, list):
