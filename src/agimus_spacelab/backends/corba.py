@@ -25,6 +25,8 @@ except ImportError:
 
 try:
     from pyhpp_viser import Viewer as _ViserViewer
+    import viser as _viser_check  # noqa: F401 — verify runtime dep
+    del _viser_check
     HAS_VISER = True
 except ImportError:
     _ViserViewer = None
@@ -1706,17 +1708,26 @@ class CorbaBackend(BackendBase):
                 if self.vf is None:
                     self.vf = ViewerFactory(self.ps)
                 self.viewer = self.vf.createViewer()
-            except Exception:
+            except Exception as gepetto_exc:
                 if HAS_VISER:
-                    self.viewer = _ViserViewer(self.robot, self.ps)
-                    self.viewer.start(open=False)
+                    try:
+                        self.viewer = _ViserViewer(self.robot, self.ps)
+                        self.viewer.start(open=False)
+                    except Exception as viser_exc:
+                        print(f"⚠ Viser also failed ({viser_exc})")
+                        self.viewer = None
+                        raise gepetto_exc
                 else:
                     raise
 
     def visualize(self, q: Optional[np.ndarray] = None):
         """Visualize configuration."""
         if self.viewer is None:
-            self.setup_viewer()
+            try:
+                self.setup_viewer()
+            except Exception as exc:
+                print(f"⚠ Viewer unavailable: {exc}")
+                return
 
         if q is not None:
             q_list = q.tolist() if isinstance(q, np.ndarray) else q
@@ -1744,6 +1755,8 @@ class CorbaBackend(BackendBase):
         """
         if self.viewer is None:
             self.visualize()
+        if self.viewer is None:
+            return  # no viewer available — skip playback
 
         if HAS_VISER and isinstance(self.viewer, _ViserViewer):
             try:
@@ -1781,31 +1794,13 @@ class CorbaBackend(BackendBase):
         if self.ps is None:
             raise RuntimeError("Problem solver not created yet")
 
-        if self.viewer is None:
-            self.visualize()
-
         # Get current number of paths to determine the index
         path_index = self.ps.numberPaths()
 
         # Add PathVector to problem solver
         self.ps.client.basic.problem.addPath(path_vector)
 
-        if HAS_VISER and isinstance(self.viewer, _ViserViewer):
-            try:
-                path = self.ps.client.basic.problem.path(path_index)
-                self.viewer.loadPath(path, name=f"path_{path_index}")
-            except Exception as e:
-                print(f"Failed to load path into viser: {e}")
-            return path_index
-
-        if self.path_player is None:
-            self.path_player = PathPlayer(self.viewer)
-
-        try:
-            self.path_player(path_index)
-        except Exception as e:
-            print(f"Failed to play path at index {path_index}: {e}")
-
+        self.play_path(path_index)
         return path_index
 
     def play_path_vector_with_viz(
@@ -1834,12 +1829,6 @@ class CorbaBackend(BackendBase):
         if self.ps is None:
             raise RuntimeError("Problem solver not created yet")
 
-        if self.viewer is None:
-            self.visualize()
-
-        if self.path_player is None:
-            self.path_player = PathPlayer(self.viewer)
-
         # Get current number of paths to determine the index
         path_index = self.ps.numberPaths()
 
@@ -1848,6 +1837,12 @@ class CorbaBackend(BackendBase):
 
         # Play with visualization if visualizer provided
         if visualizer and graph_builder:
+            if self.viewer is None:
+                self.visualize()
+            if self.viewer is None:
+                return path_index  # no viewer — path stored but not played
+            if self.path_player is None:
+                self.path_player = PathPlayer(self.viewer)
             try:
                 from agimus_spacelab.visualization.live_graph_viz import (
                     LivePathPlayer,
@@ -1865,10 +1860,7 @@ class CorbaBackend(BackendBase):
                 self.path_player(path_index)
         else:
             # Standard playback without visualization
-            try:
-                self.path_player(path_index)
-            except Exception as e:
-                print(f"Failed to play path at index {path_index}: {e}")
+            self.play_path(path_index)
 
         return path_index
 

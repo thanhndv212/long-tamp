@@ -47,6 +47,8 @@ except ImportError:
 
 try:
     from pyhpp_viser import Viewer as _ViserViewer
+    import viser as _viser_check  # noqa: F401 — verify runtime dep
+    del _viser_check
     HAS_VISER = True
 except ImportError:
     _ViserViewer = None
@@ -475,11 +477,21 @@ class PyHPPBackend(BackendBase):
             self.viewer = _GepettoViewer(self.device)
         else:  # "auto"
             if HAS_VISER:
-                problem = getattr(self, "problem", None)
-                self.viewer = _ViserViewer(self.device, problem)
-                self.viewer.start(open=False)
-                url = getattr(self.viewer, "url", None) or "http://localhost:8080"
-                print(f"Viser viewer started — open {url} in your browser")
+                try:
+                    problem = getattr(self, "problem", None)
+                    self.viewer = _ViserViewer(self.device, problem)
+                    self.viewer.start(open=False)
+                    url = getattr(self.viewer, "url", None) or "http://localhost:8080"
+                    print(f"Viser viewer started — open {url} in your browser")
+                except Exception as exc:
+                    print(f"⚠ Viser failed ({exc}), trying gepetto-viewer...")
+                    self.viewer = None
+                    if HAS_GEPETTO_VIEWER:
+                        self.viewer = _GepettoViewer(self.device)
+                    else:
+                        raise ImportError(
+                            f"Viser failed ({exc}) and gepetto-viewer is not available."
+                        ) from exc
             elif HAS_GEPETTO_VIEWER:
                 self.viewer = _GepettoViewer(self.device)
             else:
@@ -542,6 +554,8 @@ class PyHPPBackend(BackendBase):
 
         if self.viewer is None:
             self.visualize()
+        if self.viewer is None:
+            return  # no viewer available — skip playback
 
         # Viser viewer: load into GUI path-player (non-blocking)
         if HAS_VISER and isinstance(self.viewer, _ViserViewer):
@@ -2009,8 +2023,6 @@ class PyHPPBackend(BackendBase):
             path_index = path_vector
         else:
             path_index = self.store_path(path_vector)
-        if self.viewer is None:
-            self.visualize()
         self.play_path(path_index)
         return path_index
 
@@ -2039,8 +2051,6 @@ class PyHPPBackend(BackendBase):
             path_index = path_vector
         else:
             path_index = self.store_path(path_vector)
-        if self.viewer is None:
-            self.visualize()
         if visualizer is not None and graph_builder is not None:
             try:
                 from agimus_spacelab.visualization.live_graph_viz import (
