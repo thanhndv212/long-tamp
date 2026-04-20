@@ -23,12 +23,25 @@ try:
 except ImportError:
     HAS_CORBA = False
 
+try:
+    from pyhpp_viser import Viewer as _ViserViewer
+    HAS_VISER = True
+except ImportError:
+    _ViserViewer = None
+    HAS_VISER = False
+
 
 class CorbaBackend(BackendBase):
     """CORBA backend implementation for manipulation planning."""
 
-    def __init__(self):
-        """Initialize CORBA backend."""
+    def __init__(self, viewer_type: str = "auto"):
+        """Initialize CORBA backend.
+
+        Args:
+            viewer_type: Viewer to use for visualize() / play_path():
+                ``"viser"`` (browser, no X11), ``"gepetto"`` (Qt/CORBA),
+                ``"auto"`` (gepetto preferred; viser as fallback).
+        """
         if not HAS_CORBA:
             raise ImportError(
                 "CORBA backend not available. "
@@ -39,6 +52,7 @@ class CorbaBackend(BackendBase):
         loadServerPlugin("corbaserver", "manipulation-corba.so")
         Client().problem.resetProblem()
 
+        self._viewer_type = viewer_type
         self.robot = None
         self.ps = None
         self.vf = None
@@ -69,8 +83,9 @@ class CorbaBackend(BackendBase):
             "Graph-PartialShortcut",
             "SplineGradientBased_bezier5",
         ]
-        # Waypoint edges (constrained motion): Use spline optimization
+        # Waypoint edges (constrained motion): Use shortcut + spline
         self._waypoint_pregrasp_optimizers = [
+            "EnforceTransitionSemantic",
             "RandomShortcut",
             "SplineGradientBased_bezier5",
             # "SimpleTimeParameterization",
@@ -78,14 +93,15 @@ class CorbaBackend(BackendBase):
         ]
         # Waypoint edges (constrained motion): No spline optimization
         self._waypoint_grasp_optimizers = [
+            "EnforceTransitionSemantic",
             "RandomShortcut",
-            # "SplineGradientBased_bezier3",
-            # "SimpleTimeParameterization",
+            "Graph-PartialShortcut",
         ]
         # Default fallback
         self._transition_default_optimizers = [
+            "EnforceTransitionSemantic",
             "RandomShortcut",
-            # "SimpleTimeParameterization",
+            "Graph-PartialShortcut",
         ]
         # Per-edge optimizer list (edge_id -> optimizer names)
         self._transition_optimizers_by_edge_id: Dict[int, List[str]] = {}
@@ -94,6 +110,13 @@ class CorbaBackend(BackendBase):
         self._time_param_order = 2
         self._time_param_max_accel = 1.0
         self._time_param_safety: float = 0.95
+
+        # RandomShortcut: number of shortcut attempts per optimization pass.
+        # HPP core default is 5; increasing to 50 gives much better convergence.
+        self._random_shortcut_loops: int = 50
+        # SplineGradientBased: whether to enforce zero velocity at state junctions.
+        # Setting False allows the spline optimizer to carry momentum through waypoints.
+        self._spline_zero_derivatives_at_state: bool = False
 
         # Distance-based auto-tuning
         self._enable_distance_tuning = True
@@ -537,6 +560,8 @@ class CorbaBackend(BackendBase):
         path_projector: Optional[Tuple[str, float]] = None,
         enable_distance_tuning: Optional[bool] = None,
         distance_scale_factor: Optional[float] = None,
+        random_shortcut_loops: Optional[int] = None,
+        spline_zero_derivatives_at_state: Optional[bool] = None,
     ) -> None:
         """Configure defaults for the TransitionPlanner.
 
@@ -547,6 +572,10 @@ class CorbaBackend(BackendBase):
             path_projector: Path projector type and tolerance
             enable_distance_tuning: Enable distance-based timeout/iteration scaling
             distance_scale_factor: Scale factor for distance-based tuning
+            random_shortcut_loops: Number of shortcut attempts per pass
+                (HPP default 5; recommended 50+)
+            spline_zero_derivatives_at_state: Enforce zero velocity at state
+                junctions in SplineGradientBased (default False = allow momentum)
 
         Notes:
         - In practice, TransitionPlanner should have both timeOut and
@@ -565,6 +594,10 @@ class CorbaBackend(BackendBase):
             self._enable_distance_tuning = enable_distance_tuning
         if distance_scale_factor is not None:
             self._distance_scale_factor = distance_scale_factor
+        if random_shortcut_loops is not None:
+            self._random_shortcut_loops = int(random_shortcut_loops)
+        if spline_zero_derivatives_at_state is not None:
+            self._spline_zero_derivatives_at_state = bool(spline_zero_derivatives_at_state)
 
         tp = self._transition_planner
         if tp is not None:
@@ -677,7 +710,7 @@ class CorbaBackend(BackendBase):
 
         # Apply time parameterization settings
         try:
-            from CORBA import Any as CorbaAny, TC_long, TC_double
+            from CORBA import Any as CorbaAny, TC_boolean, TC_long, TC_double
             problem = self.ps.client.basic.problem.getProblem()
             problem.setParameter(
                 "SimpleTimeParameterization/order",
@@ -699,6 +732,14 @@ class CorbaBackend(BackendBase):
             )
             print(
                 f"      [TP] ✓ SimpleTimeParameterization/safety={self._time_param_safety}"
+            )
+            problem.setParameter(
+                "PathOptimization/RandomShortcut/NumberOfLoops",
+                CorbaAny(TC_long, self._random_shortcut_loops)
+            )
+            problem.setParameter(
+                "SplineGradientBased/zeroDerivativesAtStateIntersection",
+                CorbaAny(TC_boolean, self._spline_zero_derivatives_at_state)
             )
         except Exception as e:
             print(f"      [TP] ✗ SimpleTimeParameterization failed: {e}")
@@ -1631,27 +1672,86 @@ class CorbaBackend(BackendBase):
                 f"Current: {len(current_edges)}"
             )
 
-    def visualize(self, q: Optional[np.ndarray] = None):
-        """Visualize configuration."""
-        if self.viewer is None:
+    def setup_viewer(self, viewer_type: str = "auto") -> None:
+        """Explicitly initialise the viewer.
+
+        Args:
+            viewer_type: ``"viser"``, ``"gepetto"``, or ``"auto"``.
+                Overrides the value set in ``__init__`` for this call only.
+
+        Raises:
+            RuntimeError: If robot / problem solver not loaded yet.
+            ImportError: If the requested viewer library is not installed.
+        """
+        if self.ps is None:
+            raise RuntimeError("Must create problem solver first (load_robot)")
+
+        resolved = viewer_type if viewer_type != "auto" else self._viewer_type
+
+        if resolved == "viser":
+            if not HAS_VISER:
+                raise ImportError(
+                    "pyhpp_viser not available. "
+                    "Install with: pip install viser trimesh pycollada"
+                )
+            self.viewer = _ViserViewer(self.robot, self.ps)
+            self.viewer.start(open=False)
+        elif resolved == "gepetto":
             if self.vf is None:
                 self.vf = ViewerFactory(self.ps)
             self.viewer = self.vf.createViewer()
+        else:  # "auto"
+            # For CORBA, gepetto-viewer is the native choice
+            try:
+                if self.vf is None:
+                    self.vf = ViewerFactory(self.ps)
+                self.viewer = self.vf.createViewer()
+            except Exception:
+                if HAS_VISER:
+                    self.viewer = _ViserViewer(self.robot, self.ps)
+                    self.viewer.start(open=False)
+                else:
+                    raise
+
+    def visualize(self, q: Optional[np.ndarray] = None):
+        """Visualize configuration."""
+        if self.viewer is None:
+            self.setup_viewer()
 
         if q is not None:
-            self.viewer(q.tolist() if isinstance(q, np.ndarray) else q)
+            q_list = q.tolist() if isinstance(q, np.ndarray) else q
+            if HAS_VISER and isinstance(self.viewer, _ViserViewer):
+                self.viewer.display(np.array(q_list))
+            else:
+                self.viewer(q_list)
         else:
-            # Try to display current config
             try:
                 q_init = self.ps.getCurrentConfig()
-                self.viewer(q_init)
+                if HAS_VISER and isinstance(self.viewer, _ViserViewer):
+                    self.viewer.display(np.array(q_init))
+                else:
+                    self.viewer(q_init)
             except Exception:
                 pass
 
     def play_path(self, path_index: int = 0):
-        """Play path in viewer."""
+        """Play / animate a path in the viewer.
+
+        If the active viewer is a `pyhpp_viser.Viewer`, the path object is
+        retrieved from the ProblemSolver and loaded into the GUI path-player
+        dropdown (non-blocking).  For gepetto-viewer the PathPlayer blocking
+        playback is used.
+        """
         if self.viewer is None:
             self.visualize()
+
+        if HAS_VISER and isinstance(self.viewer, _ViserViewer):
+            try:
+                path = self.ps.client.basic.problem.path(path_index)
+                self.viewer.loadPath(path, name=f"path_{path_index}")
+            except Exception as e:
+                print(f"Failed to load path into viser: {e}")
+            return
 
         if self.path_player is None:
             self.path_player = PathPlayer(self.viewer)
@@ -1684,17 +1784,23 @@ class CorbaBackend(BackendBase):
         if self.viewer is None:
             self.visualize()
 
-        if self.path_player is None:
-            self.path_player = PathPlayer(self.viewer)
-
         # Get current number of paths to determine the index
         path_index = self.ps.numberPaths()
 
-        # Add PathVector to problem solver (uses basic interface)
-        # This stores the path and returns the index
+        # Add PathVector to problem solver
         self.ps.client.basic.problem.addPath(path_vector)
 
-        # Play the path by index
+        if HAS_VISER and isinstance(self.viewer, _ViserViewer):
+            try:
+                path = self.ps.client.basic.problem.path(path_index)
+                self.viewer.loadPath(path, name=f"path_{path_index}")
+            except Exception as e:
+                print(f"Failed to load path into viser: {e}")
+            return path_index
+
+        if self.path_player is None:
+            self.path_player = PathPlayer(self.viewer)
+
         try:
             self.path_player(path_index)
         except Exception as e:

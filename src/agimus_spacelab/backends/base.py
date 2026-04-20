@@ -327,7 +327,7 @@ class BackendBase(ABC):
     @abstractmethod
     def visualize(self, q: Optional[np.ndarray] = None) -> None:
         """Visualize a configuration.
-        
+
         Args:
             q: Configuration to display. If None, shows current/initial config.
         """
@@ -336,11 +336,31 @@ class BackendBase(ABC):
     @abstractmethod
     def play_path(self, path_index: int = 0) -> None:
         """Play/animate a path in the viewer.
-        
+
         Args:
             path_index: Index of the path to play
         """
         pass
+
+    def setup_viewer(self, viewer_type: str = "auto") -> None:
+        """Explicitly initialise the viewer.
+
+        Call this before ``visualize()`` / ``play_path()`` to choose the
+        viewer backend.  If not called, ``visualize()`` will auto-initialise
+        on first use with ``viewer_type="auto"``.
+
+        Args:
+            viewer_type: Which viewer to create:
+
+                * ``"viser"``   — browser-based 3-D viewer via WebSockets
+                  (`pip install viser`).  No X11 or CORBA server required.
+                  Opens at http://localhost:8000 by default.
+                * ``"gepetto"`` — Qt-based gepetto-viewer via CORBA/omniORB.
+                  Requires gepetto-viewer-corba running.
+                * ``"auto"``    — pick automatically (viser preferred for
+                  PyHPP; gepetto preferred for CORBA).
+        """
+        raise NotImplementedError("setup_viewer not implemented for this backend")
 
     # =========================================================================
     # Path Serialization Methods

@@ -36,13 +36,15 @@ class SceneBuilder:
         FILE_PATHS: Optional[Dict[str, Any]] = None,
         planner: Optional[Any] = None,
         backend: str = "corba",
+        viewer_type: str = "auto",
     ):
         """
         Initialize scene builder.
-        
+
         Args:
             planner: Existing planner instance, or None to create new one
             backend: "corba" or "pyhpp" - which backend to use
+            viewer_type: Viewer to use — "viser", "gepetto", or "auto" (default).
         """
         self.backend = backend.lower()
         self.loaded_objects = []
@@ -64,11 +66,11 @@ class SceneBuilder:
         if self.backend == "corba":
             if not HAS_CORBA:
                 raise ImportError("CORBA backend not available")
-            self.planner = planner or create_planner(backend=self.backend)
+            self.planner = planner or create_planner(backend=self.backend, viewer_type=viewer_type)
         elif self.backend == "pyhpp":
             if not HAS_PYHPP:
                 raise ImportError("PyHPP backend not available")
-            self.planner = planner or create_planner(backend=self.backend)
+            self.planner = planner or create_planner(backend=self.backend, viewer_type=viewer_type)
         else:
             raise ValueError(f"Unknown backend: {backend}. Use 'corba' or 'pyhpp'")
 

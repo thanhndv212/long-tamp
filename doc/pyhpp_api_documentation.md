@@ -1958,62 +1958,248 @@ else:
 
 ## 6. Visualization
 
-### 6.1 Gepetto Viewer
+agimus_spacelab supports two viewer backends.  Both are selected via a
+`viewer_type` parameter accepted by `ManipulationTask`, `PyHPPBackend`, and
+`CorbaBackend`.
+
+| `viewer_type` | Description |
+|---|---|
+| `"gepetto"` | Classic CORBA viewer (requires a running `gepetto-viewer-server`) |
+| `"viser"` | Browser-based 3-D viewer — no display server needed (headless / remote friendly) |
+| `"auto"` *(default)* | Prefers viser for PyHPP, gepetto for CORBA; falls back automatically |
+
+---
+
+### 6.0 Viewer Selection
+
+Pass `viewer_type` when constructing the task or backend:
 
 ```python
-from pyhpp.gepetto.viewer import Viewer
+from agimus_spacelab.tasks import ManipulationTask
 
-# Create viewer
-viewer = Viewer(robot)
+# Default — auto-selects best available viewer
+task = ManipulationTask(robot_config, backend="pyhpp")
 
-# Display configuration
-viewer(q)  # Call viewer as function
+# Force viser (browser WebSocket, headless-safe)
+task = ManipulationTask(robot_config, backend="pyhpp", viewer_type="viser")
 
-# Alternative syntax
-viewer.display(q)
-
-# Load visualization model explicitly
-viewer.loadViewerModel(robot, "robot_name")
+# Force classic gepetto-viewer
+task = ManipulationTask(robot_config, backend="pyhpp", viewer_type="gepetto")
 ```
 
-### 6.2 Animating Configurations
+Or directly on a backend:
+
+```python
+from agimus_spacelab.backends import PyHPPBackend, CorbaBackend
+
+backend = PyHPPBackend(viewer_type="viser")
+backend.setup_viewer()   # launches viewer (browser tab not opened automatically)
+
+cbackend = CorbaBackend(viewer_type="gepetto")
+cbackend.setup_viewer()  # connects to running gepetto-viewer-server
+```
+
+---
+
+### 6.1 Gepetto Viewer (CORBA)
+
+Requires a running `gepetto-viewer-server` and an X11 display.
+
+```python
+from pyhpp_gepetto import Viewer  # hpp-gepetto-viewer >= 8.0
+
+viewer = Viewer(robot)   # connects to gepetto-viewer-server via CORBA
+
+# Display a configuration
+viewer(q)          # callable syntax
+viewer.display(q)  # explicit method
+```
+
+`PyHPPBackend` wraps this automatically when `viewer_type="gepetto"`:
+
+```python
+backend.setup_viewer("gepetto")
+backend.visualize(q)       # calls viewer.display(q)
+backend.play_path(index)   # blocking time-step animation
+```
+
+---
+
+### 6.2 Viser Viewer (Browser-based)
+
+Uses **viser** — a WebSocket-based 3-D viewer that renders in a browser tab.
+No X11 / display server is required.  Ideal for remote machines, Docker
+containers, and headless CI.
+
+```python
+from pyhpp_viser import Viewer  # hpp-gepetto-viewer >= 8.0
+
+viewer = Viewer(robot, problem)
+viewer.start(host="localhost", port=8080, open=True)
+# → open http://localhost:8080 in your browser
+
+# Display a configuration
+viewer.display(np.array(q))
+
+# Non-blocking path loading (path appears in the GUI dropdown)
+viewer.loadPath(path, name="my_path")
+```
+
+`PyHPPBackend` wraps this when `viewer_type="viser"`:
+
+```python
+backend = PyHPPBackend(viewer_type="viser")
+backend.setup_viewer()       # starts server, browser NOT auto-opened
+backend.visualize(q)         # calls viewer.display(np.array(q))
+backend.play_path(index)     # calls viewer.loadPath(path, name="path_N")
+```
+
+The viser server is shared across all viewers in the same process (class-level
+`_shared_server`), so subsequent `setup_viewer()` calls reuse the same port.
+
+---
+
+### 6.3 Animating Paths
+
+#### Via the backend (both viewers)
+
+```python
+backend.play_path(path_index)   # gepetto: blocking; viser: loads into GUI
+```
+
+#### Manual animation (gepetto)
 
 ```python
 import time
 
-def animate_configurations(viewer, configs, dt=0.5):
-    """Animate a sequence of configurations."""
-    for i, q in enumerate(configs):
-        print(f"Config {i+1}/{len(configs)}")
-        viewer(q)
-        time.sleep(dt)
-
-# Use it
-configs = [q1, q2, q3, q4, q5]
-animate_configurations(viewer, configs, dt=1.0)
-```
-
-### 6.3 Animating Path
-
-```python
 def animate_path(viewer, path, dt=0.01):
-    """Animate a path."""
     t = 0.0
-    length = path.length()
-    
-    print(f"Animating path (length={length:.3f})...")
-    
-    while t <= length:
-        q = path(t)
-        viewer(q)
+    while t <= path.length():
+        q, _ = path.eval(t)
+        viewer.display(np.array(q))
         time.sleep(dt)
         t += dt
-    
-    print("Animation complete!")
 
-# Use it
 animate_path(viewer, path, dt=0.02)
 ```
+
+#### Manual animation (viser)
+
+```python
+import numpy as np, time
+
+def animate_path_viser(viewer, path, speed=1.0, fps=25):
+    length = path.length()
+    n = max(2, int(length / speed * fps))
+    for t in np.linspace(0.0, length, n):
+        q, _ = path.eval(t)
+        viewer.display(np.array(q, dtype=float))
+        time.sleep(1.0 / fps)
+
+animate_path_viser(viewer, path, speed=1.0, fps=30)
+```
+
+---
+
+### 6.4 Video Recording
+
+```python
+from agimus_spacelab.visualization.video_recorder import VideoRecorder, record_path_playback
+```
+
+#### Gepetto — async frame capture
+
+```python
+from hpp.gepetto import PathPlayer
+
+recorder = VideoRecorder(viewer, output_dir="/tmp/videos", framerate=25)
+path_player = PathPlayer(viewer)
+
+video_file = recorder.start_recording(video_name="demo", path_id=0)
+path_player(0)            # play path 0 while capturing
+recorder.stop_recording()
+print(f"Saved: {video_file}")
+
+# Or use the convenience wrapper
+video_file = record_path_playback(
+    viewer, path_player, path_id=0,
+    video_name="demo", output_dir="/tmp/videos"
+)
+```
+
+#### Viser — synchronous frame-by-frame capture
+
+```python
+recorder = VideoRecorder(viewer, output_dir="/tmp/videos", framerate=25)
+
+# path must be an HPP path object with .length() and .eval(t)
+video_file = recorder.record_path(
+    path=path,
+    speed=1.0,
+    video_name="demo",
+    path_id=0,
+    width=1280,
+    height=720,
+)
+print(f"Saved: {video_file}")
+
+# Or use the unified convenience function (dispatches automatically)
+video_file = record_path_playback(
+    viewer, path, path_id=0,
+    video_name="demo", output_dir="/tmp/videos",
+    width=1280, height=720,
+)
+```
+
+Both backends encode to video with **ffmpeg** using H.264 and produce a
+`*.mp4` file.  Raw PNG frames are auto-deleted unless `auto_cleanup=False`.
+
+---
+
+### 6.5 Handle / Gripper Frame Visualization
+
+`agimus_spacelab.visualization.viz` works with both gepetto and viser viewers.
+
+```python
+from agimus_spacelab.visualization.viz import (
+    displayHandle, displayGripper,
+    displayHandleApproach, displayGripperApproach,
+    visualize_all_handles, visualize_all_grippers,
+    clear_handle_visualizations, clear_gripper_visualizations,
+)
+
+# Display a single handle frame (XYZ axes)
+displayHandle(viewer, "box/handle1")
+
+# Display the approach arrow for a handle
+displayHandleApproach(viewer, "box/handle1")
+
+# Display all handles at once
+visualize_all_handles(viewer, robot.getAvailableHandles())
+
+# Display grippers with approach arrows
+visualize_all_grippers(viewer, robot.getAvailableGrippers())
+
+# Clear all handle / gripper markers
+clear_handle_visualizations(viewer)
+clear_gripper_visualizations(viewer)
+```
+
+Under gepetto the frames are rendered as XYZ axis objects; under viser they
+use `viewer.viewer.scene.add_frame()` and approach arrows are trimesh
+cylinder+cone meshes added via `add_mesh_simple()`.
+
+---
+
+### 6.6 Viewer Selection Guide
+
+| Scenario | Recommended `viewer_type` |
+|---|---|
+| Local workstation with X11 and gepetto-viewer installed | `"auto"` (gepetto preferred) |
+| Headless server / Docker / remote SSH | `"viser"` |
+| Jupyter notebook | `"viser"` |
+| CI / testing (no display) | `"viser"` |
+| Recording video without display | `"viser"` |
 
 ---
 
