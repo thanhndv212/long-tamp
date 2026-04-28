@@ -1,0 +1,183 @@
+# Task configuration template — generic, robot-agnostic
+# ============================================================
+# HOW TO USE
+# ----------
+# 1. Copy this file to  script/config/<your_robot>_config.yaml
+# 2. Fill in every  <PLACEHOLDER>  with your robot's values.
+# 3. In your task script, load it with YamlTaskLoader:
+#
+#       from agimus_spacelab.config.yaml_loader import YamlTaskLoader
+#       _loader = YamlTaskLoader(Path(__file__).parent.parent / "config" / "my_robot_config.yaml")
+#
+# 4. Pass _loader.file_paths and _loader.joint_bounds_class to ManipulationTask.
+# 5. Use _loader.task_config.with_grasp_goals([...]) to restrict the active pairs.
+# 6. Use _loader.build_initial_config(objects=task_config.OBJECTS) for q_init.
+#
+# See script/config/graspball_config.yaml for a minimal real-world example.
+# See script/config/spacelab_config.yaml for a complex multi-robot example.
+# ============================================================
+
+task: <your_task_name>  # Freeform label, used in log output only.
+
+# ---------------------------------------------------------------------------
+# File paths — passed verbatim to SceneBuilder.
+# Use "package://<pkg>/<rel_path>" for ROS packages, or absolute paths.
+# All robots need both urdf + srdf.  Environments need only urdf.
+# Objects need urdf and, if they have handles/contact surfaces, an srdf too.
+# ---------------------------------------------------------------------------
+paths:
+  robot:
+    <robot_name>:                  # Must match the name in the URDF.
+      urdf: "package://<pkg>/urdf/<robot>.urdf"
+      srdf: "package://<pkg>/srdf/<robot>.srdf"
+    # Add more robots here if using a composite / multi-arm setup.
+
+  environment:
+    # Static obstacles.  Value is the urdf path (string, no srdf needed).
+    <env_name>: "package://<pkg>/urdf/<env>.urdf"
+    # <env2>: "..."
+
+  objects:
+    # Manipulated objects (freeflyers).
+    <object_name>:
+      urdf: "package://<pkg>/urdf/<object>.urdf"
+      srdf: "package://<pkg>/srdf/<object>.srdf"   # Defines handles/contact surfaces.
+    # Repeat for every manipulated object.
+
+# ---------------------------------------------------------------------------
+# Scene selection — which robots and environments to load.
+# Names must match keys in `paths.robot` / `paths.environment` above.
+# ---------------------------------------------------------------------------
+robots:
+  - <robot_name>
+
+environments:
+  - <env_name>
+
+# ---------------------------------------------------------------------------
+# Robot joint groups
+# Defines the active DOF, their initial values in radians, and joint limits.
+# The group name (e.g. "ARM") is used only for organisation.
+# Each entry: {joint: <full_joint_name>, initial: <rad>, bounds: [lo, hi]}
+#
+# TIP: run the task with --show-joints to print all joint names and ranks.
+# ---------------------------------------------------------------------------
+joint_groups:
+  ARM:
+    - {joint: <robot_name>/joint_1, initial:  0.00, bounds: [-3.14159, 3.14159]}
+    - {joint: <robot_name>/joint_2, initial: -1.57, bounds: [-3.14159, 3.14159]}
+    - {joint: <robot_name>/joint_3, initial:  1.57, bounds: [-3.14159, 3.14159]}
+    - {joint: <robot_name>/joint_4, initial:  0.00, bounds: [-3.14159, 3.14159]}
+    - {joint: <robot_name>/joint_5, initial:  0.00, bounds: [-3.14159, 3.14159]}
+    - {joint: <robot_name>/joint_6, initial:  0.00, bounds: [-3.14159, 3.14159]}
+  # Add more groups (e.g. RAIL, HEAD) if the robot has extra kinematic chains.
+
+# ---------------------------------------------------------------------------
+# Freeflyer bounds — applied to the root_joint of every manipulated object.
+# translation: [[xmin, xmax], [ymin, ymax], [zmin, zmax]]  (metres)
+# quaternion:  [[qxmin, qxmax], [qymin, qymax], [qzmin, qzmax], [qwmin, qwmax]]
+# Set generous bounds so the planner can freely place objects.
+# ---------------------------------------------------------------------------
+freeflyer_bounds:
+  translation: [[-1.0, 1.0], [-1.0, 1.0], [-0.1, 2.0]]
+  quaternion:  [[-1.0001, 1.0001], [-1.0001, 1.0001],
+                [-1.0001, 1.0001], [-1.0001, 1.0001]]
+
+# ---------------------------------------------------------------------------
+# Arm groups (optional)
+# Used by GraspSequencePlanner "auto-freeze" logic:
+# when one arm is grasping, the other arm's joints are frozen.
+#
+# joint_keyword: substring that uniquely identifies this arm's joints.
+# grippers:      gripper frame names belonging to this arm.
+#
+# Omit this section entirely if you have only one arm or do not use auto-freeze.
+# ---------------------------------------------------------------------------
+arm_groups:
+  arm:
+    joint_keyword: "<robot_name>"  # All joints containing this string are "this arm".
+    grippers:
+      - <robot_name>/gripper
+  # arm2:
+  #   joint_keyword: "second_arm"
+  #   grippers:
+  #     - second_arm/gripper
+
+# ---------------------------------------------------------------------------
+# Objects — initial poses and handle / contact-surface metadata.
+#
+# Pose can be specified as XYZ RPY (roll-pitch-yaw radians) or XYZ quaternion.
+# Use xyzrpy for human-readable tuning; xyzquat when reading directly from CAD.
+#
+# handles:          Handle frame names defined in the object's SRDF.
+# contact_surfaces: Link names used for on-surface placement (leave [] if unused).
+# ---------------------------------------------------------------------------
+objects:
+  <object_name>:
+    initial_pose_xyzrpy: [0.0, 0.0, 0.0,   0.0, 0.0, 0.0]
+    # OR: initial_pose_xyzquat: [x, y, z, qx, qy, qz, qw]
+    handles:
+      - <object_name>/handle       # Must match SRDF handle definitions.
+      # - <object_name>/handle2
+    contact_surfaces: []           # E.g. ["<object_name>/bottom_surface"]
+
+# ---------------------------------------------------------------------------
+# Grippers — flat list of all gripper frame names.
+# Frame names must be defined in the robot SRDF.
+# ---------------------------------------------------------------------------
+grippers:
+  - <robot_name>/gripper
+  # - <robot_name>/second_gripper
+
+# ---------------------------------------------------------------------------
+# Valid gripper → handle pairs
+# Determines which grasp edges the ConstraintGraphFactory generates.
+# A pair appears here ONLY if the robot can physically perform that grasp.
+# ---------------------------------------------------------------------------
+valid_pairs:
+  <robot_name>/gripper:
+    - <object_name>/handle
+  # <robot_name>/second_gripper:
+  #   - <object_name>/handle2
+
+# ---------------------------------------------------------------------------
+# Environment contact surfaces
+# Maps each environment body to the surface names (links) defined in its URDF
+# that objects can be placed on.  Leave empty if no placement constraints are used.
+# ---------------------------------------------------------------------------
+environment_contacts:
+  <env_name>:
+    - <env_name>/surface_link
+  # Use {} or omit entirely if no placement is needed.
+
+# ---------------------------------------------------------------------------
+# Planning parameters
+# These feed directly into the HPP path planner and collision checker.
+# ---------------------------------------------------------------------------
+planning:
+  # Collision-check resolution (metres along path).  Smaller = safer, slower.
+  validation_step: 0.01
+  # Newton–Raphson projection step size.  Reduce if constraints diverge.
+  projector_step: 0.1
+  # Hard cap on planner iterations before giving up.
+  max_iterations: 1000
+  # Maximum random IK attempts per configuration generation call.
+  max_random_attempts: 1000
+
+# ---------------------------------------------------------------------------
+# Path optimiser settings (optional — all keys have sensible defaults)
+# These are passed to the backend optimiser after a path is found.
+# ---------------------------------------------------------------------------
+optimization:
+  # Number of random shortcut attempts per RandomShortcut pass.
+  # 50 is a reasonable general-purpose value; HPP default is 5.
+  random_shortcut_loops: 50
+  # When false the SplineGradientBased optimiser may carry velocity through
+  # state junctions, producing smoother, shorter splines.
+  spline_zero_derivatives_at_state: false
+  # Fraction of velocity limits used by SimpleTimeParameterization.
+  # Range [0, 1].  Lower = slower but safer execution.
+  time_param_safety: 0.95
+  # Polynomial order for time parametrisation.
+  # 1 = linear (constant speed), 2 = cubic (zero-vel ends), 3 = quintic.
+  time_param_order: 2
