@@ -6,7 +6,7 @@ Provides ManipulationTask base class with common structure.
 """
 
 from typing import List, Dict, Any, Optional, Sequence, Tuple
-
+from abc import ABC, abstractmethod
 import re
 
 from agimus_spacelab.planning import (
@@ -19,7 +19,7 @@ from agimus_spacelab.planning import (
 
 
 
-class ManipulationTask:
+class ManipulationTask(ABC):
     """
     Base class for manipulation tasks.
     
@@ -229,6 +229,7 @@ class ManipulationTask:
         """
         pass
 
+    @abstractmethod
     def build_initial_config(self) -> List[float]:
         """Build the initial configuration. Must be implemented by subclass."""
         raise NotImplementedError(
@@ -237,6 +238,7 @@ class ManipulationTask:
             "and objects."
         )
 
+    @abstractmethod
     def generate_configurations(
         self, q_init: List[float]
     ) -> Dict[str, List[float]]:
