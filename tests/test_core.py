@@ -37,13 +37,13 @@ class TestConfigBuilder:
     
     def test_import(self):
         """Test importing ConfigBuilder."""
-        from agimus_spacelab.utils.config_utils import ConfigBuilder
+        from agimus_spacelab.utils import ConfigBuilder
         builder = ConfigBuilder()
         assert builder is not None
     
     def test_add_joint_config(self):
         """Test adding joint configurations."""
-        from agimus_spacelab.utils.config_utils import ConfigBuilder
+        from agimus_spacelab.utils import ConfigBuilder
         
         builder = ConfigBuilder()
         builder.add_joint_config([1.0, 2.0, 3.0])
@@ -54,7 +54,7 @@ class TestConfigBuilder:
     
     def test_add_multiple_configs(self):
         """Test adding multiple configurations."""
-        from agimus_spacelab.utils.config_utils import ConfigBuilder
+        from agimus_spacelab.utils import ConfigBuilder
         
         builder = ConfigBuilder()
         builder.add_joint_config([1.0, 2.0])
@@ -70,7 +70,7 @@ class TestBoundsManager:
     
     def test_freeflyer_bounds(self):
         """Test creating freeflyer bounds."""
-        from agimus_spacelab.utils.config_utils import BoundsManager
+        from agimus_spacelab.utils import BoundsManager
         
         bounds = BoundsManager.freeflyer_bounds()
         
@@ -79,7 +79,7 @@ class TestBoundsManager:
     
     def test_revolute_bounds(self):
         """Test creating revolute joint bounds."""
-        from agimus_spacelab.utils.config_utils import BoundsManager
+        from agimus_spacelab.utils import BoundsManager
         
         bounds = BoundsManager.revolute_bounds(-1.0, 1.0)
         

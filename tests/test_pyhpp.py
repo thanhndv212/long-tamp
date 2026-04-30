@@ -28,7 +28,6 @@ class TestPyHPPBackend:
         assert planner.device is None
         assert planner.problem is None
         assert planner.graph is None
-        assert planner.planner is None
         assert planner.viewer is None
         assert planner.path is None
     

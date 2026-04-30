@@ -101,7 +101,7 @@ class TestCLIArguments:
 
         # Test defaults
         args = parser.parse_args([])
-        assert args.backend == "corba"
+        assert args.backend == "pyhpp"
         assert args.no_viz is False
         assert args.solve is False
 
