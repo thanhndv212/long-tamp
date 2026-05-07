@@ -335,8 +335,8 @@ class ManipulationTask(ABC):
         graph_constraints = None
         patterns = freeze_joint_substrings
         if patterns is None and self.use_factory:
-            # Only auto-detect FREEZE_JOINT_SUBSTRINGS for factory mode
-            patterns = getattr(self, "FREEZE_JOINT_SUBSTRINGS", None)
+            # Read freeze patterns from task_config (set by YAML loader)
+            patterns = getattr(self.task_config, "FREEZE_JOINT_SUBSTRINGS", None)
 
         if patterns:
             # Build a reference config to extract joint values

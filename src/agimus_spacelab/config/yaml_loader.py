@@ -377,6 +377,8 @@ class YamlTaskLoader:
             "ARM_GROUPS": dict(arm_groups_raw),
             "GRIPPER_TO_ARM_KEYWORD": gripper_to_arm_keyword,
             "ALL_ARM_KEYWORDS": all_arm_keywords,
+            # Freeze joints — loaded from YAML freeze_joints key
+            "FREEZE_JOINT_SUBSTRINGS": list(data.get("freeze_joints", [])),
             # Environment
             "ENVIRONMENT_CONTACTS": dict(
                 data.get("environment_contacts", {})
