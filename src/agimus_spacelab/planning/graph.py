@@ -71,6 +71,11 @@ class GraphBuilder:
         self.graph = None
         self.factory = None
 
+        # PyHPP constraint objects owned by the graph builder.
+        # Set once after constraint creation via set_pyhpp_constraints().
+        # CORBA backend: always empty (constraints stored server-side by name).
+        self._pyhpp_constraints: Dict[str, Any] = {}
+
         # Track manually created states and edges
         self.states = {}  # name -> id
         self.edges = {}   # name -> id
@@ -92,6 +97,15 @@ class GraphBuilder:
         attach = getattr(self.ps, "constraintGraph", None)
         if callable(attach):
             attach(self.graph)
+
+    def set_pyhpp_constraints(self, constraints: Dict[str, Any]) -> None:
+        """Store PyHPP constraint objects for use during graph construction.
+
+        Must be called once after constraints are created (before any
+        ``create_factory_graph`` / ``build_phase_graph`` calls).
+        CORBA backend: no-op (pass an empty dict or skip the call).
+        """
+        self._pyhpp_constraints = dict(constraints)
 
     def initiate_graph(self, name: str = "graph") -> Any:
         """
@@ -449,7 +463,6 @@ class GraphBuilder:
     def create_factory_graph(
         self,
         config: BaseTaskConfig,
-        pyhpp_constraints: Optional[Dict[str, Any]] = None,
         graph_constraints: Optional[List[str]] = None,
         q_init: Optional[List[float]] = None,
     ) -> Any:
@@ -493,7 +506,7 @@ class GraphBuilder:
             # Create PyHPP constraint graph
             self.graph = PyHPPGraph("graph", self.robot, self.ps)
             self.factory = PyHPPConstraintGraphFactory(
-                self.graph, constraints=pyhpp_constraints or {}
+                self.graph, constraints=self._pyhpp_constraints
             )
 
         # Prepare valid factory inputs
@@ -583,14 +596,12 @@ class GraphBuilder:
     def create_manual_graph(
         self,
         config: BaseTaskConfig,
-        pyhpp_constraints: Optional[Dict[str, Any]] = None,
         graph_constraints: Optional[List[str]] = None,
     ) -> Any:
         """Create the manual graph using GraphBuilder (both backends).
 
         Args:
             config: Task configuration
-            pyhpp_constraints: PyHPP constraint objects (for pyhpp backend)
             graph_constraints: Optional list of constraint names to add
                 globally (e.g., locked joint constraints)
         """
@@ -603,7 +614,7 @@ class GraphBuilder:
 
         # PyHPP constraint objects (CORBA uses names)
         constraints = (
-            pyhpp_constraints if self.backend == "pyhpp" else None
+            self._pyhpp_constraints if self.backend == "pyhpp" else None
         )
 
         # Create empty graph
@@ -719,7 +730,6 @@ class GraphBuilder:
         *,
         mode: Optional[str] = None,
         name: str = "graph",
-        pyhpp_constraints: Optional[Dict[str, Any]] = None,
     ) -> Any:
         """Build a constraint graph from a task specification.
 
@@ -729,8 +739,6 @@ class GraphBuilder:
                 - "manual" if the task defines STATES/EDGES,
                 - otherwise "factory".
             name: Graph name (manual mode only; factory mode uses "graph").
-            pyhpp_constraints: Optional dict (name -> constraint object) to
-                seed the PyHPP factory's available constraints.
         """
 
         task_cls = self._as_task_config(task)
@@ -756,7 +764,6 @@ class GraphBuilder:
                 environment_contacts=(env_contacts or None),
                 rules=None,
                 valid_pairs=dict(getattr(task_cls, "VALID_PAIRS", {})) or None,
-                pyhpp_constraints=pyhpp_constraints,
             )
 
         if chosen_mode == "manual":
@@ -1062,7 +1069,6 @@ class GraphBuilder:
         config: BaseTaskConfig,
         held_grasps: Dict[str, str],
         next_grasp: Tuple[str, str],
-        pyhpp_constraints: Optional[Dict[str, Any]] = None,
         graph_constraints: Optional[List[str]] = None,
         use_sequential_filter: bool = True,
         q_init: Optional[List[float]] = None,
@@ -1093,7 +1099,6 @@ class GraphBuilder:
             config: Task configuration (GRIPPERS, OBJECTS, etc.)
             held_grasps: Currently held grasps {gripper: handle}
             next_grasp: Next grasp to achieve (gripper, handle)
-            pyhpp_constraints: PyHPP constraint objects (for pyhpp backend)
             graph_constraints: Optional list of constraint names to add
                 globally (e.g., locked joint constraints)
             use_sequential_filter: If True, uses SequentialGraspFilter to
@@ -1360,7 +1365,6 @@ class GraphBuilder:
         # and optionally factory.graspIsAllowed.append(seq_filter)
         return self.create_factory_graph(
             phase_config,
-            pyhpp_constraints=pyhpp_constraints,
             graph_constraints=graph_constraints,
             q_init=q_init,
         )

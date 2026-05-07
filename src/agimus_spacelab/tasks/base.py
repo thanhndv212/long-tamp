@@ -62,6 +62,7 @@ class ManipulationTask(ABC):
         self.robot = None
         self.ps = None
         self.graph = None
+        self.graph_builder = None
         self.config_gen = None
         self.task_config = None
         self.use_factory = False
@@ -121,8 +122,8 @@ class ManipulationTask(ABC):
         - Complement: "{base}/complement"
 
         For CORBA, they're stored in the problem solver.
-        For PyHPP, they're stored in self.pyhpp_constraints and passed to
-        the factory constructor.
+        For PyHPP, they're stored in self.pyhpp_constraints and pushed to
+        graph_builder via set_pyhpp_constraints().
         """
         robot = self.robot
         if self.use_factory:
@@ -179,6 +180,9 @@ class ManipulationTask(ABC):
 
         # Store for PyHPP graph building
         self.pyhpp_constraints = registry.get_factory_constraints_arg()
+        # Push into graph_builder if it already exists (skip_graph path)
+        if self.graph_builder is not None:
+            self.graph_builder.set_pyhpp_constraints(self.pyhpp_constraints)
 
     def _create_manual_constraints(self, robot) -> None:
         """Create constraints with custom naming (manual mode)."""
@@ -195,6 +199,9 @@ class ManipulationTask(ABC):
 
         # Store for PyHPP graph building
         self.pyhpp_constraints = constraints
+        # Push into graph_builder if it already exists (skip_graph path)
+        if self.graph_builder is not None:
+            self.graph_builder.set_pyhpp_constraints(self.pyhpp_constraints)
 
     def create_graph(self, graph_constraints: Optional[List[str]] = None):
         """Create and configure constraint graph."""
@@ -205,20 +212,20 @@ class ManipulationTask(ABC):
         self.graph_builder = GraphBuilder(
             self.planner, robot, problem, backend=self.backend
         )
+        # Seed graph builder with any previously registered PyHPP constraints
+        self.graph_builder.set_pyhpp_constraints(self.pyhpp_constraints)
 
         if self.use_factory:
             # Pass pre-registered constraints to factory (PyHPP uses them
             # directly; CORBA already has them in the problem solver)
             return self.graph_builder.create_factory_graph(
                 self.task_config,
-                pyhpp_constraints=self.pyhpp_constraints,
                 graph_constraints=graph_constraints,
                 q_init=self.q_init,
             )
         else:
             return self.graph_builder.create_manual_graph(
                 self.task_config,
-                pyhpp_constraints=self.pyhpp_constraints,
                 graph_constraints=graph_constraints,
             )
 
@@ -238,13 +245,13 @@ class ManipulationTask(ABC):
             "and objects."
         )
 
-    @abstractmethod
     def generate_configurations(
         self, q_init: List[float]
     ) -> Dict[str, List[float]]:
         """
         Generate all intermediate configurations.
-        Override in subclass.
+        Only required when using the base run() pipeline.
+        Override in subclass; raises NotImplementedError at call time if not.
         """
         raise NotImplementedError(
             "Subclass must implement generate_configurations()"
@@ -367,6 +374,8 @@ class ManipulationTask(ABC):
             self.graph_builder = GraphBuilder(
                 self.planner, self.robot, self.ps, backend=self.backend
             )
+            # Seed with registered PyHPP constraints so phase graph builds work
+            self.graph_builder.set_pyhpp_constraints(self.pyhpp_constraints)
             # ConfigGenerator will be initialized after first phase graph
             self.graph = None
             self.config_gen = None

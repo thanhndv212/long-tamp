@@ -130,7 +130,6 @@ class GraspSequencePlanner:
         planner: Any,
         task_config: Any,
         backend: str = "corba",
-        pyhpp_constraints: Optional[Dict[str, Any]] = None,
         graph_constraints: Optional[List[str]] = None,
         auto_save_dir: Optional[str] = None,
         run_logger: Optional[Any] = None,
@@ -143,7 +142,6 @@ class GraspSequencePlanner:
             planner: Backend planner (ManipulationPlanner instance)
             task_config: Task configuration with GRIPPERS, OBJECTS, etc.
             backend: "corba" or "pyhpp"
-            pyhpp_constraints: PyHPP constraint objects (for pyhpp backend)
             graph_constraints: Optional list of global constraints
             auto_save_dir: If set, automatically save paths to this directory
                           after each successful phase. Files are named
@@ -154,7 +152,6 @@ class GraspSequencePlanner:
         self.planner = planner
         self.task_config = task_config
         self.backend = backend.lower()
-        self.pyhpp_constraints = pyhpp_constraints
         self.graph_constraints = graph_constraints
         self._MAX_COLLISION_RETRIES = 10
 
@@ -263,7 +260,6 @@ class GraspSequencePlanner:
                 config=self.task_config,
                 held_grasps=release_held_grasps,
                 next_grasp=(gripper, None),
-                pyhpp_constraints=self.pyhpp_constraints,
                 graph_constraints=phase_graph_constraints,
                 q_init=q_current,
                 q_init_original=getattr(self, "_q_scene_init", None),
@@ -1154,7 +1150,6 @@ class GraspSequencePlanner:
                     config=self.task_config,
                     held_grasps=held_grasps,
                     next_grasp=(gripper, handle),
-                    pyhpp_constraints=self.pyhpp_constraints,
                     graph_constraints=phase_graph_constraints,
                     q_init=q_current,
                     q_init_original=_q_scene_init,
@@ -2280,7 +2275,6 @@ class GraspSequencePlanner:
                     config=self.task_config,
                     held_grasps=held_grasps,
                     next_grasp=(gripper, handle),
-                    pyhpp_constraints=self.pyhpp_constraints,
                     graph_constraints=phase_graph_constraints,
                     q_init=q_current,
                     q_init_original=getattr(self, "_q_scene_init", None),
@@ -3248,7 +3242,6 @@ class InteractiveGraspSequenceBuilder:
                 planner=self.task.planner,
                 task_config=self.task_config,
                 backend=self.task.backend,
-                pyhpp_constraints=getattr(self.task, "pyhpp_constraints", {}),
                 graph_constraints=getattr(self.task, "_graph_constraints", None),
                 auto_save_dir=self.auto_save_dir,
                 run_logger=getattr(self.task, "run_logger", None),
