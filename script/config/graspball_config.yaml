@@ -93,6 +93,12 @@ valid_pairs:
 environment_contacts: {}
 
 # ---------------------------------------------------------------------------
+# Freeze joints — joint name substrings whose DOFs are locked during planning.
+# Empty list: no joints are frozen (single-arm task, all DOFs active).
+# ---------------------------------------------------------------------------
+freeze_joints: []
+
+# ---------------------------------------------------------------------------
 # Planning defaults
 # ---------------------------------------------------------------------------
 planning:
