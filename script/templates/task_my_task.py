@@ -161,7 +161,6 @@ class MyTask(ManipulationTask):
         # Restrict the factory graph to GRASP_GOALS only.
         self.task_config = _loader.task_config.with_grasp_goals(GRASP_GOALS)
         self.use_factory = True
-        self.pyhpp_constraints = {}
 
     def build_initial_config(self) -> List[float]:
         """Return the initial configuration for the active object subset."""
@@ -234,7 +233,6 @@ def run_task(backend: str = "pyhpp") -> bool:
         planner=task.planner,
         task_config=task.task_config,
         backend=task.backend,
-        pyhpp_constraints=getattr(task, "pyhpp_constraints", {}),
         graph_constraints=getattr(task, "_graph_constraints", None),
         auto_save_dir=None,          # Set to a Path to auto-save planned paths.
         run_logger=getattr(task, "run_logger", None),

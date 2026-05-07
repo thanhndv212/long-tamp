@@ -135,8 +135,6 @@ class MyRobotTask(ManipulationTask):
         self.task_config = _loader.task_config.with_grasp_goals(GRASP_GOALS)
         # Always True for YAML-driven scripts: the factory builds the graph.
         self.use_factory = True
-        # PyHPP backend may need a constraint dict (leave {} for CORBA).
-        self.pyhpp_constraints = {}
 
     def build_initial_config(self) -> List[float]:
         """Initial configuration from YAML for the active object subset."""
@@ -227,7 +225,6 @@ def run_task(backend: str = "pyhpp") -> bool:
         planner=task.planner,
         task_config=task.task_config,
         backend=task.backend,
-        pyhpp_constraints=getattr(task, "pyhpp_constraints", {}),
         graph_constraints=getattr(task, "_graph_constraints", None),
         auto_save_dir=None,                       # Change to a Path to auto-save paths.
         run_logger=getattr(task, "run_logger", None),
