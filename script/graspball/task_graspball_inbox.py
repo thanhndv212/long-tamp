@@ -79,7 +79,6 @@ class GraspBallTask(ManipulationTask):
             backend=backend
         )
         self.config = ManipulationConfig
-        self.pyhpp_constraints = {}
         self.pyhpp_states = None
         self.pyhpp_edges = None
     
@@ -145,7 +144,7 @@ class GraspBallTask(ManipulationTask):
         
         # Store for PyHPP graph building
         if self.backend == "pyhpp":
-            self.pyhpp_constraints = constraints
+            self._pyhpp_constraints_cache = constraints
         
         print("   ✓ Created transformation constraints")
 
@@ -154,20 +153,21 @@ class GraspBallTask(ManipulationTask):
         print("    Building constraint graph...")
         cfg = self.config
 
-        # Get backend-specific references
-        if self.backend == "pyhpp":
-            robot = self.planner.get_robot()
-            problem = self.planner.get_problem()
-            constraints = self.pyhpp_constraints
-        else:
-            robot = self.robot
-            problem = self.ps
-            constraints = None
-
         # Initialize GraphBuilder
+        if self.backend == "pyhpp":
+            _robot = self.planner.get_robot()
+            _problem = self.planner.get_problem()
+        else:
+            _robot = self.robot
+            _problem = self.ps
         self.graph_builder = GraphBuilder(
-            self.planner, robot, problem, backend=self.backend
+            self.planner, _robot, _problem, backend=self.backend
         )
+        # Seed PyHPP constraints into the graph builder
+        if self.backend == "pyhpp":
+            self.graph_builder.set_pyhpp_constraints(
+                getattr(self, "_pyhpp_constraints_cache", {})
+            )
 
         # Create empty graph
         graph_name = "manipulation_graph" if self.backend == "pyhpp" else "graph"

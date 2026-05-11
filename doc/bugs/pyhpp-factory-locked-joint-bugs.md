@@ -1,5 +1,12 @@
 # Bug Report: PyHPP Factory Mode — LockedJoint Constraint Failures
 
+> **API note (iteration 4)**: `create_factory_graph()` and related methods no longer
+> accept a `pyhpp_constraints` parameter. Constraints are now registered on the
+> `GraphBuilder` instance via `graph_builder.set_pyhpp_constraints(constraints)`
+> before calling `create_factory_graph()` / `create_manual_graph()`.
+> Code examples in this file that pass `pyhpp_constraints=` to these methods are
+> historical and will raise `TypeError` with the current API.
+
 **Package**: agimus_spacelab / hpp-python / hpp-manipulation  
 **Component**: `PyHPPConstraintGraphFactory.buildPlacement()`, `GraphBuilder.create_factory_graph()`  
 **Severity**: High — all PyHPP factory-mode planning fails silently  

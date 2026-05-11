@@ -62,7 +62,6 @@ class GraspBallYamlTask(ManipulationTask):
             "ur5/gripper grasps pokeball/handle"
         ])
         self.use_factory = True
-        self.pyhpp_constraints = {}
 
     def build_initial_config(self) -> List[float]:
         """Build initial config from YAML: UR5 joints + pokeball pose."""
