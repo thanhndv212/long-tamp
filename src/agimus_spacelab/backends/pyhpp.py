@@ -100,23 +100,22 @@ class PyHPPBackend(BackendBase):
         # Optimizer profiles for different edge types
         # Transit edges (free motion): Use graph-aware shortcut (best available in PyHPP)
         self._transit_edge_optimizers = [
-            "EnforceTransitionSemantic",
+            # "EnforceTransitionSemantic",
             "GraphRandomShortcut",
             "GraphPartialShortcut",
             "SplineGradientBased_bezier3",
         ]
         # Waypoint edges (constrained motion): Use manipulation-aware optimizers
         self._waypoint_pregrasp_optimizers = [
-            "EnforceTransitionSemantic",
-            "ManipulationRandomShortcut",
             # "EnforceTransitionSemantic",
-            "SplineGradientBased_bezier5",
+            "ManipulationRandomShortcut",
+            "SplineGradientBased_bezier3",
         ]
         # Waypoint edges (constrained motion): Use manipulation-aware shortcut
         self._waypoint_grasp_optimizers = [
-            "EnforceTransitionSemantic",
+            # "EnforceTransitionSemantic",
             "ManipulationRandomShortcut",
-            "GraphPartialShortcut",
+            # "GraphPartialShortcut",
         ]
         # Default fallback
         self._transition_default_optimizers = [
