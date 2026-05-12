@@ -2017,6 +2017,54 @@ class CorbaBackend(BackendBase):
         """Get constraint graph."""
         return self.graph
 
+    # =========================================================================
+    # Constraint Creation Methods (BackendBase interface)
+    # =========================================================================
+
+    def create_grasp_constraint(
+        self, ps, name: str, gripper: str, tool: str,
+        transform, mask
+    ):
+        """Create grasp constraint via CORBA (stored in problem solver)."""
+        ps.createTransformationConstraint(name, gripper, tool, transform, mask)
+        print(f"    ✓ {name}: {gripper} -> {tool}")
+        return None
+
+    def create_placement_constraint(
+        self, ps, name: str, tool: str,
+        world_pose, mask
+    ):
+        """Create placement constraint via CORBA (stored in problem solver)."""
+        ps.createTransformationConstraint(name, "", tool, world_pose, mask)
+        print(f"    ✓ {name}: tool at {world_pose[:3]}")
+        return None
+
+    def create_complement_constraint(
+        self, ps, base_name: str, tool: str,
+        world_pose, complement_mask
+    ):
+        """Create complement constraint via CORBA (stored in problem solver)."""
+        constraint_name = f"{base_name}/complement"
+        ps.createTransformationConstraint(
+            constraint_name, "", tool, world_pose, complement_mask
+        )
+        print(f"    ✓ {constraint_name}: free DOFs")
+        return None
+
+    def create_locked_joint_constraints(
+        self, ps, robot, q_ref, patterns
+    ) -> tuple:
+        """Create locked joint constraints via CORBA."""
+        from ..planning.constraints import ConstraintBuilder
+        return ConstraintBuilder.create_locked_joint_constraints(
+            ps, robot, q_ref, patterns, backend="corba"
+        )
+
+    @property
+    def skip_placement_for_no_contacts(self) -> bool:
+        """CORBA factory handles no-contact placement correctly."""
+        return False
+
     def set_path_optimization(self, enabled: bool):
         """Enable or disable path optimization.
         

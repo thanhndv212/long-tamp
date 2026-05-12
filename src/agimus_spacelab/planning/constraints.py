@@ -90,7 +90,8 @@ class ConstraintBuilder:
         ps, name: str, gripper: str, tool: str,
         transform: List[float],
         mask: List[bool] = None,
-        robot=None, backend: str = "corba"
+        robot=None, backend: str = "corba",
+        backend_obj=None,
     ) -> Any:
         """
         Create a grasp constraint (rigid attachment).
@@ -104,12 +105,20 @@ class ConstraintBuilder:
             mask: Boolean mask for DOF constraints (default: all True)
             robot: Robot/Device instance (required for PyHPP)
             backend: "corba" or "pyhpp"
+            backend_obj: BackendBase instance (preferred; overrides string dispatch)
             
         Returns:
             Implicit constraint for PyHPP, None for CORBA
         """
         if mask is None:
             mask = [True] * 6
+
+        if backend_obj is not None:
+            print(f"[ConstraintBuilder] create_grasp_constraint '{name}': using backend_obj dispatch ({type(backend_obj).__name__})")
+            return backend_obj.create_grasp_constraint(
+                ps, name, gripper, tool, transform, mask
+            )
+        print(f"[ConstraintBuilder] create_grasp_constraint '{name}': using legacy string dispatch (backend={backend!r})")
 
         if backend == "pyhpp":
             if robot is None:
@@ -166,7 +175,8 @@ class ConstraintBuilder:
         ps, name: str, tool: str,
         world_pose: List[float],
         mask: List[bool],
-        robot=None, backend: str = "corba"
+        robot=None, backend: str = "corba",
+        backend_obj=None,
     ) -> Any:
         """
         Create a placement constraint (object on surface).
@@ -179,10 +189,18 @@ class ConstraintBuilder:
             mask: Boolean mask for DOF constraints
             robot: Robot/Device instance (required for PyHPP)
             backend: "corba" or "pyhpp"
+            backend_obj: BackendBase instance (preferred; overrides string dispatch)
             
         Returns:
             Implicit constraint for PyHPP, None for CORBA
         """
+        if backend_obj is not None:
+            print(f"[ConstraintBuilder] create_placement_constraint '{name}': using backend_obj dispatch ({type(backend_obj).__name__})")
+            return backend_obj.create_placement_constraint(
+                ps, name, tool, world_pose, mask
+            )
+        print(f"[ConstraintBuilder] create_placement_constraint '{name}': using legacy string dispatch (backend={backend!r})")
+
         if backend == "pyhpp":
             if robot is None:
                 raise ValueError("robot parameter required for PyHPP backend")
@@ -233,7 +251,8 @@ class ConstraintBuilder:
         ps, base_name: str, tool: str,
         world_pose: List[float],
         complement_mask: List[bool],
-        robot=None, backend: str = "corba"
+        robot=None, backend: str = "corba",
+        backend_obj=None,
     ) -> Any:
         """
         Create complement constraint (free DOFs).
@@ -246,10 +265,18 @@ class ConstraintBuilder:
             complement_mask: Boolean mask for complement DOFs
             robot: Robot/Device instance (required for PyHPP)
             backend: "corba" or "pyhpp"
+            backend_obj: BackendBase instance (preferred; overrides string dispatch)
             
         Returns:
             Implicit constraint for PyHPP, None for CORBA
         """
+        if backend_obj is not None:
+            print(f"[ConstraintBuilder] create_complement_constraint '{base_name}': using backend_obj dispatch ({type(backend_obj).__name__})")
+            return backend_obj.create_complement_constraint(
+                ps, base_name, tool, world_pose, complement_mask
+            )
+        print(f"[ConstraintBuilder] create_complement_constraint '{base_name}': using legacy string dispatch (backend={backend!r})")
+
         constraint_name = f"{base_name}/complement"
 
         if backend == "pyhpp":
@@ -529,6 +556,7 @@ class FactoryConstraintRegistry:
         ps,
         robot=None,
         backend: str = "corba",
+        backend_obj=None,
     ):
         """
         Initialize the registry.
@@ -537,13 +565,22 @@ class FactoryConstraintRegistry:
             ps: Problem solver (CORBA) or Problem (PyHPP)
             robot: Robot/Device instance (required for PyHPP)
             backend: "corba" or "pyhpp"
+            backend_obj: BackendBase instance for polymorphic dispatch (optional)
         """
         self.ps = ps
         self.robot = robot
         self.backend = backend.lower()
+        self._backend_obj = backend_obj
         # Store constraint objects (PyHPP) or just names (CORBA)
         # For PyHPP: pass this dict to ConstraintGraphFactory(graph, constraints=...)
         self.constraints: Dict[str, Any] = {}
+
+    # --- Internal helpers ----------------------------------------------
+
+    def _store(self, name: str, result: Any) -> None:
+        """Store constraint object (PyHPP only)."""
+        if self.backend == "pyhpp" and result is not None:
+            self.constraints[name] = result
 
     # --- Factory naming conventions ------------------------------------
 
@@ -602,10 +639,10 @@ class FactoryConstraintRegistry:
         name = self.grasp_name(gripper, handle)
         result = ConstraintBuilder.create_grasp_constraint(
             self.ps, name, gripper, handle, transform, mask,
-            robot=self.robot, backend=self.backend
+            robot=self.robot, backend=self.backend,
+            backend_obj=self._backend_obj,
         )
-        if self.backend == "pyhpp" and result is not None:
-            self.constraints[name] = result
+        self._store(name, result)
         return name
 
     def register_pregrasp(
@@ -631,10 +668,10 @@ class FactoryConstraintRegistry:
         name = self.pregrasp_name(gripper, handle)
         result = ConstraintBuilder.create_grasp_constraint(
             self.ps, name, gripper, handle, transform, mask,
-            robot=self.robot, backend=self.backend
+            robot=self.robot, backend=self.backend,
+            backend_obj=self._backend_obj,
         )
-        if self.backend == "pyhpp" and result is not None:
-            self.constraints[name] = result
+        self._store(name, result)
         return name
 
     def register_placement(
@@ -658,10 +695,10 @@ class FactoryConstraintRegistry:
         name = self.place_name(obj)
         result = ConstraintBuilder.create_placement_constraint(
             self.ps, name, obj, world_pose, mask,
-            robot=self.robot, backend=self.backend
+            robot=self.robot, backend=self.backend,
+            backend_obj=self._backend_obj,
         )
-        if self.backend == "pyhpp" and result is not None:
-            self.constraints[name] = result
+        self._store(name, result)
         return name
 
     def register_placement_complement(
@@ -685,11 +722,11 @@ class FactoryConstraintRegistry:
         base_name = self.place_name(obj)
         result = ConstraintBuilder.create_complement_constraint(
             self.ps, base_name, obj, world_pose, complement_mask,
-            robot=self.robot, backend=self.backend
+            robot=self.robot, backend=self.backend,
+            backend_obj=self._backend_obj,
         )
         name = self.complement_name(base_name)
-        if self.backend == "pyhpp" and result is not None:
-            self.constraints[name] = result
+        self._store(name, result)
         return name
 
     def register_grasp_complement(
@@ -715,11 +752,11 @@ class FactoryConstraintRegistry:
         base_name = self.grasp_name(gripper, handle)
         result = ConstraintBuilder.create_complement_constraint(
             self.ps, base_name, handle, transform, complement_mask,
-            robot=self.robot, backend=self.backend
+            robot=self.robot, backend=self.backend,
+            backend_obj=self._backend_obj,
         )
         name = self.complement_name(base_name)
-        if self.backend == "pyhpp" and result is not None:
-            self.constraints[name] = result
+        self._store(name, result)
         return name
 
     def register_grasp_hold(
@@ -747,10 +784,10 @@ class FactoryConstraintRegistry:
         name = self.hold_name(base_name)
         result = ConstraintBuilder.create_grasp_constraint(
             self.ps, name, gripper, handle, transform, mask,
-            robot=self.robot, backend=self.backend
+            robot=self.robot, backend=self.backend,
+            backend_obj=self._backend_obj,
         )
-        if self.backend == "pyhpp" and result is not None:
-            self.constraints[name] = result
+        self._store(name, result)
         return name
 
     def register_placement_hold(
@@ -776,10 +813,10 @@ class FactoryConstraintRegistry:
         name = self.hold_name(base_name)
         result = ConstraintBuilder.create_placement_constraint(
             self.ps, name, obj, world_pose, mask,
-            robot=self.robot, backend=self.backend
+            robot=self.robot, backend=self.backend,
+            backend_obj=self._backend_obj,
         )
-        if self.backend == "pyhpp" and result is not None:
-            self.constraints[name] = result
+        self._store(name, result)
         return name
 
     # --- Query methods -------------------------------------------------

@@ -444,6 +444,103 @@ class BackendBase(ABC):
         """
         pass
 
+    # =========================================================================
+    # Constraint Creation Methods
+    # =========================================================================
+
+    @abstractmethod
+    def create_grasp_constraint(
+        self, ps, name: str, gripper: str, tool: str,
+        transform: List[float], mask: List[bool]
+    ) -> Any:
+        """Create a grasp (relative transformation) constraint.
+
+        Args:
+            ps: Problem solver (CORBA) or Problem (PyHPP)
+            name: Constraint name
+            gripper: Gripper joint/frame name
+            tool: Tool joint/frame name
+            transform: [x, y, z, qx, qy, qz, qw]
+            mask: Boolean mask for constrained DOFs (6 entries)
+
+        Returns:
+            PyHPP: Implicit constraint object.
+            CORBA: None (constraint stored in problem solver).
+        """
+        pass
+
+    @abstractmethod
+    def create_placement_constraint(
+        self, ps, name: str, tool: str,
+        world_pose: List[float], mask: List[bool]
+    ) -> Any:
+        """Create a placement (absolute transformation) constraint.
+
+        Args:
+            ps: Problem solver (CORBA) or Problem (PyHPP)
+            name: Constraint name
+            tool: Tool joint/frame name
+            world_pose: World pose [x, y, z, qx, qy, qz, qw]
+            mask: Boolean mask for constrained DOFs
+
+        Returns:
+            PyHPP: Implicit constraint object.
+            CORBA: None (constraint stored in problem solver).
+        """
+        pass
+
+    @abstractmethod
+    def create_complement_constraint(
+        self, ps, base_name: str, tool: str,
+        world_pose: List[float], complement_mask: List[bool]
+    ) -> Any:
+        """Create a complement (free-DOF) constraint.
+
+        The constraint name is automatically set to ``base_name + '/complement'``.
+
+        Args:
+            ps: Problem solver (CORBA) or Problem (PyHPP)
+            base_name: Base constraint name (complement suffix appended)
+            tool: Tool joint/frame name
+            world_pose: World pose [x, y, z, qx, qy, qz, qw]
+            complement_mask: Boolean mask for the free DOFs
+
+        Returns:
+            PyHPP: Implicit constraint object.
+            CORBA: None (constraint stored in problem solver).
+        """
+        pass
+
+    @abstractmethod
+    def create_locked_joint_constraints(
+        self, ps, robot, q_ref: List[float], patterns: List[str]
+    ) -> tuple:
+        """Create locked joint constraints for joints matching name patterns.
+
+        Args:
+            ps: Problem solver (CORBA) or Problem (PyHPP)
+            robot: Robot/Device instance
+            q_ref: Reference configuration
+            patterns: Substrings to match against joint names (case-insensitive)
+
+        Returns:
+            Tuple ``(locked, joint_names)`` where:
+            - CORBA: ``(List[str] constraint names, List[str] joint names)``
+            - PyHPP:  ``(List[LockedJoint] objects,  List[str] joint names)``
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def skip_placement_for_no_contacts(self) -> bool:
+        """Whether placement constraints should be skipped when no contact surfaces exist.
+
+        PyHPP: True — the factory's no-contact path uses LockedJoint foliations;
+               pre-registering a Transformation placement constraint breaks projection.
+        CORBA: False — the factory handles no-contact placement correctly regardless.
+        """
+        pass
+
 
 __all__ = [
     "BackendBase",

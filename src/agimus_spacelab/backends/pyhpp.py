@@ -1068,6 +1068,120 @@ class PyHPPBackend(BackendBase):
         """Get constraint graph."""
         return self.graph
 
+    # =========================================================================
+    # Constraint Creation Methods (BackendBase interface)
+    # =========================================================================
+
+    def create_grasp_constraint(
+        self, ps, name: str, gripper: str, tool: str,
+        transform, mask
+    ):
+        """Create grasp constraint via PyHPP (returns Implicit object)."""
+        from ..planning.constraints import (
+            ConstraintBuilder, HAS_PYHPP_CONSTRAINTS,
+            get_joint_id_for_name,
+        )
+        try:
+            from pyhpp.constraints import (
+                RelativeTransformation, ComparisonTypes, ComparisonType,
+                Implicit,
+            )
+            from pinocchio import StdVec_Bool as Mask
+            from ..utils import xyzquat_to_se3
+        except ImportError:
+            raise ImportError("PyHPP constraints not available")
+
+        robot = self.device
+        if mask is None:
+            mask = [True] * 6
+
+        joint_gripper, frame1_placement = get_joint_id_for_name(robot, gripper)
+        joint_tool, frame2_placement = get_joint_id_for_name(robot, tool)
+        grasp_tf = xyzquat_to_se3(transform)
+        frame1_tf = frame1_placement * grasp_tf
+        frame2_tf = frame2_placement
+
+        mask_vec = Mask()
+        mask_vec[:] = tuple(mask)
+        pc = RelativeTransformation(
+            name, robot, joint_gripper, joint_tool, frame1_tf, frame2_tf, mask_vec
+        )
+        cts = ComparisonTypes()
+        cts[:] = tuple([ComparisonType.EqualToZero] * sum(mask))
+        constraint = Implicit(pc, cts, mask_vec)
+        print(f"    ✓ {name}: {gripper} -> {tool} (PyHPP)")
+        return constraint
+
+    def create_placement_constraint(
+        self, ps, name: str, tool: str,
+        world_pose, mask
+    ):
+        """Create placement constraint via PyHPP (returns Implicit object)."""
+        try:
+            from pyhpp.constraints import (
+                Transformation, ComparisonTypes, ComparisonType, Implicit,
+            )
+            from ..utils import xyzquat_to_se3
+        except ImportError:
+            raise ImportError("PyHPP constraints not available")
+        from ..planning.constraints import get_joint_id_for_name
+
+        robot = self.device
+        joint_tool, frame_placement = get_joint_id_for_name(robot, tool)
+        world_tf = xyzquat_to_se3(world_pose)
+        pc = Transformation(name, robot, joint_tool, frame_placement, world_tf, mask)
+        num_constrained = sum(mask)
+        cts = ComparisonTypes()
+        cts[:] = tuple([ComparisonType.EqualToZero] * num_constrained)
+        implicit_mask = [True] * num_constrained
+        constraint = Implicit(pc, cts, implicit_mask)
+        print(f"    ✓ {name}: tool at {world_pose[:3]} (PyHPP)")
+        return constraint
+
+    def create_complement_constraint(
+        self, ps, base_name: str, tool: str,
+        world_pose, complement_mask
+    ):
+        """Create complement constraint via PyHPP (returns Implicit object)."""
+        try:
+            from pyhpp.constraints import (
+                Transformation, ComparisonTypes, ComparisonType, Implicit,
+            )
+            from ..utils import xyzquat_to_se3
+        except ImportError:
+            raise ImportError("PyHPP constraints not available")
+        from ..planning.constraints import get_joint_id_for_name
+
+        constraint_name = f"{base_name}/complement"
+        robot = self.device
+        joint_tool, frame_placement = get_joint_id_for_name(robot, tool)
+        world_tf = xyzquat_to_se3(world_pose)
+        pc = Transformation(
+            constraint_name, robot, joint_tool, frame_placement,
+            world_tf, complement_mask,
+        )
+        num_constrained = sum(complement_mask)
+        cts = ComparisonTypes()
+        cts[:] = tuple([ComparisonType.Equality] * num_constrained)
+        implicit_mask = [True] * num_constrained
+        constraint = Implicit(pc, cts, implicit_mask)
+        print(f"    ✓ {constraint_name}: free DOFs (PyHPP)")
+        return constraint
+
+    def create_locked_joint_constraints(
+        self, ps, robot, q_ref, patterns
+    ) -> tuple:
+        """Create locked joint constraints via PyHPP."""
+        from ..planning.constraints import ConstraintBuilder
+        return ConstraintBuilder.create_locked_joint_constraints(
+            ps, robot, q_ref, patterns, backend="pyhpp"
+        )
+
+    @property
+    def skip_placement_for_no_contacts(self) -> bool:
+        """PyHPP factory no-contact path uses LockedJoint foliations; skip placement."""
+        return True
+
     def set_dichotomy(self, enabled: bool):
         """Enable or disable dichotomy path validation.
         

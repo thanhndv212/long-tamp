@@ -147,7 +147,8 @@ class ManipulationTask(ABC):
 
         # Use FactoryConstraintRegistry for proper factory naming
         registry = FactoryConstraintRegistry(
-            self.ps, robot=robot, backend=self.backend
+            self.ps, robot=robot, backend=self.backend,
+            backend_obj=self.planner,
         )
 
         # Get constraint definitions from config
@@ -170,7 +171,7 @@ class ManipulationTask(ABC):
         has_contacts = bool(
             contacts_per_obj and any(contacts_per_obj)
         ) and bool(env_contacts)
-        skip_placement = (self.backend == "pyhpp") and (not has_contacts)
+        skip_placement = self.planner.skip_placement_for_no_contacts and (not has_contacts)
 
         # Register all constraints with factory naming
         # Maps user names -> factory names
