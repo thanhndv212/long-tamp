@@ -38,7 +38,7 @@ from agimus_spacelab.visualization import (
     visualize_all_grippers,
 )
 # Add config directory
-config_dir = Path(__file__).parent.parent / "config"
+config_dir = Path(__file__).parent / "config"
 sys.path.insert(0, str(config_dir))
 
 from graspball_config import (

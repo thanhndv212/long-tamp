@@ -32,7 +32,7 @@ from agimus_spacelab.config.yaml_loader import YamlTaskLoader
 # Load YAML config (module-level singleton — cheap / idempotent)
 # ---------------------------------------------------------------------------
 
-_YAML_PATH = Path(__file__).parent.parent / "config" / "graspball_config.yaml"
+_YAML_PATH = Path(__file__).parent / "config" / "graspball_config.yaml"
 _loader = YamlTaskLoader(_YAML_PATH)
 
 

@@ -13,7 +13,7 @@ Example usage in a task script::
 
     from agimus_spacelab.config.yaml_loader import YamlTaskLoader
 
-    _YAML = Path(__file__).parent.parent / "config" / "my_task.yaml"
+    _YAML = Path(__file__).parent / "config" / "my_task.yaml"
     _loader = YamlTaskLoader(_YAML)
 
     class MyTask(ManipulationTask):
@@ -75,7 +75,7 @@ def _yaml_with_grasp_goals(cls, goal_states):
     """Return a derived config filtered to the requested gripper-handle pairs.
 
     Mirrors the logic in ``TaskConfigurations.DisplayAllStates.with_grasp_goals``
-    in ``script/config/spacelab_config.py``.
+    in ``script/spacelab/config/spacelab_config.py``.
 
     Args:
         goal_states: Iterable of strings matching ``"<gripper> grasps <handle>"``.
@@ -151,8 +151,8 @@ def _yaml_with_grasp_goals(cls, goal_states):
 class YamlTaskLoader:
     """Load a YAML task config file and expose ManipulationTask-compatible objects.
 
-    The YAML schema is documented in ``script/config/graspball_config.yaml``
-    and ``script/config/spacelab_config.yaml``.
+    The YAML schema is documented in ``script/graspball/config/graspball_config.yaml``
+    and ``script/spacelab/config/spacelab_config.yaml``.
 
     Attributes are lazily built on first access.
     """

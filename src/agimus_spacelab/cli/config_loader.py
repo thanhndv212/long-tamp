@@ -42,13 +42,14 @@ def load_task_config(
 
     Example:
         >>> from pathlib import Path
-        >>> config_dir = Path(__file__).parent.parent / "config"
+        >>> config_dir = Path(__file__).parent / "config"
         >>> cfg = load_task_config(
         ...     config_dir,
         ...     "spacelab_config",
         ...     "TaskConfigurations.DisplayAllStates",
         ... )
     """
+
     # Add config directory to path if not already present
     config_dir_str = str(config_dir.resolve())
     if config_dir_str not in sys.path:
@@ -73,8 +74,8 @@ def get_default_config_dir(script_path: Path) -> Path:
     """
     Get the default config directory relative to a script path.
 
-    The convention is that config files are in ../config/ relative
-    to the script directory.
+    The convention is that config files are in config/ relative
+    to the script's directory.
 
     Args:
         script_path: Path to the script file (typically __file__).
@@ -85,4 +86,4 @@ def get_default_config_dir(script_path: Path) -> Path:
     Example:
         >>> config_dir = get_default_config_dir(Path(__file__))
     """
-    return script_path.parent.parent / "config"
+    return script_path.parent / "config"
