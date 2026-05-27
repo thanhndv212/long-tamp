@@ -1998,14 +1998,10 @@ class PyHPPBackend(BackendBase):
         if pv is None:
             print("      [TP] Falling back to planPath")
             try:
-                # Use planPathSingle (1D, 1D) instead of planPath (1D, 2D-matrix).
-                # The 2D-matrix eigenpy conversion for (1,N) arrays is broken:
-                # eigenpy falsely considers (1,N) C-order arrays as F-contiguous
-                # and creates a direct Ref, but the resulting Ref has wrong strides
-                # so C++ reads garbage from positions [1..N-1].
-                # planPathSingle constructs the MatrixXd internally in C++ from
-                # two 1D ConfigurationIn_t refs, which always work correctly.
-                pv = tp.planPathSingle(q1_arr, q2_arr, bool(reset_roadmap))
+                # planPath handles (1,N) numpy arrays via an internal RowMajor
+                # re-map that bypasses the eigenpy Stride<0,0> bug.
+                q_goals_2D = q2_arr.reshape(1, -1)
+                pv = tp.planPath(q1_arr, q_goals_2D, bool(reset_roadmap))
                 print("      [TP] planPath succeeded")
                 try:
                     pv = tp.optimizePath(pv)
