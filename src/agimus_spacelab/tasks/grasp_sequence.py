@@ -674,6 +674,7 @@ class GraspSequencePlanner:
         mode: str = "auto",
         manual_arms: Optional[List[str]] = None,
         verbose: bool = True,
+        handle: Optional[str] = None,
     ) -> List[str]:
         """Compute which arms should be frozen for current phase.
 
@@ -682,11 +683,21 @@ class GraspSequencePlanner:
             mode: "auto" (freeze all except active),
                   "manual" (use manual_arms), "none" (no locked joints)
             manual_arms: List of arm keywords to freeze (for manual mode)
+            verbose: Print progress messages
+            handle: Target handle string (e.g. ``"RS1/h_RS1_WB"``).  When
+                provided together with ``self.grasp_tracker``, the
+                held-object chain starting at the target's owning object
+                is walked: any arm that currently holds the target (directly
+                or transitively) is kept unfrozen.  This is required when
+                the target object sits inside another held object (e.g.
+                RS1 is inside ``frame_gripper`` held by UR10) — otherwise
+                the pregrasp IK cannot reach the target.
 
         Returns:
             List of arm keywords to freeze
                 (for create_locked_joint_constraints)
         """
+
         if mode == "none":
             return []
 
@@ -695,9 +706,9 @@ class GraspSequencePlanner:
                 return []
             return manual_arms
 
-        # Auto mode: freeze all arms except the active gripper's arm
-        frozen_arms = []
-        active_arm = None
+        # Auto mode: freeze all arms except the active gripper's arm AND
+        # any arm in the held-object chain that ultimately carries the
+        # target handle's owning object.
 
         # Find which arm the active gripper belongs to.
         # Exact-match first (config stores full gripper frame names),
@@ -705,18 +716,67 @@ class GraspSequencePlanner:
         active_arm = self.GRIPPER_TO_ARM_MAP.get(active_gripper)
         if active_arm is None:
             gripper_lower = active_gripper.lower()
-            for gripper_pattern, arm_keyword in self.GRIPPER_TO_ARM_MAP.items():
+            for (
+                gripper_pattern,
+                arm_keyword,
+            ) in self.GRIPPER_TO_ARM_MAP.items():
                 if gripper_pattern.lower() in gripper_lower:
                     active_arm = arm_keyword
                     break
 
+        unfrozen_arms: Set[str] = (
+            {active_arm} if active_arm is not None else set()
+        )
+
         if verbose:
             print(f"Active gripper '{active_gripper}' uses arm '{active_arm}'")
 
-        # Freeze all other arms
-        for arm_keyword in self.ALL_ARM_KEYWORDS:
-            if arm_keyword != active_arm:
-                frozen_arms.append(arm_keyword)
+        # Walk the held-object chain: if the target is held (directly or
+        # transitively) by another arm, that arm must stay free so the
+        # active arm can bring the target into reach.  Skipped when
+        # ``handle`` is not provided or the grasp tracker is not wired up
+        # (e.g. interactive-pickers unit tests) — in that case the
+        # behaviour is identical to the original (only the active arm
+        # is unfrozen).
+        if (
+            handle is not None
+            and getattr(self, "grasp_tracker", None) is not None
+        ):
+            target_obj: Optional[str] = handle.split("/")[0]
+            visited: Set[str] = set()
+            current_grasps = self.grasp_tracker.current_grasps
+            while target_obj and target_obj not in visited:
+                visited.add(target_obj)
+                holder_gripper: Optional[str] = None
+                for g, h in current_grasps.items():
+                    if h is None or g == active_gripper:
+                        continue
+                    if h.split("/")[0] == target_obj:
+                        holder_gripper = g
+                        break
+                if holder_gripper is None:
+                    break
+                holding_arm = self._get_arm_for_gripper(holder_gripper)
+                if holding_arm:
+                    unfrozen_arms.add(holding_arm)
+                    if verbose:
+                        print(
+                            f"  Chain trace: '{holder_gripper}' (arm "
+                            f"'{holding_arm}') holds object "
+                            f"'{target_obj}' — keeping "
+                            f"'{holding_arm}' unfrozen"
+                        )
+                # Walk up: the holder gripper itself is mounted on some
+                # parent object (e.g. 'g_FG_part' → 'frame_gripper',
+                # 'g_ur10_tool' → 'spacelab'/robot → end of chain).
+                target_obj = holder_gripper.split("/")[0]
+
+        # Freeze all arms not in the unfrozen set.
+        frozen_arms: List[str] = [
+            arm_keyword
+            for arm_keyword in self.ALL_ARM_KEYWORDS
+            if arm_keyword not in unfrozen_arms
+        ]
 
         return frozen_arms
 
@@ -983,24 +1043,40 @@ class GraspSequencePlanner:
                 if frozen_arms_mode == "global":
                     release_constraints = self.graph_constraints
                 elif frozen_arms_mode != "none":
+                    # Generalised chain walk: any arm that currently
+                    # holds the released object (directly or transitively)
+                    # is kept unfrozen by compute_phase_locked_joints.
                     release_frozen = self.compute_phase_locked_joints(
-                        gripper, "auto"
+                        gripper, "auto", handle=currently_held
                     )
-                    # Exclude arms whose grippers hold the released object
+                    # Defensive fallback: if the chain walk did not
+                    # unfreeze the arm that directly holds
+                    # ``currently_held``, log a warning and apply the
+                    # original 1-link approximation so we never get a
+                    # worse result than the pre-fix behaviour.
                     released_obj = currently_held.split("/")[0]
+                    direct_holder_arm: Optional[str] = None
                     for g, h in self.grasp_tracker.current_grasps.items():
                         if g == gripper or h is None:
                             continue
                         if h.split("/")[0] == released_obj:
                             arm = self._get_arm_for_gripper(g)
-                            if arm and arm in release_frozen:
-                                release_frozen.remove(arm)
-                                if verbose:
-                                    print(
-                                        f"    (auto-release) Keeping "
-                                        f"'{arm}' unfrozen: '{g}' "
-                                        f"holds '{h}' on same object"
-                                    )
+                            if arm:
+                                direct_holder_arm = arm
+                                break
+                    if (
+                        direct_holder_arm
+                        and direct_holder_arm in release_frozen
+                    ):
+                        if verbose:
+                            print(
+                                f"    \u26a0 compute_phase_locked_joints did "
+                                f"not unfreeze direct holder arm "
+                                f"'{direct_holder_arm}' of "
+                                f"'{currently_held}'; applying 1-link "
+                                f"fallback."
+                            )
+                        release_frozen.remove(direct_holder_arm)
                     if release_frozen:
                         from agimus_spacelab.planning.constraints import (
                             ConstraintBuilder,
@@ -1098,7 +1174,7 @@ class GraspSequencePlanner:
                                     f"{e}, using auto mode"
                                 )
                             frozen_arms = self.compute_phase_locked_joints(
-                                gripper, "auto"
+                                gripper, "auto", handle=handle
                             )
                     else:
                         # No callback set, fall back to auto
@@ -1108,15 +1184,17 @@ class GraspSequencePlanner:
                                 "callback set, using auto mode"
                             )
                         frozen_arms = self.compute_phase_locked_joints(
-                            gripper, "auto"
+                            gripper, "auto", handle=handle
                         )
                 elif frozen_arms_mode == "manual" and per_phase_frozen_arms:
                     # Manual mode with explicit specification
                     frozen_arms = per_phase_frozen_arms.get(phase_idx, [])
                 else:
                     # Auto mode: freeze all except active gripper's arm
+                    # (plus any arm in the kinematic chain that carries
+                    # the target handle's owning object).
                     frozen_arms = self.compute_phase_locked_joints(
-                        gripper, "auto"
+                        gripper, "auto", handle=handle
                     )
 
                 # Create locked joint constraints for this phase
@@ -2120,24 +2198,39 @@ class GraspSequencePlanner:
                 if use_fm == "global":
                     release_constraints = self.graph_constraints
                 elif use_fm != "none":
+                    # Generalised chain walk: any arm that currently
+                    # holds the released object (directly or transitively)
+                    # is kept unfrozen by compute_phase_locked_joints.
                     release_frozen = self.compute_phase_locked_joints(
-                        gripper, "auto"
+                        gripper, "auto", handle=currently_held
                     )
-                    # Exclude arms whose grippers hold the released object
+                    # Defensive fallback: if the chain walk did not
+                    # unfreeze the direct holder of ``currently_held``,
+                    # apply the original 1-link approximation so we never
+                    # get a worse result than the pre-fix behaviour.
                     released_obj = currently_held.split("/")[0]
+                    direct_holder_arm: Optional[str] = None
                     for g, h in self.grasp_tracker.current_grasps.items():
                         if g == gripper or h is None:
                             continue
                         if h.split("/")[0] == released_obj:
                             arm = self._get_arm_for_gripper(g)
-                            if arm and arm in release_frozen:
-                                release_frozen.remove(arm)
-                                if verbose:
-                                    print(
-                                        f"    (auto-release) Keeping "
-                                        f"'{arm}' unfrozen: '{g}' "
-                                        f"holds '{h}' on same object"
-                                    )
+                            if arm:
+                                direct_holder_arm = arm
+                                break
+                    if (
+                        direct_holder_arm
+                        and direct_holder_arm in release_frozen
+                    ):
+                        if verbose:
+                            print(
+                                f"    \u26a0 compute_phase_locked_joints did "
+                                f"not unfreeze direct holder arm "
+                                f"'{direct_holder_arm}' of "
+                                f"'{currently_held}'; applying 1-link "
+                                f"fallback."
+                            )
+                        release_frozen.remove(direct_holder_arm)
                     if release_frozen:
                         from agimus_spacelab.planning.constraints import (
                             ConstraintBuilder,
@@ -2223,7 +2316,7 @@ class GraspSequencePlanner:
                                     f"{e}, using auto mode"
                                 )
                             frozen_arms = self.compute_phase_locked_joints(
-                                gripper, "auto"
+                                gripper, "auto", handle=handle
                             )
                     else:
                         if verbose:
@@ -2232,14 +2325,14 @@ class GraspSequencePlanner:
                                 "callback set, using auto mode"
                             )
                         frozen_arms = self.compute_phase_locked_joints(
-                            gripper, "auto"
+                            gripper, "auto", handle=handle
                         )
                 elif use_frozen_mode == "manual" and per_phase_frozen_arms:
                     frozen_arms = per_phase_frozen_arms.get(phase_idx, [])
                 else:
                     # Auto mode
                     frozen_arms = self.compute_phase_locked_joints(
-                        gripper, "auto"
+                        gripper, "auto", handle=handle
                     )
 
                 # Create locked joint constraints
