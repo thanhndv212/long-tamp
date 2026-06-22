@@ -1016,8 +1016,9 @@ class CorbaBackend(BackendBase):
         if time_parameterize:
             try:
                 pv = tp.timeParameterization(pv)
-            except Exception:
-                pass
+                print("      [TP] Path time-parameterized")
+            except Exception as e:
+                print(f"      [TP] Time parameterization failed: {e}")
 
         # Always return tuple (timed_path, geometric_path)
         return pv, pv_geometric
