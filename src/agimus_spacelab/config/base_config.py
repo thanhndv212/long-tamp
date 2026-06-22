@@ -36,6 +36,16 @@ class Defaults:
     TIME_PARAM_SAFETY: float = 0.95
     # Polynomial order: 1=linear, 2=cubic (zero-vel ends), 3=quintic (zero-vel+accel)
     TIME_PARAM_ORDER: int = 2
+    # Time parameterization method: "stp", "trapezoidal", or "toppra"
+    TIME_PARAM_METHOD: str = "stp"
+    # TOPPRA-specific (ignored unless TIME_PARAM_METHOD == "toppra")
+    TOPPRA_VELOCITY_SCALE: float = 1.0
+    TOPPRA_EFFORT_SCALE: float = -1      # -1 = disable torque constraints
+    TOPPRA_SOLVER: int = 0               # 0=Seidel, 1=GLPK, 2=qpOASES
+    TOPPRA_N: int = 100                  # grid points
+    TOPPRA_INTERPOLATION: str = "hermite"  # or "constant_acceleration"
+    TOPPRA_GRIDPOINT_METHOD: str = "param_space"  # or "time_space"
+    TOPPRA_ACTIVE_JOINTS: list = []       # empty = all joints
     
     # Constraint masks (6 DOF: x, y, z, roll, pitch, yaw)
     MASK_ALL = [True, True, True, True, True, True]
@@ -203,6 +213,14 @@ class BaseTaskConfig(ABC):
     SPLINE_ZERO_DERIVATIVES_AT_STATE: bool = Defaults.SPLINE_ZERO_DERIVATIVES_AT_STATE
     TIME_PARAM_SAFETY: float = Defaults.TIME_PARAM_SAFETY
     TIME_PARAM_ORDER: int = Defaults.TIME_PARAM_ORDER
+    TIME_PARAM_METHOD: str = Defaults.TIME_PARAM_METHOD
+    TOPPRA_VELOCITY_SCALE: float = Defaults.TOPPRA_VELOCITY_SCALE
+    TOPPRA_EFFORT_SCALE: float = Defaults.TOPPRA_EFFORT_SCALE
+    TOPPRA_SOLVER: int = Defaults.TOPPRA_SOLVER
+    TOPPRA_N: int = Defaults.TOPPRA_N
+    TOPPRA_INTERPOLATION: str = Defaults.TOPPRA_INTERPOLATION
+    TOPPRA_GRIDPOINT_METHOD: str = Defaults.TOPPRA_GRIDPOINT_METHOD
+    TOPPRA_ACTIVE_JOINTS: list = Defaults.TOPPRA_ACTIVE_JOINTS
     
     # ==========================================================================
     # Graph Definition (Override in subclass)

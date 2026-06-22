@@ -791,6 +791,41 @@ class GraspSequencePlanner:
                 return arm
         return None
 
+    # Arm keyword → JOINT_GROUPS key mapping (case-insensitive substring)
+    _ARM_KEYWORD_TO_GROUP = {
+        "ur10": "UR10",
+        "vispa_": "VISPA_ARM",
+        "vispa2": "VISPA_BASE",
+    }
+
+    def _get_active_joints_for_unfrozen_arms(
+        self, frozen_arms: List[str]
+    ) -> List[str]:
+        """Get joint names for all unfrozen arms.
+
+        Maps arm keywords (e.g. "ur10", "vispa_") to their joint names
+        via task_config.JOINT_GROUPS.  Used to configure TOPPRA's
+        selectJoints() per phase.
+
+        Args:
+            frozen_arms: List of frozen arm keywords
+
+        Returns:
+            List of joint names for unfrozen arms
+        """
+        joint_groups = getattr(self.task_config, "JOINT_GROUPS", {})
+        if not joint_groups:
+            return []
+
+        active_joints: List[str] = []
+        for arm_keyword in self.ALL_ARM_KEYWORDS:
+            if arm_keyword in frozen_arms:
+                continue
+            group_key = self._ARM_KEYWORD_TO_GROUP.get(arm_keyword)
+            if group_key and group_key in joint_groups:
+                active_joints.extend(joint_groups[group_key])
+        return active_joints
+
     def plan_sequence(
         self,
         grasp_sequence: Sequence[Tuple[str, str]],
@@ -877,6 +912,32 @@ class GraspSequencePlanner:
                 self.planner.configure_time_parameterization(**tp_kwargs)
                 if verbose:
                     print(f"Configured time parameterization: {tp_kwargs}")
+
+        # Apply time parameterization method (stp / trapezoidal / toppra)
+        if hasattr(self.planner, "configure_time_parameterization_method"):
+            tp_method_kwargs = {}
+            for field, kwarg in (
+                ("TIME_PARAM_METHOD", "method"),
+                ("TOPPRA_VELOCITY_SCALE", "toppra_velocity_scale"),
+                ("TOPPRA_EFFORT_SCALE", "toppra_effort_scale"),
+                ("TOPPRA_SOLVER", "toppra_solver"),
+                ("TOPPRA_N", "toppra_N"),
+                ("TOPPRA_INTERPOLATION", "toppra_interpolation"),
+                ("TOPPRA_GRIDPOINT_METHOD", "toppra_gridpoint_method"),
+                ("TOPPRA_ACTIVE_JOINTS", "toppra_active_joints"),
+            ):
+                val = getattr(self.task_config, field, None)
+                if val is not None:
+                    tp_method_kwargs[kwarg] = val
+            if tp_method_kwargs:
+                self.planner.configure_time_parameterization_method(
+                    **tp_method_kwargs
+                )
+                if verbose:
+                    print(
+                        f"Configured time parameterization method: "
+                        f"{tp_method_kwargs}"
+                    )
 
         if verbose:
             print("\n" + "=" * 70)
@@ -1222,6 +1283,20 @@ class GraspSequencePlanner:
                             joint_list = ", ".join(sorted(joint_names))
                             print(f"  \u2713 Created {len(joint_names)} locked joint constraints: {joint_list}")
                             print(f"     Constraint names: {constraint_names}")
+
+                # Dynamically set TOPPRA active joints from unfrozen arms
+                if hasattr(self.planner, "set_toppra_active_joints"):
+                    active_joints = self._get_active_joints_for_unfrozen_arms(
+                        frozen_arms
+                    )
+                    if active_joints:
+                        self.planner.set_toppra_active_joints(active_joints)
+                        if verbose:
+                            print(
+                                f"  TOPPRA active joints: "
+                                f"{len(active_joints)} joints from "
+                                f"unfrozen arms"
+                            )
 
             try:
                 self.graph_builder.build_phase_graph(
@@ -2361,6 +2436,20 @@ class GraspSequencePlanner:
                             print(
                                 f"  \u2713 Created {len(joint_names)} "
                                 f"locked joint constraints: {joint_list}"
+                            )
+
+                # Dynamically set TOPPRA active joints from unfrozen arms
+                if hasattr(self.planner, "set_toppra_active_joints"):
+                    active_joints = self._get_active_joints_for_unfrozen_arms(
+                        frozen_arms
+                    )
+                    if active_joints:
+                        self.planner.set_toppra_active_joints(active_joints)
+                        if verbose:
+                            print(
+                                f"  TOPPRA active joints: "
+                                f"{len(active_joints)} joints from "
+                                f"unfrozen arms"
                             )
 
             try:

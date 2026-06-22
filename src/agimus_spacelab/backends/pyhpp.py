@@ -39,6 +39,20 @@ except ImportError:
     HAS_PYHPP = False
 
 try:
+    from pyhpp.core import TrapezoidalTimeParameterization
+    HAS_TRAPEZOIDAL = True
+except ImportError:
+    TrapezoidalTimeParameterization = None
+    HAS_TRAPEZOIDAL = False
+
+try:
+    from pyhpp_toppra import Toppra as TOPPRAOptimizer
+    HAS_TOPPRA = True
+except ImportError:
+    TOPPRAOptimizer = None
+    HAS_TOPPRA = False
+
+try:
     from pyhpp.gepetto.viewer import Viewer as _GepettoViewer
     HAS_GEPETTO_VIEWER = True
 except ImportError:
@@ -128,6 +142,17 @@ class PyHPPBackend(BackendBase):
         self._time_param_order = 2
         self._time_param_max_accel = 1.0
         self._time_param_safety: float = 0.95
+        # Time parameterization method: "stp", "trapezoidal", or "toppra"
+        self._time_param_method: str = "stp"
+        # TOPPRA-specific settings (ignored unless method == "toppra")
+        self._toppra_velocity_scale: float = 1.0
+        self._toppra_effort_scale: float = -1      # -1 = disable torque
+        self._toppra_solver: int = 0               # 0=Seidel, 1=GLPK, 2=qpOASES
+        self._toppra_N: int = 100                  # grid points
+        self._toppra_interpolation: str = "hermite"  # or "constant_acceleration"
+        self._toppra_gridpoint_method: str = "param_space"  # or "time_space"
+        # Joints to enforce limits on (None = all joints)
+        self._toppra_active_joints: Optional[List[str]] = None
 
         # RandomShortcut: number of shortcut attempts per optimization pass.
         # HPP core default is 5; increasing to 50 gives much better convergence.
@@ -1525,6 +1550,128 @@ class PyHPPBackend(BackendBase):
         if safety is not None:
             self._time_param_safety = float(safety)
 
+    def configure_time_parameterization_method(
+        self,
+        method: Optional[str] = None,
+        *,
+        toppra_velocity_scale: Optional[float] = None,
+        toppra_effort_scale: Optional[float] = None,
+        toppra_solver: Optional[int] = None,
+        toppra_N: Optional[int] = None,
+        toppra_interpolation: Optional[str] = None,
+        toppra_gridpoint_method: Optional[str] = None,
+        toppra_active_joints: Optional[List[str]] = None,
+    ) -> None:
+        """Select time parameterization method and TOPPRA-specific parameters.
+
+        Args:
+            method: "stp" (SimpleTimeParameterization), "trapezoidal"
+                (TrapezoidalTimeParameterization), or "toppra" (time-optimal,
+                requires hpp-toppra installed).
+            toppra_velocity_scale: Velocity limit scale factor (1.0 = full).
+            toppra_effort_scale: Torque limit scale (-1 = disable torque).
+            toppra_solver: 0=Seidel, 1=GLPK, 2=qpOASES.
+            toppra_N: Number of grid points for TOPPRA discretization.
+            toppra_interpolation: "hermite" or "constant_acceleration".
+            toppra_gridpoint_method: "param_space" or "time_space".
+            toppra_active_joints: Joint names to enforce limits on.
+                None = all joints.  For multi-arm systems, set to the
+                active arm's joints only to avoid degenerate timing from
+                frozen DOFs with zero velocity limits.
+        """
+        if method is not None:
+            self._time_param_method = str(method)
+        if toppra_velocity_scale is not None:
+            self._toppra_velocity_scale = float(toppra_velocity_scale)
+        if toppra_effort_scale is not None:
+            self._toppra_effort_scale = float(toppra_effort_scale)
+        if toppra_solver is not None:
+            self._toppra_solver = int(toppra_solver)
+        if toppra_N is not None:
+            self._toppra_N = int(toppra_N)
+        if toppra_interpolation is not None:
+            self._toppra_interpolation = str(toppra_interpolation)
+        if toppra_gridpoint_method is not None:
+            self._toppra_gridpoint_method = str(toppra_gridpoint_method)
+        if toppra_active_joints is not None:
+            self._toppra_active_joints = list(toppra_active_joints) or None
+
+    def set_toppra_active_joints(self, joints: Optional[List[str]]) -> None:
+        """Dynamically set TOPPRA active joints for the current phase.
+
+        Called per-phase by the planner to restrict TOPPRA's velocity/acceleration
+        limits to only the unfrozen arm's joints.  Pass None to use all joints.
+
+        Args:
+            joints: Joint names for TOPPRA's selectJoints(), or None for all.
+        """
+        self._toppra_active_joints = list(joints) if joints else None
+
+    def _apply_time_parameterization(self, pv: Any) -> Any:
+        """Apply the configured time parameterization method to a path.
+
+        Fallback chain: toppra → trapezoidal → stp.
+        Returns the time-parameterized PathVector.
+        """
+        method = self._time_param_method
+
+        if method == "toppra" and HAS_TOPPRA:
+            try:
+                tp_toppra = TOPPRAOptimizer(self.problem)
+                tp_toppra.velocityScale = self._toppra_velocity_scale
+                tp_toppra.effortScale = self._toppra_effort_scale
+                tp_toppra.solver = self._toppra_solver
+                tp_toppra.N = self._toppra_N
+                tp_toppra.interpolationMethod = self._toppra_interpolation
+                tp_toppra.gridpointMethod = self._toppra_gridpoint_method
+                if self._toppra_active_joints:
+                    tp_toppra.selectJoints(self._toppra_active_joints)
+                    print(f"      [TP] TOPPRA active joints: "
+                          f"{len(self._toppra_active_joints)} joints")
+                pv = tp_toppra.optimize(pv)
+                print("      [TP] TOPPRA applied (time-optimal)")
+                return pv
+            except Exception as e:
+                print(f"      [TP] TOPPRA failed: {e}, falling back to trapezoidal")
+
+        if method in ("toppra", "trapezoidal") and HAS_TRAPEZOIDAL:
+            try:
+                tp_trap = TrapezoidalTimeParameterization(self.problem)
+                pv = tp_trap.optimize(pv)
+                print("      [TP] TrapezoidalTimeParameterization applied")
+                return pv
+            except Exception as e:
+                print(f"      [TP] TrapezoidalTP failed: {e}, falling back to STP")
+
+        # Default / fallback: SimpleTimeParameterization
+        return self._apply_stp(pv)
+
+    def _apply_stp(self, pv: Any) -> Any:
+        """Apply SimpleTimeParameterization (current behavior)."""
+        has_spline_optimizer = any(
+            "SplineGradientBased" in name
+            for name in self._get_active_optimizer_names()
+        )
+        if has_spline_optimizer:
+            print("      [TP] Skipping tp.timeParameterization() — "
+                  "SplineGradientBased already in optimizer chain")
+            try:
+                from pyhpp.core import SimpleTimeParameterization as STP
+                tp_stp = STP(self.problem)
+                pv = tp_stp.optimize(pv)
+                print("      [TP] SimpleTimeParameterization applied "
+                      "(order from main problem)")
+            except Exception as e:
+                print(f"      [TP] SimpleTimeParameterization failed: {e}")
+        else:
+            try:
+                tp = self.ensure_transition_planner()
+                pv = tp.timeParameterization(pv)
+                print("      [TP] Path time-parameterized")
+            except Exception as e:
+                print(f"      [TP] Time parameterization failed: {e}")
+        return pv
+
     def set_inner_problem_parameter(self, key: str, value: Any) -> None:
         """Set parameter on TransitionPlanner's inner problem.
         
@@ -2012,37 +2159,7 @@ class PyHPPBackend(BackendBase):
         pv_geometric = pv
 
         if time_parameterize:
-            # Check if SplineGradientBased is in the optimizer chain.
-            # If so, the spline optimizer already produces smooth continuous
-            # splines with C0/C1 continuity across segments.  Calling
-            # tp.timeParameterization() AFTER the spline optimizer would
-            # re-parameterize each sub-path independently with SimpleTimeParameterization,
-            # destroying the continuity and creating stop-and-go motion.
-            # Instead, we apply SimpleTimeParameterization directly from the main
-            # problem (which has order=2 properly set), which respects the
-            # spline's continuity.
-            has_spline_optimizer = any(
-                "SplineGradientBased" in name
-                for name in self._get_active_optimizer_names()
-            )
-            if has_spline_optimizer:
-                print("      [TP] Skipping tp.timeParameterization() — "
-                      "SplineGradientBased already in optimizer chain")
-                try:
-                    from pyhpp.core import SimpleTimeParameterization as STP
-                    # PyHPP uses constructor directly (not .create())
-                    tp_stp = STP(self.problem)
-                    pv = tp_stp.optimize(pv)
-                    print("      [TP] SimpleTimeParameterization applied "
-                          "(order from main problem)")
-                except Exception as e:
-                    print(f"      [TP] SimpleTimeParameterization failed: {e}")
-            else:
-                try:
-                    pv = tp.timeParameterization(pv)
-                    print("      [TP] Path time-parameterized")
-                except Exception as e:
-                    print(f"      [TP] Time parameterization failed: {e}")
+            pv = self._apply_time_parameterization(pv)
         else:
             print("      [TP] Skipping time parameterization")
 

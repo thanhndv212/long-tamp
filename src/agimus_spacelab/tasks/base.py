@@ -329,6 +329,26 @@ class ManipulationTask(ABC):
             if opt_kwargs:
                 self.planner.configure_transition_planner(**opt_kwargs)
 
+        # Apply time parameterization method config (stp / trapezoidal / toppra)
+        if self.task_config is not None and hasattr(
+            self.planner, "configure_time_parameterization_method"
+        ):
+            tp_kwargs = {}
+            for field, kwarg in (
+                ("TIME_PARAM_METHOD", "method"),
+                ("TOPPRA_VELOCITY_SCALE", "toppra_velocity_scale"),
+                ("TOPPRA_EFFORT_SCALE", "toppra_effort_scale"),
+                ("TOPPRA_SOLVER", "toppra_solver"),
+                ("TOPPRA_N", "toppra_N"),
+                ("TOPPRA_INTERPOLATION", "toppra_interpolation"),
+                ("TOPPRA_GRIDPOINT_METHOD", "toppra_gridpoint_method"),
+                ("TOPPRA_ACTIVE_JOINTS", "toppra_active_joints"),
+            ):
+                if hasattr(self.task_config, field):
+                    tp_kwargs[kwarg] = getattr(self.task_config, field)
+            if tp_kwargs:
+                self.planner.configure_time_parameterization_method(**tp_kwargs)
+
         # 2. Custom collision management
         self.setup_collision_management()
 

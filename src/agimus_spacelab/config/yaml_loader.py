@@ -405,6 +405,30 @@ class YamlTaskLoader:
             "TIME_PARAM_ORDER": int(optimization.get(
                 "time_param_order", Defaults.TIME_PARAM_ORDER
             )),
+            "TIME_PARAM_METHOD": str(optimization.get(
+                "time_param_method", Defaults.TIME_PARAM_METHOD
+            )),
+            "TOPPRA_VELOCITY_SCALE": float(optimization.get(
+                "toppra_velocity_scale", Defaults.TOPPRA_VELOCITY_SCALE
+            )),
+            "TOPPRA_EFFORT_SCALE": float(optimization.get(
+                "toppra_effort_scale", Defaults.TOPPRA_EFFORT_SCALE
+            )),
+            "TOPPRA_SOLVER": int(optimization.get(
+                "toppra_solver", Defaults.TOPPRA_SOLVER
+            )),
+            "TOPPRA_N": int(optimization.get(
+                "toppra_N", Defaults.TOPPRA_N
+            )),
+            "TOPPRA_INTERPOLATION": str(optimization.get(
+                "toppra_interpolation", Defaults.TOPPRA_INTERPOLATION
+            )),
+            "TOPPRA_GRIDPOINT_METHOD": str(optimization.get(
+                "toppra_gridpoint_method", Defaults.TOPPRA_GRIDPOINT_METHOD
+            )),
+            "TOPPRA_ACTIVE_JOINTS": list(optimization.get(
+                "toppra_active_joints", Defaults.TOPPRA_ACTIVE_JOINTS
+            )),
             # Classmethods
             "get_constraint_defs": classmethod(_yaml_get_constraint_defs),
             "init_poses": classmethod(_yaml_init_poses),
