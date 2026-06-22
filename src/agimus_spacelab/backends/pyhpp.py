@@ -1568,53 +1568,32 @@ class PyHPPBackend(BackendBase):
         except Exception as e:
             print(f"      [TP] ✗ maxIterations failed: {e}")
 
-        # Apply SimpleTimeParameterization parameters to the problem so they
-        # take effect when the optimizer runs during transition planning.
-        if self.problem is not None:
+        # Apply SimpleTimeParameterization parameters.
+        # Must set on BOTH self.problem (for path optimizer chain) AND via
+        # tp.setParameter (which propagates to TransitionPlanner's innerProblem_,
+        # used by tp.timeParameterization()).  The TransitionPlanner constructor
+        # copies parameters from self.problem to innerProblem_ at creation time,
+        # but _apply_transition_planner_defaults runs AFTER construction, so
+        # we must explicitly push to innerProblem_ via tp.setParameter().
+        tp_params = [
+            ("SimpleTimeParameterization/order", self._time_param_order),
+            ("SimpleTimeParameterization/maxAcceleration", self._time_param_max_accel),
+            ("SimpleTimeParameterization/safety", self._time_param_safety),
+        ]
+        for key, value in tp_params:
+            # Set on main problem (for path optimizer chain)
+            if self.problem is not None:
+                try:
+                    self.problem.setParameter(key, value)
+                except Exception as e:
+                    print(f"      [TP] ✗ {key} on problem failed: {e}")
+            # Set on innerProblem_ via tp.innerProblem().setParameter
+            # (tp.setParameter does not exist in PyHPP bindings)
             try:
-                self.problem.setParameter(
-                    "SimpleTimeParameterization/order",
-                    self._time_param_order,
-                )
-                print(
-                    "      [TP] ✓ SimpleTimeParameterization/order"
-                    f"={self._time_param_order}"
-                )
+                tp.innerProblem().setParameter(key, value)
+                print(f"      [TP] ✓ {key}={value} (problem + innerProblem)")
             except Exception as e:
-                print(
-                    f"      [TP] ✗ SimpleTimeParameterization/order failed: {e}"
-                )
-            try:
-                self.problem.setParameter(
-                    "SimpleTimeParameterization/maxAcceleration",
-                    self._time_param_max_accel,
-                )
-                print(
-                    "      [TP] ✓ SimpleTimeParameterization/maxAcceleration"
-                    f"={self._time_param_max_accel}"
-                )
-            except Exception as e:
-                print(
-                    "      [TP] ✗ SimpleTimeParameterization/maxAcceleration"
-                    f" failed: {e}"
-                )
-            try:
-                self.problem.setParameter(
-                    "SimpleTimeParameterization/safety",
-                    self._time_param_safety,
-                )
-                print(
-                    "      [TP] ✓ SimpleTimeParameterization/safety"
-                    f"={self._time_param_safety}"
-                )
-            except Exception as e:
-                print(
-                    f"      [TP] ✗ SimpleTimeParameterization/safety failed: {e}"
-                )
-        else:
-            print(
-                "      [TP] ✗ SimpleTimeParameterization skipped: problem not set"
-            )
+                print(f"      [TP] ✗ {key} on innerProblem failed: {e}")
 
         # Apply HPP-level parameters on the Problem for path optimizers.
         # These are global to the problem and affect all optimizers in the TP.
@@ -1780,6 +1759,14 @@ class PyHPPBackend(BackendBase):
                 )
             tp.addPathOptimizer(opt_instance)
             print(f"      [TP] Added optimizer: {opt_name}")
+
+        # Store the active optimizer names for later use (e.g., to decide
+        # whether to skip tp.timeParameterization()).
+        self._active_optimizer_names = list(optimizer_names)
+
+    def _get_active_optimizer_names(self) -> List[str]:
+        """Return the optimizer names used for the current edge."""
+        return getattr(self, "_active_optimizer_names", [])
 
     def plan_transition_edge(
         self,
@@ -2025,11 +2012,37 @@ class PyHPPBackend(BackendBase):
         pv_geometric = pv
 
         if time_parameterize:
-            try:
-                pv = tp.timeParameterization(pv)
-                print("      [TP] Path time-parameterized")
-            except Exception as e:
-                print(f"      [TP] Time parameterization failed: {e}")
+            # Check if SplineGradientBased is in the optimizer chain.
+            # If so, the spline optimizer already produces smooth continuous
+            # splines with C0/C1 continuity across segments.  Calling
+            # tp.timeParameterization() AFTER the spline optimizer would
+            # re-parameterize each sub-path independently with SimpleTimeParameterization,
+            # destroying the continuity and creating stop-and-go motion.
+            # Instead, we apply SimpleTimeParameterization directly from the main
+            # problem (which has order=2 properly set), which respects the
+            # spline's continuity.
+            has_spline_optimizer = any(
+                "SplineGradientBased" in name
+                for name in self._get_active_optimizer_names()
+            )
+            if has_spline_optimizer:
+                print("      [TP] Skipping tp.timeParameterization() — "
+                      "SplineGradientBased already in optimizer chain")
+                try:
+                    from pyhpp.core import SimpleTimeParameterization as STP
+                    # PyHPP uses constructor directly (not .create())
+                    tp_stp = STP(self.problem)
+                    pv = tp_stp.optimize(pv)
+                    print("      [TP] SimpleTimeParameterization applied "
+                          "(order from main problem)")
+                except Exception as e:
+                    print(f"      [TP] SimpleTimeParameterization failed: {e}")
+            else:
+                try:
+                    pv = tp.timeParameterization(pv)
+                    print("      [TP] Path time-parameterized")
+                except Exception as e:
+                    print(f"      [TP] Time parameterization failed: {e}")
         else:
             print("      [TP] Skipping time parameterization")
 
