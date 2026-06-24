@@ -1377,7 +1377,7 @@ class GraphBuilder:
         held_grasps: Dict[str, str],
     ) -> List[float]:
         """Restore unheld objects in q_init to their original scene positions.
-
+ 
         Objects that are not currently grasped may have ended up at random
         positions during previous phases' config generation (since they are
         unconstrained in the previous phase graph).  Before building the next
