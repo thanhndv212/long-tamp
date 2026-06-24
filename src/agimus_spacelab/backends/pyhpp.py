@@ -2128,15 +2128,16 @@ class PyHPPBackend(BackendBase):
                 "skipping directPath"
             )
 
-        # Fall back to planPath if directPath didn't work or was skipped
+        # Fall back to computePath if directPath didn't work or was skipped
         if pv is None:
-            print("      [TP] Falling back to planPath")
+            print("      [TP] Falling back to computePath")
             try:
-                # planPath handles (1,N) numpy arrays via an internal RowMajor
-                # re-map that bypasses the eigenpy Stride<0,0> bug.
-                q_goals_2D = q2_arr.reshape(1, -1)
-                pv = tp.planPath(q1_arr, q_goals_2D, bool(reset_roadmap))
-                print("      [TP] planPath succeeded")
+                # computePath convention: goals as columns (configSize x numGoals).
+                # The Python binding wrapper in hpp-python handles the eigenpy
+                # Stride<0,0> ColMajor workaround for (N,1) arrays.
+                q_goals_col = q2_arr.reshape(-1, 1)
+                pv = tp.computePath(q1_arr, q_goals_col, bool(reset_roadmap))
+                print("      [TP] computePath succeeded")
                 try:
                     pv = tp.optimizePath(pv)
                     print("      [TP] Path optimized")
@@ -2148,7 +2149,7 @@ class PyHPPBackend(BackendBase):
             except Exception as exc:
                 edge_type = "waypoint" if skip_direct_path else "transit"
                 raise RuntimeError(
-                    f"TransitionPlanner.planPath failed for {edge_type} edge "
+                    f"TransitionPlanner.computePath failed for {edge_type} edge "
                     f"{edge_name}: {exc}"
                 )
 
