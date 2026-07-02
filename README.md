@@ -2,12 +2,18 @@
 
 Multi-arm collaborative manipulation planning for SpaceLab assembly tasks using HPP (Humanoid Path Planner).
 
-## Features
+`agimus_spacelab` plans **long, multi-step assembly sequences** for **several robot arms working together** on **many movable objects** in a single shared scene. It builds on HPP's constraint-graph manipulation planning and adds a task/orchestration layer that turns a high-level assembly goal (grip this, move that, hand it over, place it) into a single concatenated, collision-free motion for the whole multi-robot system.
 
-- **Modular architecture**: Reusable tools for scene setup, constraints, and configuration
-- **Scene visualization**: Interactive 3D viewer with gepetto-viewer
+## Capabilities
+
+- **Long-horizon sequence planning.** The `GraspSequencePlanner` chains an arbitrary number of grasp/place/hand-over phases into one continuous plan. Each phase gets a *minimal, phase-local* constraint graph and the paths are concatenated across phases, so planning cost grows **linearly O(N)** with the number of grasps instead of combinatorially **O(N!)** — long assembly missions stay tractable.
+- **Multiple robots (multi-arm & collaborative).** The scene composes several arms into one planning model (e.g. UR10 + VISPA + VISPA2, a ~70-DOF composite) that plan in a shared, mutually-collision-aware world. Arms can act independently, cooperate on the same object, or hand objects off between each other.
+- **Multiple objects.** Any number of free-flying objects and tools (reflector panels, frame gripper, screw driver, …) coexist in the scene. Grasp legality is data-driven via `VALID_PAIRS` (which gripper may grasp which handle), so adding objects/tools is a config change, not a code change.
+- **Constraint-graph manipulation planning.** Grasp, placement, and transition constraints are generated from a declarative `ManipulationConfig`; the constraint graph and its edges are built automatically per phase.
+- **Reproducibility & introspection.** Structured, crash-safe JSONL run logging captures every phase/edge attempt for replay, debugging, and auditing (see *Run Logging*).
+- **Modular architecture.** Reusable building blocks — `SceneBuilder`, `ConstraintBuilder`, `ConfigGenerator`, `ManipulationTask`, `create_planner()` — compose into custom tasks.
+- **Scene visualization.** Interactive 3D viewers: browser-based **viser** (default, no X11) or **gepetto-viewer** (Qt/CORBA).
 - **PyHPP backend** (default): in-process bindings via `hpp-python`. The CORBA backend (`hpp-manipulation-corba`) is still available but **deprecated**.
-- **Task examples**: Grasp, assembly, and collaborative manipulation tasks
 
 
 ## Quick Start
