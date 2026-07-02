@@ -81,15 +81,15 @@ def get_backend(name: str = "auto"):
 
 
 __all__ = [
+    # Availability flags
+    "HAS_CORBA",
+    "HAS_PYHPP",
     # Base class
     "BackendBase",
     "ConstraintResult",
     # Backend implementations
     "CorbaBackend",
     "PyHPPBackend",
-    # Availability flags
-    "HAS_CORBA",
-    "HAS_PYHPP",
     # Utility functions
     "get_available_backends",
     "get_backend",

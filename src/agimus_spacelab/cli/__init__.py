@@ -17,7 +17,7 @@ Example usage:
 from __future__ import annotations
 
 import argparse
-from typing import List, Optional
+from typing import List
 
 from .config_loader import load_task_config
 

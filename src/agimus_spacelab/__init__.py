@@ -98,28 +98,36 @@ def check_backend(backend: str) -> bool:
 
 
 __all__ = [
+    "BackendBase",
+    "ConfigGenerator",
+    "ConstraintBuilder",
+    "ConstraintResult",
+    "CorbaBackend",
+    "GraphBuilder",
+    # Tasks
+    "ManipulationTask",
+    "PlanningBridge",
+    "PyHPPBackend",
+    # Run logging
+    "RunLogger",
+    "SceneBuilder",
+    "TaskBuilder",
+    "TaskOrchestrator",
     # Version
     "__version__",
+    "check_backend",
+    "configure_logging",
+    # Planning
+    "create_planner",
     # Backend utilities
     "get_available_backends",
     "get_backend",
-    "check_backend",
-    "BackendBase",
-    "ConstraintResult",
-    "CorbaBackend",
-    "PyHPPBackend",
-    # Planning
-    "create_planner",
-    "SceneBuilder",
-    "GraphBuilder",
-    "ConstraintBuilder",
-    "ConfigGenerator",
-    # Tasks
-    "ManipulationTask",
-    "TaskOrchestrator",
-    "TaskBuilder",
-    "PlanningBridge",
+    "get_logger",
+    "get_replay_config",
+    "iter_events",
+    "load_run_log",
+    "print_joint_info",
+    "print_run_summary",
     # Visualization
     "visualize_constraint_graph",
-    "print_joint_info",
 ]

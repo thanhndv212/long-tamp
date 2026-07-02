@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 # graph-tool imports
 try:
     import graph_tool.all as gt
-    from graph_tool.draw import GraphWindow, graph_draw
+    from graph_tool.draw import GraphWindow
 
     HAS_GRAPH_TOOL = True
 except ImportError:
@@ -111,7 +111,6 @@ class LiveConstraintGraphVisualizer:
 
         # Get data from graph builder
         states = self.graph_builder.get_states()
-        edges = self.graph_builder.get_edges()
         edge_topology = self.graph_builder.get_edge_topology()
 
         # Create property maps
@@ -597,7 +596,9 @@ class LivePathPlayer:
         # Try each state and find the one with minimal projection error
         for state_name in states.keys():
             try:
-                success, q_proj, error = graph.applyNodeConstraints(state_name, list(q))
+                success, _q_proj, error = graph.applyNodeConstraints(
+                    state_name, list(q)
+                )
                 if success and error < best_error:
                     best_error = error
                     best_state = state_name

@@ -2021,7 +2021,7 @@ class PyHPPBackend(BackendBase):
                 # Validate q1 against source state
                 try:
                     # getConfigErrorForState returns (error_vector, belongs)
-                    err_q1, belongs_q1 = self.graph.getConfigErrorForState(
+                    err_q1, _belongs_q1 = self.graph.getConfigErrorForState(
                         state_from, q1_arr
                     )
                     error_q1_scalar = float(
@@ -2048,7 +2048,7 @@ class PyHPPBackend(BackendBase):
                 # Validate q2 against destination state
                 try:
                     # getConfigErrorForState returns (error_vector, belongs)
-                    err_q2, belongs_q2 = self.graph.getConfigErrorForState(
+                    err_q2, _belongs_q2 = self.graph.getConfigErrorForState(
                         state_to, q2_arr
                     )
                     error_q2_scalar = float(

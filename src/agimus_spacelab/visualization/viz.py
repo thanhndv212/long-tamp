@@ -131,7 +131,7 @@ def _viser_add_arrow(
         The created viser mesh handle
     """
     arrow_mesh = _make_arrow_mesh(length, radius)
-    pos, wxyz = _viser_xyzquat_to_wxyz(pose)
+    pos, _wxyz = _viser_xyzquat_to_wxyz(pose)
 
     # Build transform: rotate from +X to direction
     d = np.array(direction, dtype=float)
@@ -768,7 +768,7 @@ def visualize_constraint_graph(
             G.add_edge(from_node, to_node, label=edge_name)
             edge_labels[(from_node, to_node)] = edge_name
         # Set up the plot
-        fig, ax = plt.subplots(figsize=(14, 10))
+        _fig, ax = plt.subplots(figsize=(14, 10))
 
         # Use hierarchical layout for better readability
         try:

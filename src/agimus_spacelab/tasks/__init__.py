@@ -21,9 +21,9 @@ from .grasp_sequence import (
 )
 
 __all__ = [
-    # Base task
-    "ManipulationTask",
     # Grasp sequence
     "GraspSequencePlanner",
     "InteractiveGraspSequenceBuilder",
+    # Base task
+    "ManipulationTask",
 ]
