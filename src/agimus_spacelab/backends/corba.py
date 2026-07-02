@@ -2,8 +2,16 @@
 CORBA backend implementation for manipulation planning.
 
 This backend uses hpp-manipulation-corba for communication with HPP.
+
+.. deprecated::
+    The CORBA backend is deprecated and scheduled for removal. Use the default
+    ``pyhpp`` backend (in-process bindings) instead. Its native prerequisites
+    (hpp-manipulation-corba, hpp-corbaserver, hpp-gepetto-viewer, omniORBpy)
+    are not distributed on PyPI; install the ``corba`` extra's system packages
+    via robotpkg / conda-forge if you still need it.
 """
 
+import warnings
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 from ..utils import parse_package_uri
@@ -44,10 +52,21 @@ class CorbaBackend(BackendBase):
                 ``"viser"`` (browser, no X11), ``"gepetto"`` (Qt/CORBA),
                 ``"auto"`` (gepetto preferred; viser as fallback).
         """
+        warnings.warn(
+            "The CORBA backend is deprecated and will be removed in a future "
+            "release; use the default 'pyhpp' backend instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if not HAS_CORBA:
             raise ImportError(
-                "CORBA backend not available. "
-                "Please install hpp-manipulation-corba."
+                "CORBA backend unavailable: the `hpp.corbaserver` / "
+                "`hpp.gepetto` bindings are not importable. They are NOT "
+                "distributed on PyPI — install via robotpkg (e.g. "
+                "`apt install robotpkg-py3XX-hpp-manipulation-corba "
+                "robotpkg-py3XX-hpp-gepetto-viewer`) or conda-forge, or run "
+                "inside the hpp-agimus container. Note the CORBA backend also "
+                "requires a running `hppcorbaserver` (port 13331)."
             )
 
         # Initialize CORBA server

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2", "wheel"]
+requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -28,18 +28,52 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Robotics",
 ]
 
+# Hard runtime deps.
+#   numpy / pyyaml — imported unguarded in core modules (numpy, yaml_loader,
+#                    utils/transforms).
+#   viser / trimesh / pycollada — the browser viewer (pyhpp_viser) is the
+#                    default viewer, so its PyPI-side deps ship by default. The
+#                    pyhpp_viser bindings themselves come from hpp-gepetto-viewer
+#                    (robotpkg/conda, not PyPI).
+# pinocchio is intentionally NOT a hard dep: in every supported environment it
+# is provided by the HPP stack (robotpkg /opt/openrobots, built against NumPy
+# 1.x). Pulling `pin` from PyPI here dragged in NumPy 2.x and segfaulted the
+# native pinocchio. Standalone-without-HPP users get it via the [standalone]
+# extra (which pins compatible numpy).
 dependencies = [
-    "numpy>=1.19.0",
+    # numpy capped <2: the HPP/pinocchio native bindings (robotpkg, /opt/openrobots)
+    # are compiled against NumPy 1.x. A NumPy 2.x in the user/site path shadows the
+    # system numpy and segfaults the pinocchio C-extension (ABI mismatch).
+    "numpy>=1.19.0,<2",
+    "pyyaml>=5.1",
+    "viser",
+    "trimesh",
+    "pycollada",
 ]
 
 [project.optional-dependencies]
+# Standalone (no HPP stack present): pull pinocchio from PyPI. Only use this in
+# an environment WITHOUT robotpkg/system pinocchio — mixing the two causes the
+# NumPy-ABI segfault described above.
+standalone = ["pin>=2.6,<3", "numpy>=1.19.0,<2"]
+
+# --- Optional native HPP stacks (NOT on PyPI; robotpkg / conda-forge only) ---
+# These extras carry no PyPI packages; they exist as valid, documented install
+# targets and as a place to record what the system-package prerequisites are.
+
+# TOPPRA time-parameterization (optional optimizer). The pyhpp_toppra binding
+# ships in `hpp-toppra`, which requires the `toppra` C++ lib (>=0.6.2).
+toppra = [
+    # System packages only: hpp-toppra, toppra.
+]
+
+# CORBA backend — DEPRECATED, scheduled for removal. Prefer the default pyhpp
+# backend. Native-only prerequisites: hpp-manipulation-corba, hpp-corbaserver,
+# hpp-gepetto-viewer, omniORBpy. Install via robotpkg / conda-forge.
 corba = [
-    # Note: These are typically installed via system packages
-    # Listed here for documentation purposes
+    # System packages only.
 ]
-pyhpp = [
-    # Note: hpp-python typically installed via system packages
-]
+
 dev = [
     "pytest>=6.0",
     "pytest-cov",

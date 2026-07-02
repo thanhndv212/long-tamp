@@ -69,7 +69,14 @@ class SceneBuilder:
             self.planner = planner or create_planner(backend=self.backend, viewer_type=viewer_type)
         elif self.backend == "pyhpp":
             if not HAS_PYHPP:
-                raise ImportError("PyHPP backend not available")
+                # Instantiating the backend raises with the specific missing
+                # symbol / install guidance instead of a blank message.
+                if PyHPPBackend is not None:
+                    PyHPPBackend()
+                raise ImportError(
+                    "PyHPP backend not available and PyHPPBackend could not be "
+                    "imported; see agimus_spacelab.backends.pyhpp import errors."
+                )
             self.planner = planner or create_planner(backend=self.backend, viewer_type=viewer_type)
         else:
             raise ValueError(f"Unknown backend: {backend}. Use 'corba' or 'pyhpp'")

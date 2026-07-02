@@ -35,8 +35,14 @@ try:
         SplineGradientBased_bezier5,
     )
     HAS_PYHPP = True
-except ImportError:
+    PYHPP_IMPORT_ERROR = None
+except ImportError as _e:
+    # Common failure mode: `import pyhpp` succeeds but a specific symbol is
+    # absent because the installed HPP is upstream (e.g. the robotpkg 6.1.0
+    # binary) rather than the customized/source HPP this project targets.
+    # Keep the real message so the runtime error can name the missing symbol.
     HAS_PYHPP = False
+    PYHPP_IMPORT_ERROR = _e
 
 try:
     from pyhpp.core import TrapezoidalTimeParameterization
@@ -81,9 +87,22 @@ class PyHPPBackend(BackendBase):
                 ``"auto"`` (tries viser first, falls back to gepetto).
         """
         if not HAS_PYHPP:
+            detail = (
+                f" (underlying error: {PYHPP_IMPORT_ERROR})"
+                if PYHPP_IMPORT_ERROR is not None
+                else ""
+            )
             raise ImportError(
-                "PyHPP backend not available. "
-                "Please install hpp-python."
+                "PyHPP backend unavailable: could not import the symbols this "
+                "project requires from `pyhpp`." + detail + "\n"
+                "Note: `import pyhpp` succeeding is not enough — agimus_spacelab "
+                "targets a customized/source HPP that exposes extra bindings "
+                "(e.g. RSTimeParameterization, EnforceTransitionSemantic, "
+                "GraphRandomShortcut/GraphPartialShortcut, SplineGradientBased_bezier*, "
+                "ProgressiveProjector). The upstream robotpkg binary (6.1.0) does "
+                "not yet ship these. Build HPP from source (the hpp-agimus "
+                "container / DEVEL_HPP_DIR flow) or wait for a release that fills "
+                "the gap: https://github.com/humanoid-path-planner/hpp-python"
             )
 
         self._viewer_type = viewer_type

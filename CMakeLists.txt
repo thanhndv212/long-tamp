@@ -34,29 +34,32 @@ project(${PROJECT_NAME} ${PROJECT_ARGS})
 
 findpython()
 
-# Optional dependencies - can be disabled
-option(WITH_CORBA "Build with CORBA support" ON)
-option(WITH_PYHPP "Build with PyHPP support" ON)
+# Backend / feature options.
+#   PyHPP is the default backend (ON).
+#   CORBA is DEPRECATED and OFF by default; enable explicitly if still needed.
+#   TOPPRA is an optional time-parameterization optimizer (OFF by default).
+option(WITH_PYHPP "Build with PyHPP support (default backend)" ON)
+option(WITH_CORBA "Build with CORBA support (DEPRECATED)" OFF)
+option(WITH_TOPPRA "Build with TOPPRA time-parameterization support" OFF)
 option(BUILD_TESTING "Build tests" ON)
 
 # Find required dependencies
 find_package(pinocchio REQUIRED)
 find_package(hpp-pinocchio REQUIRED)
 
-# Optional CORBA dependencies
-if(WITH_CORBA)
-  find_package(hpp-manipulation-corba)
+# hpp-gepetto-viewer provides the viewer bindings for BOTH backends:
+# `hpp.gepetto` (CORBA/Qt) and `pyhpp_viser` (browser). Look it up whenever
+# either PyHPP or CORBA is enabled.
+if(WITH_PYHPP OR WITH_CORBA)
   find_package(hpp-gepetto-viewer)
-  if(hpp-manipulation-corba_FOUND AND hpp-gepetto-viewer_FOUND)
-    set(HAS_CORBA TRUE)
-    add_compile_definitions(HAS_CORBA_SUPPORT)
+  if(hpp-gepetto-viewer_FOUND)
+    add_compile_definitions(HAS_GEPETTO_VIEWER_SUPPORT)
   else()
-    message(WARNING "CORBA dependencies not found. CORBA backend will be disabled.")
-    set(HAS_CORBA FALSE)
+    message(WARNING "hpp-gepetto-viewer not found. Viser/Gepetto viewers will be disabled.")
   endif()
 endif()
 
-# Optional PyHPP dependencies
+# Optional PyHPP dependencies (default backend)
 if(WITH_PYHPP)
   find_package(hpp-python)
   if(hpp-python_FOUND)
@@ -65,6 +68,31 @@ if(WITH_PYHPP)
   else()
     message(WARNING "PyHPP dependencies not found. PyHPP backend will be disabled.")
     set(HAS_PYHPP FALSE)
+  endif()
+endif()
+
+# Optional TOPPRA optimizer (pyhpp_toppra ships in hpp-toppra, needs toppra C++)
+if(WITH_TOPPRA)
+  find_package(hpp-toppra)
+  if(hpp-toppra_FOUND)
+    set(HAS_TOPPRA TRUE)
+    add_compile_definitions(HAS_TOPPRA_SUPPORT)
+  else()
+    message(WARNING "hpp-toppra not found. TOPPRA optimizer will be disabled.")
+    set(HAS_TOPPRA FALSE)
+  endif()
+endif()
+
+# Optional CORBA dependencies (DEPRECATED backend)
+if(WITH_CORBA)
+  message(WARNING "WITH_CORBA is deprecated and will be removed; prefer the PyHPP backend.")
+  find_package(hpp-manipulation-corba)
+  if(hpp-manipulation-corba_FOUND AND hpp-gepetto-viewer_FOUND)
+    set(HAS_CORBA TRUE)
+    add_compile_definitions(HAS_CORBA_SUPPORT)
+  else()
+    message(WARNING "CORBA dependencies not found. CORBA backend will be disabled.")
+    set(HAS_CORBA FALSE)
   endif()
 endif()
 

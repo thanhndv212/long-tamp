@@ -24,13 +24,22 @@
   <depend>pinocchio</depend>
   <depend>hpp-pinocchio</depend>
   <depend>python3-numpy</depend>
-  
-  <!-- Optional CORBA dependencies -->
-  <depend condition="$WITH_CORBA">hpp-manipulation-corba</depend>
-  <depend condition="$WITH_CORBA">hpp-gepetto-viewer</depend>
-  
-  <!-- Optional PyHPP dependencies -->
+  <depend>python3-yaml</depend>
+
+  <!-- Viewer bindings: hpp-gepetto-viewer provides both the Gepetto (CORBA/Qt)
+       viewer AND the pyhpp_viser browser viewer, so it is needed by either
+       backend. -->
+  <depend condition="$WITH_PYHPP or $WITH_CORBA">hpp-gepetto-viewer</depend>
+
+  <!-- PyHPP backend (default) -->
   <depend condition="$WITH_PYHPP">hpp-python</depend>
+
+  <!-- Optional TOPPRA optimizer: pyhpp_toppra ships in hpp-toppra
+       (which itself requires the toppra C++ package). -->
+  <depend condition="$WITH_TOPPRA">hpp-toppra</depend>
+
+  <!-- CORBA backend (DEPRECATED, off by default) -->
+  <depend condition="$WITH_CORBA">hpp-manipulation-corba</depend>
   
   <!-- Test dependencies -->
   <test_depend>python3-pytest</test_depend>

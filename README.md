@@ -6,7 +6,7 @@ Multi-arm collaborative manipulation planning for SpaceLab assembly tasks using 
 
 - **Modular architecture**: Reusable tools for scene setup, constraints, and configuration
 - **Scene visualization**: Interactive 3D viewer with gepetto-viewer
-- **Dual backend support**: CORBA (hpp-manipulation-corba) and PyHPP (hpp-python)
+- **PyHPP backend** (default): in-process bindings via `hpp-python`. The CORBA backend (`hpp-manipulation-corba`) is still available but **deprecated**.
 - **Task examples**: Grasp, assembly, and collaborative manipulation tasks
 
 
@@ -17,17 +17,199 @@ cd script/spacelab
 ./interactive_planning.py -i
 ```
 
-### Installation
+## Installation
+
+`agimus_spacelab` has two distinct dependency tiers, and this drives how you install it:
+
+| Tier | Packages | Source |
+|------|----------|--------|
+| **Python (PyPI)** | `numpy`, `pyyaml`, `pinocchio` (`pin`), and the viser viewer stack (`viser`, `trimesh`, `pycollada`) | `pip` |
+| **HPP native bindings** | `hpp-python` (pyhpp), `hpp-toppra`, `hpp-gepetto-viewer`, `hpp-manipulation-corba`, `omniORBpy`, … | **robotpkg / conda-forge / source only — NOT on PyPI** |
+
+The HPP native bindings are C++ extension modules and **cannot be installed with pip**. `pip install agimus-spacelab` therefore gives you a working *pure-Python* package (config parsing, planning-graph construction, transforms, run logging, viser viewer), but the planning **backends** must be provided by your environment (the `hpp-agimus` container, robotpkg, or conda-forge). Instantiating a backend without its bindings raises an `ImportError` explaining exactly what is missing.
+
+Install in **two steps, in this order**: first the HPP native bindings that provide the planning backends, then the `agimus_spacelab` package itself. Installing the package first is pointless — it cannot plan until the backends are on the path.
+
+---
+
+### Step 1 — Install the HPP native bindings (do this first)
+
+These C++ extension modules provide the planning backends and **cannot be installed with pip**. Put them in place before installing or running `agimus_spacelab`. There are two ways to obtain them: the robotpkg binary (1a) or a source build / container (1b). **The default PyHPP backend currently requires the source build (1b)**, because the stable robotpkg binary does not yet ship the extra bindings — see the caveat below.
+
+#### 1a. Binary install via robotpkg
+
+The official HPP binaries are distributed as `robotpkg-*` Debian packages, installed under the `/opt/openrobots` prefix. See the [HPP download page](https://humanoid-path-planner.github.io/hpp-doc/download.html) and the [robotpkg APT repository instructions](http://robotpkg.openrobots.org/debian.html) for the authoritative version.
+
+> **⚠️ The current robotpkg binary (`hpp-python` 6.1.0) is NOT sufficient for
+> the PyHPP backend.** `agimus_spacelab` targets a customized/source HPP that
+> exposes extra `pyhpp` bindings the upstream stable binary does not yet ship —
+> notably `RSTimeParameterization`, `SimpleTimeParameterization`,
+> `EnforceTransitionSemantic`, `GraphRandomShortcut` / `GraphPartialShortcut`,
+> `SplineGradientBased_bezier{1,3,5}`, and `ProgressiveProjector`. With the
+> binary, `import pyhpp` succeeds but the backend reports **"PyHPP backend
+> unavailable"** because those symbols are missing.
+>
+> Until a release fills the gap
+> ([humanoid-path-planner/hpp-python](https://github.com/humanoid-path-planner/hpp-python)),
+> the PyHPP backend requires the **source-built HPP** (the `hpp-agimus`
+> container / `DEVEL_HPP_DIR` flow — see *Source build* below). The robotpkg
+> binary is still fine for the C++ toolchain and the deprecated CORBA backend.
+
+1. Add the robotpkg APT repository (the stable `pub` repo is sufficient — all
+   HPP packages below, including `hpp-python`, are published there):
+
+   ```bash
+   sudo mkdir -p /etc/apt/keyrings
+   curl http://robotpkg.openrobots.org/packages/debian/robotpkg.asc \
+     | sudo tee /etc/apt/keyrings/robotpkg.asc
+   sudo tee /etc/apt/sources.list.d/robotpkg.list <<EOF
+   deb [arch=amd64 signed-by=/etc/apt/keyrings/robotpkg.asc] http://robotpkg.openrobots.org/packages/debian/pub $(lsb_release -cs) robotpkg
+   EOF
+   sudo apt-get update
+   ```
+
+2. Install the packages. Package names are `robotpkg-py<pyver>-<name>`, where `<pyver>` matches your Python (Ubuntu 24.04 → `312`, 22.04 → `310`, 20.04 → `38`). The current HPP release line is **6.1.0**.
+
+   **Required — just two packages.** `hpp-python` transitively pulls the whole
+   HPP core stack via apt (pinocchio, eigenpy, coal, hpp-util, hpp-pinocchio,
+   hpp-core, hpp-constraints, hpp-manipulation, hpp-manipulation-urdf,
+   hpp-corbaserver, omniorbpy), so you do **not** list those individually:
+
+   ```bash
+   pyver=312   # adjust to your Python version
+
+   sudo apt-get install \
+     robotpkg-py${pyver}-hpp-python \
+     robotpkg-py${pyver}-qt5-hpp-gepetto-viewer
+   ```
+
+   | Package | Provides | Pulls in (transitively) |
+   |---------|----------|-------------------------|
+   | `robotpkg-py${pyver}-hpp-python` | PyHPP backend (`pyhpp.*`) | pinocchio, eigenpy, coal, hpp-util, hpp-pinocchio, hpp-core, hpp-constraints, hpp-manipulation, hpp-manipulation-urdf, hpp-corbaserver, omniorbpy |
+   | `robotpkg-py${pyver}-qt5-hpp-gepetto-viewer` | Gepetto + `pyhpp_viser` viewers | gepetto-viewer-corba, qgv, qtbase5 |
+
+   **Optional — deprecated CORBA backend.** Only needed if you set
+   `backend:=corba`. This is the single extra package; its own dependencies
+   (`hpp-corbaserver`, `omniorbpy`, core libs) are already present from the
+   required step above:
+
+   ```bash
+   sudo apt-get install robotpkg-py${pyver}-hpp-manipulation-corba
+   ```
+
+   **Not available as a binary — TOPPRA.** `hpp-toppra` and its `toppra` C++
+   dependency are not published in robotpkg (checked: absent from both `pub`
+   and `wip`, all distros). To use the TOPPRA optimizer, build `toppra` and
+   `hpp-toppra` from source — this is what the `hpp-agimus` container does.
+
+3. Put `/opt/openrobots` on your environment (add to `~/.bashrc`; fix the Python version in `PYTHONPATH`):
+
+   ```bash
+   export PATH=/opt/openrobots/bin:$PATH
+   export LD_LIBRARY_PATH=/opt/openrobots/lib:$LD_LIBRARY_PATH
+   export PYTHONPATH=/opt/openrobots/lib/python3.12/site-packages:$PYTHONPATH
+   export CMAKE_PREFIX_PATH=/opt/openrobots:$CMAKE_PREFIX_PATH
+   export PKG_CONFIG_PATH=/opt/openrobots/lib/pkgconfig:$PKG_CONFIG_PATH
+   export ROS_PACKAGE_PATH=/opt/openrobots/share:$ROS_PACKAGE_PATH
+   ```
+
+> **Availability (verified against robotpkg, release line 6.1.0):**
+> `hpp-python` (6.0.0+), `qt5-hpp-gepetto-viewer`, the full CORBA stack
+> (`hpp-manipulation-corba`, `hpp-corbaserver`, `hpp-template-corba`) and the
+> C++ core (`hpp-core`, `hpp-constraints`, `hpp-manipulation`,
+> `hpp-manipulation-urdf`, `hpp-pinocchio`, `hpp-util`, `hpp-fcl`) are all in
+> the stable `pub` repo for `py312` (Ubuntu 24.04) and `py310` (22.04).
+> **`hpp-toppra` is the only piece this project uses that is not packaged** —
+> build it from source (see *1b. Source build* below).
+
+#### 1b. Source build / container — required for the PyHPP backend today
+
+The recommended way to get a complete, matching HPP stack is the prebuilt Docker image, which compiles HPP from source under `$DEVEL_HPP_DIR` (`~/devel/hpp`). All backends — including the customized `pyhpp` bindings this project relies on — are available inside it without any robotpkg install.
+
+The Docker definitions live in a separate repository: [gitlab.laas.fr/dvtnguyen/dockers](https://gitlab.laas.fr/dvtnguyen/dockers). It provides **two images, one per ROS 2 distribution**:
+
+| Directory | ROS 2 distro | Ubuntu base |
+|-----------|--------------|-------------|
+| `hpp/` | Jazzy | 24.04 (noble) |
+| `hpp-humble/` | Humble | 22.04 (jammy) |
+
+Pick the one matching your target ROS 2 version, build it (`run_docker.sh` in each directory), and work inside the container. To reproduce the build outside Docker, follow the same steps on the host and point `PYTHONPATH` / `LD_LIBRARY_PATH` at your source-install prefix instead of `/opt/openrobots`.
+
+---
+
+### Step 2 — Install the `agimus_spacelab` package
+
+With the HPP native bindings from Step 1 in place, install the package itself — either with pip (standalone / development) or with CMake (inside an HPP workspace).
+
+#### 2a. pip (standalone / development)
 
 ```bash
-# Via pip (editable mode)
+# Editable install with the default viser viewer stack
 pip install -e .
 
-# Or via CMake in HPP workspace
+# With dev tooling (pytest, black, ruff, sphinx)
+pip install -e ".[dev]"
+
+# Standalone WITHOUT an HPP stack — also pulls pinocchio from PyPI:
+pip install -e ".[standalone]"
+```
+
+This resolves the Python tier only; the planning backends come from Step 1.
+
+> **⚠️ NumPy ABI — do not install `pinocchio` from PyPI on top of robotpkg.**
+> The robotpkg/`/opt/openrobots` pinocchio is compiled against **NumPy 1.x**. A
+> NumPy 2.x in your user/site path shadows the system numpy and **segfaults**
+> the pinocchio C-extension (`_multiarray_umath` ImportError → core dump).
+> Therefore:
+> - `pinocchio` is **not** a default pip dependency (use `[standalone]` only
+>   when no HPP stack is present), and the default numpy is pinned `<2`.
+> - In a robotpkg environment, if a stray NumPy 2.x got installed, remove it:
+>   `pip uninstall -y numpy pin` (Python then falls back to the system
+>   NumPy 1.26 that pinocchio expects). Verify with
+>   `python -c "import numpy; print(numpy.__version__, numpy.__file__)"`.
+> - Cleanest of all in a robotpkg env: `pip install --no-deps -e .` and let the
+>   system/robotpkg provide numpy + pinocchio.
+
+#### 2b. CMake (in an HPP workspace)
+
+This is the source of truth for the native backends. It installs the Python package into `PYTHON_SITELIB` alongside the HPP libraries.
+
+```bash
 mkdir build && cd build
 cmake .. -DCMAKE_INSTALL_PREFIX=$INSTALL_HPP_DIR
 make install
 ```
+
+Build options (see `CMakeLists.txt`):
+
+| Option | Default | Provides | Native prerequisites |
+|--------|:-------:|----------|----------------------|
+| `WITH_PYHPP`  | **ON**  | PyHPP backend (default) | `hpp-python` |
+| `WITH_TOPPRA` | OFF     | TOPPRA time-parameterization optimizer | `hpp-toppra` (which requires the `toppra` C++ lib ≥0.6.2) |
+| `WITH_CORBA`  | **OFF** *(deprecated)* | CORBA backend | `hpp-manipulation-corba`, `hpp-corbaserver`, `omniORBpy` |
+
+`hpp-gepetto-viewer` is picked up whenever `WITH_PYHPP` **or** `WITH_CORBA` is enabled — it provides both the Gepetto (CORBA/Qt) viewer and the `pyhpp_viser` browser viewer.
+
+```bash
+# Enable the optional TOPPRA optimizer:
+cmake .. -DCMAKE_INSTALL_PREFIX=$INSTALL_HPP_DIR -DWITH_TOPPRA=ON
+
+# Re-enable the deprecated CORBA backend (emits a deprecation warning):
+cmake .. -DCMAKE_INSTALL_PREFIX=$INSTALL_HPP_DIR -DWITH_CORBA=ON
+```
+
+### Optional feature extras
+
+The pip extras below carry **no PyPI packages** — they are documented install targets. The listed native packages must come from robotpkg / conda-forge.
+
+| Extra | Command | Native packages to install separately |
+|-------|---------|---------------------------------------|
+| `toppra` | `pip install "agimus-spacelab[toppra]"` | `hpp-toppra`, `toppra` — **source build only** (not in robotpkg) |
+| `corba` *(deprecated)* | `pip install "agimus-spacelab[corba]"` | `hpp-manipulation-corba`, `hpp-corbaserver`, `hpp-gepetto-viewer`, `omniORBpy` |
+
+### Backend availability at runtime
+
+The viser browser viewer ships by default. The other optimizers/viewers are detected at import time and expose `HAS_*` flags in `agimus_spacelab.backends.pyhpp` (`HAS_PYHPP`, `HAS_TOPPRA`, `HAS_VISER`, `HAS_GEPETTO_VIEWER`). A missing backend fails loudly only when you try to construct it, with guidance on how to obtain the bindings.
 
 ## Usage
 
