@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 
@@ -86,7 +86,7 @@ def _yaml_with_grasp_goals(cls, goal_states):
         ``VALID_PAIRS``, and ``TOOL_NAME`` filtered to the requested goals.
     """
     pattern = re.compile(r"^(.+)\s+grasps\s+(.+)$")
-    needed_pairs: Dict[str, set] = {}
+    needed_pairs: dict[str, set] = {}
     for goal in goal_states:
         m = pattern.match(goal.strip())
         if m:
@@ -100,7 +100,7 @@ def _yaml_with_grasp_goals(cls, goal_states):
         )
 
     # Map each handle to its parent object.
-    handle_to_object: Dict[str, str] = {}
+    handle_to_object: dict[str, str] = {}
     for obj, info in cls.OBJECTS_INFO.items():
         for h in info.get("handles", []):
             handle_to_object[h] = obj
@@ -157,9 +157,9 @@ class YamlTaskLoader:
         if not yaml_path.exists():
             raise FileNotFoundError(f"YAML config not found: {yaml_path}")
         with open(yaml_path) as fh:
-            self._data: Dict[str, Any] = yaml.safe_load(fh)
+            self._data: dict[str, Any] = yaml.safe_load(fh)
         self._yaml_path = yaml_path
-        self._file_paths: Optional[Dict[str, Any]] = None
+        self._file_paths: dict[str, Any] | None = None
         self._joint_bounds_class = None
         self._task_config = None
 
@@ -168,7 +168,7 @@ class YamlTaskLoader:
     # ------------------------------------------------------------------
 
     @property
-    def file_paths(self) -> Dict[str, Any]:
+    def file_paths(self) -> dict[str, Any]:
         """``FILE_PATHS`` dict compatible with ``SceneBuilder``."""
         if self._file_paths is None:
             self._file_paths = self._build_file_paths()
@@ -190,8 +190,8 @@ class YamlTaskLoader:
 
     def build_initial_config(
         self,
-        objects: Optional[List[str]] = None,
-    ) -> List[float]:
+        objects: list[str] | None = None,
+    ) -> list[float]:
         """Build a flat initial configuration list.
 
         Concatenates robot joint initial values (in joint_groups order) with
@@ -206,7 +206,7 @@ class YamlTaskLoader:
         Returns:
             Flat ``List[float]`` of joint values + object poses.
         """
-        q: List[float] = []
+        q: list[float] = []
 
         # Robot joints (all groups, in declaration order).
         for _group, joints in self._data.get("joint_groups", {}).items():
@@ -214,7 +214,7 @@ class YamlTaskLoader:
                 q.append(float(jspec["initial"]))
 
         # Object poses.
-        objects_raw: Dict[str, Any] = self._data.get("objects", {})
+        objects_raw: dict[str, Any] = self._data.get("objects", {})
         selected = objects if objects is not None else list(objects_raw.keys())
 
         for obj_name in selected:
@@ -237,21 +237,21 @@ class YamlTaskLoader:
     # Private builders
     # ------------------------------------------------------------------
 
-    def _build_file_paths(self) -> Dict[str, Any]:
+    def _build_file_paths(self) -> dict[str, Any]:
         paths = self._data.get("paths", {})
 
-        robot_paths: Dict[str, Dict[str, str]] = {}
+        robot_paths: dict[str, dict[str, str]] = {}
         for name, rdata in paths.get("robot", {}).items():
             robot_paths[name] = {
                 "urdf": rdata.get("urdf", ""),
                 "srdf": rdata.get("srdf", ""),
             }
 
-        env_paths: Dict[str, str] = {}
+        env_paths: dict[str, str] = {}
         for name, urdf in paths.get("environment", {}).items():
             env_paths[name] = urdf
 
-        obj_paths: Dict[str, Dict[str, str]] = {}
+        obj_paths: dict[str, dict[str, str]] = {}
         for name, odata in paths.get("objects", {}).items():
             if isinstance(odata, str):
                 obj_paths[name] = {"urdf": odata, "srdf": ""}
@@ -271,20 +271,20 @@ class YamlTaskLoader:
         data = self._data
         ff_data = data.get("freeflyer_bounds", {})
 
-        translation: List[List[float]] = [
+        translation: list[list[float]] = [
             list(b) for b in ff_data.get("translation", [])
         ]
-        quaternion: List[List[float]] = [list(b) for b in ff_data.get("quaternion", [])]
+        quaternion: list[list[float]] = [list(b) for b in ff_data.get("quaternion", [])]
 
         # Flat freeflyer bounds: [xmin,xmax, ymin,ymax, zmin,zmax, qxmin,qxmax, ...]
-        ff_flat: List[float] = []
+        ff_flat: list[float] = []
         for b in translation:
             ff_flat.extend(b)
         for b in quaternion:
             ff_flat.extend(b)
 
         # Per-joint bounds: {joint_name: [lo, hi]}
-        robot_bounds: Dict[str, List[float]] = {}
+        robot_bounds: dict[str, list[float]] = {}
         for _group, joints in data.get("joint_groups", {}).items():
             for jspec in joints:
                 robot_bounds[jspec["joint"]] = list(jspec["bounds"])
@@ -299,19 +299,19 @@ class YamlTaskLoader:
             ROBOT_BOUNDS = _robot_bounds
 
             @classmethod
-            def freeflyer_bounds(cls) -> List[float]:
+            def freeflyer_bounds(cls) -> list[float]:
                 return list(cls.FF_FLAT)
 
             @classmethod
-            def all_robot_bounds(cls) -> Dict[str, List[float]]:
+            def all_robot_bounds(cls) -> dict[str, list[float]]:
                 return dict(cls.ROBOT_BOUNDS)
 
         return _JointBounds
 
     def _build_task_config(self):
         data = self._data
-        objects_raw: Dict[str, Any] = data.get("objects", {})
-        object_names: List[str] = list(objects_raw.keys())
+        objects_raw: dict[str, Any] = data.get("objects", {})
+        object_names: list[str] = list(objects_raw.keys())
 
         handles_per_object = [
             list(objects_raw[obj].get("handles", [])) for obj in object_names
@@ -322,7 +322,7 @@ class YamlTaskLoader:
 
         # OBJECTS_INFO is a stable dict used by with_grasp_goals() to map
         # handles back to their parent objects regardless of filtering.
-        objects_info: Dict[str, Dict[str, List[str]]] = {
+        objects_info: dict[str, dict[str, list[str]]] = {
             obj: {
                 "handles": list(objects_raw[obj].get("handles", [])),
                 "contact_surfaces": list(objects_raw[obj].get("contact_surfaces", [])),
@@ -335,18 +335,18 @@ class YamlTaskLoader:
 
         # Arm groups (optional) — derive GRIPPER_TO_ARM_KEYWORD and ALL_ARM_KEYWORDS
         # so GraspSequencePlanner auto-freeze works without any hard-coded robot names.
-        arm_groups_raw: Dict[str, Any] = data.get("arm_groups", {})
-        gripper_to_arm_keyword: Dict[str, str] = {}
+        arm_groups_raw: dict[str, Any] = data.get("arm_groups", {})
+        gripper_to_arm_keyword: dict[str, str] = {}
         for arm_name, arm_cfg in arm_groups_raw.items():
             keyword = arm_cfg.get("joint_keyword", arm_name)
             for gripper in arm_cfg.get("grippers", []):
                 gripper_to_arm_keyword[gripper] = keyword
-        all_arm_keywords: List[str] = [
+        all_arm_keywords: list[str] = [
             arm_cfg.get("joint_keyword", arm_name)
             for arm_name, arm_cfg in arm_groups_raw.items()
         ]
 
-        namespace: Dict[str, Any] = {
+        namespace: dict[str, Any] = {
             # Scene
             "ROBOT_NAMES": list(data.get("robots", [])),
             "ENVIRONMENT_NAMES": list(data.get("environments", [])),

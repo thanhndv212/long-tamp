@@ -488,10 +488,9 @@ class CorbaBackend(BackendBase):
 
         raise KeyError(
             (
-                "Unknown edge '%s'. If using a factory graph, expected it "
+                f"Unknown edge '{edge}'. If using a factory graph, expected it "
                 "to be present in graph.edges."
             )
-            % edge
         )
 
     def _resolve_edge_name(self, edge: Union[int, str]) -> str:
@@ -980,8 +979,7 @@ class CorbaBackend(BackendBase):
                             pv = path.asVector()
                         except Exception as exc:
                             raise RuntimeError(
-                                "Failed to convert directPath result to PathVector: %s"
-                                % exc
+                                f"Failed to convert directPath result to PathVector: {exc}"
                             )
                 else:
                     # directPath failed, fallback to planPath
@@ -1001,9 +999,8 @@ class CorbaBackend(BackendBase):
                         raise RuntimeError(
                             (
                                 "Both directPath and planPath failed. "
-                                "directPath status: %s. planPath error: %s"
+                                f"directPath status: {status}. planPath error: {exc}"
                             )
-                            % (status, exc)
                         )
             except Exception as exc:
                 # directPath itself threw an exception
@@ -1050,8 +1047,8 @@ class CorbaBackend(BackendBase):
         """
         if len(waypoints) != len(edges) + 1:
             raise ValueError(
-                "Expected len(waypoints) == len(edges) + 1, got %d and %d"
-                % (len(waypoints), len(edges))
+                "Expected len(waypoints) == len(edges) + 1, got "
+                f"{len(waypoints)} and {len(edges)}"
             )
 
         pv_total: Optional[Any] = None

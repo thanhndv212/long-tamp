@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import glob
 import os
-from typing import TYPE_CHECKING, Any, List
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     pass
@@ -78,7 +78,7 @@ def load_paths_from_directory(
     pattern: str = "phase_*.path",
     prefer_json: bool = True,
     auto_setup_graph: bool = True,
-) -> List[int]:
+) -> list[int]:
     """
     Load paths from a directory into the planner.
 
@@ -161,7 +161,7 @@ def load_paths_from_directory(
 
 def replay_paths(
     planner: Any,
-    indices: List[int],
+    indices: list[int],
     verbose: bool = True,
 ) -> dict:
     """

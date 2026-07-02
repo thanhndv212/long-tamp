@@ -17,7 +17,6 @@ Example usage:
 from __future__ import annotations
 
 import argparse
-from typing import List
 
 from .config_loader import load_task_config
 
@@ -216,7 +215,7 @@ def add_grasp_sequence_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def parse_grasp_sequence(sequence_str: str) -> List[tuple]:
+def parse_grasp_sequence(sequence_str: str) -> list[tuple]:
     """
     Parse a grasp sequence string into a list of (gripper, handle) tuples.
 
@@ -244,7 +243,7 @@ def parse_grasp_sequence(sequence_str: str) -> List[tuple]:
     return grasp_sequence
 
 
-def parse_goal_pairs(pairs: List[str]) -> List[str]:
+def parse_goal_pairs(pairs: list[str]) -> list[str]:
     """
     Convert --pair arguments to goal state strings.
 

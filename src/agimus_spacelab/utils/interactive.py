@@ -17,7 +17,7 @@ Example usage:
 from __future__ import annotations
 
 import sys
-from typing import Callable, List, Optional
+from typing import Callable
 
 __all__ = [
     "clear_line",
@@ -61,7 +61,7 @@ def show_cursor() -> None:
 # =============================================================================
 
 
-def _get_getch() -> Optional[Callable[[], str]]:
+def _get_getch() -> Callable[[], str] | None:
     """
     Get a getch function for reading single characters including escape sequences.
 
@@ -97,10 +97,10 @@ def _get_getch() -> Optional[Callable[[], str]]:
 
 def _numbered_menu(
     title: str,
-    options: List[str],
+    options: list[str],
     multi_select: bool = False,
-    selected: Optional[List[int]] = None,
-) -> List[int]:
+    selected: list[int] | None = None,
+) -> list[int]:
     """
     Fallback numbered menu when arrow keys aren't available.
 
@@ -148,10 +148,10 @@ def _numbered_menu(
 
 def interactive_menu(
     title: str,
-    options: List[str],
+    options: list[str],
     multi_select: bool = False,
-    selected: Optional[List[int]] = None,
-) -> List[int]:
+    selected: list[int] | None = None,
+) -> list[int]:
     """
     Simple arrow-key menu for terminal selection.
 

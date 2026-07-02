@@ -2187,8 +2187,8 @@ class PyHPPBackend(BackendBase):
         """
         if len(waypoints) != len(edges) + 1:
             raise ValueError(
-                "Expected len(waypoints) == len(edges) + 1, got %d and %d"
-                % (len(waypoints), len(edges))
+                "Expected len(waypoints) == len(edges) + 1, got "
+                f"{len(waypoints)} and {len(edges)}"
             )
 
         pv_total: Optional[Any] = None

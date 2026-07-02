@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 import signal
 import time
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Sequence
 
 from agimus_spacelab.planning.config import ConfigGenerator
 from agimus_spacelab.planning.graph import GraphBuilder
@@ -131,9 +131,9 @@ class GraspSequencePlanner:
         planner: Any,
         task_config: Any,
         backend: str = "corba",
-        graph_constraints: Optional[List[str]] = None,
-        auto_save_dir: Optional[str] = None,
-        run_logger: Optional[Any] = None,
+        graph_constraints: list[str] | None = None,
+        auto_save_dir: str | None = None,
+        run_logger: Any | None = None,
     ):
         """Initialize grasp sequence planner.
 
@@ -158,7 +158,7 @@ class GraspSequencePlanner:
 
         # Auto-save configuration
         self.auto_save_dir = auto_save_dir
-        self.saved_path_files: List[str] = []  # Track saved file paths
+        self.saved_path_files: list[str] = []  # Track saved file paths
 
         # Structured run logger (optional)
         self.run_logger = run_logger
@@ -218,8 +218,8 @@ class GraspSequencePlanner:
     def _plan_release_subphase(
         self,
         gripper: str,
-        q_current: List,
-        phase_graph_constraints: Optional[List],
+        q_current: list,
+        phase_graph_constraints: list | None,
         verbose: bool,
     ):
         """Plan a release sub-phase.
@@ -546,11 +546,11 @@ class GraspSequencePlanner:
     def _auto_save_phase_paths(
         self,
         phase_idx: int,
-        phase_paths: List[Any],
-        edge_names: List[str],
+        phase_paths: list[Any],
+        edge_names: list[str],
         verbose: bool = True,
-        phase_geometric_paths: Optional[List[Any]] = None,
-    ) -> List[str]:
+        phase_geometric_paths: list[Any] | None = None,
+    ) -> list[str]:
         """Auto-save phase paths to files if auto_save_dir is configured.
 
         Args:
@@ -640,7 +640,7 @@ class GraspSequencePlanner:
         self.saved_path_files.extend(saved_files)
         return saved_files
 
-    def get_saved_path_files(self) -> List[str]:
+    def get_saved_path_files(self) -> list[str]:
         """Get list of all auto-saved path files.
 
         Returns:
@@ -654,7 +654,7 @@ class GraspSequencePlanner:
         """
         return list(self.saved_path_files)
 
-    def load_saved_paths(self, verbose: bool = True) -> List[int]:
+    def load_saved_paths(self, verbose: bool = True) -> list[int]:
         """Load all previously auto-saved paths.
 
         This is useful for replaying a sequence after restarting.
@@ -690,10 +690,10 @@ class GraspSequencePlanner:
         self,
         active_gripper: str,
         mode: str = "auto",
-        manual_arms: Optional[List[str]] = None,
+        manual_arms: list[str] | None = None,
         verbose: bool = True,
-        handle: Optional[str] = None,
-    ) -> List[str]:
+        handle: str | None = None,
+    ) -> list[str]:
         """Compute which arms should be frozen for current phase.
 
         Args:
@@ -742,7 +742,7 @@ class GraspSequencePlanner:
                     active_arm = arm_keyword
                     break
 
-        unfrozen_arms: Set[str] = {active_arm} if active_arm is not None else set()
+        unfrozen_arms: set[str] = {active_arm} if active_arm is not None else set()
 
         if verbose:
             print(f"Active gripper '{active_gripper}' uses arm '{active_arm}'")
@@ -755,12 +755,12 @@ class GraspSequencePlanner:
         # behaviour is identical to the original (only the active arm
         # is unfrozen).
         if handle is not None and getattr(self, "grasp_tracker", None) is not None:
-            target_obj: Optional[str] = handle.split("/")[0]
-            visited: Set[str] = set()
+            target_obj: str | None = handle.split("/")[0]
+            visited: set[str] = set()
             current_grasps = self.grasp_tracker.current_grasps
             while target_obj and target_obj not in visited:
                 visited.add(target_obj)
-                holder_gripper: Optional[str] = None
+                holder_gripper: str | None = None
                 for g, h in current_grasps.items():
                     if h is None or g == active_gripper:
                         continue
@@ -785,7 +785,7 @@ class GraspSequencePlanner:
                 target_obj = holder_gripper.split("/")[0]
 
         # Freeze all arms not in the unfrozen set.
-        frozen_arms: List[str] = [
+        frozen_arms: list[str] = [
             arm_keyword
             for arm_keyword in self.ALL_ARM_KEYWORDS
             if arm_keyword not in unfrozen_arms
@@ -793,7 +793,7 @@ class GraspSequencePlanner:
 
         return frozen_arms
 
-    def _get_arm_for_gripper(self, gripper_name: str) -> Optional[str]:
+    def _get_arm_for_gripper(self, gripper_name: str) -> str | None:
         """Return the arm keyword for a gripper name, or None."""
         arm = self.GRIPPER_TO_ARM_MAP.get(gripper_name)
         if arm is not None:
@@ -811,7 +811,7 @@ class GraspSequencePlanner:
         "vispa2": "VISPA_BASE",
     }
 
-    def _get_active_joints_for_unfrozen_arms(self, frozen_arms: List[str]) -> List[str]:
+    def _get_active_joints_for_unfrozen_arms(self, frozen_arms: list[str]) -> list[str]:
         """Get joint names for all unfrozen arms.
 
         Maps arm keywords (e.g. "ur10", "vispa_") to their joint names
@@ -828,7 +828,7 @@ class GraspSequencePlanner:
         if not joint_groups:
             return []
 
-        active_joints: List[str] = []
+        active_joints: list[str] = []
         for arm_keyword in self.ALL_ARM_KEYWORDS:
             if arm_keyword in frozen_arms:
                 continue
@@ -839,7 +839,7 @@ class GraspSequencePlanner:
 
     def plan_sequence(
         self,
-        grasp_sequence: Sequence[Tuple[str, str]],
+        grasp_sequence: Sequence[tuple[str, str]],
         q_init: Sequence[float],
         validate: bool = True,
         reset_roadmap: bool = True,
@@ -847,10 +847,10 @@ class GraspSequencePlanner:
         max_iterations_per_edge: int = 10000,
         timeout_per_edge: float = 60.0,
         frozen_arms_mode: str = "auto",
-        per_phase_frozen_arms: Optional[Dict[int, List[str]]] = None,
-        skip_phases: Optional[Set[int]] = None,
+        per_phase_frozen_arms: dict[int, list[str]] | None = None,
+        skip_phases: set[int] | None = None,
         verbose: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Plan a sequence of grasp transitions.
 
         Args:
@@ -1125,7 +1125,7 @@ class GraspSequencePlanner:
                     # original 1-link approximation so we never get a
                     # worse result than the pre-fix behaviour.
                     released_obj = currently_held.split("/")[0]
-                    direct_holder_arm: Optional[str] = None
+                    direct_holder_arm: str | None = None
                     for g, h in self.grasp_tracker.current_grasps.items():
                         if g == gripper or h is None:
                             continue
@@ -1972,7 +1972,7 @@ class GraspSequencePlanner:
             "grasp_tracker": self.grasp_tracker,
         }
 
-    def get_resumable_state(self) -> Optional[Dict[str, Any]]:
+    def get_resumable_state(self) -> dict[str, Any] | None:
         """Check if sequence can be resumed and return failure context.
 
         Returns:
@@ -2018,16 +2018,16 @@ class GraspSequencePlanner:
     def resume_sequence(
         self,
         retry_from_edge: int = 0,
-        max_iterations_per_edge: Optional[int] = None,
-        timeout_per_edge: Optional[float] = None,
-        frozen_arms_mode: Optional[str] = None,
-        per_phase_frozen_arms: Optional[Dict[int, List[str]]] = None,
-        skip_phases: Optional[Set[int]] = None,
+        max_iterations_per_edge: int | None = None,
+        timeout_per_edge: float | None = None,
+        frozen_arms_mode: str | None = None,
+        per_phase_frozen_arms: dict[int, list[str]] | None = None,
+        skip_phases: set[int] | None = None,
         validate: bool = True,
         reset_roadmap: bool = True,
         time_parameterize: bool = True,
         verbose: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Resume planning from last failure point.
 
         Args:
@@ -2273,7 +2273,7 @@ class GraspSequencePlanner:
                     # apply the original 1-link approximation so we never
                     # get a worse result than the pre-fix behaviour.
                     released_obj = currently_held.split("/")[0]
-                    direct_holder_arm: Optional[str] = None
+                    direct_holder_arm: str | None = None
                     for g, h in self.grasp_tracker.current_grasps.items():
                         if g == gripper or h is None:
                             continue
@@ -2937,13 +2937,13 @@ class GraspSequencePlanner:
         self,
         speed: float = 1.0,
         clear_paths_first: bool = False,
-        visualizer: Optional[Any] = None,
+        visualizer: Any | None = None,
         record: bool = False,
         output_dir: str = "/home/dvtnguyen/devel/demos",
-        video_prefix: Optional[str] = None,
+        video_prefix: str | None = None,
         framerate: int = 25,
         dt: float = 0.01,
-    ) -> Optional[List[str]]:
+    ) -> list[str] | None:
         """Replay all phase paths in sequence.
 
         Args:
@@ -3217,7 +3217,7 @@ class InteractiveGraspSequenceBuilder:
         self,
         task: Any,
         task_config: Any,
-        freeze_joint_substrings: Optional[List[str]] = None,
+        freeze_joint_substrings: list[str] | None = None,
     ):
         """Initialize interactive grasp sequence builder.
 
@@ -3232,15 +3232,15 @@ class InteractiveGraspSequenceBuilder:
         self.ALL_ARM_KEYWORDS = list(getattr(task_config, "ALL_ARM_KEYWORDS", []))
 
         # Will be populated during run()
-        self.grasp_sequence: List[Tuple[str, str]] = []
-        self.skip_phases: Set[int] = set()
+        self.grasp_sequence: list[tuple[str, str]] = []
+        self.skip_phases: set[int] = set()
         self.skip_all_phases: bool = False
         self.frozen_arms_mode: str = "auto"
-        self.per_phase_frozen_arms: Optional[Dict[int, List[str]]] = None
-        self.auto_save_dir: Optional[str] = None
+        self.per_phase_frozen_arms: dict[int, list[str]] | None = None
+        self.auto_save_dir: str | None = None
         self.non_stop: bool = False
 
-    def _get_available_grasps(self) -> List[Tuple[str, str]]:
+    def _get_available_grasps(self) -> list[tuple[str, str]]:
         """Get all possible grasps from config."""
         all_grasps = []
         valid_pairs = getattr(self.task_config, "VALID_PAIRS", {})
@@ -3346,7 +3346,7 @@ class InteractiveGraspSequenceBuilder:
 
         return interactive_arm_selector
 
-    def run(self) -> Dict[str, Any]:
+    def run(self) -> dict[str, Any]:
         """Run the interactive grasp sequence planning workflow.
 
         Returns:
@@ -3460,7 +3460,7 @@ class InteractiveGraspSequenceBuilder:
             return False
         return True
 
-    def _get_q_init(self) -> Optional[List[float]]:
+    def _get_q_init(self) -> list[float] | None:
         """Get initial configuration."""
         if hasattr(self.task, "config_gen") and self.task.config_gen is not None:
             q_init = self.task.config_gen.configs.get("q_init")
@@ -3469,7 +3469,7 @@ class InteractiveGraspSequenceBuilder:
         return getattr(self.task, "q_init", None)
 
     def _handle_failure(
-        self, planner: GraspSequencePlanner, q_init: Optional[List[float]] = None
+        self, planner: GraspSequencePlanner, q_init: list[float] | None = None
     ) -> None:
         """Handle planning failure with optional resume.
 
@@ -3504,7 +3504,7 @@ class InteractiveGraspSequenceBuilder:
             self._interactive_resume_loop(planner, q_init)
 
     def _auto_resume_loop(
-        self, planner: GraspSequencePlanner, q_init: Optional[List[float]] = None
+        self, planner: GraspSequencePlanner, q_init: list[float] | None = None
     ) -> None:
         """Auto-resume loop for non-stop mode.
 
@@ -3542,7 +3542,7 @@ class InteractiveGraspSequenceBuilder:
                 print(f"\nAuto-resume failed: {e}")
 
     def _interactive_resume_loop(
-        self, planner: GraspSequencePlanner, q_init: Optional[List[float]] = None
+        self, planner: GraspSequencePlanner, q_init: list[float] | None = None
     ) -> None:
         """Interactive resume loop with menu options.
 
@@ -3606,8 +3606,8 @@ class InteractiveGraspSequenceBuilder:
                 print(f"\nResume failed: {e}")
 
     def _collect_generated_configs(
-        self, planner: GraspSequencePlanner, q_init: List[float]
-    ) -> Dict[str, List[float]]:
+        self, planner: GraspSequencePlanner, q_init: list[float]
+    ) -> dict[str, list[float]]:
         """Collect all generated configurations from the planner.
 
         Args:
@@ -3660,7 +3660,7 @@ class InteractiveGraspSequenceBuilder:
         return generated_configs
 
     def _offer_replay_or_browse(
-        self, planner: GraspSequencePlanner, q_init: Optional[List[float]]
+        self, planner: GraspSequencePlanner, q_init: list[float] | None
     ) -> None:
         """Offer replay for non-skipped phases or browse for skipped phases.
 

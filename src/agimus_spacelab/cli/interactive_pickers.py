@@ -8,7 +8,7 @@ configurations.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from agimus_spacelab.utils.interactive import interactive_menu
 
@@ -22,7 +22,7 @@ __all__ = [
 ]
 
 
-def select_grasp_pairs(cfg: Any) -> List[str]:
+def select_grasp_pairs(cfg: Any) -> list[str]:
     """
     Interactively select gripper-handle pairs from a task configuration.
 
@@ -70,9 +70,9 @@ def select_grasp_pairs(cfg: Any) -> List[str]:
 
 
 def select_frozen_arms(
-    default_substrings: List[str],
-    arm_options: Optional[List[str]] = None,
-) -> List[str]:
+    default_substrings: list[str],
+    arm_options: list[str] | None = None,
+) -> list[str]:
     """
     Interactively select joint-name substrings to freeze during planning.
 
@@ -122,7 +122,7 @@ def select_frozen_arms(
 
 def browse_configurations(
     task: Any,
-    configs: Dict[str, List[float]],
+    configs: dict[str, list[float]],
 ) -> None:
     """
     Interactively browse and visualize configurations.
@@ -161,7 +161,7 @@ def browse_configurations(
 
 
 def select_skip_phases(
-    grasp_sequence: List[tuple],
+    grasp_sequence: list[tuple],
 ) -> tuple:
     """
     Interactively select phases to skip during grasp sequence planning.
@@ -228,8 +228,8 @@ def select_skip_phases(
 
 
 def select_frozen_arms_mode(
-    grasp_sequence: Optional[List[tuple]] = None,
-    arm_keywords: Optional[List[str]] = None,
+    grasp_sequence: list[tuple] | None = None,
+    arm_keywords: list[str] | None = None,
 ) -> tuple:
     """
     Interactively select the frozen arms mode for planning.
@@ -302,7 +302,7 @@ def select_frozen_arms_mode(
     return frozen_arms_mode, per_phase_frozen_arms
 
 
-def select_auto_save_directory() -> Optional[str]:
+def select_auto_save_directory() -> str | None:
     """
     Interactively select auto-save directory for paths.
 

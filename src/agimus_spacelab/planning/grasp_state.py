@@ -11,8 +11,6 @@ the factory naming convention:
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
-
 
 class GraspStateTracker:
     """Track current grasp state and compute edge names for transitions.
@@ -31,9 +29,9 @@ class GraspStateTracker:
 
     def __init__(
         self,
-        grippers: List[str],
-        handles: List[str],
-        initial_grasps: Optional[Dict[str, Optional[str]]] = None,
+        grippers: list[str],
+        handles: list[str],
+        initial_grasps: dict[str, str | None] | None = None,
     ):
         """Initialize grasp state tracker.
 
@@ -80,7 +78,7 @@ class GraspStateTracker:
         self._phase_handle_to_idx = {h: i for i, h in enumerate(phase_handles)}
 
     def _get_abbreviated_state(
-        self, grasps: Optional[Dict[str, Optional[str]]] = None
+        self, grasps: dict[str, str | None] | None = None
     ) -> str:
         """Get abbreviated state string for given grasp configuration.
 
@@ -326,7 +324,7 @@ class GraspStateTracker:
         state_abbrev = self._get_abbreviated_state()
         return f"Loop | {state_abbrev}"
 
-    def update_grasp(self, gripper: str, handle: Optional[str] = None) -> None:
+    def update_grasp(self, gripper: str, handle: str | None = None) -> None:
         """Update grasp state after successful planning.
 
         Args:
@@ -385,7 +383,7 @@ class GraspStateTracker:
 
         return " : ".join(parts)
 
-    def get_held_handles(self) -> List[str]:
+    def get_held_handles(self) -> list[str]:
         """Get list of currently held handles.
 
         Returns:
@@ -393,7 +391,7 @@ class GraspStateTracker:
         """
         return [h for h in self.current_grasps.values() if h is not None]
 
-    def get_free_grippers(self) -> List[str]:
+    def get_free_grippers(self) -> list[str]:
         """Get list of currently free grippers.
 
         Returns:
@@ -414,7 +412,7 @@ class GraspStateTracker:
         is_none = self.current_grasps[gripper] is None if gripper_exists else False
         return gripper_exists and is_none
 
-    def get_gripper_handle(self, gripper: str) -> Optional[str]:
+    def get_gripper_handle(self, gripper: str) -> str | None:
         """Get the handle held by a gripper.
 
         Args:

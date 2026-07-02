@@ -7,7 +7,7 @@ Provides GraphBuilder for creating constraint graphs with dual backend support.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Type, Union
 
 import numpy as np
 
@@ -79,7 +79,7 @@ class GraphBuilder:
         # PyHPP constraint objects owned by the graph builder.
         # Set once after constraint creation via set_pyhpp_constraints().
         # CORBA backend: always empty (constraints stored server-side by name).
-        self._pyhpp_constraints: Dict[str, Any] = {}
+        self._pyhpp_constraints: dict[str, Any] = {}
 
         # Track manually created states and edges
         self.states = {}  # name -> id
@@ -103,7 +103,7 @@ class GraphBuilder:
         if callable(attach):
             attach(self.graph)
 
-    def set_pyhpp_constraints(self, constraints: Dict[str, Any]) -> None:
+    def set_pyhpp_constraints(self, constraints: dict[str, Any]) -> None:
         """Store PyHPP constraint objects for use during graph construction.
 
         Must be called once after constraints are created (before any
@@ -170,7 +170,7 @@ class GraphBuilder:
         print(f"    ✓ State '{name}' created (ID: {state_id})")
         return state_id
 
-    def add_states(self, names: List[str], is_waypoint: bool = False) -> None:
+    def add_states(self, names: list[str], is_waypoint: bool = False) -> None:
         """
         Add multiple states to the graph at once.
 
@@ -204,7 +204,7 @@ class GraphBuilder:
         to_state: str,
         name: str,
         weight: int = 1,
-        containing_state: Optional[str] = None,
+        containing_state: str | None = None,
     ) -> int:
         """
         Add an edge between two states.
@@ -250,8 +250,8 @@ class GraphBuilder:
     def add_state_constraints(
         self,
         state_name: str,
-        constraints: List[Any],
-        constraint_names: Optional[List[str]] = None,
+        constraints: list[Any],
+        constraint_names: list[str] | None = None,
     ) -> None:
         """
         Add constraints to a state.
@@ -300,8 +300,8 @@ class GraphBuilder:
     def add_edge_constraints(
         self,
         edge_name: str,
-        constraints: List[Any],
-        constraint_names: Optional[List[str]] = None,
+        constraints: list[Any],
+        constraint_names: list[str] | None = None,
     ) -> None:
         """
         Add constraints to an edge (path constraints).
@@ -351,7 +351,7 @@ class GraphBuilder:
 
     def add_global_constraints(
         self,
-        constraint_names: List,
+        constraint_names: list,
     ) -> bool:
         """Add numerical constraints globally to the graph.
 
@@ -459,8 +459,8 @@ class GraphBuilder:
     def create_factory_graph(
         self,
         config: BaseTaskConfig,
-        graph_constraints: Optional[List[str]] = None,
-        q_init: Optional[List[float]] = None,
+        graph_constraints: list[str] | None = None,
+        q_init: list[float] | None = None,
     ) -> Any:
         """
         Create constraint graph using factory for both backends.
@@ -594,7 +594,7 @@ class GraphBuilder:
     def create_manual_graph(
         self,
         config: BaseTaskConfig,
-        graph_constraints: Optional[List[str]] = None,
+        graph_constraints: list[str] | None = None,
     ) -> Any:
         """Create the manual graph using GraphBuilder (both backends).
 
@@ -709,7 +709,7 @@ class GraphBuilder:
     TaskConfigT = Union[Type[BaseTaskConfig], BaseTaskConfig]
 
     @staticmethod
-    def _as_task_config(task: TaskConfigT) -> Type[BaseTaskConfig]:
+    def _as_task_config(task: TaskConfigT) -> type[BaseTaskConfig]:
         # Task configs in this repo are typically class-based (class
         # attributes). If the caller passes an instance, recover the class.
         return task if isinstance(task, type) else task.__class__
@@ -718,7 +718,7 @@ class GraphBuilder:
         self,
         task: TaskConfigT,
         *,
-        mode: Optional[str] = None,
+        mode: str | None = None,
         name: str = "graph",
     ) -> Any:
         """Build a constraint graph from a task specification.
@@ -775,7 +775,7 @@ class GraphBuilder:
         self.initiate_graph(name=name)
 
         # 1) Create constraints declared by the task.
-        pyhpp_constraint_objects: Dict[str, Any] = {}
+        pyhpp_constraint_objects: dict[str, Any] = {}
         for cdef in task_cls.get_constraint_defs():
             if not isinstance(cdef, ConstraintDef):
                 raise TypeError(
@@ -867,8 +867,7 @@ class GraphBuilder:
                     ]
                     if missing:
                         raise KeyError(
-                            "State '%s' references unknown constraints: %s"
-                            % (state.name, missing)
+                            f"State '{state.name}' references unknown constraints: {missing}"
                         )
                     objs = [pyhpp_constraint_objects[n] for n in state.constraints]
                     self.add_state_constraints(state.name, constraints=objs)
@@ -888,8 +887,7 @@ class GraphBuilder:
                 ]
                 if missing:
                     raise KeyError(
-                        "Edge '%s' references unknown constraints: %s"
-                        % (edge.name, missing)
+                        f"Edge '{edge.name}' references unknown constraints: {missing}"
                     )
                 objs = [pyhpp_constraint_objects[n] for n in edge.path_constraints]
                 self.add_edge_constraints(edge.name, constraints=objs)
@@ -952,7 +950,7 @@ class GraphBuilder:
                             if not is_pair:
                                 continue
 
-                            def _state_name(s: Any) -> Optional[str]:
+                            def _state_name(s: Any) -> str | None:
                                 if isinstance(s, str):
                                     return s
                                 name_attr = getattr(s, "name", None)
@@ -981,10 +979,10 @@ class GraphBuilder:
     def apply_state_constraints(
         self,
         state_name: str,
-        q: List[float],
+        q: list[float],
         max_iterations: int = 10000,
         error_threshold: float = 1e-4,
-    ) -> Tuple[bool, List[float], float]:
+    ) -> tuple[bool, list[float], float]:
         """
         Apply state constraints to project configuration.
 
@@ -1025,27 +1023,27 @@ class GraphBuilder:
         """Get the constraint graph."""
         return self.graph
 
-    def get_states(self) -> Dict[str, int]:
+    def get_states(self) -> dict[str, int]:
         """Get dictionary of state names to IDs."""
         return self.states.copy()
 
-    def get_edges(self) -> Dict[str, int]:
+    def get_edges(self) -> dict[str, int]:
         """Get dictionary of edge names to IDs."""
         return self.edges.copy()
 
-    def get_edge_topology(self) -> Dict[str, Tuple[str, str]]:
+    def get_edge_topology(self) -> dict[str, tuple[str, str]]:
         """Get dictionary of edge names to (from, to) tuples."""
         return self.edge_topology.copy()
 
     def build_phase_graph(
         self,
         config: BaseTaskConfig,
-        held_grasps: Dict[str, str],
-        next_grasp: Tuple[str, str],
-        graph_constraints: Optional[List[str]] = None,
+        held_grasps: dict[str, str],
+        next_grasp: tuple[str, str],
+        graph_constraints: list[str] | None = None,
         use_sequential_filter: bool = True,
-        q_init: Optional[List[float]] = None,
-        q_init_original: Optional[List[float]] = None,
+        q_init: list[float] | None = None,
+        q_init_original: list[float] | None = None,
     ) -> Any:
         """Build a minimal phase graph for incremental multi-grasp planning.
 
@@ -1339,11 +1337,11 @@ class GraphBuilder:
 
     def _reset_free_objects_in_q_init(
         self,
-        q_init: List[float],
-        q_init_original: List[float],
-        phase_objects: List[str],
-        held_grasps: Dict[str, str],
-    ) -> List[float]:
+        q_init: list[float],
+        q_init_original: list[float],
+        phase_objects: list[str],
+        held_grasps: dict[str, str],
+    ) -> list[float]:
         """Restore unheld objects in q_init to their original scene positions.
 
         Objects that are not currently grasped may have ended up at random

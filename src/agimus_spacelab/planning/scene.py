@@ -288,8 +288,7 @@ class SceneBuilder:
                 `frame_gripper/root_joint`). Child joints are included.
         """
         print(
-            "   Disabling collisions (subtrees): %s <-> %s"
-            % (robot_frame_or_joint, obstacle_root_joint)
+            f"   Disabling collisions (subtrees): {robot_frame_or_joint} <-> {obstacle_root_joint}"
         )
 
         if self.backend == "pyhpp":
@@ -448,11 +447,9 @@ class SceneBuilder:
 
         before_pairs: List[tuple[str, str]] = _pairs_between_by_prefix()
         if verbose:
-            print("      Robot joints: %s" % robot_joints)
-            print("      Target obstacle prefix: %s" % obstacle_prefix)
-            print(
-                "      Found %d existing collision pairs to filter" % len(before_pairs)
-            )
+            print(f"      Robot joints: {robot_joints}")
+            print(f"      Target obstacle prefix: {obstacle_prefix}")
+            print(f"      Found {len(before_pairs)} existing collision pairs to filter")
             for rj, obj in before_pairs[:max_pairs]:
                 print(f"        - {rj} <-> {obj}")
             if len(before_pairs) > max_pairs:
@@ -470,7 +467,7 @@ class SceneBuilder:
             print(f"      removeObstacleFromJoint calls attempted: {removed}")
             after_pairs = _pairs_between_by_prefix()
             print(
-                "      Remaining collision pairs after filtering: %d" % len(after_pairs)
+                f"      Remaining collision pairs after filtering: {len(after_pairs)}"
             )
             for rj, obj in after_pairs[:max_pairs]:
                 print(f"        - {rj} <-> {obj}")
