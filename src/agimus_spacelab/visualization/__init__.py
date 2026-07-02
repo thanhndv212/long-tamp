@@ -20,45 +20,43 @@ Usage:
     )
 """
 
-from .viz import (
-    print_joint_info,
-    visualize_constraint_graph,
-    visualize_constraint_graph_interactive,
-    displayHandleApproach,
-    displayGripperApproach,
-    displayHandle,
-    displayGripper,
-    visualize_all_handles,
-    visualize_all_grippers,
-    print_handle_info,
-    print_gripper_info,
-    clear_handle_visualizations,
-    clear_gripper_visualizations,
-    clear_all_visualizations,
-)
-
 from .video_recorder import (
     VideoRecorder,
     record_path_playback,
 )
-
+from .viz import (
+    clear_all_visualizations,
+    clear_gripper_visualizations,
+    clear_handle_visualizations,
+    displayGripper,
+    displayGripperApproach,
+    displayHandle,
+    displayHandleApproach,
+    print_gripper_info,
+    print_handle_info,
+    print_joint_info,
+    visualize_all_grippers,
+    visualize_all_handles,
+    visualize_constraint_graph,
+    visualize_constraint_graph_interactive,
+)
 
 __all__ = [
-    "print_joint_info",
-    "visualize_constraint_graph",
-    "visualize_constraint_graph_interactive",
-    "displayHandleApproach",
+    "VideoRecorder",
+    "clear_all_visualizations",
+    "clear_all_visualizations",
+    "clear_gripper_visualizations",
+    "clear_handle_visualizations",
+    "displayGripper",
     "displayGripperApproach",
     "displayHandle",
-    "displayGripper",
-    "visualize_all_handles",
-    "visualize_all_grippers",
-    "print_handle_info",
+    "displayHandleApproach",
     "print_gripper_info",
-    "clear_handle_visualizations",
-    "clear_gripper_visualizations",
-    "clear_all_visualizations",
-    "VideoRecorder",
+    "print_handle_info",
+    "print_joint_info",
     "record_path_playback",
-    "clear_all_visualizations",
+    "visualize_all_grippers",
+    "visualize_all_handles",
+    "visualize_constraint_graph",
+    "visualize_constraint_graph_interactive",
 ]

@@ -7,8 +7,9 @@ Provides GraphBuilder for creating constraint graphs with dual backend support.
 
 from __future__ import annotations
 
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
+
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Any, Type, Union
 
 from agimus_spacelab.config.base_config import BaseTaskConfig, ConstraintDef
 from agimus_spacelab.planning.constraints import (
@@ -20,9 +21,10 @@ try:
     from hpp.corbaserver.manipulation import (
         ConstraintGraph,
         ConstraintGraphFactory,
+        Constraints,
         Rule,
-        Constraints
     )
+
     HAS_CORBA_GRAPH = True
 except ImportError:
     HAS_CORBA_GRAPH = False
@@ -36,8 +38,11 @@ try:
     from pyhpp.manipulation import Graph as PyHPPGraph
     from pyhpp.manipulation.constraint_graph_factory import (
         ConstraintGraphFactory as PyHPPConstraintGraphFactory,
-        Rule as PyHPPRule
     )
+    from pyhpp.manipulation.constraint_graph_factory import (
+        Rule as PyHPPRule,
+    )
+
     HAS_PYHPP_GRAPH = True
 except ImportError:
     HAS_PYHPP_GRAPH = False
@@ -49,7 +54,7 @@ except ImportError:
 class GraphBuilder:
     """
     Builder class for creating constraint graphs with dual backend support.
-    
+
     Supports both manual graph construction (node by node, edge by edge) and
     factory-based automatic graph generation.
     """
@@ -57,7 +62,7 @@ class GraphBuilder:
     def __init__(self, planner, robot, ps, backend: str = "corba"):
         """
         Initialize graph builder.
-        
+
         Args:
             planner: Planner instance
             robot: Robot/Device instance
@@ -78,7 +83,7 @@ class GraphBuilder:
 
         # Track manually created states and edges
         self.states = {}  # name -> id
-        self.edges = {}   # name -> id
+        self.edges = {}  # name -> id
         self.edge_topology = {}  # name -> (from_state, to_state)
 
     def _attach_graph_to_problem_if_supported(self) -> None:
@@ -110,10 +115,10 @@ class GraphBuilder:
     def initiate_graph(self, name: str = "graph") -> Any:
         """
         Initialize an empty constraint graph for manual construction.
-        
+
         Args:
             name: Graph name
-            
+
         Returns:
             ConstraintGraph or Graph instance
         """
@@ -139,8 +144,7 @@ class GraphBuilder:
 
         return self.graph
 
-    def add_state(self, name: str, is_waypoint: bool = False,
-                  priority: int = 0) -> int:
+    def add_state(self, name: str, is_waypoint: bool = False, priority: int = 0) -> int:
         """
         Add a state to the graph.
 
@@ -148,14 +152,12 @@ class GraphBuilder:
             name: State name
             is_waypoint: Whether this is a waypoint state
             priority: State priority
-            
+
         Returns:
             State ID
         """
         if self.graph is None:
-            raise RuntimeError(
-                "Graph not initialized. Call initiate_graph() first"
-            )
+            raise RuntimeError("Graph not initialized. Call initiate_graph() first")
 
         if self.backend == "corba":
             # CORBA uses createNode
@@ -183,9 +185,7 @@ class GraphBuilder:
             For PyHPP backend, this calls add_state for each name.
         """
         if self.graph is None:
-            raise RuntimeError(
-                "Graph not initialized. Call initiate_graph() first"
-            )
+            raise RuntimeError("Graph not initialized. Call initiate_graph() first")
 
         if self.backend == "corba":
             # CORBA can create multiple nodes at once
@@ -198,26 +198,29 @@ class GraphBuilder:
             for name in names:
                 self.add_state(name, is_waypoint)
 
-    def add_edge(self, from_state: str, to_state: str, name: str,
-                 weight: int = 1,
-                 containing_state: Optional[str] = None) -> int:
+    def add_edge(
+        self,
+        from_state: str,
+        to_state: str,
+        name: str,
+        weight: int = 1,
+        containing_state: Optional[str] = None,
+    ) -> int:
         """
         Add an edge between two states.
-        
+
         Args:
             from_state: Source state name
             to_state: Target state name
             name: Edge name
             weight: Edge weight for planning
             containing_state: State whose constraints apply during edge
-            
+
         Returns:
             Edge ID
         """
         if self.graph is None:
-            raise RuntimeError(
-                "Graph not initialized. Call initiate_graph() first"
-            )
+            raise RuntimeError("Graph not initialized. Call initiate_graph() first")
 
         # Verify states exist
         if from_state not in self.states:
@@ -228,8 +231,7 @@ class GraphBuilder:
         if self.backend == "corba":
             # CORBA uses createEdge with state names
             edge_id = self.graph.createEdge(
-                from_state, to_state, name, weight,
-                containing_state or from_state
+                from_state, to_state, name, weight, containing_state or from_state
             )
         else:  # pyhpp
             # PyHPP uses createTransition with state objects
@@ -242,15 +244,14 @@ class GraphBuilder:
 
         self.edges[name] = edge_id
         self.edge_topology[name] = (from_state, to_state)
-        print(f"    ✓ Edge '{name}': {from_state} → {to_state} "
-              f"(ID: {edge_id})")
+        print(f"    ✓ Edge '{name}': {from_state} → {to_state} " f"(ID: {edge_id})")
         return edge_id
 
     def add_state_constraints(
         self,
         state_name: str,
         constraints: List[Any],
-        constraint_names: Optional[List[str]] = None
+        constraint_names: Optional[List[str]] = None,
     ) -> None:
         """
         Add constraints to a state.
@@ -273,34 +274,34 @@ class GraphBuilder:
 
         if self.backend == "corba":
             if constraint_names is None:
-                raise ValueError(
-                    "constraint_names required for CORBA backend"
-                )
+                raise ValueError("constraint_names required for CORBA backend")
             # CORBA uses addConstraints with Constraints object
             self.graph.addConstraints(
                 node=state_name,
-                constraints=Constraints(numConstraints=constraint_names)
+                constraints=Constraints(numConstraints=constraint_names),
             )
-            print(f"    ✓ Added constraints {constraint_names} "
-                  f"to state '{state_name}'")
+            print(
+                f"    ✓ Added constraints {constraint_names} "
+                f"to state '{state_name}'"
+            )
 
         else:  # pyhpp
             if constraints is None or len(constraints) == 0:
-                raise ValueError(
-                    "constraints list required for PyHPP backend"
-                )
+                raise ValueError("constraints list required for PyHPP backend")
             # PyHPP uses addNumericalConstraint for each constraint
             state_id = self.states[state_name]
             for constraint in constraints:
                 self.graph.addNumericalConstraint(state_id, constraint)
-            print(f"    ✓ Added {len(constraints)} constraint(s) "
-                  f"to state '{state_name}'")
+            print(
+                f"    ✓ Added {len(constraints)} constraint(s) "
+                f"to state '{state_name}'"
+            )
 
     def add_edge_constraints(
         self,
         edge_name: str,
         constraints: List[Any],
-        constraint_names: Optional[List[str]] = None
+        constraint_names: Optional[List[str]] = None,
     ) -> None:
         """
         Add constraints to an edge (path constraints).
@@ -326,8 +327,7 @@ class GraphBuilder:
             # Empty constraint_names is valid (no path constraints)
             names = constraint_names or []
             self.graph.addConstraints(
-                edge=edge_name,
-                constraints=Constraints(numConstraints=names)
+                edge=edge_name, constraints=Constraints(numConstraints=names)
             )
             if names:
                 print(f"    ✓ Added constraints {names} to edge '{edge_name}'")
@@ -338,15 +338,16 @@ class GraphBuilder:
             # PyHPP uses addNumericalConstraintsToTransition
             edge_id = self.edges[edge_name]
             if constraints and len(constraints) > 0:
-                self.graph.addNumericalConstraintsToTransition(
-                    edge_id, constraints
+                self.graph.addNumericalConstraintsToTransition(edge_id, constraints)
+                print(
+                    f"    ✓ Added {len(constraints)} constraint(s) "
+                    f"to edge '{edge_name}'"
                 )
-                print(f"    ✓ Added {len(constraints)} constraint(s) "
-                      f"to edge '{edge_name}'")
             else:
                 # No constraints to add (free motion edge)
-                print(f"    ✓ No constraints added to edge '{edge_name}' "
-                      "(free motion)")
+                print(
+                    f"    ✓ No constraints added to edge '{edge_name}' " "(free motion)"
+                )
 
     def add_global_constraints(
         self,
@@ -380,8 +381,10 @@ class GraphBuilder:
                 )
             else:  # pyhpp
                 self.graph.addNumericalConstraintsToGraph(constraint_names)
-            print(f"    ✓ Added {len(constraint_names)} global constraints: ",
-                  f" {constraint_names}")
+            print(
+                f"    ✓ Added {len(constraint_names)} global constraints: ",
+                f" {constraint_names}",
+            )
             return True
         except Exception as e:
             print(f"   ⚠ Failed to add global constraints: {e}")
@@ -390,7 +393,7 @@ class GraphBuilder:
     def finalize_manual_graph(self) -> Any:
         """
         Finalize manual graph construction and initialize it.
-        
+
         Returns:
             Initialized graph
         """
@@ -440,21 +443,14 @@ class GraphBuilder:
         if not config.OBJECTS:
             raise ValueError("At least one object required")
         if len(config.HANDLES_PER_OBJECT) != len(config.OBJECTS):
-            raise ValueError(
-                "handles_per_object length must match objects length"
-            )
+            raise ValueError("handles_per_object length must match objects length")
         if config.CONTACT_SURFACES_PER_OBJECT is not None:
-            if len(config.CONTACT_SURFACES_PER_OBJECT) != len(
-                config.OBJECTS
-            ):
+            if len(config.CONTACT_SURFACES_PER_OBJECT) != len(config.OBJECTS):
                 raise ValueError(
-                    "contact_surfaces_per_object length must match "
-                    "objects length"
+                    "contact_surfaces_per_object length must match " "objects length"
                 )
         else:
-            config.CONTACT_SURFACES_PER_OBJECT = [
-                [] for _ in config.OBJECTS
-            ]
+            config.CONTACT_SURFACES_PER_OBJECT = [[] for _ in config.OBJECTS]
 
         if config.ENVIRONMENT_CONTACTS is None:
             config.ENVIRONMENT_CONTACTS = []
@@ -487,8 +483,7 @@ class GraphBuilder:
         Returns:
             ConstraintGraph or Graph instance
         """
-        print("    Using ConstraintGraphFactory for automatic graph "
-              "generation")
+        print("    Using ConstraintGraphFactory for automatic graph " "generation")
 
         # Backend-specific setup
         if self.backend == "corba":
@@ -518,16 +513,19 @@ class GraphBuilder:
 
         # Set objects with handles and contact surfaces
         self.factory.setObjects(
-            config.OBJECTS, config.HANDLES_PER_OBJECT,
-            config.CONTACT_SURFACES_PER_OBJECT
+            config.OBJECTS,
+            config.HANDLES_PER_OBJECT,
+            config.CONTACT_SURFACES_PER_OBJECT,
         )
         print(f"    \u2713 Set objects: {config.OBJECTS}")
 
         # Set environment contacts if provided
         if config.ENVIRONMENT_CONTACTS:
             self.factory.environmentContacts(config.ENVIRONMENT_CONTACTS)
-            print(f"    \u2713 Set environment contacts: "
-                  f"{config.ENVIRONMENT_CONTACTS}")
+            print(
+                f"    \u2713 Set environment contacts: "
+                f"{config.ENVIRONMENT_CONTACTS}"
+            )
 
         # Set grasp restrictions
         if config.RULES is not None:
@@ -538,7 +536,7 @@ class GraphBuilder:
             print("    ✓ Set possible grasps from valid_pairs")
 
         # Apply sequential filter if provided (strict 2-state limit)
-        if hasattr(config, '_SEQUENTIAL_FILTER'):
+        if hasattr(config, "_SEQUENTIAL_FILTER"):
             seq_filter = config._SEQUENTIAL_FILTER
             self.factory.graspIsAllowed.append(seq_filter)
             print("    ✓ Applied SequentialGraspFilter")
@@ -613,14 +611,10 @@ class GraphBuilder:
             raise RuntimeError("Missing 'GRASP_FG_GRAPH' graph config")
 
         # PyHPP constraint objects (CORBA uses names)
-        constraints = (
-            self._pyhpp_constraints if self.backend == "pyhpp" else None
-        )
+        constraints = self._pyhpp_constraints if self.backend == "pyhpp" else None
 
         # Create empty graph
-        graph_name = (
-            "manipulation_graph" if self.backend == "pyhpp" else "graph"
-        )
+        graph_name = "manipulation_graph" if self.backend == "pyhpp" else "graph"
         self.initiate_graph(name=graph_name)
 
         # Create states (order matters for solver performance)
@@ -655,9 +649,7 @@ class GraphBuilder:
                         state_name, [], constraint_names=constraint_names
                     )
                 else:
-                    constraint_objs = [
-                        constraints[n] for n in constraint_names
-                    ]
+                    constraint_objs = [constraints[n] for n in constraint_names]
                     self.add_state_constraints(state_name, constraint_objs)
         print("    ✓ Added constraints to nodes")
 
@@ -670,9 +662,7 @@ class GraphBuilder:
                         edge_name, [], constraint_names=[constraint_name]
                     )
                 else:
-                    self.add_edge_constraints(
-                        edge_name, [constraints[constraint_name]]
-                    )
+                    self.add_edge_constraints(edge_name, [constraints[constraint_name]])
 
         # Free motion edges (no path constraints)
         for edge_name in graph_def.get("free_motion_edges", []):
@@ -744,9 +734,7 @@ class GraphBuilder:
         task_cls = self._as_task_config(task)
         chosen_mode = mode
         if chosen_mode is None:
-            if getattr(task_cls, "STATES", None) and getattr(
-                task_cls, "EDGES", None
-            ):
+            if getattr(task_cls, "STATES", None) and getattr(task_cls, "EDGES", None):
                 chosen_mode = "manual"
             else:
                 chosen_mode = "factory"
@@ -791,8 +779,7 @@ class GraphBuilder:
         for cdef in task_cls.get_constraint_defs():
             if not isinstance(cdef, ConstraintDef):
                 raise TypeError(
-                    "Task get_constraint_defs() must return ConstraintDef "
-                    "items"
+                    "Task get_constraint_defs() must return ConstraintDef " "items"
                 )
 
             if cdef.type == "grasp":
@@ -813,9 +800,7 @@ class GraphBuilder:
 
             elif cdef.type == "placement":
                 if not cdef.obj or not cdef.transform:
-                    raise ValueError(
-                        f"Invalid placement ConstraintDef: {cdef}"
-                    )
+                    raise ValueError(f"Invalid placement ConstraintDef: {cdef}")
                 created = ConstraintBuilder.create_placement_constraint(
                     self.ps,
                     cdef.name,
@@ -830,9 +815,7 @@ class GraphBuilder:
 
             elif cdef.type == "complement":
                 if not cdef.obj or not cdef.transform:
-                    raise ValueError(
-                        f"Invalid complement ConstraintDef: {cdef}"
-                    )
+                    raise ValueError(f"Invalid complement ConstraintDef: {cdef}")
                 created = ConstraintBuilder.create_complement_constraint(
                     self.ps,
                     cdef.name,
@@ -887,9 +870,7 @@ class GraphBuilder:
                             "State '%s' references unknown constraints: %s"
                             % (state.name, missing)
                         )
-                    objs = [
-                        pyhpp_constraint_objects[n] for n in state.constraints
-                    ]
+                    objs = [pyhpp_constraint_objects[n] for n in state.constraints]
                     self.add_state_constraints(state.name, constraints=objs)
 
         for edge in task_cls.EDGES.values():
@@ -910,9 +891,7 @@ class GraphBuilder:
                         "Edge '%s' references unknown constraints: %s"
                         % (edge.name, missing)
                     )
-                objs = [
-                    pyhpp_constraint_objects[n] for n in edge.path_constraints
-                ]
+                objs = [pyhpp_constraint_objects[n] for n in edge.path_constraints]
                 self.add_edge_constraints(edge.name, constraints=objs)
 
         return self.finalize_manual_graph()
@@ -920,7 +899,7 @@ class GraphBuilder:
     def _extract_factory_graph_structure(self) -> None:
         """
         Extract states and edges from factory-generated graph.
-        
+
         Populates self.states, self.edges, and self.edge_topology.
         """
         try:
@@ -939,24 +918,22 @@ class GraphBuilder:
                         pass
             else:  # pyhpp
                 # PyHPP graph - extract all states from the graph
-                if hasattr(self.graph, 'getStateNames'):
+                if hasattr(self.graph, "getStateNames"):
                     for state_name in self.graph.getStateNames():
                         self.states[state_name] = state_name
 
-                if hasattr(self.graph, 'getTransitionNames'):
+                if hasattr(self.graph, "getTransitionNames"):
                     for edge_name in self.graph.getTransitionNames():
                         self.edges[edge_name] = edge_name
                         try:
                             edge_obj = None
-                            get_transition = getattr(
-                                self.graph, 'getTransition', None
-                            )
+                            get_transition = getattr(self.graph, "getTransition", None)
                             if callable(get_transition):
                                 edge_obj = get_transition(edge_name)
 
                             get_nodes = getattr(
                                 self.graph,
-                                'getNodesConnectedByTransition',
+                                "getNodesConnectedByTransition",
                                 None,
                             )
                             if not callable(get_nodes):
@@ -965,11 +942,7 @@ class GraphBuilder:
                             # Depending on bindings, this may accept either a
                             # Transition object or a transition name.
                             try:
-                                query = (
-                                    edge_obj
-                                    if edge_obj is not None
-                                    else edge_name
-                                )
+                                query = edge_obj if edge_obj is not None else edge_name
                                 result = get_nodes(query)
                             except Exception:
                                 result = get_nodes(edge_name)
@@ -982,7 +955,7 @@ class GraphBuilder:
                             def _state_name(s: Any) -> Optional[str]:
                                 if isinstance(s, str):
                                     return s
-                                name_attr = getattr(s, 'name', None)
+                                name_attr = getattr(s, "name", None)
                                 if callable(name_attr):
                                     try:
                                         return name_attr()
@@ -1010,17 +983,17 @@ class GraphBuilder:
         state_name: str,
         q: List[float],
         max_iterations: int = 10000,
-        error_threshold: float = 1e-4
+        error_threshold: float = 1e-4,
     ) -> Tuple[bool, List[float], float]:
         """
         Apply state constraints to project configuration.
-        
+
         Args:
             state_name: Name of the state
             q: Configuration to project
             max_iterations: Maximum projection iterations
             error_threshold: Convergence threshold
-            
+
         Returns:
             Tuple of (success, projected_config, error)
         """
@@ -1075,26 +1048,26 @@ class GraphBuilder:
         q_init_original: Optional[List[float]] = None,
     ) -> Any:
         """Build a minimal phase graph for incremental multi-grasp planning.
-        
+
         This method creates a drastically reduced constraint graph containing
         only the states and edges needed for a single grasp transition.
-        
+
         Two filtering strategies are available:
         1. setPossibleGrasps (use_sequential_filter=False):
            - Restricts which gripper-handle pairs are valid
            - Still generates intermediate states (e.g., free, A, B, A+B)
            - Results in ~4-10 states per phase
-        
+
         2. SequentialGraspFilter (use_sequential_filter=True, default):
            - Only allows current state and immediate next state
            - Prevents all intermediate/parallel grasp combinations
            - Results in exactly 2 states + waypoints per phase
            - Dramatically reduces graph from O(N!) to O(1) states per
              transition
-        
+
         This reduces graph size from combinatorial explosion to linear growth
         for sequential multi-grasp tasks.
-        
+
         Args:
             config: Task configuration (GRIPPERS, OBJECTS, etc.)
             held_grasps: Currently held grasps {gripper: handle}
@@ -1104,10 +1077,10 @@ class GraphBuilder:
             use_sequential_filter: If True, uses SequentialGraspFilter to
                 strictly limit to current→next state transition only.
                 If False, uses setPossibleGrasps (allows intermediate states).
-        
+
         Returns:
             Newly created ConstraintGraph or Graph instance
-        
+
         Example:
             >>> # Start free, grasp handle1 with gripper1
             >>> graph = builder.build_phase_graph(
@@ -1120,10 +1093,7 @@ class GraphBuilder:
             ...     next_grasp=("gripper2", "handle2"),
             ... )
         """
-        print(
-            f"\n    Building phase graph: held={held_grasps}, "
-            f"next={next_grasp}"
-        )
+        print(f"\n    Building phase graph: held={held_grasps}, " f"next={next_grasp}")
 
         if use_sequential_filter:
             print("    Using SequentialGraspFilter (strict 2-state limit)")
@@ -1141,7 +1111,7 @@ class GraphBuilder:
 
                     # CORBA: also reset cached TransitionPlanner
                     # It holds a reference to the old graph
-                    if hasattr(self.planner, 'reset_transition_planner'):
+                    if hasattr(self.planner, "reset_transition_planner"):
                         self.planner.reset_transition_planner()
                         print("    ✓ Reset TransitionPlanner")
                 else:
@@ -1150,7 +1120,7 @@ class GraphBuilder:
                     # graph::GraphPtr_t to the old graph.  If not reset, the
                     # first C++ call on the stale planner object (tp.setEdge,
                     # tp.timeOut, …) will dereference a freed pointer → SIGSEGV.
-                    if hasattr(self.planner, 'reset_transition_planner'):
+                    if hasattr(self.planner, "reset_transition_planner"):
                         self.planner.reset_transition_planner()
                         print("    ✓ Reset TransitionPlanner (PyHPP graph rebuild)")
                     print("    ✓ Clearing existing graph reference")
@@ -1198,6 +1168,7 @@ class GraphBuilder:
         # Create a derived config with filtered VALID_PAIRS
         # Use a simple namespace to avoid full class copying
         from types import SimpleNamespace
+
         phase_config = SimpleNamespace()
 
         # Copy required attributes from original config
@@ -1260,15 +1231,14 @@ class GraphBuilder:
         # during planning.  Objects excluded from phase_objects have no
         # LockedJoint produced by the factory, leaving their freeflyer DOFs
         # completely unconstrained (they would float to random positions).
-        _nonphase_objects = [
-            o for o in _orig_objects if o not in phase_objects
-        ]
+        _nonphase_objects = [o for o in _orig_objects if o not in phase_objects]
         if _nonphase_objects and q_init is not None:
             _lock_patterns = [f"{o}/root_joint" for o in _nonphase_objects]
             try:
                 from agimus_spacelab.planning.constraints import (
                     ConstraintBuilder,
                 )
+
                 _np_cnames, _np_jnames = (
                     ConstraintBuilder.create_locked_joint_constraints(
                         self.ps,
@@ -1282,9 +1252,7 @@ class GraphBuilder:
                     if graph_constraints is None:
                         graph_constraints = list(_np_cnames)
                     else:
-                        graph_constraints = list(graph_constraints) + list(
-                            _np_cnames
-                        )
+                        graph_constraints = list(graph_constraints) + list(_np_cnames)
                     print(
                         f"    \u2713 Locked {len(_np_jnames)} non-phase "
                         f"object joints: {_nonphase_objects}"
@@ -1377,7 +1345,7 @@ class GraphBuilder:
         held_grasps: Dict[str, str],
     ) -> List[float]:
         """Restore unheld objects in q_init to their original scene positions.
- 
+
         Objects that are not currently grasped may have ended up at random
         positions during previous phases' config generation (since they are
         unconstrained in the previous phase graph).  Before building the next
@@ -1393,9 +1361,7 @@ class GraphBuilder:
             New configuration vector with free objects at their original poses.
         """
         # Determine held objects from handle names  ("obj/handle" → "obj")
-        held_objects: set = {
-            handle.split("/")[0] for handle in held_grasps.values()
-        }
+        held_objects: set = {handle.split("/")[0] for handle in held_grasps.values()}
 
         # Get joint-rank mapping from robot model
         try:
@@ -1410,9 +1376,7 @@ class GraphBuilder:
         # not in phase_objects are still part of the robot model, and their
         # q_init values must be kept at their true scene positions.
         all_candidate_objects = [
-            jn.split("/")[0]
-            for jn in rank_map
-            if jn.endswith("/root_joint")
+            jn.split("/")[0] for jn in rank_map if jn.endswith("/root_joint")
         ]
 
         for obj_name in all_candidate_objects:

@@ -5,35 +5,43 @@ This backend uses hpp-python for direct Python bindings to HPP.
 """
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+
 import numpy as np
 from pinocchio import SE3
+
 from .base import BackendBase, ConstraintResult
 
-
 try:
-    from pyhpp.manipulation import (
-        Device,
-        urdf,
-        ManipulationPlanner as HPPManipulationPlanner,
-        TransitionPlanner as HPPTransitionPlanner,
-        Problem,
-        ProgressiveProjector,
-        RandomShortcut as ManipulationRandomShortcut,
-        EnforceTransitionSemantic,
-        GraphRandomShortcut,
-        GraphPartialShortcut,
-    )
     from pyhpp.core import (
         Discretized,
-        RandomShortcut,
-        SimpleShortcut,
         PartialShortcut,
-        SimpleTimeParameterization,
+        RandomShortcut,
         RSTimeParameterization,
+        SimpleShortcut,
+        SimpleTimeParameterization,
         SplineGradientBased_bezier1,
         SplineGradientBased_bezier3,
         SplineGradientBased_bezier5,
     )
+    from pyhpp.manipulation import (
+        Device,
+        EnforceTransitionSemantic,
+        GraphPartialShortcut,
+        GraphRandomShortcut,
+        Problem,
+        ProgressiveProjector,
+        urdf,
+    )
+    from pyhpp.manipulation import (
+        ManipulationPlanner as HPPManipulationPlanner,
+    )
+    from pyhpp.manipulation import (
+        RandomShortcut as ManipulationRandomShortcut,
+    )
+    from pyhpp.manipulation import (
+        TransitionPlanner as HPPTransitionPlanner,
+    )
+
     HAS_PYHPP = True
     PYHPP_IMPORT_ERROR = None
 except ImportError as _e:
@@ -46,6 +54,7 @@ except ImportError as _e:
 
 try:
     from pyhpp.core import TrapezoidalTimeParameterization
+
     HAS_TRAPEZOIDAL = True
 except ImportError:
     TrapezoidalTimeParameterization = None
@@ -53,6 +62,7 @@ except ImportError:
 
 try:
     from pyhpp_toppra import Toppra as TOPPRAOptimizer
+
     HAS_TOPPRA = True
 except ImportError:
     TOPPRAOptimizer = None
@@ -60,14 +70,16 @@ except ImportError:
 
 try:
     from pyhpp.gepetto.viewer import Viewer as _GepettoViewer
+
     HAS_GEPETTO_VIEWER = True
 except ImportError:
     _GepettoViewer = None
     HAS_GEPETTO_VIEWER = False
 
 try:
+    import viser as _viser_check
     from pyhpp_viser import Viewer as _ViserViewer
-    import viser as _viser_check  # noqa: F401 — verify runtime dep
+
     del _viser_check
     HAS_VISER = True
 except ImportError:
@@ -165,9 +177,9 @@ class PyHPPBackend(BackendBase):
         self._time_param_method: str = "stp"
         # TOPPRA-specific settings (ignored unless method == "toppra")
         self._toppra_velocity_scale: float = 1.0
-        self._toppra_effort_scale: float = -1      # -1 = disable torque
-        self._toppra_solver: int = 0               # 0=Seidel, 1=GLPK, 2=qpOASES
-        self._toppra_N: int = 100                  # grid points
+        self._toppra_effort_scale: float = -1  # -1 = disable torque
+        self._toppra_solver: int = 0  # 0=Seidel, 1=GLPK, 2=qpOASES
+        self._toppra_N: int = 100  # grid points
         self._toppra_interpolation: str = "hermite"  # or "constant_acceleration"
         self._toppra_gridpoint_method: str = "param_space"  # or "time_space"
         # Joints to enforce limits on (None = all joints)
@@ -250,7 +262,7 @@ class PyHPPBackend(BackendBase):
             root_joint_type,
             urdf_path,
             srdf_path or "",
-            SE3.Identity()
+            SE3.Identity(),
         )
 
         # Create problem
@@ -258,14 +270,9 @@ class PyHPPBackend(BackendBase):
 
         return self.device
 
-    def load_environment(
-        self,
-        name: str,
-        urdf_path: str,
-        pose: Optional[SE3] = None
-    ):
+    def load_environment(self, name: str, urdf_path: str, pose: Optional[SE3] = None):
         """Load environment model.
-        
+
         Args:
             name: Name for the environment object
             urdf_path: Path to URDF file
@@ -277,15 +284,7 @@ class PyHPPBackend(BackendBase):
         if pose is None:
             pose = SE3.Identity()
 
-        urdf.loadModel(
-            self.device,
-            0,
-            name,
-            "anchor",
-            urdf_path,
-            "",
-            pose
-        )
+        urdf.loadModel(self.device, 0, name, "anchor", urdf_path, "", pose)
 
         return name
 
@@ -294,10 +293,10 @@ class PyHPPBackend(BackendBase):
         name: str,
         urdf_path: str,
         srdf_path: Optional[str] = None,
-        root_joint_type: str = "freeflyer"
+        root_joint_type: str = "freeflyer",
     ):
         """Load manipulable object.
-        
+
         Args:
             name: Name for the object (used as prefix for handles/grippers)
             urdf_path: Path to URDF file
@@ -314,7 +313,7 @@ class PyHPPBackend(BackendBase):
             root_joint_type,
             urdf_path,
             srdf_path or "",
-            SE3.Identity()
+            SE3.Identity(),
         )
 
         return name
@@ -343,18 +342,15 @@ class PyHPPBackend(BackendBase):
         self.problem.addGoalConfig(q)
 
     def create_state(
-        self,
-        name: str,
-        is_waypoint: bool = False,
-        priority: int = 0
+        self, name: str, is_waypoint: bool = False, priority: int = 0
     ) -> int:
         """Create a state manually.
-        
+
         Args:
             name: State name
             is_waypoint: Whether this is a waypoint state
             priority: State priority (higher = more important)
-            
+
         Returns:
             State ID
         """
@@ -370,17 +366,17 @@ class PyHPPBackend(BackendBase):
         to_state: str,
         name: str,
         weight: int = 1,
-        containing_state: Optional[str] = None
+        containing_state: Optional[str] = None,
     ) -> int:
         """Create an edge manually.
-        
+
         Args:
             from_state: Source state name
             to_state: Target state name
             name: Edge name
             weight: Edge weight for planning
             containing_state: State whose constraints apply during edge
-            
+
         Returns:
             Edge ID
         """
@@ -388,11 +384,7 @@ class PyHPPBackend(BackendBase):
             raise RuntimeError("Graph not initialized")
 
         edge_id = self.graph.createEdge(
-            from_state,
-            to_state,
-            name,
-            weight,
-            containing_state or from_state
+            from_state, to_state, name, weight, containing_state or from_state
         )
         return edge_id
 
@@ -401,16 +393,16 @@ class PyHPPBackend(BackendBase):
         state: str,
         q: np.ndarray,
         max_iterations: int = 10000,
-        error_threshold: float = 1e-4
+        error_threshold: float = 1e-4,
     ) -> ConstraintResult:
         """Apply state constraints to project configuration.
-        
+
         Args:
             state: State name
             q: Input configuration
             max_iterations: Maximum projection iterations
             error_threshold: Convergence threshold
-            
+
         Returns:
             ConstraintResult with success status, projected config, and error
         """
@@ -433,19 +425,17 @@ class PyHPPBackend(BackendBase):
         self.graph.errorThreshold(old_error)
 
         return ConstraintResult(
-            success=success,
-            configuration=np.array(q_proj),
-            error=error
+            success=success, configuration=np.array(q_proj), error=error
         )
 
     def solve(
         self, max_iterations: int = 10000, optimizer: str = "RandomShortcut"
     ) -> bool:
         """Solve planning problem.
-        
+
         Args:
             max_iterations: Maximum planning iterations
-            
+
         Returns:
             True if solution found
         """
@@ -561,12 +551,20 @@ class PyHPPBackend(BackendBase):
         if q is not None:
             if isinstance(q, list):
                 q = np.array(q)
-            self.viewer.display(q) if hasattr(self.viewer, "display") else self.viewer(q)
+            (
+                self.viewer.display(q)
+                if hasattr(self.viewer, "display")
+                else self.viewer(q)
+            )
         else:
             try:
                 q_init = self.problem.initConfig()
                 q_arr = np.array(q_init)
-                self.viewer.display(q_arr) if hasattr(self.viewer, "display") else self.viewer(q_arr)
+                (
+                    self.viewer.display(q_arr)
+                    if hasattr(self.viewer, "display")
+                    else self.viewer(q_arr)
+                )
             except Exception:
                 pass
 
@@ -608,6 +606,7 @@ class PyHPPBackend(BackendBase):
 
         # Gepetto viewer: blocking animation loop
         import time
+
         t = 0.0
         dt = 0.01
         length = path.length()
@@ -646,13 +645,13 @@ class PyHPPBackend(BackendBase):
 
     def save_path(self, path_index: int, filename: str) -> None:
         """Save a path to file (binary format).
-        
+
         Uses pyhpp's built-in path serialization via hpp::core::path::Vector.
-        
+
         Args:
             path_index: Index of the path in stored paths to save
             filename: Output file path
-            
+
         Raises:
             RuntimeError: If path doesn't exist or save fails
         """
@@ -666,7 +665,7 @@ class PyHPPBackend(BackendBase):
 
         try:
             # pyhpp PathVector has save() method
-            if hasattr(path, 'save'):
+            if hasattr(path, "save"):
                 path.save(filename)
             else:
                 raise RuntimeError(
@@ -678,15 +677,15 @@ class PyHPPBackend(BackendBase):
 
     def load_path(self, filename: str) -> int:
         """Load a path from file (binary format).
-        
+
         Uses pyhpp's built-in path deserialization.
-        
+
         Args:
             filename: Input file path
-            
+
         Returns:
             Index of the loaded path in stored paths
-            
+
         Raises:
             RuntimeError: If file doesn't exist or load fails
         """
@@ -695,7 +694,7 @@ class PyHPPBackend(BackendBase):
             from pyhpp.core.path import Vector as PathVector
 
             # Load using static method
-            if hasattr(PathVector, 'load'):
+            if hasattr(PathVector, "load"):
                 path = PathVector.load(filename)
             else:
                 raise RuntimeError(
@@ -710,18 +709,16 @@ class PyHPPBackend(BackendBase):
 
     def save_path_vector(self, path_vector: Any, filename: str) -> None:
         """Save a PathVector object directly to file.
-        
+
         Args:
             path_vector: PathVector object
             filename: Output file path
         """
         try:
-            if hasattr(path_vector, 'save'):
+            if hasattr(path_vector, "save"):
                 path_vector.save(filename)
             else:
-                raise RuntimeError(
-                    "PathVector object does not support serialization"
-                )
+                raise RuntimeError("PathVector object does not support serialization")
         except Exception as e:
             raise RuntimeError(f"Failed to save path vector: {e}") from e
 
@@ -732,12 +729,12 @@ class PyHPPBackend(BackendBase):
         sort: bool = True,
     ) -> List[int]:
         """Load multiple paths from a directory.
-        
+
         Args:
             directory: Directory containing path files
             pattern: Glob pattern for path files (default: phase_*.path)
             sort: If True, sort files by name before loading
-            
+
         Returns:
             List of path indices in stored paths
         """
@@ -800,8 +797,7 @@ class PyHPPBackend(BackendBase):
                     metadata["states"] = list(states.keys())
                 elif isinstance(states, list):
                     metadata["states"] = [
-                        str(s.name() if hasattr(s, "name") else s)
-                        for s in states
+                        str(s.name() if hasattr(s, "name") else s) for s in states
                     ]
         except Exception as e:
             print(f"Warning: Could not extract states: {e}")
@@ -871,11 +867,10 @@ class PyHPPBackend(BackendBase):
             RuntimeError: If path is invalid or save fails
         """
         import json
-        import os
 
         # Ensure .json extension
-        if not filename.endswith('.json'):
-            filename = filename + '.json'
+        if not filename.endswith(".json"):
+            filename = filename + ".json"
 
         try:
             # Get path length
@@ -915,7 +910,7 @@ class PyHPPBackend(BackendBase):
             }
 
             # Write to file
-            with open(filename, 'w') as f:
+            with open(filename, "w") as f:
                 json.dump(data, f, indent=2)
 
         except Exception as e:
@@ -966,7 +961,7 @@ class PyHPPBackend(BackendBase):
 
         try:
             # Read waypoints
-            with open(filename, 'r') as f:
+            with open(filename) as f:
                 data = json.load(f)
 
             # Check for graph metadata and validate if requested
@@ -1089,11 +1084,7 @@ class PyHPPBackend(BackendBase):
         # Validate edge count (if available)
         saved_edges = saved_metadata.get("edges", [])
         current_edges = current_metadata.get("edges", [])
-        if (
-            saved_edges
-            and current_edges
-            and len(saved_edges) != len(current_edges)
-        ):
+        if saved_edges and current_edges and len(saved_edges) != len(current_edges):
             print(
                 f"Warning: Edge count mismatch. Saved: {len(saved_edges)}, "
                 f"Current: {len(current_edges)}"
@@ -1116,20 +1107,22 @@ class PyHPPBackend(BackendBase):
     # =========================================================================
 
     def create_grasp_constraint(
-        self, ps, name: str, gripper: str, tool: str,
-        transform, mask
+        self, ps, name: str, gripper: str, tool: str, transform, mask
     ):
         """Create grasp constraint via PyHPP (returns Implicit object)."""
         from ..planning.constraints import (
-            ConstraintBuilder, HAS_PYHPP_CONSTRAINTS,
             get_joint_id_for_name,
         )
+
         try:
-            from pyhpp.constraints import (
-                RelativeTransformation, ComparisonTypes, ComparisonType,
-                Implicit,
-            )
             from pinocchio import StdVec_Bool as Mask
+            from pyhpp.constraints import (
+                ComparisonType,
+                ComparisonTypes,
+                Implicit,
+                RelativeTransformation,
+            )
+
             from ..utils import xyzquat_to_se3
         except ImportError:
             raise ImportError("PyHPP constraints not available")
@@ -1155,15 +1148,16 @@ class PyHPPBackend(BackendBase):
         print(f"    ✓ {name}: {gripper} -> {tool} (PyHPP)")
         return constraint
 
-    def create_placement_constraint(
-        self, ps, name: str, tool: str,
-        world_pose, mask
-    ):
+    def create_placement_constraint(self, ps, name: str, tool: str, world_pose, mask):
         """Create placement constraint via PyHPP (returns Implicit object)."""
         try:
             from pyhpp.constraints import (
-                Transformation, ComparisonTypes, ComparisonType, Implicit,
+                ComparisonType,
+                ComparisonTypes,
+                Implicit,
+                Transformation,
             )
+
             from ..utils import xyzquat_to_se3
         except ImportError:
             raise ImportError("PyHPP constraints not available")
@@ -1182,14 +1176,17 @@ class PyHPPBackend(BackendBase):
         return constraint
 
     def create_complement_constraint(
-        self, ps, base_name: str, tool: str,
-        world_pose, complement_mask
+        self, ps, base_name: str, tool: str, world_pose, complement_mask
     ):
         """Create complement constraint via PyHPP (returns Implicit object)."""
         try:
             from pyhpp.constraints import (
-                Transformation, ComparisonTypes, ComparisonType, Implicit,
+                ComparisonType,
+                ComparisonTypes,
+                Implicit,
+                Transformation,
             )
+
             from ..utils import xyzquat_to_se3
         except ImportError:
             raise ImportError("PyHPP constraints not available")
@@ -1200,8 +1197,12 @@ class PyHPPBackend(BackendBase):
         joint_tool, frame_placement = get_joint_id_for_name(robot, tool)
         world_tf = xyzquat_to_se3(world_pose)
         pc = Transformation(
-            constraint_name, robot, joint_tool, frame_placement,
-            world_tf, complement_mask,
+            constraint_name,
+            robot,
+            joint_tool,
+            frame_placement,
+            world_tf,
+            complement_mask,
         )
         num_constrained = sum(complement_mask)
         cts = ComparisonTypes()
@@ -1211,11 +1212,10 @@ class PyHPPBackend(BackendBase):
         print(f"    ✓ {constraint_name}: free DOFs (PyHPP)")
         return constraint
 
-    def create_locked_joint_constraints(
-        self, ps, robot, q_ref, patterns
-    ) -> tuple:
+    def create_locked_joint_constraints(self, ps, robot, q_ref, patterns) -> tuple:
         """Create locked joint constraints via PyHPP."""
         from ..planning.constraints import ConstraintBuilder
+
         return ConstraintBuilder.create_locked_joint_constraints(
             ps, robot, q_ref, patterns, backend="pyhpp"
         )
@@ -1227,7 +1227,7 @@ class PyHPPBackend(BackendBase):
 
     def set_dichotomy(self, enabled: bool):
         """Enable or disable dichotomy path validation.
-        
+
         Args:
             enabled: Whether to use dichotomy for path validation
         """
@@ -1235,19 +1235,17 @@ class PyHPPBackend(BackendBase):
 
     def set_progressive_projector(self, enabled: bool):
         """Enable or disable progressive path projector.
-        
+
         Args:
             enabled: Whether to use progressive projector
         """
         self._use_progressive_projector = enabled
 
     def configure_graph_parameters(
-        self,
-        max_iterations: int = 10000,
-        error_threshold: float = 1e-4
+        self, max_iterations: int = 10000, error_threshold: float = 1e-4
     ):
         """Configure constraint graph parameters before initialization.
-        
+
         Args:
             max_iterations: Maximum iterations for constraint projection
             error_threshold: Error threshold for constraint satisfaction
@@ -1259,9 +1257,7 @@ class PyHPPBackend(BackendBase):
         self.graph.setErrorThreshold(error_threshold)
 
     def configure_path_validation(
-        self,
-        validation_step: float = 0.01,
-        projector_step: float = 0.1
+        self, validation_step: float = 0.01, projector_step: float = 0.1
     ):
         """Configure path validation parameters."""
         print("   Configuring path validation...")
@@ -1270,16 +1266,16 @@ class PyHPPBackend(BackendBase):
 
         # Configure path validation if enabled
         if self._use_pathvalidation:
-            self.problem.pathValidation(Discretized(
-                self.device, validation_step
-            ))
+            self.problem.pathValidation(Discretized(self.device, validation_step))
         # Configure path projection if enabled
         if self._use_progressive_projector:
-            self.problem.pathProjector(ProgressiveProjector(
-                self.problem.distance(),
-                self.problem.steeringMethod(),
-                projector_step,
-            ))
+            self.problem.pathProjector(
+                ProgressiveProjector(
+                    self.problem.distance(),
+                    self.problem.steeringMethod(),
+                    projector_step,
+                )
+            )
         return self
 
     def set_path_optimization(self, enabled: bool):
@@ -1365,17 +1361,11 @@ class PyHPPBackend(BackendBase):
             "RandomShortcut": lambda: RandomShortcut(prob),
             "SimpleShortcut": lambda: SimpleShortcut(prob),
             "PartialShortcut": lambda: PartialShortcut(prob),
-            "SimpleTimeParameterization": lambda: SimpleTimeParameterization(
-                prob
-            ),
+            "SimpleTimeParameterization": lambda: SimpleTimeParameterization(prob),
             "RSTimeParameterization": lambda: RSTimeParameterization(prob),
             # Manipulation optimizers
-            "ManipulationRandomShortcut": lambda: ManipulationRandomShortcut(
-                prob
-            ),
-            "EnforceTransitionSemantic": lambda: EnforceTransitionSemantic(
-                prob
-            ),
+            "ManipulationRandomShortcut": lambda: ManipulationRandomShortcut(prob),
+            "EnforceTransitionSemantic": lambda: EnforceTransitionSemantic(prob),
             "GraphRandomShortcut": lambda: GraphRandomShortcut(prob),
             "GraphPartialShortcut": lambda: GraphPartialShortcut(prob),
             # Spline gradient-based optimizers (bezier polynomial)
@@ -1397,7 +1387,7 @@ class PyHPPBackend(BackendBase):
 
     def _is_pregrasp_edge(self, edge_name: str) -> bool:
         """Check if edge is a pregrasp edge (constrained motion).
-        
+
         Pregrasp edges (_01, _10) represent constrained motion
         like pregrasp->grasp transitions. They benefit less from spline
         optimization compared to free-space transit edges.
@@ -1406,7 +1396,7 @@ class PyHPPBackend(BackendBase):
 
     def _is_grasp_edge(self, edge_name: str) -> bool:
         """Check if edge is a grasp edge (constrained motion).
-        
+
         Grasp edges (_12, _21) represent constrained motion
         like grasp->pregrasp transitions. They benefit less from spline
         optimization compared to free-space transit edges.
@@ -1423,7 +1413,7 @@ class PyHPPBackend(BackendBase):
         self, q1: Sequence[float], q2: Sequence[float]
     ) -> Tuple[float, int]:
         """Compute timeout and max_iterations based on distance.
-        
+
         Returns:
             (timeout, max_iterations) scaled by configuration distance
         """
@@ -1448,20 +1438,20 @@ class PyHPPBackend(BackendBase):
         edge_name: str = "unknown",
     ) -> np.ndarray:
         """Project q_target onto the constraint leaf defined by q_rhs.
-        
+
         Args:
             edge: Transition edge object
             q_rhs: Configuration defining the leaf (typically q1/q_init)
             q_target: Configuration to project (typically q2/q_goal)
             edge_name: Edge name for error messages
-            
+
         Returns:
             Projected configuration
-            
+
         Raises:
             RuntimeError: If projection unavailable or fails
         """
-        if not hasattr(self.graph, 'applyLeafConstraints'):
+        if not hasattr(self.graph, "applyLeafConstraints"):
             raise RuntimeError(
                 f"PYHPP-GAP: Cannot project q_goal onto leaf for edge '{edge_name}'. "
                 "applyLeafConstraints not available in this pyhpp build. "
@@ -1505,7 +1495,7 @@ class PyHPPBackend(BackendBase):
         spline_zero_derivatives_at_state: Optional[bool] = None,
     ) -> None:
         """Configure defaults for TransitionPlanner edge-scoped planning.
-        
+
         Args:
             inner_planner_type: Inner planner type string (e.g. "DiffusingPlanner").
                 PYHPP-GAP: pyhpp HPPTransitionPlanner has no setInnerPlannerType
@@ -1538,7 +1528,9 @@ class PyHPPBackend(BackendBase):
         if random_shortcut_loops is not None:
             self._random_shortcut_loops = int(random_shortcut_loops)
         if spline_zero_derivatives_at_state is not None:
-            self._spline_zero_derivatives_at_state = bool(spline_zero_derivatives_at_state)
+            self._spline_zero_derivatives_at_state = bool(
+                spline_zero_derivatives_at_state
+            )
 
         tp = self._transition_planner
         if tp is not None:
@@ -1645,8 +1637,10 @@ class PyHPPBackend(BackendBase):
                 tp_toppra.gridpointMethod = self._toppra_gridpoint_method
                 if self._toppra_active_joints:
                     tp_toppra.selectJoints(self._toppra_active_joints)
-                    print(f"      [TP] TOPPRA active joints: "
-                          f"{len(self._toppra_active_joints)} joints")
+                    print(
+                        f"      [TP] TOPPRA active joints: "
+                        f"{len(self._toppra_active_joints)} joints"
+                    )
                 pv = tp_toppra.optimize(pv)
                 print("      [TP] TOPPRA applied (time-optimal)")
                 return pv
@@ -1668,18 +1662,22 @@ class PyHPPBackend(BackendBase):
     def _apply_stp(self, pv: Any) -> Any:
         """Apply SimpleTimeParameterization (current behavior)."""
         has_spline_optimizer = any(
-            "SplineGradientBased" in name
-            for name in self._get_active_optimizer_names()
+            "SplineGradientBased" in name for name in self._get_active_optimizer_names()
         )
         if has_spline_optimizer:
-            print("      [TP] Skipping tp.timeParameterization() — "
-                  "SplineGradientBased already in optimizer chain")
+            print(
+                "      [TP] Skipping tp.timeParameterization() — "
+                "SplineGradientBased already in optimizer chain"
+            )
             try:
                 from pyhpp.core import SimpleTimeParameterization as STP
+
                 tp_stp = STP(self.problem)
                 pv = tp_stp.optimize(pv)
-                print("      [TP] SimpleTimeParameterization applied "
-                      "(order from main problem)")
+                print(
+                    "      [TP] SimpleTimeParameterization applied "
+                    "(order from main problem)"
+                )
             except Exception as e:
                 print(f"      [TP] SimpleTimeParameterization failed: {e}")
         else:
@@ -1693,11 +1691,11 @@ class PyHPPBackend(BackendBase):
 
     def set_inner_problem_parameter(self, key: str, value: Any) -> None:
         """Set parameter on TransitionPlanner's inner problem.
-        
+
         Args:
             key: Parameter name (e.g., "kRRT*")
             value: Parameter value
-        
+
         Note:
             In PyHPP, parameters are typically set differently than in CORBA.
             This method attempts to set parameters on the problem if the
@@ -1706,19 +1704,16 @@ class PyHPPBackend(BackendBase):
         tp = self.ensure_transition_planner()
         try:
             # Try to access inner problem if TransitionPlanner exposes it
-            if hasattr(tp, 'problem'):
+            if hasattr(tp, "problem"):
                 inner_problem = tp.problem()
-                if hasattr(inner_problem, 'setParameter'):
+                if hasattr(inner_problem, "setParameter"):
                     inner_problem.setParameter(key, value)
             # Fallback: set on main problem
             elif self.problem is not None:
-                if hasattr(self.problem, 'setParameter'):
+                if hasattr(self.problem, "setParameter"):
                     self.problem.setParameter(key, value)
         except Exception as e:
-            print(
-                f"Warning: Could not set inner problem parameter "
-                f"'{key}': {e}"
-            )
+            print(f"Warning: Could not set inner problem parameter " f"'{key}': {e}")
 
     def _apply_transition_planner_defaults(self, tp: Any) -> None:
         try:
@@ -1728,9 +1723,7 @@ class PyHPPBackend(BackendBase):
             print(f"      [TP] ✗ timeOut failed: {e}")
         try:
             tp.maxIterations(self._transition_max_iterations)
-            print(
-                f"      [TP] ✓ maxIterations={self._transition_max_iterations}"
-            )
+            print(f"      [TP] ✓ maxIterations={self._transition_max_iterations}")
         except Exception as e:
             print(f"      [TP] ✗ maxIterations failed: {e}")
 
@@ -1806,9 +1799,7 @@ class PyHPPBackend(BackendBase):
                     f" (unknown type '{proj_type}')"
                 )
         except Exception as e:
-            print(
-                f"      [TP] ✗ pathProjector={proj_type}(step={step}) failed: {e}"
-            )
+            print(f"      [TP] ✗ pathProjector={proj_type}(step={step}) failed: {e}")
 
     def ensure_transition_planner(self) -> Any:
         """Create (or return cached) TransitionPlanner object."""
@@ -1873,7 +1864,7 @@ class PyHPPBackend(BackendBase):
 
     def _configure_transition_planner_for_edge(self, tp: Any, tr: Any) -> None:
         """Configure TransitionPlanner for a specific edge.
-        
+
         Applies edge-type-aware optimizer selection based on edge
         naming patterns.
         """
@@ -1895,9 +1886,7 @@ class PyHPPBackend(BackendBase):
         # Determine which optimizer list to use based on edge type
         if edge_name in self._transition_optimizers_by_edge_name:
             # Use explicit per-edge override if set
-            optimizer_names = (
-                self._transition_optimizers_by_edge_name[edge_name]
-            )
+            optimizer_names = self._transition_optimizers_by_edge_name[edge_name]
             print("      [TP] Using edge-specific optimizers")
         elif self._is_pregrasp_edge(edge_name):
             # Pregrasp edges: constrained motion
@@ -1946,14 +1935,14 @@ class PyHPPBackend(BackendBase):
         store: bool = True,
     ) -> Tuple[Union[int, Any], Any]:
         """Plan a transition along a specific graph edge.
-        
+
         PYHPP-GAP: Requires graph.applyLeafConstraints() binding.
         - CORBA backend: Leaf projection happens internally in C++
         - PyHPP backend: Must explicitly call applyLeafConstraints() in Python
-        
+
         If applyLeafConstraints is not available, this method will raise
         RuntimeError. Workaround: use backend='corba' or rebuild hpp-python.
-        
+
         Implements smart planning strategy:
         - Applies distance-based timeout/iteration scaling
         - Skips directPath for waypoint pregrasp/grasp edges
@@ -2001,7 +1990,7 @@ class PyHPPBackend(BackendBase):
             state_to = None
 
             if self.graph is not None and hasattr(
-                self.graph, 'getNodesConnectedByTransition'
+                self.graph, "getNodesConnectedByTransition"
             ):
                 try:
                     nodes = self.graph.getNodesConnectedByTransition(tr)
@@ -2020,12 +2009,12 @@ class PyHPPBackend(BackendBase):
             if has_states:
                 state_from_name = (
                     state_from.name()
-                    if hasattr(state_from, 'name') and callable(state_from.name)
+                    if hasattr(state_from, "name") and callable(state_from.name)
                     else str(state_from)
                 )
                 state_to_name = (
                     state_to.name()
-                    if hasattr(state_to, 'name') and callable(state_to.name)
+                    if hasattr(state_to, "name") and callable(state_to.name)
                     else str(state_to)
                 )
 
@@ -2035,9 +2024,9 @@ class PyHPPBackend(BackendBase):
                     err_q1, belongs_q1 = self.graph.getConfigErrorForState(
                         state_from, q1_arr
                     )
-                    error_q1_scalar = float(np.linalg.norm(
-                        np.asarray(err_q1, dtype=float)
-                    ))
+                    error_q1_scalar = float(
+                        np.linalg.norm(np.asarray(err_q1, dtype=float))
+                    )
                     threshold = float(self.graph.errorThreshold())
                     success_q1 = error_q1_scalar < threshold
                     print(
@@ -2062,9 +2051,9 @@ class PyHPPBackend(BackendBase):
                     err_q2, belongs_q2 = self.graph.getConfigErrorForState(
                         state_to, q2_arr
                     )
-                    error_q2_scalar = float(np.linalg.norm(
-                        np.asarray(err_q2, dtype=float)
-                    ))
+                    error_q2_scalar = float(
+                        np.linalg.norm(np.asarray(err_q2, dtype=float))
+                    )
                     threshold = float(self.graph.errorThreshold())
                     success_q2 = error_q2_scalar < threshold
                     print(
@@ -2121,9 +2110,7 @@ class PyHPPBackend(BackendBase):
             label = "release retract (_21)" if is_release_retract_edge else "transit"
             print(f"      [TP] {label} edge, trying directPath first")
             try:
-                success, path, status = tp.directPath(
-                    q1_arr, q2_arr, bool(validate)
-                )
+                success, path, status = tp.directPath(q1_arr, q2_arr, bool(validate))
                 if success:
                     print("      [TP] directPath succeeded")
                     try:
@@ -2131,8 +2118,7 @@ class PyHPPBackend(BackendBase):
                         print("      [TP] Path optimized")
                     except Exception:
                         print(
-                            "      [TP] Optimization failed, "
-                            "using unoptimized path"
+                            "      [TP] Optimization failed, " "using unoptimized path"
                         )
                         pv = path
                 else:
@@ -2142,10 +2128,7 @@ class PyHPPBackend(BackendBase):
                 print(f"      [TP] directPath threw exception: {exc}")
         else:
             edge_type = "pregrasp" if is_waypoint_pregrasp else "forward grasp (_12)"
-            print(
-                f"      [TP] Waypoint {edge_type} edge, "
-                "skipping directPath"
-            )
+            print(f"      [TP] Waypoint {edge_type} edge, " "skipping directPath")
 
         # Fall back to computePath if directPath didn't work or was skipped
         if pv is None:
@@ -2161,10 +2144,7 @@ class PyHPPBackend(BackendBase):
                     pv = tp.optimizePath(pv)
                     print("      [TP] Path optimized")
                 except Exception:
-                    print(
-                        "      [TP] Optimization failed, "
-                        "using unoptimized path"
-                    )
+                    print("      [TP] Optimization failed, " "using unoptimized path")
             except Exception as exc:
                 edge_type = "waypoint" if skip_direct_path else "transit"
                 raise RuntimeError(
@@ -2201,7 +2181,7 @@ class PyHPPBackend(BackendBase):
         store: bool = True,
     ) -> Union[int, Any]:
         """Plan a multi-edge transition sequence and concatenate results.
-        
+
         IMPORTANT: Each waypoint is re-projected onto its edge's constraint leaf
         to ensure leaf consistency across the sequence.
         """
@@ -2315,9 +2295,8 @@ class PyHPPBackend(BackendBase):
                 from agimus_spacelab.visualization.live_graph_viz import (
                     LivePathPlayer,
                 )
-                live_player = LivePathPlayer(
-                    self, graph_builder, visualizer=visualizer
-                )
+
+                live_player = LivePathPlayer(self, graph_builder, visualizer=visualizer)
                 live_player.play_with_visualization(path_index, edge_name)
             except Exception as exc:
                 print(
@@ -2355,6 +2334,7 @@ class PyHPPBackend(BackendBase):
         if self.viewer is None:
             self.visualize()
         from agimus_spacelab.visualization.video_recorder import VideoRecorder
+
         recorder = VideoRecorder(
             self.viewer, output_dir=output_dir, framerate=framerate
         )
@@ -2428,8 +2408,8 @@ PyHPPManipulationPlanner = PyHPPBackend
 
 
 __all__ = [
+    "HAS_PYHPP",
+    "ConstraintResult",
     "PyHPPBackend",
     "PyHPPManipulationPlanner",
-    "ConstraintResult",
-    "HAS_PYHPP",
 ]

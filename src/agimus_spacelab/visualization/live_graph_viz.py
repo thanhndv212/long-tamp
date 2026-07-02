@@ -6,9 +6,9 @@ Provides real-time graph visualization that updates during path playback
 to show current robot state in the constraint graph.
 """
 
-from typing import Dict, List, Tuple, Optional, Callable, Any
 import threading
 import time
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # graph-tool imports
 try:
@@ -116,13 +116,9 @@ class LiveConstraintGraphVisualizer:
 
         # Create property maps
         self.vertex_text = self.gt_graph.new_vertex_property("string")
-        self.vertex_fill_color = self.gt_graph.new_vertex_property(
-            "vector<float>"
-        )
+        self.vertex_fill_color = self.gt_graph.new_vertex_property("vector<float>")
         self.vertex_halo = self.gt_graph.new_vertex_property("bool")
-        self.vertex_halo_color = self.gt_graph.new_vertex_property(
-            "vector<float>"
-        )
+        self.vertex_halo_color = self.gt_graph.new_vertex_property("vector<float>")
         self.vertex_size = self.gt_graph.new_vertex_property("float")
 
         self.edge_color = self.gt_graph.new_edge_property("vector<float>")
@@ -215,18 +211,14 @@ class LiveConstraintGraphVisualizer:
         state_lower = state_name.lower()
         if "free" in state_lower:
             return self.colors["free_state"]
-        elif any(
-            wp in state_name for wp in ["_pregrasp", "_preplace", "waypoint"]
-        ):
+        elif any(wp in state_name for wp in ["_pregrasp", "_preplace", "waypoint"]):
             return self.colors["waypoint_state"]
         else:
             return self.colors["grasp_state"]
 
     def compute_layout(self) -> gt.VertexPropertyMap:
         """Compute graph layout using SFDP algorithm."""
-        print(
-            "Computing SFDP layout (this may take a moment for large graphs)..."
-        )
+        print("Computing SFDP layout (this may take a moment for large graphs)...")
 
         # SFDP works well for hierarchical constraint graphs
         # Use higher K for more spacing between nodes
@@ -259,11 +251,12 @@ class LiveConstraintGraphVisualizer:
         print("Opening interactive graph window...")
 
         # Initialize GTK
-        import gi
         import threading
 
+        import gi
+
         gi.require_version("Gtk", "3.0")
-        from gi.repository import Gtk, GLib
+        from gi.repository import Gtk
 
         if not blocking:
             # Start GTK main loop in background thread BEFORE creating window
@@ -271,9 +264,7 @@ class LiveConstraintGraphVisualizer:
                 """Run GTK main loop in background."""
                 Gtk.main()
 
-            self.gtk_thread = threading.Thread(
-                target=gtk_main_loop, daemon=True
-            )
+            self.gtk_thread = threading.Thread(target=gtk_main_loop, daemon=True)
             self.gtk_thread.start()
             # Give GTK time to initialize
             time.sleep(0.2)
@@ -329,13 +320,8 @@ class LiveConstraintGraphVisualizer:
             self._last_update_time = now
 
             # Clear previous highlight
-            if (
-                self.current_state
-                and self.current_state in self.state_to_vertex
-            ):
-                old_v = self.gt_graph.vertex(
-                    self.state_to_vertex[self.current_state]
-                )
+            if self.current_state and self.current_state in self.state_to_vertex:
+                old_v = self.gt_graph.vertex(self.state_to_vertex[self.current_state])
                 self.vertex_halo[old_v] = False
                 self.vertex_size[old_v] = 10
 
@@ -611,9 +597,7 @@ class LivePathPlayer:
         # Try each state and find the one with minimal projection error
         for state_name in states.keys():
             try:
-                success, q_proj, error = graph.applyNodeConstraints(
-                    state_name, list(q)
-                )
+                success, q_proj, error = graph.applyNodeConstraints(state_name, list(q))
                 if success and error < best_error:
                     best_error = error
                     best_state = state_name

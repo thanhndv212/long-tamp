@@ -17,19 +17,19 @@ HAS_CORBA = False
 HAS_PYHPP = False
 
 try:
-    from .corba import CorbaBackend, HAS_CORBA
+    from .corba import HAS_CORBA, CorbaBackend
 except ImportError:
     pass
 
 try:
-    from .pyhpp import PyHPPBackend, HAS_PYHPP
+    from .pyhpp import HAS_PYHPP, PyHPPBackend
 except ImportError:
     pass
 
 
 def get_available_backends():
     """Get list of available backend names.
-    
+
     Returns:
         List of available backend names ('corba', 'pyhpp')
     """
@@ -43,14 +43,14 @@ def get_available_backends():
 
 def get_backend(name: str = "auto"):
     """Get a backend by name.
-    
+
     Args:
         name: Backend name ('corba', 'pyhpp', or 'auto')
               'auto' will return the first available backend
-              
+
     Returns:
         Backend class
-        
+
     Raises:
         ImportError: If requested backend is not available
     """
@@ -67,15 +67,13 @@ def get_backend(name: str = "auto"):
     elif name == "corba":
         if not HAS_CORBA:
             raise ImportError(
-                "CORBA backend not available. "
-                "Please install hpp-manipulation-corba."
+                "CORBA backend not available. " "Please install hpp-manipulation-corba."
             )
         return CorbaBackend
     elif name == "pyhpp":
         if not HAS_PYHPP:
             raise ImportError(
-                "PyHPP backend not available. "
-                "Please install hpp-python."
+                "PyHPP backend not available. " "Please install hpp-python."
             )
         return PyHPPBackend
     else:

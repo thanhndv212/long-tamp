@@ -14,10 +14,10 @@ Package Structure:
 
 Basic Usage:
     from agimus_spacelab import create_planner, get_available_backends
-    
+
     # Check available backends
     backends = get_available_backends()
-    
+
     # Create planner with specified backend
     planner = create_planner(backend="corba")
 
@@ -35,10 +35,10 @@ __license__ = "LGPL-3.0"
 
 # Import from new module structure
 from .backends import (
-    get_available_backends,
-    get_backend,
     BackendBase,
     ConstraintResult,
+    get_available_backends,
+    get_backend,
 )
 
 # Conditionally import backends that may not be available
@@ -52,31 +52,28 @@ try:
 except ImportError:
     PyHPPBackend = None  # type: ignore[assignment,misc]
 
-from .planning import (
-    create_planner,
-    SceneBuilder,
-    GraphBuilder,
-    ConstraintBuilder,
-    ConfigGenerator,
-)
-
-from .tasks import (
-    ManipulationTask,
-)
-
-from .visualization import (
-    visualize_constraint_graph,
-    print_joint_info,
-)
-
 from .logging import (
     RunLogger,
     configure_logging,
     get_logger,
-    load_run_log,
-    iter_events,
     get_replay_config,
+    iter_events,
+    load_run_log,
     print_run_summary,
+)
+from .planning import (
+    ConfigGenerator,
+    ConstraintBuilder,
+    GraphBuilder,
+    SceneBuilder,
+    create_planner,
+)
+from .tasks import (
+    ManipulationTask,
+)
+from .visualization import (
+    print_joint_info,
+    visualize_constraint_graph,
 )
 
 

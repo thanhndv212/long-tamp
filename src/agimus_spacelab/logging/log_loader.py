@@ -32,7 +32,7 @@ Quick-start::
 
 import json
 import os
-from typing import Any, Dict, Generator, List, Optional
+from typing import Any, Dict, Generator, List
 
 
 def iter_events(
@@ -47,7 +47,7 @@ def iter_events(
         Parsed event dicts in the order they were logged.  Malformed lines
         are silently skipped.
     """
-    with open(jsonl_path, "r", encoding="utf-8") as f:
+    with open(jsonl_path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
@@ -79,7 +79,7 @@ def load_run_log(path: str) -> Dict[str, Any]:
         Structured log dict as described above.
     """
     if path.endswith(".json"):
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
 
     result: Dict[str, Any] = {"events": [], "phase_results": []}

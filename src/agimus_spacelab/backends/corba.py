@@ -13,10 +13,11 @@ This backend uses hpp-manipulation-corba for communication with HPP.
 
 import warnings
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+
 import numpy as np
+
 from ..utils import parse_package_uri
 from .base import BackendBase, ConstraintResult
-
 
 try:
     from hpp.corbaserver import loadServerPlugin
@@ -27,13 +28,15 @@ try:
     from hpp.corbaserver.manipulation.robot import Robot as ParentRobot
     from hpp.gepetto import PathPlayer
     from hpp.gepetto.manipulation import ViewerFactory
+
     HAS_CORBA = True
 except ImportError:
     HAS_CORBA = False
 
 try:
+    import viser as _viser_check
     from pyhpp_viser import Viewer as _ViserViewer
-    import viser as _viser_check  # noqa: F401 — verify runtime dep
+
     del _viser_check
     HAS_VISER = True
 except ImportError:
@@ -196,8 +199,10 @@ class CorbaBackend(BackendBase):
         self.srdfSuffix = ""
 
         if HAS_CORBA:
+
             class Robot(ParentRobot):
                 """Spacelab composite robot wrapper for CORBA."""
+
                 packageName = self.packageName
                 urdfName = self.urdfName
                 urdfSuffix = self.urdfSuffix
@@ -210,11 +215,12 @@ class CorbaBackend(BackendBase):
                     urdf_path: str,
                     srdf_path: Optional[str] = None,
                     load: bool = True,
-                    rootJointType: str = "anchor"
+                    rootJointType: str = "anchor",
                 ):
                     ParentRobot.__init__(
                         self, compositeName, robotName, rootJointType, load
                     )
+
             if composite_name is None:
                 composite_name = robot_name
         self.robot = Robot(
@@ -223,7 +229,8 @@ class CorbaBackend(BackendBase):
             urdf_path=urdf_path,
             srdf_path=srdf_path,
             load=True,
-            rootJointType=root_joint_type)
+            rootJointType=root_joint_type,
+        )
 
         # Initialize problem solver
         self.ps = ProblemSolver(self.robot)
@@ -275,7 +282,7 @@ class CorbaBackend(BackendBase):
         meshpkg_name: Optional[str] = None,
     ):
         """Load manipulable object.
-        
+
         Args:
             name: Name for the object
             urdf_path: Path to URDF file
@@ -284,7 +291,7 @@ class CorbaBackend(BackendBase):
             urdf_suffix: URDF suffix for loading
             srdf_suffix: SRDF suffix for loading
             meshpkg_name: Mesh package name
-            
+
         Note:
             CORBA backend uses srdf_suffix to find SRDF in the same location
             as the URDF. The srdf_path parameter is accepted but not used
@@ -328,18 +335,15 @@ class CorbaBackend(BackendBase):
             self.ps.addGoalConfig(q.tolist())
 
     def create_state(
-        self,
-        name: str,
-        is_waypoint: bool = False,
-        priority: int = 0
+        self, name: str, is_waypoint: bool = False, priority: int = 0
     ) -> int:
         """Create a state manually.
-        
+
         Args:
             name: State name
             is_waypoint: Whether this is a waypoint state
             priority: State priority (higher = more important)
-            
+
         Returns:
             State ID
         """
@@ -356,17 +360,17 @@ class CorbaBackend(BackendBase):
         to_state: str,
         name: str,
         weight: int = 1,
-        containing_state: Optional[str] = None
+        containing_state: Optional[str] = None,
     ) -> int:
         """Create an edge manually.
-        
+
         Args:
             from_state: Source state name
             to_state: Target state name
             name: Edge name
             weight: Edge weight for planning
             containing_state: State whose constraints apply during edge
-            
+
         Returns:
             Edge ID
         """
@@ -375,11 +379,7 @@ class CorbaBackend(BackendBase):
 
         # CORBA API uses createEdge
         edge_id = self.graph.createEdge(
-            from_state,
-            to_state,
-            name,
-            weight,
-            containing_state or from_state
+            from_state, to_state, name, weight, containing_state or from_state
         )
         return edge_id
 
@@ -388,16 +388,16 @@ class CorbaBackend(BackendBase):
         state: str,
         q: np.ndarray,
         max_iterations: int = 10000,
-        error_threshold: float = 1e-4
+        error_threshold: float = 1e-4,
     ) -> ConstraintResult:
         """Apply state constraints to project configuration.
-        
+
         Args:
             state: State name
             q: Input configuration
             max_iterations: Maximum projection iterations
             error_threshold: Convergence threshold
-            
+
         Returns:
             ConstraintResult with success status, projected config, and error
         """
@@ -415,13 +415,9 @@ class CorbaBackend(BackendBase):
         # Apply constraints using graph
         q_list = q.tolist() if isinstance(q, np.ndarray) else list(q)
         try:
-            success, q_proj, error = self.graph.applyNodeConstraints(
-                state, q_list
-            )
+            success, q_proj, error = self.graph.applyNodeConstraints(state, q_list)
             result = ConstraintResult(
-                success=success,
-                configuration=np.array(q_proj),
-                error=error
+                success=success, configuration=np.array(q_proj), error=error
             )
         except Exception:
             # If applyNodeConstraints not available, use generateTargetConfig
@@ -430,15 +426,11 @@ class CorbaBackend(BackendBase):
                     state, q_list, q_list
                 )
                 result = ConstraintResult(
-                    success=res,
-                    configuration=np.array(q_proj),
-                    error=err
+                    success=res, configuration=np.array(q_proj), error=err
                 )
             except Exception:
                 result = ConstraintResult(
-                    success=False,
-                    configuration=q,
-                    error=float('inf')
+                    success=False, configuration=q, error=float("inf")
                 )
 
         # Restore parameters
@@ -448,16 +440,14 @@ class CorbaBackend(BackendBase):
         return result
 
     def solve(
-        self,
-        max_iterations: int = 10000,
-        optimizer: str = "RandomShortcut"
+        self, max_iterations: int = 10000, optimizer: str = "RandomShortcut"
     ) -> bool:
         """Solve planning problem.
-        
+
         Args:
             max_iterations: Maximum planning iterations
             optimizer: Path optimizer to use during optimization
-            
+
         Returns:
             True if solution found
         """
@@ -520,23 +510,25 @@ class CorbaBackend(BackendBase):
 
     def _is_pregrasp_edge(self, edge_name: str) -> bool:
         """Check if edge is a pregrasp edge (constrained motion).
-        
+
         Pregrasp edges (_01, _10) represent constrained motion
         like pregrasp->grasp transitions. They benefit less from spline
         optimization compared to free-space transit edges.
         """
-        return any(suffix in edge_name for suffix in ["_01","_10"])
+        return any(suffix in edge_name for suffix in ["_01", "_10"])
 
     def _is_grasp_edge(self, edge_name: str) -> bool:
         """Check if edge is a grasp edge (constrained motion).
-        
+
         Grasp edges (_12, _21) represent constrained motion
         like grasp->pregrasp transitions. They benefit less from spline
         optimization compared to free-space transit edges.
         """
-        return any(suffix in edge_name for suffix in ["_12","_21"])
+        return any(suffix in edge_name for suffix in ["_12", "_21"])
 
-    def _compute_config_distance(self, q1: Sequence[float], q2: Sequence[float]) -> float:
+    def _compute_config_distance(
+        self, q1: Sequence[float], q2: Sequence[float]
+    ) -> float:
         """Compute configuration space distance for auto-tuning."""
         return float(np.linalg.norm(np.array(q1) - np.array(q2)))
 
@@ -544,7 +536,7 @@ class CorbaBackend(BackendBase):
         self, q1: Sequence[float], q2: Sequence[float]
     ) -> Tuple[float, int]:
         """Compute timeout and max_iterations based on distance.
-        
+
         Returns:
             (timeout, max_iterations) scaled by configuration distance
         """
@@ -618,7 +610,9 @@ class CorbaBackend(BackendBase):
         if random_shortcut_loops is not None:
             self._random_shortcut_loops = int(random_shortcut_loops)
         if spline_zero_derivatives_at_state is not None:
-            self._spline_zero_derivatives_at_state = bool(spline_zero_derivatives_at_state)
+            self._spline_zero_derivatives_at_state = bool(
+                spline_zero_derivatives_at_state
+            )
 
         tp = self._transition_planner
         if tp is not None:
@@ -649,15 +643,16 @@ class CorbaBackend(BackendBase):
         tp = self._transition_planner
         if tp is not None and self.ps is not None:
             try:
-                from CORBA import Any, TC_long, TC_double
+                from CORBA import Any, TC_double, TC_long
+
                 problem = self.ps.client.basic.problem.getProblem()
                 problem.setParameter(
                     "SimpleTimeParameterization/order",
-                    Any(TC_long, self._time_param_order)
+                    Any(TC_long, self._time_param_order),
                 )
                 problem.setParameter(
                     "SimpleTimeParameterization/maxAcceleration",
-                    Any(TC_double, self._time_param_max_accel)
+                    Any(TC_double, self._time_param_max_accel),
                 )
                 problem.setParameter(
                     "SimpleTimeParameterization/safety",
@@ -678,26 +673,24 @@ class CorbaBackend(BackendBase):
                 )
             except AttributeError:
                 print(
-                    f"      [TP] Warning: setInnerPlannerType not available (using default BiRRT*)"
+                    "      [TP] Warning: setInnerPlannerType not available (using default BiRRT*)"
                 )
                 print(
-                    f"      [TP] To change planner, restart hpp-manipulation-corba server"
+                    "      [TP] To change planner, restart hpp-manipulation-corba server"
                 )
             except Exception as e:
                 # BAD_OPERATION means the CORBA server doesn't have this method yet
-                if "BAD_OPERATION" in str(
-                    e
-                ) or "UnRecognisedOperationName" in str(e):
+                if "BAD_OPERATION" in str(e) or "UnRecognisedOperationName" in str(e):
                     print(
-                        f"      [TP] Warning: setInnerPlannerType not available in server (using default BiRRT*)"
+                        "      [TP] Warning: setInnerPlannerType not available in server (using default BiRRT*)"
                     )
                     print(
-                        f"      [TP] Server needs to be restarted with updated hpp-manipulation-corba"
+                        "      [TP] Server needs to be restarted with updated hpp-manipulation-corba"
                     )
                 else:
                     print(f"      [TP] Failed to set inner planner type: {e}")
         else:
-            print(f"      [TP] Using default inner planner type (BiRRT*)")
+            print("      [TP] Using default inner planner type (BiRRT*)")
 
         try:
             tp.timeOut(self._transition_time_out)
@@ -706,9 +699,7 @@ class CorbaBackend(BackendBase):
             print(f"      [TP] ✗ timeOut failed: {e}")
         try:
             tp.maxIterations(self._transition_max_iterations)
-            print(
-                f"      [TP] ✓ maxIterations={self._transition_max_iterations}"
-            )
+            print(f"      [TP] ✓ maxIterations={self._transition_max_iterations}")
         except Exception as e:
             print(f"      [TP] ✗ maxIterations failed: {e}")
         if self._transition_path_projector is not None:
@@ -717,9 +708,7 @@ class CorbaBackend(BackendBase):
                 tp.setPathProjector(proj_type, float(tol))
                 print(f"      [TP] ✓ pathProjector={proj_type}(tol={tol})")
             except Exception as e:
-                print(
-                    f"      [TP] ✗ pathProjector={proj_type}(tol={tol}) failed: {e}"
-                )
+                print(f"      [TP] ✗ pathProjector={proj_type}(tol={tol}) failed: {e}")
         # Add default path optimizers
         for opt in self._transition_default_optimizers:
             try:
@@ -731,18 +720,20 @@ class CorbaBackend(BackendBase):
 
         # Apply time parameterization settings
         try:
-            from CORBA import Any as CorbaAny, TC_boolean, TC_long, TC_double
+            from CORBA import Any as CorbaAny
+            from CORBA import TC_boolean, TC_double, TC_long
+
             problem = self.ps.client.basic.problem.getProblem()
             problem.setParameter(
                 "SimpleTimeParameterization/order",
-                CorbaAny(TC_long, self._time_param_order)
+                CorbaAny(TC_long, self._time_param_order),
             )
             print(
                 f"      [TP] ✓ SimpleTimeParameterization/order={self._time_param_order}"
             )
             problem.setParameter(
                 "SimpleTimeParameterization/maxAcceleration",
-                CorbaAny(TC_double, self._time_param_max_accel)
+                CorbaAny(TC_double, self._time_param_max_accel),
             )
             print(
                 f"      [TP] ✓ SimpleTimeParameterization/maxAcceleration={self._time_param_max_accel}"
@@ -756,29 +747,31 @@ class CorbaBackend(BackendBase):
             )
             problem.setParameter(
                 "PathOptimization/RandomShortcut/NumberOfLoops",
-                CorbaAny(TC_long, self._random_shortcut_loops)
+                CorbaAny(TC_long, self._random_shortcut_loops),
             )
             problem.setParameter(
                 "SplineGradientBased/zeroDerivativesAtStateIntersection",
-                CorbaAny(TC_boolean, self._spline_zero_derivatives_at_state)
+                CorbaAny(TC_boolean, self._spline_zero_derivatives_at_state),
             )
         except Exception as e:
             print(f"      [TP] ✗ SimpleTimeParameterization failed: {e}")
 
     def set_inner_problem_parameter(self, key: str, value: Any) -> None:
         """Set parameter on TransitionPlanner's inner problem.
-        
+
         Useful for tuning BiRrtStar parameters like:
         - "kRRT*": Growth factor for RRT*
         - "kPRM*": k-nearest parameter
-        
+
         Args:
             key: Parameter name
             value: Parameter value (will be wrapped in CORBA Any)
         """
         tp = self.ensure_transition_planner()
         try:
-            from CORBA import Any as CorbaAny, TC_double
+            from CORBA import Any as CorbaAny
+            from CORBA import TC_double
+
             # Most parameters are doubles
             tp.setParameter(key, CorbaAny(TC_double, float(value)))
         except Exception as exc:
@@ -790,10 +783,10 @@ class CorbaBackend(BackendBase):
             raise RuntimeError("Problem solver not created yet")
 
         if self._transition_planner is not None:
-            print(f"      [TP] Using cached TransitionPlanner")
+            print("      [TP] Using cached TransitionPlanner")
             return self._transition_planner
 
-        print(f"      [TP] Creating new TransitionPlanner")
+        print("      [TP] Creating new TransitionPlanner")
         tp = self.ps.client.manipulation.problem.createTransitionPlanner()
         self._apply_transition_planner_defaults(tp)
         self._transition_planner = tp
@@ -812,15 +805,15 @@ class CorbaBackend(BackendBase):
         tp = self._transition_planner
         self._transition_planner = None
         if tp is None:
-            print(f"      [TP] No cached TransitionPlanner to reset")
+            print("      [TP] No cached TransitionPlanner to reset")
             return
 
-        print(f"      [TP] Resetting cached TransitionPlanner")
+        print("      [TP] Resetting cached TransitionPlanner")
         delete_this = getattr(tp, "deleteThis", None)
         if callable(delete_this):
             try:
                 delete_this()
-                print(f"      [TP] Called deleteThis()")
+                print("      [TP] Called deleteThis()")
             except Exception:
                 pass
 
@@ -857,31 +850,29 @@ class CorbaBackend(BackendBase):
             tp.setEdge(int(edge_id))
             print(f"      [TP] Set edge ID: {edge_id}")
         except Exception as exc:
-            raise RuntimeError(
-                f"Failed to set TransitionPlanner edge {edge_id}: {exc}"
-            )
+            raise RuntimeError(f"Failed to set TransitionPlanner edge {edge_id}: {exc}")
 
         # Determine which optimizers to use
         if edge_id in self._transition_optimizers_by_edge_id:
             # Explicit per-edge configuration
             optimizers = self._transition_optimizers_by_edge_id[edge_id]
-            print(f"      [TP] Using edge-specific optimizers")
+            print("      [TP] Using edge-specific optimizers")
         elif edge_name and self._is_pregrasp_edge(edge_name):
             # Pregrasp edge: use spline optimization
             optimizers = self._waypoint_pregrasp_optimizers
-            print(f"      [TP] Using pregrasp edge optimizers")
+            print("      [TP] Using pregrasp edge optimizers")
         elif edge_name and self._is_grasp_edge(edge_name):
             # Grasp edge: use no spline optimization
             optimizers = self._waypoint_grasp_optimizers
-            print(f"      [TP] Using grasp edge optimizers")
+            print("      [TP] Using grasp edge optimizers")
         elif edge_name:
             # Transit edge: use spline optimization
             optimizers = self._transit_edge_optimizers
-            print(f"      [TP] Using transit edge optimizers")
+            print("      [TP] Using transit edge optimizers")
         else:
             # Fallback
             optimizers = self._transition_default_optimizers
-            print(f"      [TP] Using default optimizers")
+            print("      [TP] Using default optimizers")
 
         # Clear and set optimizers
         try:
@@ -942,7 +933,9 @@ class CorbaBackend(BackendBase):
         timeout, max_iter = self._compute_planning_budget(q1_list, q2_list)
         tp.timeOut(timeout)
         tp.maxIterations(max_iter)
-        print(f"      [TP] Planning budget: timeout={timeout:.1f}s, max_iter={max_iter}")
+        print(
+            f"      [TP] Planning budget: timeout={timeout:.1f}s, max_iter={max_iter}"
+        )
 
         # Validate configurations
         q1_ok, msg1 = tp.validateConfiguration(q1_list, edge_id)
@@ -957,33 +950,31 @@ class CorbaBackend(BackendBase):
         if is_waypoint_pregrasp:
             # Waypoint edges: Skip directPath, go straight to sampling-based planning
             # These edges have constrained motion and directPath rarely succeeds
-            print(
-                f"      [TP] Waypoint pregrasp edge detected, using planPath."
-            )
+            print("      [TP] Waypoint pregrasp edge detected, using planPath.")
             try:
                 pv = tp.planPath(q1_list, [q2_list], bool(reset_roadmap))
-                print(f"      [TP] planPath succeeded")
+                print("      [TP] planPath succeeded")
                 try:
                     pv = tp.optimizePath(pv)
-                    print(f"      [TP] Path optimized")
+                    print("      [TP] Path optimized")
                 except Exception:
-                    print(f"      [TP] Optimization failed, using unoptimized path")
+                    print("      [TP] Optimization failed, using unoptimized path")
             except Exception as exc:
                 raise RuntimeError(
                     f"TransitionPlanner.planPath failed for waypoint edge: {exc}"
                 )
         else:
             # Transit edges: Try directPath first (fast), fallback to planPath
-            print(f"      [TP] Transit edge or waypoint grasp edge, trying directPath first")
+            print(
+                "      [TP] Transit edge or waypoint grasp edge, trying directPath first"
+            )
             try:
-                path, success, status = tp.directPath(
-                    q1_list, q2_list, bool(validate)
-                )
+                path, success, status = tp.directPath(q1_list, q2_list, bool(validate))
                 if success:
-                    print(f"      [TP] directPath succeeded")
+                    print("      [TP] directPath succeeded")
                     try:
                         pv = tp.optimizePath(path)
-                        print(f"      [TP] Path optimized")
+                        print("      [TP] Path optimized")
                     except Exception:
                         try:
                             pv = path.asVector()
@@ -995,15 +986,17 @@ class CorbaBackend(BackendBase):
                 else:
                     # directPath failed, fallback to planPath
                     print(f"      [TP] directPath failed: {status}")
-                    print(f"      [TP] Falling back to planPath (BiRrtStar)")
+                    print("      [TP] Falling back to planPath (BiRrtStar)")
                     try:
                         pv = tp.planPath(q1_list, [q2_list], bool(reset_roadmap))
-                        print(f"      [TP] planPath succeeded")
+                        print("      [TP] planPath succeeded")
                         try:
                             pv = tp.optimizePath(pv)
-                            print(f"      [TP] Path optimized")
+                            print("      [TP] Path optimized")
                         except Exception:
-                            print(f"      [TP] Optimization failed, using unoptimized path")
+                            print(
+                                "      [TP] Optimization failed, using unoptimized path"
+                            )
                     except Exception as exc:
                         raise RuntimeError(
                             (
@@ -1015,19 +1008,17 @@ class CorbaBackend(BackendBase):
             except Exception as exc:
                 # directPath itself threw an exception
                 print(f"      [TP] directPath threw exception: {exc}")
-                print(f"      [TP] Falling back to planPath (BiRrtStar)")
+                print("      [TP] Falling back to planPath (BiRrtStar)")
                 try:
                     pv = tp.planPath(q1_list, [q2_list], bool(reset_roadmap))
-                    print(f"      [TP] planPath succeeded")
+                    print("      [TP] planPath succeeded")
                     try:
                         pv = tp.optimizePath(pv)
-                        print(f"      [TP] Path optimized")
+                        print("      [TP] Path optimized")
                     except Exception:
-                        print(f"      [TP] Optimization failed, using unoptimized path")
+                        print("      [TP] Optimization failed, using unoptimized path")
                 except Exception as exc2:
-                    raise RuntimeError(
-                        f"TransitionPlanner failed completely: {exc2}"
-                    )
+                    raise RuntimeError(f"TransitionPlanner failed completely: {exc2}")
 
         # Store geometric path before time parameterization (for serialization)
         pv_geometric = pv
@@ -1087,11 +1078,11 @@ class CorbaBackend(BackendBase):
 
     def optimize_path(self, path_index: int = -1) -> int:
         """Optimize a path using configured optimizers.
-        
+
         Args:
             path_index: Index of the path to optimize.
                        If -1, optimizes the last path.
-            
+
         Returns:
             Index of the optimized path
         """
@@ -1125,17 +1116,17 @@ class CorbaBackend(BackendBase):
 
     def extract_graph_metadata(self) -> Dict[str, Any]:
         """Extract constraint graph metadata for serialization.
-        
+
         Returns a dictionary containing graph structure information that can
         be used to reconstruct a minimal graph for path loading.
-        
+
         Returns:
             Dictionary with graph metadata:
             - states: List of state names
             - edges: List of (edge_name, from_state, to_state)
             - robot_name: Name of the robot
             - objects: List of object names (if available)
-            
+
         Raises:
             RuntimeError: If graph is not initialized
         """
@@ -1174,10 +1165,12 @@ class CorbaBackend(BackendBase):
                             # Get edge endpoints
                             # This is graph-implementation specific
                             # For now, just store edge names
-                            metadata["edges"].append({
-                                "name": edge_name,
-                                "id": int(edge_id) if edge_id is not None else None,
-                            })
+                            metadata["edges"].append(
+                                {
+                                    "name": edge_name,
+                                    "id": int(edge_id) if edge_id is not None else None,
+                                }
+                            )
                         except Exception:
                             metadata["edges"].append({"name": edge_name})
         except Exception as e:
@@ -1189,9 +1182,7 @@ class CorbaBackend(BackendBase):
                 all_names = self.robot.robotNames
                 # Filter out the main robot name
                 robot_name = metadata["robot_name"]
-                metadata["objects"] = [
-                    n for n in all_names if n != robot_name
-                ]
+                metadata["objects"] = [n for n in all_names if n != robot_name]
         except Exception as e:
             print(f"Warning: Could not extract object names: {e}")
 
@@ -1220,8 +1211,7 @@ class CorbaBackend(BackendBase):
         num_paths = self.ps.numberPaths()
         if path_index < 0 or path_index >= num_paths:
             raise RuntimeError(
-                f"Invalid path index {path_index}, "
-                f"only {num_paths} paths available"
+                f"Invalid path index {path_index}, " f"only {num_paths} paths available"
             )
 
         try:
@@ -1265,19 +1255,14 @@ class CorbaBackend(BackendBase):
             return path_index
         except Exception as e:
             error_msg = str(e)
-            if (
-                "deserialize edges" in error_msg.lower()
-                or "graph" in error_msg.lower()
-            ):
+            if "deserialize edges" in error_msg.lower() or "graph" in error_msg.lower():
                 raise RuntimeError(
                     f"Failed to load path from {filename}: Path contains constraint "
                     f"graph edge references but the graph is not set up. To load these "
                     f"paths, you need to recreate the same constraint graph that was "
                     f"used during planning. Original error: {e}"
                 ) from e
-            raise RuntimeError(
-                f"Failed to load path from {filename}: {e}"
-            ) from e
+            raise RuntimeError(f"Failed to load path from {filename}: {e}") from e
 
     def save_path_vector(self, path_vector: Any, filename: str) -> None:
         """Save a PathVector object directly to file.
@@ -1359,19 +1344,18 @@ class CorbaBackend(BackendBase):
 
         Raises:
             RuntimeError: If path is invalid or save fails
-            
+
         Example:
             # Planning session
             graph = setup_constraint_graph(backend, robot, objects)
             path, _ = backend.plan_transition_edge(...)
             backend.save_path_as_waypoints(path, "my_phase.json")
-            
+
             # Loading session (new process)
             graph = setup_constraint_graph(backend, robot, objects)  # Same setup!
             path_idx = backend.load_path_from_waypoints("my_phase.json")
         """
         import json
-        import os
 
         if self.ps is None:
             raise RuntimeError("Problem solver not created yet")
@@ -1398,7 +1382,9 @@ class CorbaBackend(BackendBase):
                 graph_metadata = self.extract_graph_metadata()
             except Exception as e:
                 print(f"Warning: Could not extract graph metadata: {e}")
-                print("Path can still be saved but may require manual graph setup to load.")
+                print(
+                    "Path can still be saved but may require manual graph setup to load."
+                )
 
             # Create data structure
             data = {
@@ -1431,12 +1417,12 @@ class CorbaBackend(BackendBase):
         GRAPH RECONSTRUCTION:
         If the JSON file contains graph metadata (format_version 1.0+), you have
         two options:
-        
+
         Option 1 (Recommended): Set up the graph manually before loading
         - Load robot/objects with the same setup as when path was saved
         - Create constraint graph with same structure
         - Call load_path_from_waypoints()
-        
+
         Option 2: Use auto_setup_graph=True (Experimental)
         - Validates that graph metadata is present
         - Checks if current graph matches saved metadata
@@ -1453,16 +1439,16 @@ class CorbaBackend(BackendBase):
         Raises:
             RuntimeError: If file doesn't exist, invalid format, or reconstruction fails
             RuntimeError: If graph metadata doesn't match current setup
-            
+
         Example:
             # Option 1: Manual setup (recommended)
             graph = setup_constraint_graph(backend, robot, objects)
             path_idx = backend.load_path_from_waypoints("my_phase.json")
-            
+
             # Option 2: With validation
             graph = setup_constraint_graph(backend, robot, objects)
             path_idx = backend.load_path_from_waypoints(
-                "my_phase.json", 
+                "my_phase.json",
                 auto_setup_graph=True  # Validates match
             )
         """
@@ -1520,7 +1506,7 @@ class CorbaBackend(BackendBase):
 
         try:
             # Read waypoints
-            with open(filename, "r") as f:
+            with open(filename) as f:
                 data = json.load(f)
 
             # Check for graph metadata and validate if requested
@@ -1571,9 +1557,7 @@ class CorbaBackend(BackendBase):
 
             waypoints = data["waypoints"]
             if len(waypoints) < 2:
-                raise RuntimeError(
-                    "Need at least 2 waypoints to reconstruct path"
-                )
+                raise RuntimeError("Need at least 2 waypoints to reconstruct path")
 
             # Create path segments between consecutive waypoints
             # Use the steering method to interpolate
@@ -1597,9 +1581,7 @@ class CorbaBackend(BackendBase):
                         )
                 except Exception as e:
                     # If direct path fails, skip this segment
-                    print(
-                        f"Warning: Failed to create segment {i} -> {i+1}: {e}"
-                    )
+                    print(f"Warning: Failed to create segment {i} -> {i+1}: {e}")
                     continue
 
             if not path_segments:
@@ -1631,22 +1613,18 @@ class CorbaBackend(BackendBase):
                 return path_vector
 
         except json.JSONDecodeError as e:
-            raise RuntimeError(
-                f"Invalid JSON format in {filename}: {e}"
-            ) from e
+            raise RuntimeError(f"Invalid JSON format in {filename}: {e}") from e
         except KeyError as e:
             raise RuntimeError(f"Missing required field in JSON: {e}") from e
         except Exception as e:
-            raise RuntimeError(
-                f"Failed to load path from waypoints: {e}"
-            ) from e
+            raise RuntimeError(f"Failed to load path from waypoints: {e}") from e
 
     def _validate_graph_metadata(self, saved_metadata: Dict[str, Any]) -> None:
         """Validate current graph matches saved metadata.
-        
+
         Args:
             saved_metadata: Graph metadata from saved file
-            
+
         Raises:
             RuntimeError: If validation fails
         """
@@ -1895,7 +1873,7 @@ class CorbaBackend(BackendBase):
     ) -> str:
         """
         Play path and record it as a video.
-        
+
         Args:
             path_index: Index of the path to play
             video_name: Custom name for the output video (without extension).
@@ -1904,7 +1882,7 @@ class CorbaBackend(BackendBase):
             framerate: Video framerate in fps (default: 25)
             dt: Time step for path sampling (default: 0.01)
             speed: Playback speed multiplier (default: 1.0)
-            
+
         Returns:
             The path to the generated video file
         """
@@ -1913,6 +1891,7 @@ class CorbaBackend(BackendBase):
 
         if self.path_player is None:
             from hpp.gepetto import PathPlayer
+
             self.path_player = PathPlayer(self.viewer)
 
         # Import video recorder
@@ -1947,7 +1926,7 @@ class CorbaBackend(BackendBase):
     ) -> Tuple[int, str]:
         """
         Play a PathVector object and record it as a video.
-        
+
         Args:
             path_vector: PathVector CORBA object from TransitionPlanner
             video_name: Custom name for the output video (without extension)
@@ -1955,7 +1934,7 @@ class CorbaBackend(BackendBase):
             framerate: Video framerate in fps
             dt: Time step for path sampling
             speed: Playback speed multiplier
-            
+
         Returns:
             Tuple of (path_index, video_file_path)
         """
@@ -1967,6 +1946,7 @@ class CorbaBackend(BackendBase):
 
         if self.path_player is None:
             from hpp.gepetto import PathPlayer
+
             self.path_player = PathPlayer(self.viewer)
 
         # Get current number of paths to determine the index
@@ -2042,26 +2022,21 @@ class CorbaBackend(BackendBase):
     # =========================================================================
 
     def create_grasp_constraint(
-        self, ps, name: str, gripper: str, tool: str,
-        transform, mask
+        self, ps, name: str, gripper: str, tool: str, transform, mask
     ):
         """Create grasp constraint via CORBA (stored in problem solver)."""
         ps.createTransformationConstraint(name, gripper, tool, transform, mask)
         print(f"    ✓ {name}: {gripper} -> {tool}")
         return None
 
-    def create_placement_constraint(
-        self, ps, name: str, tool: str,
-        world_pose, mask
-    ):
+    def create_placement_constraint(self, ps, name: str, tool: str, world_pose, mask):
         """Create placement constraint via CORBA (stored in problem solver)."""
         ps.createTransformationConstraint(name, "", tool, world_pose, mask)
         print(f"    ✓ {name}: tool at {world_pose[:3]}")
         return None
 
     def create_complement_constraint(
-        self, ps, base_name: str, tool: str,
-        world_pose, complement_mask
+        self, ps, base_name: str, tool: str, world_pose, complement_mask
     ):
         """Create complement constraint via CORBA (stored in problem solver)."""
         constraint_name = f"{base_name}/complement"
@@ -2071,11 +2046,10 @@ class CorbaBackend(BackendBase):
         print(f"    ✓ {constraint_name}: free DOFs")
         return None
 
-    def create_locked_joint_constraints(
-        self, ps, robot, q_ref, patterns
-    ) -> tuple:
+    def create_locked_joint_constraints(self, ps, robot, q_ref, patterns) -> tuple:
         """Create locked joint constraints via CORBA."""
         from ..planning.constraints import ConstraintBuilder
+
         return ConstraintBuilder.create_locked_joint_constraints(
             ps, robot, q_ref, patterns, backend="corba"
         )
@@ -2087,7 +2061,7 @@ class CorbaBackend(BackendBase):
 
     def set_path_optimization(self, enabled: bool):
         """Enable or disable path optimization.
-        
+
         Args:
             enabled: Whether to use path optimization
         """
@@ -2095,19 +2069,17 @@ class CorbaBackend(BackendBase):
 
     def set_path_projection(self, enabled: bool):
         """Enable or disable path projection.
-        
+
         Args:
             enabled: Whether to use path projection
         """
         self._use_path_projection = enabled
 
     def configure_graph_parameters(
-        self,
-        max_iterations: int = 40,
-        error_threshold: float = 1e-4
+        self, max_iterations: int = 40, error_threshold: float = 1e-4
     ):
         """Configure constraint graph parameters.
-        
+
         Args:
             max_iterations: Maximum iterations for constraint projection
             error_threshold: Error threshold for constraint satisfaction
@@ -2119,9 +2091,7 @@ class CorbaBackend(BackendBase):
         self.ps.setErrorThreshold(error_threshold)
 
     def configure_path_validation(
-        self,
-        validation_step: float = 0.01,
-        projector_step: float = 0.1
+        self, validation_step: float = 0.01, projector_step: float = 0.1
     ):
         """Configure path validation parameters."""
         print("   Configuring path validation...")
@@ -2131,12 +2101,10 @@ class CorbaBackend(BackendBase):
         # self.ps.selectPathPlanner("DiffusingPlanner")
 
     def configure_path_optimization(
-        self,
-        optimizer: str = "RandomShortcut",
-        clear_existing: bool = True
+        self, optimizer: str = "RandomShortcut", clear_existing: bool = True
     ):
         """Configure path optimization parameters.
-        
+
         Args:
             optimizer: Path optimizer to use. Available options:
                 Built-in (hpp-core):
@@ -2145,12 +2113,12 @@ class CorbaBackend(BackendBase):
                 - "PartialShortcut": Partial shortcut optimizer
                 - "SimpleTimeParameterization": Adds time parameterization
                 - "RSTimeParameterization": Reeds-Shepp time parameterization
-                
+
                 Manipulation-specific (hpp-manipulation):
                 - "Graph-RandomShortcut": Graph-aware random shortcut
                 - "Graph-PartialShortcut": Graph-aware partial shortcut
                 - "EnforceTransitionSemantic": Enforces transition semantics
-                
+
                 Plugin-based (loaded automatically):
                 - "SplineGradientBased_bezier1": Spline optimization, order 1
                 - "SplineGradientBased_bezier3": Spline optimization, order 3
@@ -2178,8 +2146,8 @@ CorbaManipulationPlanner = CorbaBackend
 
 
 __all__ = [
+    "HAS_CORBA",
+    "ConstraintResult",
     "CorbaBackend",
     "CorbaManipulationPlanner",
-    "ConstraintResult",
-    "HAS_CORBA",
 ]

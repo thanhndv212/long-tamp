@@ -62,9 +62,7 @@ def configure_logging(
     if log_dir is not None:
         os.makedirs(log_dir, exist_ok=True)
         fname = f"{run_id or 'run'}.log"
-        fh = logging.FileHandler(
-            os.path.join(log_dir, fname), encoding="utf-8"
-        )
+        fh = logging.FileHandler(os.path.join(log_dir, fname), encoding="utf-8")
         fh.setLevel(level)
         fh.setFormatter(formatter)
         logger.addHandler(fh)

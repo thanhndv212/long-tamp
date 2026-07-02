@@ -5,19 +5,19 @@ Scene setup utilities for Spacelab manipulation tasks.
 Provides SceneBuilder for loading robots, environment, and objects.
 """
 
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 from agimus_spacelab.planning import create_planner
 
 # Import unified backend interfaces
 try:
-    from agimus_spacelab.backends import CorbaBackend, HAS_CORBA
+    from agimus_spacelab.backends import HAS_CORBA, CorbaBackend
 except ImportError:
     HAS_CORBA = False
     CorbaBackend = None
 
 try:
-    from agimus_spacelab.backends import PyHPPBackend, HAS_PYHPP
+    from agimus_spacelab.backends import HAS_PYHPP, PyHPPBackend
 except ImportError:
     HAS_PYHPP = False
     PyHPPBackend = None
@@ -26,7 +26,7 @@ except ImportError:
 class SceneBuilder:
     """
     Builder class for setting up Spacelab scenes with robots and objects.
-    
+
     Handles loading robots, environment, objects, and configuring collision checking.
     """
 
@@ -66,7 +66,9 @@ class SceneBuilder:
         if self.backend == "corba":
             if not HAS_CORBA:
                 raise ImportError("CORBA backend not available")
-            self.planner = planner or create_planner(backend=self.backend, viewer_type=viewer_type)
+            self.planner = planner or create_planner(
+                backend=self.backend, viewer_type=viewer_type
+            )
         elif self.backend == "pyhpp":
             if not HAS_PYHPP:
                 # Instantiating the backend raises with the specific missing
@@ -77,12 +79,15 @@ class SceneBuilder:
                     "PyHPP backend not available and PyHPPBackend could not be "
                     "imported; see agimus_spacelab.backends.pyhpp import errors."
                 )
-            self.planner = planner or create_planner(backend=self.backend, viewer_type=viewer_type)
+            self.planner = planner or create_planner(
+                backend=self.backend, viewer_type=viewer_type
+            )
         else:
             raise ValueError(f"Unknown backend: {backend}. Use 'corba' or 'pyhpp'")
 
-    def load_robot(self, composite_names: List[str],
-                   robot_names: List[str]) -> 'SceneBuilder':
+    def load_robot(
+        self, composite_names: List[str], robot_names: List[str]
+    ) -> "SceneBuilder":
         """Load the composite robot (UR10 + VISPA)."""
         print(f"   Loading robot ({robot_names})...")
         for id, rb_name in enumerate(robot_names):
@@ -92,13 +97,15 @@ class SceneBuilder:
                     urdf_path=self.FILE_PATHS["robot"][rb_name]["urdf"],
                     srdf_path=self.FILE_PATHS["robot"][rb_name]["srdf"],
                     root_joint_type="anchor",
-                    composite_name=composite_names[id]
-            )
+                    composite_name=composite_names[id],
+                )
             else:
                 print(f"      ⚠ Unknown robot: {rb_name}")
         return self
 
-    def load_environment(self, environment_names: List[str], pose=None) -> 'SceneBuilder':
+    def load_environment(
+        self, environment_names: List[str], pose=None
+    ) -> "SceneBuilder":
         """Load the environment (dispenser, ground, etc.)."""
         print(f"   Loading environment ({environment_names})...")
         for id, env_name in enumerate(environment_names):
@@ -108,16 +115,16 @@ class SceneBuilder:
                 self.planner.load_environment(
                     name=env_name,
                     urdf_path=self.FILE_PATHS["environment"][env_name],
-                    pose=pose[id] if pose is not None else None
+                    pose=pose[id] if pose is not None else None,
                 )
             else:
                 print(f"      ⚠ Unknown environment: {env_name}")
         return self
 
-    def load_objects(self, object_names: List[str]) -> 'SceneBuilder':
+    def load_objects(self, object_names: List[str]) -> "SceneBuilder":
         """
         Load multiple objects.
-        
+
         Args:
             object_names: List of object names to load
         """
@@ -143,13 +150,13 @@ class SceneBuilder:
                 name=obj_name,
                 urdf_path=urdf_path,
                 srdf_path=srdf_path,
-                root_joint_type="freeflyer"
+                root_joint_type="freeflyer",
             )
             self.loaded_objects.append(obj_name)
 
         return self
 
-    def set_joint_bounds(self) -> 'SceneBuilder':
+    def set_joint_bounds(self) -> "SceneBuilder":
         """Set joint bounds for all loaded freeflyer objects."""
         print("   Setting joint bounds...")
         bounds = self.joint_bounds.freeflyer_bounds()
@@ -160,25 +167,26 @@ class SceneBuilder:
 
         return self
 
-    def configure_path_validation(self,
-                                   validation_step: float = 0.01,
-                                   projector_step: float = 0.1) -> 'SceneBuilder':
+    def configure_path_validation(
+        self, validation_step: float = 0.01, projector_step: float = 0.1
+    ) -> "SceneBuilder":
         """Configure path validation parameters."""
         print("   Configuring path validation...")
         self.planner.configure_path_validation(
-            validation_step=validation_step,
-            projector_step=projector_step
+            validation_step=validation_step, projector_step=projector_step
         )
         return self
 
-    def disable_collision_pair(self,
-                               obstacle_name: str,
-                               joint_name: str,
-                               remove_collision: bool = True,
-                               remove_distance: bool = False) -> 'SceneBuilder':
+    def disable_collision_pair(
+        self,
+        obstacle_name: str,
+        joint_name: str,
+        remove_collision: bool = True,
+        remove_distance: bool = False,
+    ) -> "SceneBuilder":
         """
         Disable collision checking for a specific obstacle-joint pair.
-        
+
         Args:
             obstacle_name: Name of the obstacle body
             joint_name: Name of the joint
@@ -189,10 +197,7 @@ class SceneBuilder:
         if self.backend == "corba":
             ps = self.planner.get_problem()
             ps.removeObstacleFromJoint(
-                obstacle_name,
-                joint_name,
-                remove_collision,
-                remove_distance
+                obstacle_name, joint_name, remove_collision, remove_distance
             )
         else:
             # pyhpp: remove pairs from the pinocchio GeometryModel directly.
@@ -205,14 +210,21 @@ class SceneBuilder:
             try:
                 from pinocchio import CollisionPair
             except ImportError:
-                print("      [warn] pinocchio not available; cannot remove collision pairs")
+                print(
+                    "      [warn] pinocchio not available; cannot remove collision pairs"
+                )
                 return self
 
             # Find obstacle geometry object indices (exact name or _N suffix)
-            obs_ids = [i for i, go in enumerate(gm.geometryObjects)
-                       if go.name == obstacle_name or
-                       (go.name.startswith(obstacle_name + "_") and
-                        go.name[len(obstacle_name) + 1:].isdigit())]
+            obs_ids = [
+                i
+                for i, go in enumerate(gm.geometryObjects)
+                if go.name == obstacle_name
+                or (
+                    go.name.startswith(obstacle_name + "_")
+                    and go.name[len(obstacle_name) + 1 :].isdigit()
+                )
+            ]
             if not obs_ids:
                 print(f"      [warn] no geometry found matching {obstacle_name!r}")
 
@@ -228,8 +240,11 @@ class SceneBuilder:
                 return self
 
             # Find geometry objects directly attached to this joint
-            robot_ids = [i for i, go in enumerate(gm.geometryObjects)
-                         if go.parentJoint == joint_id]
+            robot_ids = [
+                i
+                for i, go in enumerate(gm.geometryObjects)
+                if go.parentJoint == joint_id
+            ]
 
             # Remove cross-pairs from the geometry model
             removed = 0
@@ -241,8 +256,10 @@ class SceneBuilder:
                     if gm.existCollisionPair(cp):
                         gm.removeCollisionPair(cp)
                         removed += 1
-            print(f"      [pyhpp] removed {removed} collision pair(s) "
-                  f"({obstacle_name!r} <-> {joint_name!r})")
+            print(
+                f"      [pyhpp] removed {removed} collision pair(s) "
+                f"({obstacle_name!r} <-> {joint_name!r})"
+            )
         return self
 
     def disable_collisions_between_subtrees(
@@ -253,7 +270,7 @@ class SceneBuilder:
         remove_distance: bool = False,
         verbose: bool = False,
         max_pairs: int = 80,
-    ) -> 'SceneBuilder':
+    ) -> "SceneBuilder":
         """Disable collisions between a robot subtree and an obstacle subtree.
 
         This is intended to handle common setups where SRDF grippers/handles are
@@ -292,7 +309,9 @@ class SceneBuilder:
             try:
                 from pinocchio import CollisionPair
             except ImportError:
-                print("      [warn] pinocchio not available; cannot remove collision pairs")
+                print(
+                    "      [warn] pinocchio not available; cannot remove collision pairs"
+                )
                 return self
 
             def _resolve_joint_id(name):
@@ -328,12 +347,18 @@ class SceneBuilder:
                 jid = _resolve_joint_id(name)
                 if jid is not None and jid != 0:
                     subtree = _subtree_joint_ids(jid)
-                    return [i for i, go in enumerate(gm.geometryObjects)
-                            if go.parentJoint in subtree]
+                    return [
+                        i
+                        for i, go in enumerate(gm.geometryObjects)
+                        if go.parentJoint in subtree
+                    ]
                 # Prefix fallback: "ground_demo/joint_world_NYX" → "ground_demo/"
                 prefix = name.split("/")[0] + "/"
-                return [i for i, go in enumerate(gm.geometryObjects)
-                        if go.name.startswith(prefix)]
+                return [
+                    i
+                    for i, go in enumerate(gm.geometryObjects)
+                    if go.name.startswith(prefix)
+                ]
 
             robot_geom_ids = _geom_ids_for(robot_frame_or_joint)
             obs_geom_ids = _geom_ids_for(obstacle_root_joint)
@@ -348,10 +373,14 @@ class SceneBuilder:
             if verbose:
                 robot_names = [gm.geometryObjects[i].name for i in robot_geom_ids]
                 obs_names = [gm.geometryObjects[i].name for i in obs_geom_ids]
-                print(f"      Robot geoms ({len(robot_geom_ids)}): "
-                      f"{robot_names[:max_pairs]}")
-                print(f"      Obstacle geoms ({len(obs_geom_ids)}): "
-                      f"{obs_names[:max_pairs]}")
+                print(
+                    f"      Robot geoms ({len(robot_geom_ids)}): "
+                    f"{robot_names[:max_pairs]}"
+                )
+                print(
+                    f"      Obstacle geoms ({len(obs_geom_ids)}): "
+                    f"{obs_names[:max_pairs]}"
+                )
 
             removed = 0
             for rid in robot_geom_ids:
@@ -362,9 +391,11 @@ class SceneBuilder:
                     if gm.existCollisionPair(cp):
                         gm.removeCollisionPair(cp)
                         removed += 1
-            print(f"      [pyhpp] removed {removed} collision pair(s) between "
-                  f"{robot_frame_or_joint!r} subtree and "
-                  f"{obstacle_root_joint!r} subtree")
+            print(
+                f"      [pyhpp] removed {removed} collision pair(s) between "
+                f"{robot_frame_or_joint!r} subtree and "
+                f"{obstacle_root_joint!r} subtree"
+            )
             return self
 
         robot = self.planner.get_robot()
@@ -417,17 +448,12 @@ class SceneBuilder:
 
         before_pairs: List[tuple[str, str]] = _pairs_between_by_prefix()
         if verbose:
-            print("      Robot joints: %s" % robot_joints
-                  )
+            print("      Robot joints: %s" % robot_joints)
+            print("      Target obstacle prefix: %s" % obstacle_prefix)
             print(
-                "      Target obstacle prefix: %s"
-                % obstacle_prefix
+                "      Found %d existing collision pairs to filter" % len(before_pairs)
             )
-            print(
-                "      Found %d existing collision pairs to filter"
-                % len(before_pairs)
-            )
-            for rj, obj in before_pairs[: max_pairs]:
+            for rj, obj in before_pairs[:max_pairs]:
                 print(f"        - {rj} <-> {obj}")
             if len(before_pairs) > max_pairs:
                 print(f"        ... ({len(before_pairs) - max_pairs} more)")
@@ -444,21 +470,18 @@ class SceneBuilder:
             print(f"      removeObstacleFromJoint calls attempted: {removed}")
             after_pairs = _pairs_between_by_prefix()
             print(
-                "      Remaining collision pairs after filtering: %d"
-                % len(after_pairs)
+                "      Remaining collision pairs after filtering: %d" % len(after_pairs)
             )
-            for rj, obj in after_pairs[: max_pairs]:
+            for rj, obj in after_pairs[:max_pairs]:
                 print(f"        - {rj} <-> {obj}")
             if len(after_pairs) > max_pairs:
                 print(f"        ... ({len(after_pairs) - max_pairs} more)")
 
         return self
 
-    def move_obstacle(self,
-                      obstacle_name: str,
-                      position: List[float],
-                      orientation: List[float]) -> 'SceneBuilder':
-
+    def move_obstacle(
+        self, obstacle_name: str, position: List[float], orientation: List[float]
+    ) -> "SceneBuilder":
         """
         Move an object to a specified position and orientation.
         Args:
@@ -468,10 +491,7 @@ class SceneBuilder:
         """
         if self.backend == "corba":
             ps = self.planner.get_problem()
-            ps.moveObstacle(
-                obstacle_name,
-                position + orientation
-            )
+            ps.moveObstacle(obstacle_name, position + orientation)
         else:
             # PYHPP-GAP: pyhpp Problem has no moveObstacle binding.
             # Obstacle placement must be set before building the problem
@@ -485,7 +505,7 @@ class SceneBuilder:
     def get_instances(self) -> Tuple[Any, Any, Any]:
         """
         Get planner, robot, and problem solver instances.
-        
+
         Returns:
             Tuple of (planner, robot, ps/problem)
         """
@@ -493,31 +513,34 @@ class SceneBuilder:
         ps = self.planner.get_problem()
         return self.planner, robot, ps
 
-    def build(self,
-              robot_names: List[str],
-              composite_names: List[str],
-              environment_names: List[str],
-              object_names: List[str],
-              validation_step: float = 0.01,
-              projector_step: float = 0.1) -> Tuple[Any, Any, Any]:
+    def build(
+        self,
+        robot_names: List[str],
+        composite_names: List[str],
+        environment_names: List[str],
+        object_names: List[str],
+        validation_step: float = 0.01,
+        projector_step: float = 0.1,
+    ) -> Tuple[Any, Any, Any]:
         """
         Complete scene setup with default configuration.
-        
+
         Args:
             objects: List of object names to load
             validation_step: Path validation discretization step
             projector_step: Path projector step
-            
+
         Returns:
             Tuple of (planner, robot, ps)
         """
         print("\n1. Setting up scene...")
-        (self.load_robot(composite_names=composite_names,
-                         robot_names=robot_names)
+        (
+            self.load_robot(composite_names=composite_names, robot_names=robot_names)
             .load_environment(environment_names=environment_names)
             .load_objects(object_names=object_names)
             .set_joint_bounds()
-            .configure_path_validation(validation_step, projector_step))
+            .configure_path_validation(validation_step, projector_step)
+        )
 
         print("   ✓ Scene setup complete")
         return self.get_instances()

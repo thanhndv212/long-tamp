@@ -5,24 +5,23 @@ Base class for manipulation tasks.
 Provides ManipulationTask base class with common structure.
 """
 
-from typing import List, Dict, Any, Optional, Sequence, Tuple
-from abc import ABC, abstractmethod
 import re
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from agimus_spacelab.planning import (
-    SceneBuilder,
     ConfigGenerator,
-    GraphBuilder,
     ConstraintBuilder,
-    FactoryConstraintRegistry
+    FactoryConstraintRegistry,
+    GraphBuilder,
+    SceneBuilder,
 )
-
 
 
 class ManipulationTask(ABC):
     """
     Base class for manipulation tasks.
-    
+
     Provides common structure for task definition, constraint creation,
     graph building, and configuration management.
     """
@@ -72,6 +71,7 @@ class ManipulationTask(ABC):
         if log_dir == "auto":
             import datetime
             import os
+
             slug = re.sub(r"[^a-zA-Z0-9]+", "_", task_name).strip("_").lower()
             stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             log_dir = os.path.join("/tmp", "agimus_spacelab", f"{slug}_{stamp}")
@@ -80,7 +80,9 @@ class ManipulationTask(ABC):
             try:
                 import socket
                 import sys
+
                 from agimus_spacelab.logging import RunLogger
+
                 self.run_logger = RunLogger(log_dir)
                 self.run_logger.log(
                     "run_start",
@@ -147,7 +149,9 @@ class ManipulationTask(ABC):
 
         # Use FactoryConstraintRegistry for proper factory naming
         registry = FactoryConstraintRegistry(
-            self.ps, robot=robot, backend=self.backend,
+            self.ps,
+            robot=robot,
+            backend=self.backend,
             backend_obj=self.planner,
         )
 
@@ -168,10 +172,12 @@ class ManipulationTask(ABC):
         # case so the factory uses its own LockedJoint foliation.
         contacts_per_obj = getattr(cfg, "CONTACT_SURFACES_PER_OBJECT", None)
         env_contacts = getattr(cfg, "ENVIRONMENT_CONTACTS", None)
-        has_contacts = bool(
-            contacts_per_obj and any(contacts_per_obj)
-        ) and bool(env_contacts)
-        skip_placement = self.planner.skip_placement_for_no_contacts and (not has_contacts)
+        has_contacts = bool(contacts_per_obj and any(contacts_per_obj)) and bool(
+            env_contacts
+        )
+        skip_placement = self.planner.skip_placement_for_no_contacts and (
+            not has_contacts
+        )
 
         # Register all constraints with factory naming
         # Maps user names -> factory names
@@ -246,17 +252,13 @@ class ManipulationTask(ABC):
             "and objects."
         )
 
-    def generate_configurations(
-        self, q_init: List[float]
-    ) -> Dict[str, List[float]]:
+    def generate_configurations(self, q_init: List[float]) -> Dict[str, List[float]]:
         """
         Generate all intermediate configurations.
         Only required when using the base run() pipeline.
         Override in subclass; raises NotImplementedError at call time if not.
         """
-        raise NotImplementedError(
-            "Subclass must implement generate_configurations()"
-        )
+        raise NotImplementedError("Subclass must implement generate_configurations()")
 
     def setup(
         self,
@@ -311,18 +313,23 @@ class ManipulationTask(ABC):
             composite_names=self.get_composite_names(),
             object_names=self.get_object_names(),
             validation_step=validation_step,
-            projector_step=projector_step
+            projector_step=projector_step,
         )
         # Get initial configuration
         self.q_init = self.build_initial_config()
 
         # Apply optimizer config from task_config (overrides backend defaults).
         # This wires YAML optimization: fields set via yaml_loader into the backend.
-        if self.task_config is not None and hasattr(self.planner, "configure_transition_planner"):
+        if self.task_config is not None and hasattr(
+            self.planner, "configure_transition_planner"
+        ):
             opt_kwargs = {}
             for field, kwarg in (
                 ("RANDOM_SHORTCUT_LOOPS", "random_shortcut_loops"),
-                ("SPLINE_ZERO_DERIVATIVES_AT_STATE", "spline_zero_derivatives_at_state"),
+                (
+                    "SPLINE_ZERO_DERIVATIVES_AT_STATE",
+                    "spline_zero_derivatives_at_state",
+                ),
             ):
                 if hasattr(self.task_config, field):
                     opt_kwargs[kwarg] = getattr(self.task_config, field)
@@ -372,7 +379,10 @@ class ManipulationTask(ABC):
             if q_ref:
                 constraint_names, frozen_names = (
                     ConstraintBuilder.create_locked_joint_constraints(
-                        self.ps, self.robot, q_ref, patterns,
+                        self.ps,
+                        self.robot,
+                        q_ref,
+                        patterns,
                         backend=self.backend,
                     )
                 )
@@ -406,7 +416,7 @@ class ManipulationTask(ABC):
             self.graph = self.create_graph(graph_constraints=graph_constraints)
 
             # Make graph available to backend for validation/introspection
-            if hasattr(self.planner, 'graph'):
+            if hasattr(self.planner, "graph"):
                 self.planner.graph = self.graph
 
             # 6. Initialize configuration generator
@@ -604,19 +614,14 @@ class ManipulationTask(ABC):
                     edges = [str(e) for e in transition_edges]
                     if not generate_waypoints_via_edges:
                         raise ValueError(
-                            (
-                                "transition_edges provided but no waypoints "
-                                "found. Either pass transition_waypoints, "
-                                "provide configs named q_wp_<i>_<edge>, or "
-                                "set generate_waypoints_via_edges=True."
-                            )
+                            "transition_edges provided but no waypoints "
+                            "found. Either pass transition_waypoints, "
+                            "provide configs named q_wp_<i>_<edge>, or "
+                            "set generate_waypoints_via_edges=True."
                         )
                     if self.config_gen is None:
                         raise RuntimeError(
-                            (
-                                "ConfigGenerator not initialized; "
-                                "call setup() first"
-                            )
+                            "ConfigGenerator not initialized; " "call setup() first"
                         )
                     if "q_init" not in cfgs or "q_goal" not in cfgs:
                         raise ValueError("Missing q_init/q_goal in configs")
@@ -633,10 +638,7 @@ class ManipulationTask(ABC):
                         )
                         if not ok or q_next is None:
                             raise RuntimeError(
-                                (
-                                    "Failed to generate waypoint via edge "
-                                    f"'{edge_name}'"
-                                )
+                                "Failed to generate waypoint via edge " f"'{edge_name}'"
                             )
                         q_current = list(q_next)
                         waypoints.append(q_current)
@@ -679,7 +681,7 @@ class ManipulationTask(ABC):
                                 output_dir=output_dir,
                                 framerate=framerate,
                             )
-                            print(f"   ✓ Path playback complete")
+                            print("   ✓ Path playback complete")
                             print(f"   📹 Video recorded: {video_file}")
                         else:
                             self.planner.play_path(0)
@@ -711,10 +713,8 @@ class ManipulationTask(ABC):
                                 )
                             except Exception as exc:
                                 raise RuntimeError(
-                                    (
-                                        "Failed to set transition optimizers "
-                                        f"for '{e}': {exc}"
-                                    )
+                                    "Failed to set transition optimizers "
+                                    f"for '{e}': {exc}"
                                 )
 
                     try:
@@ -727,9 +727,7 @@ class ManipulationTask(ABC):
                             store=True,
                         )
                     except Exception as exc:
-                        raise RuntimeError(
-                            f"transition-planner planning failed: {exc}"
-                        )
+                        raise RuntimeError(f"transition-planner planning failed: {exc}")
 
                     if visualize:
                         print("\n7. Playing solution path...")
@@ -741,7 +739,7 @@ class ManipulationTask(ABC):
                                     output_dir=output_dir,
                                     framerate=framerate,
                                 )
-                                print(f"   ✓ Path playback complete")
+                                print("   ✓ Path playback complete")
                                 print(f"   📹 Video recorded: {video_file}")
                             else:
                                 self.planner.play_path(int(path_id))
@@ -755,9 +753,7 @@ class ManipulationTask(ABC):
                         "robot": self.robot,
                         "ps": self.ps,
                         "graph": self.graph,
-                        "viewer": (
-                            self.planner.viewer if self.planner else None
-                        ),
+                        "viewer": (self.planner.viewer if self.planner else None),
                         "path_id": int(path_id),
                         "solve_mode": solve_mode,
                     }
@@ -810,7 +806,7 @@ class ManipulationTask(ABC):
                                 output_dir=output_dir,
                                 framerate=framerate,
                             )
-                            print(f"   ✓ Path playback complete")
+                            print("   ✓ Path playback complete")
                             print(f"   📹 Video recorded: {video_file}")
                         else:
                             self.planner.play_path(pid)
@@ -824,7 +820,7 @@ class ManipulationTask(ABC):
             "robot": self.robot,
             "ps": self.ps,
             "graph": self.graph,
-            "viewer": self.planner.viewer if self.planner else None
+            "viewer": self.planner.viewer if self.planner else None,
         }
 
 

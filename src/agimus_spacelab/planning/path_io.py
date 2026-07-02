@@ -7,20 +7,19 @@ motion planning paths from files.
 
 from __future__ import annotations
 
-import os
 import glob
-from pathlib import Path
-from typing import List, Optional, Any, TYPE_CHECKING
+import os
+from typing import TYPE_CHECKING, Any, List
 
 if TYPE_CHECKING:
-    from agimus_spacelab.planning.planner import Planner
+    pass
 
 
 __all__ = [
     "PathLoadError",
+    "get_path_files",
     "load_paths_from_directory",
     "replay_paths",
-    "get_path_files",
 ]
 
 
@@ -145,10 +144,7 @@ def load_paths_from_directory(
             return indices
         except Exception as e:
             error_msg = str(e)
-            if (
-                "graph" in error_msg.lower()
-                or "deserialize edges" in error_msg.lower()
-            ):
+            if "graph" in error_msg.lower() or "deserialize edges" in error_msg.lower():
                 raise PathLoadError(
                     "These paths contain constraint graph edge references. "
                     "They can only be loaded in the same session where they were created, "

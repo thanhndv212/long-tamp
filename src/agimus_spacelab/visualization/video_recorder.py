@@ -11,7 +11,6 @@ Provides functionality to record videos during path playback using either:
 import glob
 import os
 import subprocess
-import time
 from datetime import datetime
 from typing import Optional
 
@@ -21,7 +20,8 @@ import numpy as np
 def _is_viser_viewer(viewer) -> bool:
     """Return True if *viewer* is a pyhpp_viser Viewer instance."""
     try:
-        from pyhpp_viser import Viewer as _ViserViewer  # noqa: PLC0415
+        from pyhpp_viser import Viewer as _ViserViewer
+
         return isinstance(viewer, _ViserViewer)
     except ImportError:
         return False
@@ -75,7 +75,9 @@ class VideoRecorder:
         """True when the wrapped viewer is a pyhpp_viser Viewer."""
         return _is_viser_viewer(self.viewer)
 
-    def start_recording(self, video_name: Optional[str] = None, path_id: Optional[int] = None) -> str:
+    def start_recording(
+        self, video_name: Optional[str] = None, path_id: Optional[int] = None
+    ) -> str:
         """
         Start video recording by initiating frame capture (gepetto only).
 
@@ -95,11 +97,13 @@ class VideoRecorder:
                 "Use VideoRecorder.record_path(path, ...) instead."
             )
         if self._recording:
-            raise RuntimeError("Recording already in progress. Call stop_recording() first.")
-        
+            raise RuntimeError(
+                "Recording already in progress. Call stop_recording() first."
+            )
+
         # Ensure output directory exists
         os.makedirs(self.output_dir, exist_ok=True)
-        
+
         # Generate video name if not provided
         if video_name is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -109,43 +113,43 @@ class VideoRecorder:
                 base_name = f"recording_{timestamp}"
         else:
             base_name = video_name
-        
+
         # Setup frame capture prefix (without extension)
         self._frame_prefix = os.path.join(self.output_dir, f"{base_name}_frame")
-        
+
         # Video output file
-        self._video_file = os.path.join(self.output_dir, f"{base_name}.{self.video_extension}")
-        
+        self._video_file = os.path.join(
+            self.output_dir, f"{base_name}.{self.video_extension}"
+        )
+
         # Start capture using gepetto-viewer-corba API
         print(f"[VideoRecorder] Starting recording: {self._video_file}")
         self.viewer.client.gui.startCapture(
-            self.viewer.windowId,
-            self._frame_prefix,
-            self.frame_extension
+            self.viewer.windowId, self._frame_prefix, self.frame_extension
         )
-        
+
         self._recording = True
         return self._video_file
 
     def stop_recording(self) -> str:
         """
         Stop video recording and encode frames to video.
-        
+
         Returns:
             The path to the generated video file
         """
         if not self._recording:
             raise RuntimeError("No recording in progress.")
-        
+
         # Stop frame capture
         self.viewer.client.gui.stopCapture(self.viewer.windowId)
-        print(f"[VideoRecorder] Stopped frame capture")
-        
+        print("[VideoRecorder] Stopped frame capture")
+
         self._recording = False
-        
+
         # Encode video using ffmpeg
         self._encode_video()
-        
+
         return self._video_file
 
     def record_path(
@@ -189,20 +193,32 @@ class VideoRecorder:
         os.makedirs(self.output_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         if video_name is None:
-            base_name = f"path_{path_id}_{timestamp}" if path_id is not None else f"recording_{timestamp}"
+            base_name = (
+                f"path_{path_id}_{timestamp}"
+                if path_id is not None
+                else f"recording_{timestamp}"
+            )
         else:
             base_name = video_name
         self._frame_prefix = os.path.join(self.output_dir, f"{base_name}_frame")
-        self._video_file = os.path.join(self.output_dir, f"{base_name}.{self.video_extension}")
+        self._video_file = os.path.join(
+            self.output_dir, f"{base_name}.{self.video_extension}"
+        )
 
         total_time = path.length()
         n_frames = max(2, int(total_time / speed * self.framerate))
-        print(f"[VideoRecorder] Capturing {n_frames} viser frames (path length {total_time:.3f} s)...")
+        print(
+            f"[VideoRecorder] Capturing {n_frames} viser frames (path length {total_time:.3f} s)..."
+        )
 
         for i, t in enumerate(np.linspace(0.0, total_time, n_frames)):
             result = path.eval(t)
             # result may be (q, valid) or just q depending on HPP version
-            if isinstance(result, (list, tuple)) and len(result) == 2 and isinstance(result[1], bool):
+            if (
+                isinstance(result, (list, tuple))
+                and len(result) == 2
+                and isinstance(result[1], bool)
+            ):
                 q, valid = result
             else:
                 q = result
@@ -222,56 +238,70 @@ class VideoRecorder:
         # Find all captured frames
         # Note: gepetto-viewer generates frames without zero-padding (0, 1, 2, ... not 000000, 000001)
         frame_pattern = f"{self._frame_prefix}_%d.{self.frame_extension}"
-        
+
         # Check if ffmpeg is available
         try:
             subprocess.run(
                 ["ffmpeg", "-version"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                check=True
+                check=True,
             )
         except (subprocess.CalledProcessError, FileNotFoundError):
-            print("[VideoRecorder] Warning: ffmpeg not found. Frames saved but video not encoded.")
+            print(
+                "[VideoRecorder] Warning: ffmpeg not found. Frames saved but video not encoded."
+            )
             print(f"[VideoRecorder] Frame pattern: {frame_pattern}")
-            print(f"[VideoRecorder] You can manually encode with:")
-            print(f"  ffmpeg -r {self.framerate} -i {frame_pattern} -c:v libx264 -pix_fmt yuv420p {self._video_file}")
+            print("[VideoRecorder] You can manually encode with:")
+            print(
+                f"  ffmpeg -r {self.framerate} -i {frame_pattern} -c:v libx264 -pix_fmt yuv420p {self._video_file}"
+            )
             return
-        
+
         # Encode with ffmpeg
         cmd = [
-            "ffmpeg", "-y",  # Overwrite output file
-            "-r", str(self.framerate),  # Input framerate
-            "-i", frame_pattern,  # Input pattern
-            "-c:v", "libx264",  # Video codec
-            "-pix_fmt", "yuv420p",  # Pixel format for compatibility
-            "-preset", "medium",  # Encoding speed/quality tradeoff
-            self._video_file
+            "ffmpeg",
+            "-y",  # Overwrite output file
+            "-r",
+            str(self.framerate),  # Input framerate
+            "-i",
+            frame_pattern,  # Input pattern
+            "-c:v",
+            "libx264",  # Video codec
+            "-pix_fmt",
+            "yuv420p",  # Pixel format for compatibility
+            "-preset",
+            "medium",  # Encoding speed/quality tradeoff
+            self._video_file,
         ]
-        
-        print(f"[VideoRecorder] Encoding video with ffmpeg...")
+
+        print("[VideoRecorder] Encoding video with ffmpeg...")
         try:
             subprocess.run(cmd, capture_output=True, text=True, check=True)
             print(f"[VideoRecorder] Video saved: {self._video_file}")
-            
+
             # Auto cleanup frames if enabled
             if self.auto_cleanup:
                 self._cleanup_frames()
         except subprocess.CalledProcessError as e:
             print(f"[VideoRecorder] Error encoding video: {e.stderr}")
-            print(f"[VideoRecorder] Frames preserved at: {self._frame_prefix}_*.{self.frame_extension}")
+            print(
+                f"[VideoRecorder] Frames preserved at: {self._frame_prefix}_*.{self.frame_extension}"
+            )
 
     def _cleanup_frames(self):
         """Delete intermediate frame files after successful video encoding."""
         frame_files = glob.glob(f"{self._frame_prefix}_*.{self.frame_extension}")
-        
+
         if frame_files:
             print(f"[VideoRecorder] Cleaning up {len(frame_files)} frame files...")
             for frame_file in frame_files:
                 try:
                     os.remove(frame_file)
                 except OSError as e:
-                    print(f"[VideoRecorder] Warning: Could not remove {frame_file}: {e}")
+                    print(
+                        f"[VideoRecorder] Warning: Could not remove {frame_file}: {e}"
+                    )
 
     @property
     def is_recording(self) -> bool:

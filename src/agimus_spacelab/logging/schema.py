@@ -8,9 +8,9 @@ runtime; ``RunLogger.log()`` accepts arbitrary keyword arguments.
 from typing import Any, Dict, List, Optional
 
 try:
-    from typing import TypedDict, Literal
+    from typing import Literal, TypedDict
 except ImportError:  # Python < 3.8
-    from typing_extensions import TypedDict, Literal  # type: ignore[assignment]
+    from typing_extensions import Literal, TypedDict  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -36,7 +36,7 @@ class ConfigSnapshotEvent(TypedDict):
     event: Literal["config_snapshot"]
     run_id: str
     timestamp: str
-    task_config: Dict[str, Any]   # Serialised BaseTaskConfig fields
+    task_config: Dict[str, Any]  # Serialised BaseTaskConfig fields
     setup_params: Dict[str, Any]  # validation_step, skip_graph, …
     backend: str
     task_name: str
@@ -83,7 +83,7 @@ class PhaseStartEvent(TypedDict):
     event: Literal["phase_start"]
     run_id: str
     timestamp: str
-    phase: int               # 1-based
+    phase: int  # 1-based
     gripper: str
     handle: Optional[str]
     q_start: List[float]

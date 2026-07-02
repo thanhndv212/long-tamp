@@ -12,17 +12,18 @@ Usage::
     from agimus_spacelab.config import ModelPaths, ConstraintDef, StateDef, EdgeDef
 """
 
-from .rules import RuleGenerator
 from .base_config import (
-    Defaults,
-    ModelPaths,
-    TransformConfig,
-    ConstraintDef,
-    EdgeDef,
-    StateDef,
     BaseTaskConfig,
+    ConstraintDef,
+    Defaults,
+    EdgeDef,
+    ModelPaths,
+    StateDef,
+    TransformConfig,
     merge_configs,
 )
+from .rules import RuleGenerator
+
 __all__ = [
     # Base classes
     "Defaults",

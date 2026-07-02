@@ -7,6 +7,7 @@ Provides ConfigGenerator for generating and validating configurations.
 
 from collections import deque
 from typing import Dict, List, Optional, Tuple
+
 import numpy as np
 
 # Import transformation utilities
@@ -127,15 +128,22 @@ def freeze_joints_by_substrings(
 class ConfigGenerator:
     """
     Generate and validate configurations for manipulation tasks.
-    
+
     Handles projection, random sampling, and waypoint generation.
     """
 
-    def __init__(self, robot, graph, planner, ps, backend: str = "corba",
-                 max_attempts: int = 1000):
+    def __init__(
+        self,
+        robot,
+        graph,
+        planner,
+        ps,
+        backend: str = "corba",
+        max_attempts: int = 1000,
+    ):
         """
         Initialize configuration generator.
-        
+
         Args:
             robot: Robot instance
             graph: ConstraintGraph or Graph instance
@@ -172,11 +180,11 @@ class ConfigGenerator:
     ) -> Tuple[bool, str]:
         """
         Check if a configuration is valid (collision-free and within bounds).
-        
+
         Args:
             q: Configuration to validate
             verbose: If True, print validation result
-            
+
         Returns:
             Tuple of (is_valid, error_message)
             - is_valid: True if configuration is valid
@@ -197,19 +205,21 @@ class ConfigGenerator:
         return is_valid, error_msg
 
     def project_on_node(
-        self, node_name: str, q: List[float],
+        self,
+        node_name: str,
+        q: List[float],
         config_label: Optional[str] = None,
-        verbose: bool = True
+        verbose: bool = True,
     ) -> Tuple[bool, List[float]]:
         """
         Project configuration onto node constraints.
-        
+
         Args:
             node_name: Name of the graph node
             q: Configuration to project
             config_label: Optional label to store result
             verbose: Print progress messages
-            
+
         Returns:
             Tuple of (success, projected_config)
         """
@@ -217,9 +227,7 @@ class ConfigGenerator:
         last_valid_err = None
         for attempt in range(self.max_attempts):
             if self.backend == "corba":
-                res, q_proj, err = self.graph.applyNodeConstraints(
-                    node_name, list(q)
-                )
+                res, q_proj, err = self.graph.applyNodeConstraints(node_name, list(q))
                 success = res
                 config = q_proj
                 last_err = err
@@ -249,9 +257,7 @@ class ConfigGenerator:
                                 except Exception:
                                     continue
 
-                res, q_proj, err = self.graph.applyStateConstraints(
-                    state_obj, q_arr
-                )
+                res, q_proj, err = self.graph.applyStateConstraints(state_obj, q_arr)
                 success = res
                 config = q_proj.tolist() if success else None
                 last_err = err
@@ -260,8 +266,10 @@ class ConfigGenerator:
                 if is_valid:
                     if config_label:
                         self.configs[config_label] = config
-                        print(f"       ✓ SUCCESS   {config_label} projected onto node "
-                              f"'{node_name}' after {attempt + 1} attempts")
+                        print(
+                            f"       ✓ SUCCESS   {config_label} projected onto node "
+                            f"'{node_name}' after {attempt + 1} attempts"
+                        )
                     return True, config
                 last_valid_err = valid_err
 
@@ -269,13 +277,17 @@ class ConfigGenerator:
         if config_label:
             self.configs[config_label] = list(q)
             if verbose:
-                print(f"       ⚠ Projection onto node FAILED: {node_name} "
-                      f"({last_valid_err or last_err or 'unknown'})")
+                print(
+                    f"       ⚠ Projection onto node FAILED: {node_name} "
+                    f"({last_valid_err or last_err or 'unknown'})"
+                )
 
         return False, list(q)
 
     def generate_via_edge(
-        self, edge_name: str, q_from: List[float],
+        self,
+        edge_name: str,
+        q_from: List[float],
         config_label: Optional[str] = None,
         verbose: bool = True,
         q_hint: Optional[List[float]] = None,
@@ -300,23 +312,18 @@ class ConfigGenerator:
         last_err = None
         last_valid_err = None
         for i in range(self.max_attempts):
-            use_hint = (i == 0 and q_hint is not None)
+            use_hint = i == 0 and q_hint is not None
             # Generate random config (or use hint on first attempt)
             if self.backend == "corba":
-                q_rand = (list(q_hint) if use_hint
-                          else self.planner.random_config())
+                q_rand = list(q_hint) if use_hint else self.planner.random_config()
 
                 # omniORB stubs expect plain Python sequences (list/tuple),
                 # not numpy arrays.
                 q_from_seq = (
-                    q_from.tolist()
-                    if isinstance(q_from, np.ndarray)
-                    else list(q_from)
+                    q_from.tolist() if isinstance(q_from, np.ndarray) else list(q_from)
                 )
                 q_rand_seq = (
-                    q_rand.tolist()
-                    if isinstance(q_rand, np.ndarray)
-                    else list(q_rand)
+                    q_rand.tolist() if isinstance(q_rand, np.ndarray) else list(q_rand)
                 )
 
                 res, q_target, err = self.graph.generateTargetConfig(
@@ -326,10 +333,14 @@ class ConfigGenerator:
                 config = q_target
                 last_err = err
             else:  # pyhpp
-                q_rand = (np.array(q_hint, dtype=float) if use_hint
-                          else self.planner.random_config())
-                q_from_arr = np.array(q_from) if not isinstance(
-                    q_from, np.ndarray) else q_from
+                q_rand = (
+                    np.array(q_hint, dtype=float)
+                    if use_hint
+                    else self.planner.random_config()
+                )
+                q_from_arr = (
+                    np.array(q_from) if not isinstance(q_from, np.ndarray) else q_from
+                )
 
                 # Keep all object freeflyer DOF from q_from in q_rand.
                 # Objects not constrained by this edge (e.g. RS1 during a
@@ -385,14 +396,18 @@ class ConfigGenerator:
             if success:
                 if verbose:
                     # Debug: print config and check for invalid values
-                    print(f"       [DEBUG] Generated config via edge '{edge_name}' (attempt {i+1}):")
+                    print(
+                        f"       [DEBUG] Generated config via edge '{edge_name}' (attempt {i+1}):"
+                    )
                     print(f"         config = {config}")
                     if config is None:
-                        print(f"         [ERROR] Config is None!")
+                        print("         [ERROR] Config is None!")
                         continue
                     config_arr = np.array(config)
                     if not np.all(np.isfinite(config_arr)):
-                        print(f"         [ERROR] Config contains non-finite values: {config_arr}")
+                        print(
+                            f"         [ERROR] Config contains non-finite values: {config_arr}"
+                        )
                         # Print offending indices and values
                         for idx, val in enumerate(config_arr):
                             if not np.isfinite(val):
@@ -406,13 +421,17 @@ class ConfigGenerator:
 
                 if config_label:
                     self.configs[config_label] = config
-                    print(f"       ✓ SUCCESS {config_label} generated via edge "
-                          f"'{edge_name}' after {i + 1} attempts")
+                    print(
+                        f"       ✓ SUCCESS {config_label} generated via edge "
+                        f"'{edge_name}' after {i + 1} attempts"
+                    )
                 return True, config
 
         if config_label and verbose:
-            print(f"       ⚠ Generation via edge FAILED: {edge_name} "
-                  f"({last_valid_err or last_err or 'unknown'})")
+            print(
+                f"       ⚠ Generation via edge FAILED: {edge_name} "
+                f"({last_valid_err or last_err or 'unknown'})"
+            )
             # Diagnostic: print solver details on failure
             self._print_edge_failure_diagnostics(
                 edge_name, q_from, q_hint, last_err, last_valid_err
@@ -420,7 +439,12 @@ class ConfigGenerator:
         return False, None
 
     def _print_edge_failure_diagnostics(
-        self, edge_name, q_from, q_hint, last_err, last_valid_err,
+        self,
+        edge_name,
+        q_from,
+        q_hint,
+        last_err,
+        last_valid_err,
     ):
         """Print diagnostic info when generate_via_edge exhausts all attempts."""
         print(f"       --- Edge failure diagnostics for '{edge_name}' ---")
@@ -434,11 +458,15 @@ class ConfigGenerator:
             if len(sig) > 0:
                 print(f"       q_hint vs q_from differ at {len(sig)} DOFs:")
                 for idx in sig[:20]:  # cap output
-                    print(f"         [{idx}] q_from={q_from_arr[idx]:.6f}  "
-                          f"q_hint={q_hint_arr[idx]:.6f}  "
-                          f"delta={diff[idx]:.6f}")
+                    print(
+                        f"         [{idx}] q_from={q_from_arr[idx]:.6f}  "
+                        f"q_hint={q_hint_arr[idx]:.6f}  "
+                        f"delta={diff[idx]:.6f}"
+                    )
             else:
-                print("       q_hint == q_from (identical — cached pregrasp not available)")
+                print(
+                    "       q_hint == q_from (identical — cached pregrasp not available)"
+                )
         # Try applying targetConstraint of the edge to diagnose residuals
         # Use targetConstraint (end-state constraints) rather than
         # pathConstraint (fold), since generateTargetConfig projects to
@@ -465,10 +493,14 @@ class ConfigGenerator:
                                 proj.rightHandSideFromConfig(q_from_arr)
                                 ok_from = proj.apply(q_test_from)
                                 res_from = proj.residualError()
-                                print(f"       targetConstraint.apply(q_from):  "
-                                      f"residual={res_from:.6e}, success={ok_from}")
+                                print(
+                                    f"       targetConstraint.apply(q_from):  "
+                                    f"residual={res_from:.6e}, success={ok_from}"
+                                )
                             except Exception as de:
-                                print(f"       targetConstraint.apply(q_from) failed: {de}")
+                                print(
+                                    f"       targetConstraint.apply(q_from) failed: {de}"
+                                )
                             # Test 2: apply to q_hint if different from q_from
                             if q_hint is not None:
                                 q_hint_arr = np.array(q_hint, dtype=float)
@@ -478,10 +510,14 @@ class ConfigGenerator:
                                         proj.rightHandSideFromConfig(q_from_arr)
                                         ok_hint = proj.apply(q_test_hint)
                                         res_hint = proj.residualError()
-                                        print(f"       targetConstraint.apply(q_hint): "
-                                              f"residual={res_hint:.6e}, success={ok_hint}")
+                                        print(
+                                            f"       targetConstraint.apply(q_hint): "
+                                            f"residual={res_hint:.6e}, success={ok_hint}"
+                                        )
                                     except Exception as de2:
-                                        print(f"       targetConstraint.apply(q_hint) failed: {de2}")
+                                        print(
+                                            f"       targetConstraint.apply(q_hint) failed: {de2}"
+                                        )
         except Exception as e:
             print(f"       Could not retrieve edge constraints: {e}")
         print("       --- End diagnostics ---")

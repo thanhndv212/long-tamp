@@ -20,7 +20,6 @@ from .grasp_sequence import (
     InteractiveGraspSequenceBuilder,
 )
 
-
 __all__ = [
     # Base task
     "ManipulationTask",

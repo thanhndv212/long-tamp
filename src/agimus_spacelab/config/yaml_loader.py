@@ -46,12 +46,12 @@ import yaml
 from agimus_spacelab.config.base_config import Defaults
 from agimus_spacelab.utils.transforms import xyzrpy_to_xyzquat
 
-
 # ---------------------------------------------------------------------------
 # Module-level helpers used as classmethods on the dynamic config class.
 # Defined here (not inside _build_task_config) so they can be pickled and
 # their __qualname__ is clean.
 # ---------------------------------------------------------------------------
+
 
 def _yaml_get_constraint_defs(cls):
     """YAML configs do not declare explicit constraint defs (factory mode)."""
@@ -113,20 +113,14 @@ def _yaml_with_grasp_goals(cls, goal_states):
                 needed_objects.add(obj)
 
     if not needed_objects:
-        raise ValueError(
-            f"Could not find objects for handles: {needed_pairs}"
-        )
+        raise ValueError(f"Could not find objects for handles: {needed_pairs}")
 
     # Preserve YAML ordering.
     objects = [o for o in cls.OBJECTS if o in needed_objects]
     grippers = [g for g in cls.GRIPPERS if g in needed_pairs]
 
-    handles_per_object = [
-        cls.OBJECTS_INFO[obj]["handles"] for obj in objects
-    ]
-    contacts_per_object = [
-        cls.OBJECTS_INFO[obj]["contact_surfaces"] for obj in objects
-    ]
+    handles_per_object = [cls.OBJECTS_INFO[obj]["handles"] for obj in objects]
+    contacts_per_object = [cls.OBJECTS_INFO[obj]["contact_surfaces"] for obj in objects]
     valid_pairs = {g: list(needed_pairs[g]) for g in grippers}
     tool_name = objects[0] if objects else cls.TOOL_NAME
 
@@ -148,6 +142,7 @@ def _yaml_with_grasp_goals(cls, goal_states):
 # Main loader class
 # ---------------------------------------------------------------------------
 
+
 class YamlTaskLoader:
     """Load a YAML task config file and expose ManipulationTask-compatible objects.
 
@@ -157,7 +152,7 @@ class YamlTaskLoader:
     Attributes are lazily built on first access.
     """
 
-    def __init__(self, yaml_path: "str | Path"):
+    def __init__(self, yaml_path: str | Path):
         yaml_path = Path(yaml_path)
         if not yaml_path.exists():
             raise FileNotFoundError(f"YAML config not found: {yaml_path}")
@@ -279,9 +274,7 @@ class YamlTaskLoader:
         translation: List[List[float]] = [
             list(b) for b in ff_data.get("translation", [])
         ]
-        quaternion: List[List[float]] = [
-            list(b) for b in ff_data.get("quaternion", [])
-        ]
+        quaternion: List[List[float]] = [list(b) for b in ff_data.get("quaternion", [])]
 
         # Flat freeflyer bounds: [xmin,xmax, ymin,ymax, zmin,zmax, qxmin,qxmax, ...]
         ff_flat: List[float] = []
@@ -301,6 +294,7 @@ class YamlTaskLoader:
 
         class _JointBounds:
             """Dynamically built joint bounds from YAML."""
+
             FF_FLAT = _ff_flat
             ROBOT_BOUNDS = _robot_bounds
 
@@ -320,12 +314,10 @@ class YamlTaskLoader:
         object_names: List[str] = list(objects_raw.keys())
 
         handles_per_object = [
-            list(objects_raw[obj].get("handles", []))
-            for obj in object_names
+            list(objects_raw[obj].get("handles", [])) for obj in object_names
         ]
         contacts_per_object = [
-            list(objects_raw[obj].get("contact_surfaces", []))
-            for obj in object_names
+            list(objects_raw[obj].get("contact_surfaces", [])) for obj in object_names
         ]
 
         # OBJECTS_INFO is a stable dict used by with_grasp_goals() to map
@@ -333,9 +325,7 @@ class YamlTaskLoader:
         objects_info: Dict[str, Dict[str, List[str]]] = {
             obj: {
                 "handles": list(objects_raw[obj].get("handles", [])),
-                "contact_surfaces": list(
-                    objects_raw[obj].get("contact_surfaces", [])
-                ),
+                "contact_surfaces": list(objects_raw[obj].get("contact_surfaces", [])),
             }
             for obj in object_names
         }
@@ -369,10 +359,7 @@ class YamlTaskLoader:
             "OBJECTS_INFO": objects_info,
             # Grippers & pairs
             "GRIPPERS": list(data.get("grippers", [])),
-            "VALID_PAIRS": {
-                k: list(v)
-                for k, v in data.get("valid_pairs", {}).items()
-            },
+            "VALID_PAIRS": {k: list(v) for k, v in data.get("valid_pairs", {}).items()},
             # Arm groups for auto-freeze
             "ARM_GROUPS": dict(arm_groups_raw),
             "GRIPPER_TO_ARM_KEYWORD": gripper_to_arm_keyword,
@@ -380,9 +367,7 @@ class YamlTaskLoader:
             # Freeze joints — loaded from YAML freeze_joints key
             "FREEZE_JOINT_SUBSTRINGS": list(data.get("freeze_joints", [])),
             # Environment
-            "ENVIRONMENT_CONTACTS": dict(
-                data.get("environment_contacts", {})
-            ),
+            "ENVIRONMENT_CONTACTS": dict(data.get("environment_contacts", {})),
             # Misc task metadata
             "TOOL_NAME": object_names[0] if object_names else "",
             "RULES": None,
@@ -399,42 +384,42 @@ class YamlTaskLoader:
                 "spline_zero_derivatives_at_state",
                 Defaults.SPLINE_ZERO_DERIVATIVES_AT_STATE,
             ),
-            "TIME_PARAM_SAFETY": float(optimization.get(
-                "time_param_safety", Defaults.TIME_PARAM_SAFETY
-            )),
-            "TIME_PARAM_ORDER": int(optimization.get(
-                "time_param_order", Defaults.TIME_PARAM_ORDER
-            )),
-            "TIME_PARAM_METHOD": str(optimization.get(
-                "time_param_method", Defaults.TIME_PARAM_METHOD
-            )),
-            "TOPPRA_VELOCITY_SCALE": float(optimization.get(
-                "toppra_velocity_scale", Defaults.TOPPRA_VELOCITY_SCALE
-            )),
-            "TOPPRA_EFFORT_SCALE": float(optimization.get(
-                "toppra_effort_scale", Defaults.TOPPRA_EFFORT_SCALE
-            )),
-            "TOPPRA_SOLVER": int(optimization.get(
-                "toppra_solver", Defaults.TOPPRA_SOLVER
-            )),
-            "TOPPRA_N": int(optimization.get(
-                "toppra_N", Defaults.TOPPRA_N
-            )),
-            "TOPPRA_INTERPOLATION": str(optimization.get(
-                "toppra_interpolation", Defaults.TOPPRA_INTERPOLATION
-            )),
-            "TOPPRA_GRIDPOINT_METHOD": str(optimization.get(
-                "toppra_gridpoint_method", Defaults.TOPPRA_GRIDPOINT_METHOD
-            )),
-            "TOPPRA_ACTIVE_JOINTS": list(optimization.get(
-                "toppra_active_joints", Defaults.TOPPRA_ACTIVE_JOINTS
-            )),
+            "TIME_PARAM_SAFETY": float(
+                optimization.get("time_param_safety", Defaults.TIME_PARAM_SAFETY)
+            ),
+            "TIME_PARAM_ORDER": int(
+                optimization.get("time_param_order", Defaults.TIME_PARAM_ORDER)
+            ),
+            "TIME_PARAM_METHOD": str(
+                optimization.get("time_param_method", Defaults.TIME_PARAM_METHOD)
+            ),
+            "TOPPRA_VELOCITY_SCALE": float(
+                optimization.get(
+                    "toppra_velocity_scale", Defaults.TOPPRA_VELOCITY_SCALE
+                )
+            ),
+            "TOPPRA_EFFORT_SCALE": float(
+                optimization.get("toppra_effort_scale", Defaults.TOPPRA_EFFORT_SCALE)
+            ),
+            "TOPPRA_SOLVER": int(
+                optimization.get("toppra_solver", Defaults.TOPPRA_SOLVER)
+            ),
+            "TOPPRA_N": int(optimization.get("toppra_N", Defaults.TOPPRA_N)),
+            "TOPPRA_INTERPOLATION": str(
+                optimization.get("toppra_interpolation", Defaults.TOPPRA_INTERPOLATION)
+            ),
+            "TOPPRA_GRIDPOINT_METHOD": str(
+                optimization.get(
+                    "toppra_gridpoint_method", Defaults.TOPPRA_GRIDPOINT_METHOD
+                )
+            ),
+            "TOPPRA_ACTIVE_JOINTS": list(
+                optimization.get("toppra_active_joints", Defaults.TOPPRA_ACTIVE_JOINTS)
+            ),
             # Classmethods
             "get_constraint_defs": classmethod(_yaml_get_constraint_defs),
             "init_poses": classmethod(_yaml_init_poses),
-            "feasible_grasp_goal_states": classmethod(
-                _yaml_feasible_grasp_goal_states
-            ),
+            "feasible_grasp_goal_states": classmethod(_yaml_feasible_grasp_goal_states),
             "with_grasp_goals": classmethod(_yaml_with_grasp_goals),
         }
 

@@ -7,7 +7,7 @@ Both gepetto-viewer (CORBA) and pyhpp_viser (browser-based) viewers are
 supported transparently — functions detect the viewer type at call time.
 """
 
-from typing import List, Optional, Dict, Tuple, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 from agimus_spacelab.planning.graph import GraphBuilder
 
@@ -22,18 +22,20 @@ def print_joint_info(robot):
 
 
 import numpy as np
-from pinocchio import SE3, Quaternion
-from agimus_spacelab.utils import xyzquat_to_se3
+from pinocchio import Quaternion
 
+from agimus_spacelab.utils import xyzquat_to_se3
 
 # ---------------------------------------------------------------------------
 # Viewer-type detection helpers
 # ---------------------------------------------------------------------------
 
+
 def _is_viser_viewer(viewer) -> bool:
     """Return True when *viewer* is a pyhpp_viser.Viewer instance."""
     try:
         from pyhpp_viser import Viewer as _ViserViewer
+
         return isinstance(viewer, _ViserViewer)
     except ImportError:
         return False
@@ -52,8 +54,13 @@ def _viser_xyzquat_to_wxyz(pose: list) -> tuple:
     return pos, wxyz
 
 
-def _viser_add_frame(viewer, name: str, pose: list,
-                     axes_length: float = 0.015, axes_radius: float = 0.005):
+def _viser_add_frame(
+    viewer,
+    name: str,
+    pose: list,
+    axes_length: float = 0.015,
+    axes_radius: float = 0.005,
+):
     """Add a coordinate-frame to a viser scene and register it.
 
     Args:
@@ -86,23 +93,35 @@ def _make_arrow_mesh(length: float, radius: float):
         trimesh.Trimesh combined mesh
     """
     import trimesh
+
     shaft_len = length * 0.75
     tip_len = length * 0.25
     shaft = trimesh.creation.cylinder(
-        radius=radius, height=shaft_len,
+        radius=radius,
+        height=shaft_len,
         transform=trimesh.transformations.translation_matrix([shaft_len / 2, 0, 0])
         @ trimesh.transformations.rotation_matrix(np.pi / 2, [0, 1, 0]),
     )
     cone = trimesh.creation.cone(
-        radius=radius * 2.0, height=tip_len,
-        transform=trimesh.transformations.translation_matrix([shaft_len + tip_len / 2, 0, 0])
+        radius=radius * 2.0,
+        height=tip_len,
+        transform=trimesh.transformations.translation_matrix(
+            [shaft_len + tip_len / 2, 0, 0]
+        )
         @ trimesh.transformations.rotation_matrix(np.pi / 2, [0, 1, 0]),
     )
     return trimesh.util.concatenate([shaft, cone])
 
 
-def _viser_add_arrow(viewer, name: str, pose: list, direction: np.ndarray,
-                     color: list, length: float, radius: float):
+def _viser_add_arrow(
+    viewer,
+    name: str,
+    pose: list,
+    direction: np.ndarray,
+    color: list,
+    length: float,
+    radius: float,
+):
     """Add an arrow mesh to a viser scene pointing along *direction*.
 
     The arrow is placed at the position encoded in *pose* and oriented along
@@ -132,9 +151,11 @@ def _viser_add_arrow(viewer, name: str, pose: list, direction: np.ndarray,
         cross = cross / cross_norm
         angle = np.arccos(np.clip(np.dot(x_axis, d), -1.0, 1.0))
         import pinocchio as pin
+
         R = pin.AngleAxis(angle, cross).toRotationMatrix()
 
     import pinocchio as pin
+
     arrow_wxyz = pin.Quaternion(R).coeffs()[[3, 0, 1, 2]]
 
     rgba = color[:4] if len(color) >= 4 else color + [1.0]
@@ -169,7 +190,7 @@ def displayHandle(
     handle_name: str,
     frame_color: Optional[List[float]] = None,
     axis_radius: float = 0.005,
-    axis_length: float = 0.015
+    axis_length: float = 0.015,
 ) -> bool:
     """
     Display handle frame in the viewer.
@@ -198,8 +219,9 @@ def displayHandle(
         hname = "handle__" + handle_name.replace("/", "_")
 
         if _is_viser_viewer(viewer):
-            _viser_add_frame(viewer, hname, pose,
-                             axes_length=axis_length, axes_radius=axis_radius)
+            _viser_add_frame(
+                viewer, hname, pose, axes_length=axis_length, axes_radius=axis_radius
+            )
         else:
             viewer.client.gui.addXYZaxis(hname, frame_color, axis_radius, axis_length)
             if joint != "universe":
@@ -219,7 +241,7 @@ def displayGripper(
     gripper_name: str,
     frame_color: Optional[List[float]] = None,
     axis_radius: float = 0.005,
-    axis_length: float = 0.015
+    axis_length: float = 0.015,
 ) -> bool:
     """
     Display gripper frame in the viewer.
@@ -245,8 +267,9 @@ def displayGripper(
         gname = "gripper__" + gripper_name.replace("/", "_")
 
         if _is_viser_viewer(viewer):
-            _viser_add_frame(viewer, gname, pose,
-                             axes_length=axis_length, axes_radius=axis_radius)
+            _viser_add_frame(
+                viewer, gname, pose, axes_length=axis_length, axes_radius=axis_radius
+            )
         else:
             viewer.client.gui.addXYZaxis(gname, frame_color, axis_radius, axis_length)
             if joint != "universe":
@@ -267,27 +290,27 @@ def displayHandleApproach(
     arrow_color: Optional[List[float]] = None,
     arrow_length: float = 0.15,
     arrow_radius: float = 0.008,
-    approach_direction: Optional[List[float]] = None
+    approach_direction: Optional[List[float]] = None,
 ) -> bool:
     """
     Display approach direction arrow for a handle.
-    
+
     The arrow will be attached to the same link as the handle frame,
     so it moves with the robot configuration.
-    
+
     Args:
         viewer: Gepetto viewer instance
         handle_name: Full handle name (e.g., "box/handle2")
         arrow_color: RGBA color for arrow [r, g, b, a] (default: [0, 1, 1, 1] cyan)
         arrow_length: Length of approach arrow
         arrow_radius: Radius of approach arrow
-        
+
     Returns:
         True if successful
     """
     if arrow_color is None:
         arrow_color = [0, 1, 1, 1]  # Cyan
-    
+
     try:
         robot = viewer.robot if hasattr(viewer, "robot") else viewer._robot
         joint, pose = robot.getHandlePositionInJoint(handle_name)
@@ -296,21 +319,38 @@ def displayHandleApproach(
         if approach_direction is not None:
             approach_vec = np.array(approach_direction, dtype=float)
         else:
-            approach_vec = np.array(robot.getHandleApproachingDirection(handle_name),
-                                    dtype=float)
+            approach_vec = np.array(
+                robot.getHandleApproachingDirection(handle_name), dtype=float
+            )
 
         arrow_name = "handle__" + handle_name.replace("/", "_") + "_approach"
 
         if _is_viser_viewer(viewer):
-            _viser_add_arrow(viewer, arrow_name, pose, approach_vec,
-                             arrow_color, arrow_length, arrow_radius)
+            _viser_add_arrow(
+                viewer,
+                arrow_name,
+                pose,
+                approach_vec,
+                arrow_color,
+                arrow_length,
+                arrow_radius,
+            )
         else:
             handle_T = xyzquat_to_se3(pose)
             approach_world = handle_T.rotation @ approach_vec
             arrow_quat = _compute_arrow_orientation_gepetto(approach_world)
-            arrow_pose = [pose[0], pose[1], pose[2],
-                          arrow_quat.w, arrow_quat.x, arrow_quat.y, arrow_quat.z]
-            viewer.client.gui.addArrow(arrow_name, arrow_radius, arrow_length, arrow_color)
+            arrow_pose = [
+                pose[0],
+                pose[1],
+                pose[2],
+                arrow_quat.w,
+                arrow_quat.x,
+                arrow_quat.y,
+                arrow_quat.z,
+            ]
+            viewer.client.gui.addArrow(
+                arrow_name, arrow_radius, arrow_length, arrow_color
+            )
             viewer.client.gui.applyConfiguration(arrow_name, arrow_pose)
             if joint != "universe":
                 link = robot.getLinkNames(joint)[0]
@@ -329,14 +369,14 @@ def displayGripperApproach(
     arrow_color: Optional[List[float]] = None,
     arrow_length: float = 0.15,
     arrow_radius: float = 0.008,
-    approach_direction: Optional[List[float]] = None
+    approach_direction: Optional[List[float]] = None,
 ) -> bool:
     """
     Display approach direction arrow for a gripper.
-    
+
     The arrow will be attached to the same link as the gripper frame,
     so it moves with the robot configuration.
-    
+
     Args:
         viewer: Gepetto viewer instance
         gripper_name: Full gripper name (e.g., "pr2/l_gripper")
@@ -344,7 +384,7 @@ def displayGripperApproach(
         arrow_length: Length of approach arrow
         arrow_radius: Radius of approach arrow
         approach_direction: Approach direction in gripper frame (default: [1, 0, 0])
-        
+
     Returns:
         True if successful
     """
@@ -364,15 +404,31 @@ def displayGripperApproach(
         arrow_name = "gripper__" + gripper_name.replace("/", "_") + "_approach"
 
         if _is_viser_viewer(viewer):
-            _viser_add_arrow(viewer, arrow_name, pose, approach_vec,
-                             arrow_color, arrow_length, arrow_radius)
+            _viser_add_arrow(
+                viewer,
+                arrow_name,
+                pose,
+                approach_vec,
+                arrow_color,
+                arrow_length,
+                arrow_radius,
+            )
         else:
             gripper_T = xyzquat_to_se3(pose)
             approach_world = gripper_T.rotation @ approach_vec
             arrow_quat = _compute_arrow_orientation_gepetto(approach_world)
-            arrow_pose = [pose[0], pose[1], pose[2],
-                          arrow_quat.w, arrow_quat.x, arrow_quat.y, arrow_quat.z]
-            viewer.client.gui.addArrow(arrow_name, arrow_radius, arrow_length, arrow_color)
+            arrow_pose = [
+                pose[0],
+                pose[1],
+                pose[2],
+                arrow_quat.w,
+                arrow_quat.x,
+                arrow_quat.y,
+                arrow_quat.z,
+            ]
+            viewer.client.gui.addArrow(
+                arrow_name, arrow_radius, arrow_length, arrow_color
+            )
             viewer.client.gui.applyConfiguration(arrow_name, arrow_pose)
             if joint != "universe":
                 link = robot.getLinkNames(joint)[0]
@@ -394,11 +450,11 @@ def visualize_all_handles(
     axis_length: float = 0.015,
     arrow_color: Optional[List[float]] = None,
     arrow_length: float = 0.15,
-    arrow_radius: float = 0.008
+    arrow_radius: float = 0.008,
 ) -> int:
     """
     Display multiple handles at once.
-    
+
     Args:
         viewer: Gepetto viewer instance
         handle_names: List of handle names
@@ -409,30 +465,32 @@ def visualize_all_handles(
         arrow_color: RGBA color for arrows
         arrow_length: Length of approach arrows
         arrow_radius: Radius of approach arrows
-        
+
     Returns:
         Number of successfully visualized handles
     """
     print(f"\nDisplaying {len(handle_names)} handles...")
     success_count = 0
-    
+
     for handle_name in handle_names:
         print(f"  {handle_name}")
         frame_ok = displayHandle(
-            viewer, handle_name,
+            viewer,
+            handle_name,
             frame_color=frame_color,
             axis_radius=axis_radius,
-            axis_length=axis_length
+            axis_length=axis_length,
         )
         arrow_ok = True
         if show_approach:
             arrow_ok = displayHandleApproach(
-                viewer, handle_name,
+                viewer,
+                handle_name,
                 arrow_color=arrow_color,
                 arrow_length=arrow_length,
                 arrow_radius=arrow_radius,
             )
-        
+
         if frame_ok and arrow_ok:
             success_count += 1
             status = "frame and arrow" if show_approach else "frame"
@@ -441,7 +499,7 @@ def visualize_all_handles(
             print("    ✓ Frame added (arrow failed)")
         else:
             print("    ✗ Failed")
-    
+
     if not _is_viser_viewer(viewer):
         viewer.client.gui.refresh()
     print(f"\nSuccessfully displayed {success_count}/{len(handle_names)} handles")
@@ -458,11 +516,11 @@ def visualize_all_grippers(
     arrow_color: Optional[List[float]] = None,
     arrow_length: float = 0.15,
     arrow_radius: float = 0.008,
-    approach_direction: Optional[List[float]] = None
+    approach_direction: Optional[List[float]] = None,
 ) -> int:
     """
     Display multiple grippers at once.
-    
+
     Args:
         viewer: Gepetto viewer instance
         gripper_names: List of gripper names
@@ -474,31 +532,33 @@ def visualize_all_grippers(
         arrow_length: Length of approach arrows
         arrow_radius: Radius of approach arrows
         approach_direction: Approach direction in gripper frame
-        
+
     Returns:
         Number of successfully visualized grippers
     """
     print(f"\nDisplaying {len(gripper_names)} grippers...")
     success_count = 0
-    
+
     for gripper_name in gripper_names:
         print(f"  {gripper_name}")
         frame_ok = displayGripper(
-            viewer, gripper_name,
+            viewer,
+            gripper_name,
             frame_color=frame_color,
             axis_radius=axis_radius,
-            axis_length=axis_length
+            axis_length=axis_length,
         )
         arrow_ok = True
         if show_approach:
             arrow_ok = displayGripperApproach(
-                viewer, gripper_name,
+                viewer,
+                gripper_name,
                 arrow_color=arrow_color,
                 arrow_length=arrow_length,
                 arrow_radius=arrow_radius,
-                approach_direction=approach_direction
+                approach_direction=approach_direction,
             )
-        
+
         if frame_ok and arrow_ok:
             success_count += 1
             status = "frame and arrow" if show_approach else "frame"
@@ -507,7 +567,7 @@ def visualize_all_grippers(
             print("    ✓ Frame added (arrow failed)")
         else:
             print("    ✗ Failed")
-    
+
     if not _is_viser_viewer(viewer):
         viewer.client.gui.refresh()
     print(f"\nSuccessfully displayed {success_count}/{len(gripper_names)} grippers")
@@ -517,7 +577,7 @@ def visualize_all_grippers(
 def print_handle_info(viewer, handle_name: str) -> None:
     """
     Print detailed information about a handle.
-    
+
     Args:
         viewer: Gepetto viewer instance
         handle_name: Full handle name
@@ -525,7 +585,7 @@ def print_handle_info(viewer, handle_name: str) -> None:
     robot = viewer.robot
     handle_info = robot.getHandlePositionInJoint(handle_name)
     approach_dir = list(robot.getHandleApproachingDirection(handle_name))
-    
+
     print(f"\nHandle: {handle_name}")
     print(f"  Joint: {handle_info[0]}")
     print(f"  Local pose (x,y,z,qw,qx,qy,qz): {handle_info[1]}")
@@ -535,14 +595,14 @@ def print_handle_info(viewer, handle_name: str) -> None:
 def print_gripper_info(viewer, gripper_name: str) -> None:
     """
     Print detailed information about a gripper.
-    
+
     Args:
         viewer: Gepetto viewer instance
         gripper_name: Full gripper name
     """
     robot = viewer.robot
     gripper_info = robot.getGripperPositionInJoint(gripper_name)
-    
+
     print(f"\nGripper: {gripper_name}")
     print(f"  Joint: {gripper_info[0]}")
     print(f"  Local pose (x,y,z,qw,qx,qy,qz): {gripper_info[1]}")
@@ -551,11 +611,11 @@ def print_gripper_info(viewer, gripper_name: str) -> None:
 def remove_visualization(viewer, name: str) -> bool:
     """
     Remove a visualization element from viewer.
-    
+
     Args:
         viewer: Gepetto viewer instance
         name: Name of element to remove (e.g., "handle__box_handle2")
-        
+
     Returns:
         True if successful
     """
@@ -578,7 +638,9 @@ def clear_handle_visualizations(viewer) -> int:
     """
     count = 0
     if _is_viser_viewer(viewer):
-        to_remove = [k for k in list(_VISER_FRAME_REGISTRY.keys()) if k.startswith("handle__")]
+        to_remove = [
+            k for k in list(_VISER_FRAME_REGISTRY.keys()) if k.startswith("handle__")
+        ]
         for name in to_remove:
             try:
                 _VISER_FRAME_REGISTRY.pop(name).remove()
@@ -610,7 +672,9 @@ def clear_gripper_visualizations(viewer) -> int:
     """
     count = 0
     if _is_viser_viewer(viewer):
-        to_remove = [k for k in list(_VISER_FRAME_REGISTRY.keys()) if k.startswith("gripper__")]
+        to_remove = [
+            k for k in list(_VISER_FRAME_REGISTRY.keys()) if k.startswith("gripper__")
+        ]
         for name in to_remove:
             try:
                 _VISER_FRAME_REGISTRY.pop(name).remove()
@@ -633,10 +697,10 @@ def clear_gripper_visualizations(viewer) -> int:
 def clear_all_visualizations(viewer) -> int:
     """
     Clear all handle and gripper visualization elements.
-    
+
     Args:
         viewer: Gepetto viewer instance
-        
+
     Returns:
         Number of elements removed
     """
@@ -652,7 +716,7 @@ def visualize_constraint_graph(
     show_png: bool = False,
     states_dict: Optional[Dict] = None,
     edges_dict: Optional[Dict] = None,
-    edge_topology: Optional[Dict[str, Tuple[str, str]]] = None
+    edge_topology: Optional[Dict[str, Tuple[str, str]]] = None,
 ) -> Optional[str]:
     """
     Visualize constraint graph structure using NetworkX and Graphviz.
@@ -673,10 +737,12 @@ def visualize_constraint_graph(
         Path to the generated PNG file if successful, None otherwise
     """
     try:
-        import networkx as nx
-        import matplotlib.pyplot as plt
         import warnings
-        warnings.filterwarnings('ignore', category=DeprecationWarning)
+
+        import matplotlib.pyplot as plt
+        import networkx as nx
+
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # # Detect backend type and get graph structure accordingly
         # is_pyhpp = hasattr(graph, 'getStates')
@@ -698,7 +764,7 @@ def visualize_constraint_graph(
         edge_labels = {}
         edge_topology = graph_builder.get_edge_topology()
         for edge_name in edges:
-            (from_node, to_node) = edge_topology.get(edge_name, ("?", "?"))
+            from_node, to_node = edge_topology.get(edge_name, ("?", "?"))
             G.add_edge(from_node, to_node, label=edge_name)
             edge_labels[(from_node, to_node)] = edge_name
         # Set up the plot
@@ -712,43 +778,43 @@ def visualize_constraint_graph(
 
         # Draw nodes
         node_colors = [
-            'lightblue' if 'free' in node.lower() else 'lightgreen'
+            "lightblue" if "free" in node.lower() else "lightgreen"
             for node in G.nodes()
         ]
         nx.draw_networkx_nodes(
-            G, pos, node_color=node_colors,
-            node_size=3000, alpha=0.9, ax=ax
+            G, pos, node_color=node_colors, node_size=3000, alpha=0.9, ax=ax
         )
 
         # Draw node labels
-        nx.draw_networkx_labels(
-            G, pos, font_size=9, font_weight='bold', ax=ax
-        )
+        nx.draw_networkx_labels(G, pos, font_size=9, font_weight="bold", ax=ax)
 
         # Draw edges
         nx.draw_networkx_edges(
-            G, pos, edge_color='gray',
-            arrows=True, arrowsize=20,
-            arrowstyle='->', width=2, ax=ax
+            G,
+            pos,
+            edge_color="gray",
+            arrows=True,
+            arrowsize=20,
+            arrowstyle="->",
+            width=2,
+            ax=ax,
         )
 
         # Draw edge labels
-        nx.draw_networkx_edge_labels(
-            G, pos, edge_labels, font_size=7, ax=ax
-        )
+        nx.draw_networkx_edge_labels(G, pos, edge_labels, font_size=7, ax=ax)
 
         # Add title and info
         title = "Constraint Graph Visualization"
         if include_subgraph:
             title += f"\n{len(nodes)} nodes, {len(edges)} edges"
-        ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
-        ax.axis('off')
+        ax.set_title(title, fontsize=14, fontweight="bold", pad=20)
+        ax.axis("off")
 
         plt.tight_layout()
 
         # Save to file
         png_path = f"{output_path}.png"
-        plt.savefig(png_path, dpi=150, bbox_inches='tight')
+        plt.savefig(png_path, dpi=150, bbox_inches="tight")
         print(f"  ✓ Saved graph visualization to: {png_path}")
 
         # Print node/edge details
@@ -779,6 +845,7 @@ def visualize_constraint_graph(
     except Exception as e:
         print(f"  ⚠ Failed to visualize graph: {e}")
         import traceback
+
         traceback.print_exc()
         return None
 
@@ -817,8 +884,8 @@ def visualize_constraint_graph_interactive(
     """
     try:
         from agimus_spacelab.visualization.live_graph_viz import (
-            LiveConstraintGraphVisualizer,
             HAS_GRAPH_TOOL,
+            LiveConstraintGraphVisualizer,
         )
 
         if not HAS_GRAPH_TOOL:

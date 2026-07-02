@@ -17,15 +17,15 @@ Example usage:
 from __future__ import annotations
 
 import argparse
-from typing import Optional, List
+from typing import List, Optional
 
 from .config_loader import load_task_config
 
 __all__ = [
-    "add_common_arguments",
-    "add_task_arguments",
     "add_advanced_arguments",
+    "add_common_arguments",
     "add_grasp_sequence_arguments",
+    "add_task_arguments",
     "load_task_config",
 ]
 
@@ -261,7 +261,6 @@ def parse_goal_pairs(pairs: List[str]) -> List[str]:
             goals.append(f"{gripper.strip()} grasps {handle.strip()}")
         else:
             print(
-                f"Warning: Invalid --pair format '{pair}', "
-                "expected 'GRIPPER:HANDLE'"
+                f"Warning: Invalid --pair format '{pair}', " "expected 'GRIPPER:HANDLE'"
             )
     return goals

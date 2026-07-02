@@ -55,9 +55,7 @@ from typing import Optional, Tuple
 try:
     from hpp.corbaserver.manipulation import ConstraintGraphFactory
 except ImportError:
-    from pyhpp.manipulation.constraint_graph_factory import (
-        ConstraintGraphFactory
-    )
+    from pyhpp.manipulation.constraint_graph_factory import ConstraintGraphFactory
 
 from .sequential_grasp_filter import (
     SequentialGraspFilter,
@@ -199,9 +197,7 @@ class SequentialConstraintGraphFactory(ConstraintGraphFactory):
             # Filters not initialized yet (shouldn't happen during generate)
             return super().transitionIsAllowed(stateFrom, stateTo)
 
-        return self.transition_filter.is_allowed(
-            stateFrom.grasps, stateTo.grasps
-        )
+        return self.transition_filter.is_allowed(stateFrom.grasps, stateTo.grasps)
 
 
 __all__ = ["SequentialConstraintGraphFactory"]

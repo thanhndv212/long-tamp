@@ -17,13 +17,13 @@ Example usage:
 from __future__ import annotations
 
 import sys
-from typing import List, Optional, Callable
+from typing import Callable, List, Optional
 
 __all__ = [
-    "interactive_menu",
     "clear_line",
-    "move_cursor_up",
     "hide_cursor",
+    "interactive_menu",
+    "move_cursor_up",
     "show_cursor",
 ]
 
@@ -69,8 +69,8 @@ def _get_getch() -> Optional[Callable[[], str]]:
         Callable that reads a single character/escape sequence, or None if unavailable.
     """
     try:
-        import tty
         import termios
+        import tty
 
         def getch() -> str:
             fd = sys.stdin.fileno()

@@ -8,18 +8,17 @@ configurations.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 from agimus_spacelab.utils.interactive import interactive_menu
 
-
 __all__ = [
-    "select_grasp_pairs",
-    "select_frozen_arms",
     "browse_configurations",
-    "select_skip_phases",
-    "select_frozen_arms_mode",
     "select_auto_save_directory",
+    "select_frozen_arms",
+    "select_frozen_arms_mode",
+    "select_grasp_pairs",
+    "select_skip_phases",
 ]
 
 
@@ -94,6 +93,7 @@ def select_frozen_arms(
     """
     if arm_options is None:
         import warnings
+
         warnings.warn(
             "select_frozen_arms() called without arm_options. "
             "Pass task_config.ALL_ARM_KEYWORDS so the menu shows the correct "
@@ -201,9 +201,7 @@ def select_skip_phases(
     # Check if "Skip ALL phases" (index 0) was selected
     if skip_selected and 0 in skip_selected:
         skip_phases = set(range(len(grasp_sequence)))
-        print(
-            f"\nSkipping ALL {len(grasp_sequence)} phases - Config generation only"
-        )
+        print(f"\nSkipping ALL {len(grasp_sequence)} phases - Config generation only")
         return skip_phases, True
 
     # Collect individual phase indices (adjust for "Skip ALL" option at index 0)
@@ -274,6 +272,7 @@ def select_frozen_arms_mode(
         per_phase_frozen_arms = {}
         if arm_keywords is None:
             import warnings
+
             warnings.warn(
                 "select_frozen_arms_mode() called without arm_keywords. "
                 "Pass task_config.ALL_ARM_KEYWORDS for correct arm choices.",
@@ -294,9 +293,7 @@ def select_frozen_arms_mode(
 
             arm_count = len(arm_keywords)
             if selected_arms and selected_arms[0] < arm_count:
-                frozen = [
-                    arm_keywords[i] for i in selected_arms if i < arm_count
-                ]
+                frozen = [arm_keywords[i] for i in selected_arms if i < arm_count]
                 per_phase_frozen_arms[phase_idx] = frozen
                 print(f"  Freezing: {frozen}")
             else:

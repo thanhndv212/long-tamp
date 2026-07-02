@@ -45,7 +45,7 @@ class GraspStateTracker:
         """
         self.grippers = grippers
         self.handles = handles
-        
+
         # Store gripper order to match ConstraintGraphFactory ordering
         # This is critical for state name generation
         self.gripper_order = list(grippers)
@@ -76,12 +76,8 @@ class GraspStateTracker:
         Must be called after each build_phase_graph so that abbreviated
         state indices match the ConstraintGraphFactory ordering.
         """
-        self._phase_gripper_to_idx = {
-            g: i for i, g in enumerate(phase_grippers)
-        }
-        self._phase_handle_to_idx = {
-            h: i for i, h in enumerate(phase_handles)
-        }
+        self._phase_gripper_to_idx = {g: i for i, g in enumerate(phase_grippers)}
+        self._phase_handle_to_idx = {h: i for i, h in enumerate(phase_handles)}
 
     def _get_abbreviated_state(
         self, grasps: Optional[Dict[str, Optional[str]]] = None
@@ -104,6 +100,7 @@ class GraspStateTracker:
             g_idx_map = self._phase_gripper_to_idx
         else:
             import warnings
+
             warnings.warn(
                 "Phase-local gripper indices not set — using global indices. "
                 "Call set_phase_indices() after build_phase_graph() to ensure "
@@ -116,6 +113,7 @@ class GraspStateTracker:
             h_idx_map = self._phase_handle_to_idx
         else:
             import warnings
+
             warnings.warn(
                 "Phase-local handle indices not set — using global indices. "
                 "Call set_phase_indices() after build_phase_graph() to ensure "
@@ -198,7 +196,7 @@ class GraspStateTracker:
         """
         # Validate inputs using get_grasp_edge (will raise if invalid)
         base_edge = self.get_grasp_edge(gripper, handle)
-        
+
         # Factory creates waypoint edges with _01, _12 suffixes
         # These represent: free -> pregrasp (_01) -> grasp (_12)
         return [f"{base_edge}_01", f"{base_edge}_12"]
@@ -261,9 +259,7 @@ class GraspStateTracker:
         if handle is None:
             raise ValueError(f"Gripper '{gripper}' is not holding anything")
 
-        grasps_after = {
-            g: h for g, h in self.current_grasps.items() if g != gripper
-        }
+        grasps_after = {g: h for g, h in self.current_grasps.items() if g != gripper}
         grasps_after[gripper] = None
         state_abbrev = self._get_abbreviated_state(grasps_after)
         return f"{gripper} > {handle} | {state_abbrev}_01"
@@ -313,7 +309,7 @@ class GraspStateTracker:
         """
         # Validate inputs using get_release_edge (will raise if invalid)
         base_edge = self.get_release_edge(gripper)
-        
+
         # Factory creates waypoint edges with _21, _10 suffixes for release
         # These represent: grasp -> prerelease (_21) -> free (_10)
         return [f"{base_edge}_21", f"{base_edge}_10"]
@@ -356,15 +352,11 @@ class GraspStateTracker:
             # Check handle is not already grasped
             for g, h in self.current_grasps.items():
                 if h == handle and g != gripper:
-                    raise ValueError(
-                        f"Cannot grasp '{handle}': already held by '{g}'"
-                    )
+                    raise ValueError(f"Cannot grasp '{handle}': already held by '{g}'")
         else:
             # Releasing: check gripper holds something
             if self.current_grasps[gripper] is None:
-                raise ValueError(
-                    f"Cannot release: gripper '{gripper}' holds nothing"
-                )
+                raise ValueError(f"Cannot release: gripper '{gripper}' holds nothing")
 
         self.current_grasps[gripper] = handle
 
@@ -374,7 +366,7 @@ class GraspStateTracker:
         Returns:
             State name, e.g., "free" or
             "gripper1 grasps handle1 : gripper2 grasps handle2"
-            
+
         Note:
             Uses gripper_order (from GRIPPERS list) to match
             ConstraintGraphFactory._stateName() ordering convention.
@@ -419,11 +411,7 @@ class GraspStateTracker:
             True if gripper exists and is not holding anything
         """
         gripper_exists = gripper in self.current_grasps
-        is_none = (
-            self.current_grasps[gripper] is None
-            if gripper_exists
-            else False
-        )
+        is_none = self.current_grasps[gripper] is None if gripper_exists else False
         return gripper_exists and is_none
 
     def get_gripper_handle(self, gripper: str) -> Optional[str]:
@@ -437,7 +425,7 @@ class GraspStateTracker:
         """
         return self.current_grasps.get(gripper)
 
-    def copy(self) -> "GraspStateTracker":
+    def copy(self) -> GraspStateTracker:
         """Create a copy of this tracker with the same configuration.
 
         Returns:

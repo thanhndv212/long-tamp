@@ -14,7 +14,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-
 # ---------------------------------------------------------------------------
 # Serialisation helpers
 # ---------------------------------------------------------------------------
@@ -34,6 +33,7 @@ def _make_serializable(obj: Any) -> Any:
     # Numpy types (optional import — gracefully skipped if not present)
     try:
         import numpy as np  # type: ignore[import]
+
         if isinstance(obj, np.integer):
             return int(obj)
         if isinstance(obj, np.floating):
@@ -54,6 +54,7 @@ def _make_serializable(obj: Any) -> Any:
     # Dataclasses
     try:
         import dataclasses
+
         if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
             return _make_serializable(dataclasses.asdict(obj))
     except ImportError:
@@ -166,6 +167,7 @@ class RunLogger:
         # Ensure close() is called even if the caller never does so explicitly
         # (e.g. on an unhandled exception that exits the process).
         import atexit
+
         atexit.register(self.close)
 
     # ------------------------------------------------------------------
@@ -190,9 +192,7 @@ class RunLogger:
                 "run_id": self.run_id,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
-            record.update(
-                {k: _make_serializable(v) for k, v in kwargs.items()}
-            )
+            record.update({k: _make_serializable(v) for k, v in kwargs.items()})
             line = json.dumps(record, ensure_ascii=False)
             self._file.write(line + "\n")
             self._file.flush()
@@ -294,9 +294,7 @@ class RunLogger:
                 }
         try:
             with open(self.replay_path, "w", encoding="utf-8") as f:
-                yaml.dump(
-                    replay, f, default_flow_style=False, allow_unicode=True
-                )
+                yaml.dump(replay, f, default_flow_style=False, allow_unicode=True)
         except Exception:
             pass
 

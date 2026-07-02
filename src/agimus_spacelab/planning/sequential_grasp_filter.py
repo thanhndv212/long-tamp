@@ -226,14 +226,10 @@ class SequentialGraspFilter:
         self.handle_names = handles
 
         # Convert current grasps to tuple
-        self.current_grasps = grasps_dict_to_tuple(
-            current_grasps, grippers, handles
-        )
+        self.current_grasps = grasps_dict_to_tuple(current_grasps, grippers, handles)
 
         # Compute next grasps tuple (handle_idx may be None for release)
-        gripper_idx, handle_idx = next_grasp_to_indices(
-            next_grasp, grippers, handles
-        )
+        gripper_idx, handle_idx = next_grasp_to_indices(next_grasp, grippers, handles)
 
         # Build next state: current + one grasp change (add or release)
         next_list = list(self.current_grasps)
@@ -296,20 +292,17 @@ class SequentialTransitionFilter:
             next_grasp: Next grasp or release as (gripper_name, handle_name).
                     Pass ``None`` as handle_name for a release transition.
         """
-        self.current_grasps = grasps_dict_to_tuple(
-            current_grasps, grippers, handles
-        )
+        self.current_grasps = grasps_dict_to_tuple(current_grasps, grippers, handles)
 
-        gripper_idx, handle_idx = next_grasp_to_indices(
-            next_grasp, grippers, handles
-        )
+        gripper_idx, handle_idx = next_grasp_to_indices(next_grasp, grippers, handles)
         next_list = list(self.current_grasps)
         next_list[gripper_idx] = handle_idx  # None for release
         self.next_grasps = tuple(next_list)
 
     def is_allowed(
-        self, state_from_grasps: Tuple[Optional[int], ...],
-        state_to_grasps: Tuple[Optional[int], ...]
+        self,
+        state_from_grasps: Tuple[Optional[int], ...],
+        state_to_grasps: Tuple[Optional[int], ...],
     ) -> bool:
         """Check if transition between states is allowed.
 
