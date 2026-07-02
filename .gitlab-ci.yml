@@ -17,20 +17,31 @@
 stages:
   - lint
 
-# Style/lint sweep. The codebase currently carries lint + formatting debt, so
-# this job is ADVISORY (allow_failure) — it reports issues in the MR without
-# blocking. Burn the debt down with `ruff check --fix src` and `black src`,
-# then remove `allow_failure` to make it enforcing.
-lint:
-  stage: lint
+.lint_base:
   image: python:3.12
   before_script:
     - python -m pip install --upgrade pip
     - pip install ruff black
-  script:
-    - ruff check src
-    - black --check src
-  allow_failure: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Enforcing: real errors (pyflakes F-codes: undefined/unused names, etc.) and
+# formatting. These are kept clean in the tree, so a failure here is a genuine
+# regression and blocks the pipeline.
+lint:
+  extends: .lint_base
+  stage: lint
+  script:
+    - ruff check --select F src
+    - black --check src
+
+# Advisory: the full ruff style set still carries debt (RUF012 mutable class
+# defaults, RUF013 implicit-optional, ambiguous unicode, …). Reported in the MR
+# without blocking. Burn it down, then fold rules into the enforcing `lint` job.
+lint-style:
+  extends: .lint_base
+  stage: lint
+  script:
+    - ruff check src
+  allow_failure: true
