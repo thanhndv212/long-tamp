@@ -59,10 +59,8 @@ devel/
 install/
 log/
 
-# Documentation
-doc/_build/
-doc/_static/
-doc/_templates/
+# Documentation (not tracked)
+doc/
 
 # ROS
 CATKIN_IGNORE
