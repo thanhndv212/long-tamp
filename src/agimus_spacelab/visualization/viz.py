@@ -858,7 +858,7 @@ def visualize_constraint_graph_interactive(
 
 __all__ = [
     "print_joint_info",
-    "visualize_handle_frames",
+    "visualize_all_handles",
     "visualize_constraint_graph",
     "visualize_constraint_graph_interactive",
 ]

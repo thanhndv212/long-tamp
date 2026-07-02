@@ -3,7 +3,7 @@ Visualization utilities for agimus_spacelab manipulation tasks.
 
 This module provides visualization functions:
 - print_joint_info: Display joint information
-- visualize_handle_frames: Add handle frame visualization
+- visualize_all_handles: Add handle frame visualization
 - visualize_constraint_graph: Generate static graph diagrams
 - visualize_constraint_graph_interactive: Create live interactive graph windows
 - VideoRecorder: Record path playback as video
@@ -13,7 +13,7 @@ Usage:
     from agimus_spacelab.visualization import (
         visualize_constraint_graph,
         visualize_constraint_graph_interactive,
-        visualize_handle_frames,
+        visualize_all_handles,
         print_joint_info,
         VideoRecorder,
         record_path_playback,

@@ -615,9 +615,6 @@ class GraspSequencePlanner:
                             print(f"       ⚠ Native format skipped: Graph-constrained paths (JSON format works)")
                         else:
                             print(f"       ⚠ Native format failed: {e}")
-                else:
-                    if verbose:
-                        print(f"       ⚠ Failed to save {base_filename}: {e}")
 
         self.saved_path_files.extend(saved_files)
         return saved_files
@@ -2588,6 +2585,11 @@ class GraspSequencePlanner:
                     pass
 
             for edge_idx in range(start_edge_idx, len(edge_sequence)):
+                # Resolve the edge name first so the stop-request handler below
+                # can record it (otherwise a stop on the first iteration would
+                # reference an undefined `edge_name`).
+                edge_name = edge_sequence[edge_idx]
+
                 # Check for stop request
                 if is_stop_requested():
                     if verbose:
@@ -2630,7 +2632,6 @@ class GraspSequencePlanner:
                     disable_graceful_stop()
                     raise KeyboardInterrupt("Planning stopped by user request")
 
-                edge_name = edge_sequence[edge_idx]
                 edge_start_time = time.time()
 
                 # Get previous attempt count for this edge
