@@ -2130,27 +2130,52 @@ class PyHPPBackend(BackendBase):
             edge_type = "pregrasp" if is_waypoint_pregrasp else "forward grasp (_12)"
             print(f"      [TP] Waypoint {edge_type} edge, " "skipping directPath")
 
-        # Fall back to computePath if directPath didn't work or was skipped
+        # Fall back to computePath (preferred) if directPath didn't work or
+        # was skipped. computePath was only added to hpp-python/hpp-manipulation
+        # in mid-2026; older builds only expose the 0-arg base-class
+        # computePath(), which raises a boost::python signature-mismatch
+        # TypeError when called with (qInit, qGoals, resetRoadmap). In that
+        # case fall back to the older planPath API (goals as rows), which
+        # exists across both old and new hpp-python versions, so this keeps
+        # working regardless of which hpp-python build is installed.
         if pv is None:
-            print("      [TP] Falling back to computePath")
             try:
+                print("      [TP] Falling back to computePath")
                 # computePath convention: goals as columns (configSize x numGoals).
                 # The Python binding wrapper in hpp-python handles the eigenpy
                 # Stride<0,0> ColMajor workaround for (N,1) arrays.
                 q_goals_col = q2_arr.reshape(-1, 1)
                 pv = tp.computePath(q1_arr, q_goals_col, bool(reset_roadmap))
                 print("      [TP] computePath succeeded")
+            except TypeError as exc:
+                print(
+                    f"      [TP] computePath signature mismatch ({exc}), "
+                    "falling back to planPath (older hpp-python build)"
+                )
                 try:
-                    pv = tp.optimizePath(pv)
-                    print("      [TP] Path optimized")
-                except Exception:
-                    print("      [TP] Optimization failed, " "using unoptimized path")
+                    # planPath handles (1,N) numpy arrays via an internal
+                    # RowMajor re-map that bypasses the eigenpy Stride<0,0> bug.
+                    q_goals_2D = q2_arr.reshape(1, -1)
+                    pv = tp.planPath(q1_arr, q_goals_2D, bool(reset_roadmap))
+                    print("      [TP] planPath succeeded")
+                except Exception as exc2:
+                    edge_type = "waypoint" if skip_direct_path else "transit"
+                    raise RuntimeError(
+                        f"TransitionPlanner.planPath failed for {edge_type} edge "
+                        f"{edge_name}: {exc2}"
+                    )
             except Exception as exc:
                 edge_type = "waypoint" if skip_direct_path else "transit"
                 raise RuntimeError(
                     f"TransitionPlanner.computePath failed for {edge_type} edge "
                     f"{edge_name}: {exc}"
                 )
+
+            try:
+                pv = tp.optimizePath(pv)
+                print("      [TP] Path optimized")
+            except Exception:
+                print("      [TP] Optimization failed, " "using unoptimized path")
 
         if pv is None:
             return None, None
