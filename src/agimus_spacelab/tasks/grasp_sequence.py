@@ -372,18 +372,50 @@ class GraspSequencePlanner:
         # from the current context, not a stale Phase-2 configuration.
         self._last_pregrasp_q[gripper] = q_pregrasp
 
+        # Retry edge_21 planning with fresh (unhinted, randomly-seeded)
+        # pregrasp targets on failure, mirroring the regenerate-and-retry
+        # pattern used for the main grasp-edge planning below (see
+        # _MAX_COLLISION_RETRIES loops later in this file): a particular
+        # IK solution may be kinematically valid but sit in a region the
+        # RRT can't reach, so resampling the target before giving up on
+        # this edge (and falling back to the direct release edge) is
+        # cheap insurance against an unlucky first sample.
         path21 = None
         t_plan1 = 0.0
         plan_err_21 = None
-        try:
-            t0 = time.time()
-            path21, _ = self.planner.plan_transition_edge(
-                edge=edge_21, q1=q_start, q2=q_pregrasp
-            )
-            t_plan1 = time.time() - t0
-        except Exception as e:
-            t_plan1 = time.time() - t0
-            plan_err_21 = e
+        t0 = time.time()
+        for _attempt_21 in range(self._MAX_COLLISION_RETRIES):
+            try:
+                path21, _ = self.planner.plan_transition_edge(
+                    edge=edge_21, q1=q_start, q2=q_pregrasp
+                )
+                if path21 is None:
+                    raise RuntimeError(f"Planning failed for edge '{edge_21}'")
+                plan_err_21 = None
+                break
+            except Exception as e:
+                plan_err_21 = e
+                path21 = None
+                if _attempt_21 < self._MAX_COLLISION_RETRIES - 1:
+                    if verbose:
+                        print(
+                            f"    ⚠ Planning '{edge_21}' failed "
+                            f"(attempt {_attempt_21 + 1}), "
+                            "regenerating pregrasp config..."
+                        )
+                    _ok21, _q_new21 = self.config_gen.generate_via_edge(
+                        edge_name=edge_01,
+                        q_from=q_start,
+                        config_label=f"q_autorelease_{gripper}_pregrasp",
+                    )
+                    if (
+                        _ok21
+                        and _q_new21 is not None
+                        and np.all(np.isfinite(_q_new21))
+                    ):
+                        q_pregrasp = _q_new21
+                        self._last_pregrasp_q[gripper] = q_pregrasp
+        t_plan1 = time.time() - t0
 
         # --- Step 2 (primary): pregrasp -> free ---
         t_gen2 = 0.0
@@ -403,28 +435,57 @@ class GraspSequencePlanner:
             if verbose:
                 print(f"    Planning release edge: {edge_10}")
 
-            t0 = time.time()
-            ok, q_free = self.config_gen.generate_via_edge(
-                edge_name=edge_10,
-                q_from=q_start,
-                config_label=f"q_autorelease_{gripper}_free",
-            )
-            t_gen2 = time.time() - t0
-            if not ok or q_free is None or not np.all(np.isfinite(q_free)):
-                raise RuntimeError(
-                    f"Auto-release of '{released_handle}': failed to "
-                    f"generate target config via edge '{edge_10}'"
+            # Same regenerate-and-retry treatment as edge_21 above: retry
+            # target generation + planning together up to
+            # _MAX_COLLISION_RETRIES times before giving up on this edge.
+            q_free = None
+            path10 = None
+            plan_err_10 = None
+            for _attempt_10 in range(self._MAX_COLLISION_RETRIES):
+                _t0 = time.time()
+                ok, q_free_candidate = self.config_gen.generate_via_edge(
+                    edge_name=edge_10,
+                    q_from=q_start,
+                    config_label=f"q_autorelease_{gripper}_free",
                 )
+                t_gen2 += time.time() - _t0
+                if (
+                    not ok
+                    or q_free_candidate is None
+                    or not np.all(np.isfinite(q_free_candidate))
+                ):
+                    plan_err_10 = RuntimeError(
+                        f"failed to generate target config via edge '{edge_10}'"
+                    )
+                    continue
+                q_free = q_free_candidate
 
-            t0 = time.time()
-            path10, _ = self.planner.plan_transition_edge(
-                edge=edge_10, q1=q_start, q2=q_free
-            )
-            t_plan2 = time.time() - t0
+                _t0 = time.time()
+                try:
+                    path10, _ = self.planner.plan_transition_edge(
+                        edge=edge_10, q1=q_start, q2=q_free
+                    )
+                    t_plan2 += time.time() - _t0
+                    if path10 is None:
+                        raise RuntimeError(f"Planning failed for edge '{edge_10}'")
+                    plan_err_10 = None
+                    break
+                except Exception as e:
+                    t_plan2 += time.time() - _t0
+                    plan_err_10 = e
+                    path10 = None
+                    if verbose and _attempt_10 < self._MAX_COLLISION_RETRIES - 1:
+                        print(
+                            f"    ⚠ Planning '{edge_10}' failed "
+                            f"(attempt {_attempt_10 + 1}), "
+                            "regenerating target config..."
+                        )
             if path10 is None:
                 raise RuntimeError(
-                    f"Auto-release of '{released_handle}': motion planning "
-                    f"failed for edge '{edge_10}'"
+                    f"Auto-release of '{released_handle}': failed to "
+                    f"generate/plan edge '{edge_10}' after "
+                    f"{self._MAX_COLLISION_RETRIES} attempts "
+                    f"(last error: {plan_err_10})"
                 )
             q_start = (
                 list(path10.getEndConfig())
@@ -452,31 +513,58 @@ class GraspSequencePlanner:
             if verbose:
                 print(f"    Planning direct release edge: {direct_edge}")
 
-            t0 = time.time()
-            ok_d, q_free_d = self.config_gen.generate_via_edge(
-                edge_name=direct_edge,
-                q_from=q_start,
-                config_label=f"q_autorelease_{gripper}_free_direct",
-                q_hint=None,  # random arm seeds — avoids NYX-blocked direction
-            )
-            t_gen_direct = time.time() - t0
-            if not ok_d or q_free_d is None or not np.all(np.isfinite(q_free_d)):
-                raise RuntimeError(
-                    f"Auto-release of '{released_handle}': _21 failed "
-                    f"({plan_err_21}) and direct release edge '{direct_edge}' "
-                    f"also failed to generate a free config"
+            # Same regenerate-and-retry treatment as edge_21/edge_10 above.
+            q_free_d = None
+            path_direct = None
+            plan_err_direct = None
+            for _attempt_d in range(self._MAX_COLLISION_RETRIES):
+                t0 = time.time()
+                ok_d, q_free_d_candidate = self.config_gen.generate_via_edge(
+                    edge_name=direct_edge,
+                    q_from=q_start,
+                    config_label=f"q_autorelease_{gripper}_free_direct",
+                    q_hint=None,  # random arm seeds — avoids NYX-blocked direction
                 )
+                t_gen_direct += time.time() - t0
+                if (
+                    not ok_d
+                    or q_free_d_candidate is None
+                    or not np.all(np.isfinite(q_free_d_candidate))
+                ):
+                    plan_err_direct = RuntimeError(
+                        f"failed to generate a free config via edge '{direct_edge}'"
+                    )
+                    continue
+                q_free_d = q_free_d_candidate
 
-            t0 = time.time()
-            path_direct, _ = self.planner.plan_transition_edge(
-                edge=direct_edge, q1=q_start, q2=q_free_d
-            )
-            t_plan_direct = time.time() - t0
+                t0 = time.time()
+                try:
+                    path_direct, _ = self.planner.plan_transition_edge(
+                        edge=direct_edge, q1=q_start, q2=q_free_d
+                    )
+                    t_plan_direct += time.time() - t0
+                    if path_direct is None:
+                        raise RuntimeError(
+                            f"Planning failed for edge '{direct_edge}'"
+                        )
+                    plan_err_direct = None
+                    break
+                except Exception as e:
+                    t_plan_direct += time.time() - t0
+                    plan_err_direct = e
+                    path_direct = None
+                    if verbose and _attempt_d < self._MAX_COLLISION_RETRIES - 1:
+                        print(
+                            f"    ⚠ Planning '{direct_edge}' failed "
+                            f"(attempt {_attempt_d + 1}), "
+                            "regenerating target config..."
+                        )
             if path_direct is None:
                 raise RuntimeError(
                     f"Auto-release of '{released_handle}': _21 failed "
                     f"({plan_err_21}) and direct release edge '{direct_edge}' "
-                    f"also failed motion planning"
+                    f"also failed after {self._MAX_COLLISION_RETRIES} attempts "
+                    f"(last error: {plan_err_direct})"
                 )
             q_start = (
                 list(path_direct.getEndConfig())
