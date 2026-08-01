@@ -5,6 +5,7 @@ Configuration generation and management for manipulation tasks.
 Provides ConfigGenerator for generating and validating configurations.
 """
 
+import time
 from collections import deque
 from typing import Dict, List, Optional, Tuple
 
@@ -291,6 +292,7 @@ class ConfigGenerator:
         config_label: Optional[str] = None,
         verbose: bool = True,
         q_hint: Optional[List[float]] = None,
+        timeout: Optional[float] = 30.0,
     ) -> Tuple[bool, Optional[List[float]]]:
         """
         Generate target configuration by shooting random configs along edge.
@@ -305,13 +307,30 @@ class ConfigGenerator:
                 Useful when a nearby solution is known (e.g. for release
                 pregrasp generation: starting from q_grasped, the IK only
                 needs to pull the arm back by the clearance distance).
+            timeout: Wall-clock cap in seconds across all attempts, or None
+                for no cap. Each attempt is bounded by iteration count
+                (graph.maxIterations()) but not by wall-clock time, so
+                self.max_attempts random restarts of an expensive solve had
+                no overall ceiling.
 
         Returns:
             Tuple of (success, generated_config or None)
         """
         last_err = None
         last_valid_err = None
+        n_solver_fail = 0
+        n_collision_invalid = 0
+        _t_start = time.time()
         for i in range(self.max_attempts):
+            if timeout is not None and (time.time() - _t_start) > timeout:
+                if verbose:
+                    print(
+                        f"       ⚠ Generation via edge TIMED OUT: {edge_name} "
+                        f"after {i} attempts / {timeout:.0f}s "
+                        f"({n_solver_fail} solver-failed, "
+                        f"{n_collision_invalid} invalid/in-collision)"
+                    )
+                return False, None
             use_hint = i == 0 and q_hint is not None
             # Generate random config (or use hint on first attempt)
             if self.backend == "corba":
@@ -393,39 +412,43 @@ class ConfigGenerator:
                 config = q_target.tolist() if success else None
                 last_err = err
 
-            if success:
-                if verbose:
-                    # Debug: print config and check for invalid values
-                    print(
-                        f"       [DEBUG] Generated config via edge '{edge_name}' (attempt {i+1}):"
-                    )
-                    print(f"         config = {config}")
-                    if config is None:
-                        print("         [ERROR] Config is None!")
-                        continue
-                    config_arr = np.array(config)
-                    if not np.all(np.isfinite(config_arr)):
-                        print(
-                            f"         [ERROR] Config contains non-finite values: {config_arr}"
-                        )
-                        # Print offending indices and values
-                        for idx, val in enumerate(config_arr):
-                            if not np.isfinite(val):
-                                print(f"           [BAD] idx={idx}, value={val}")
-                        continue
+            if not success:
+                n_solver_fail += 1
+                continue
 
-                is_valid, valid_err = self.is_config_valid(config)
-                if not is_valid:
-                    last_valid_err = valid_err
+            if verbose:
+                # Debug: print config and check for invalid values
+                print(
+                    f"       [DEBUG] Generated config via edge '{edge_name}' (attempt {i+1}):"
+                )
+                print(f"         config = {config}")
+                if config is None:
+                    print("         [ERROR] Config is None!")
+                    continue
+                config_arr = np.array(config)
+                if not np.all(np.isfinite(config_arr)):
+                    print(
+                        f"         [ERROR] Config contains non-finite values: {config_arr}"
+                    )
+                    # Print offending indices and values
+                    for idx, val in enumerate(config_arr):
+                        if not np.isfinite(val):
+                            print(f"           [BAD] idx={idx}, value={val}")
                     continue
 
-                if config_label:
-                    self.configs[config_label] = config
-                    print(
-                        f"       ✓ SUCCESS {config_label} generated via edge "
-                        f"'{edge_name}' after {i + 1} attempts"
-                    )
-                return True, config
+            is_valid, valid_err = self.is_config_valid(config)
+            if not is_valid:
+                n_collision_invalid += 1
+                last_valid_err = valid_err
+                continue
+
+            if config_label:
+                self.configs[config_label] = config
+                print(
+                    f"       ✓ SUCCESS {config_label} generated via edge "
+                    f"'{edge_name}' after {i + 1} attempts"
+                )
+            return True, config
 
         if config_label and verbose:
             print(
