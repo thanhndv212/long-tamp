@@ -1762,6 +1762,20 @@ class PyHPPBackend(BackendBase):
             )
         except Exception:
             pass
+        # PathOptimizer/timeOut defaults to +infinity in hpp-core and is
+        # never otherwise armed. Must be set on both self.problem and
+        # tp.innerProblem() — PathOptimizer instances are constructed
+        # against innerProblem_, same as the SimpleTimeParameterization
+        # case just above.
+        try:
+            self.problem.setParameter("PathOptimizer/timeOut", 30.0)
+        except Exception as e:
+            print(f"      [TP] ✗ PathOptimizer/timeOut on problem failed: {e}")
+        try:
+            tp.innerProblem().setParameter("PathOptimizer/timeOut", 30.0)
+            print("      [TP] ✓ PathOptimizer/timeOut=30.0s (problem + innerProblem)")
+        except Exception as e:
+            print(f"      [TP] ✗ PathOptimizer/timeOut on innerProblem failed: {e}")
         try:
             self.problem.setParameter(
                 "SplineGradientBased/zeroDerivativesAtStateIntersection",
