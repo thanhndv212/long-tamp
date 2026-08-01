@@ -9,6 +9,7 @@ graph explosion by rebuilding minimal graphs for each phase.
 
 from __future__ import annotations
 
+import json
 import os
 import signal
 import time
@@ -919,6 +920,40 @@ class GraspSequencePlanner:
                 active_joints.extend(joint_groups[group_key])
         return active_joints
 
+    def _dump_phase_checkpoint(
+        self,
+        phase_idx: int,
+        gripper: str,
+        handle: str | None,
+        q_current: Sequence[float],
+        verbose: bool,
+    ) -> None:
+        """Dump (q_current, held grasps) entering a phase, for repro_phase_range.py.
+
+        No-op unless AGIMUS_CHECKPOINT_DIR is set.
+        """
+        checkpoint_dir = os.environ.get("AGIMUS_CHECKPOINT_DIR")
+        if not checkpoint_dir:
+            return
+        try:
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            with open(
+                os.path.join(checkpoint_dir, f"phase_{phase_idx:02d}.json"), "w"
+            ) as f:
+                json.dump(
+                    {
+                        "phase_idx": phase_idx,
+                        "gripper": gripper,
+                        "handle": handle,
+                        "q_current": [float(x) for x in q_current],
+                        "held_grasps": dict(self.grasp_tracker.current_grasps),
+                    },
+                    f,
+                )
+        except Exception as e:
+            if verbose:
+                print(f"  ⚠ Checkpoint dump failed: {e}")
+
     def plan_sequence(
         self,
         grasp_sequence: Sequence[tuple[str, str]],
@@ -928,6 +963,7 @@ class GraspSequencePlanner:
         time_parameterize: bool = True,
         max_iterations_per_edge: int = 10000,
         timeout_per_edge: float = 60.0,
+        q_scene_init: Sequence[float] | None = None,
         frozen_arms_mode: str = "auto",
         per_phase_frozen_arms: dict[int, list[str]] | None = None,
         skip_phases: set[int] | None = None,
@@ -943,6 +979,12 @@ class GraspSequencePlanner:
             time_parameterize: Apply time parameterization to paths
             max_iterations_per_edge: Max iterations per edge planning
             timeout_per_edge: Timeout in seconds for each edge planning
+            q_scene_init: True original scene configuration (all grippers
+                free, objects at their real scene poses), used to lock free
+                objects at their real positions during phase graph builds.
+                Defaults to q_init. Only pass this explicitly when q_init is
+                NOT the phase-0 starting config — e.g. a diagnostic script
+                that starts mid-sequence from a checkpointed q_current.
             frozen_arms_mode: "auto" (freeze all except active arm),
                 "manual" (use per_phase_frozen_arms), "none" (no locking),
                 "interactive" (use callback for selection per phase),
@@ -1048,7 +1090,9 @@ class GraspSequencePlanner:
         # Original scene configuration — used to restore free-object positions
         # before each phase graph build so LockedJoint foliation locks them at
         # their true scene positions, not at random IK-sampled positions.
-        _q_scene_init = list(q_init)
+        # Defaults to q_init; callers starting mid-sequence from a
+        # checkpointed q_current must pass the true scene config explicitly.
+        _q_scene_init = list(q_scene_init) if q_scene_init is not None else list(q_init)
         self._q_scene_init = _q_scene_init  # store for resume_planning
 
         # Emit sequence_start with all call parameters before iteration begins.
@@ -1079,6 +1123,8 @@ class GraspSequencePlanner:
                     print(f"  Release with '{gripper}'")
                 current_state = self.grasp_tracker.get_current_state_name()
                 print(f"  Current state: {current_state}")
+
+            self._dump_phase_checkpoint(phase_idx, gripper, handle, q_current, verbose)
 
             # ----------------------------------------------------------------
             # Handle explicit release entry: (gripper, None)
@@ -2240,6 +2286,8 @@ class GraspSequencePlanner:
                     print(f"  Release with '{gripper}'")
                 current_state = self.grasp_tracker.get_current_state_name()
                 print(f"  Current state: {current_state}")
+
+            self._dump_phase_checkpoint(phase_idx, gripper, handle, q_current, verbose)
 
             # Handle explicit release entry: (gripper, None)
             currently_held = self.grasp_tracker.current_grasps.get(gripper)
