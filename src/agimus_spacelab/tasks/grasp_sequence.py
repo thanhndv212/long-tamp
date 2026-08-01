@@ -408,11 +408,7 @@ class GraspSequencePlanner:
                         q_from=q_start,
                         config_label=f"q_autorelease_{gripper}_pregrasp",
                     )
-                    if (
-                        _ok21
-                        and _q_new21 is not None
-                        and np.all(np.isfinite(_q_new21))
-                    ):
+                    if _ok21 and _q_new21 is not None and np.all(np.isfinite(_q_new21)):
                         q_pregrasp = _q_new21
                         self._last_pregrasp_q[gripper] = q_pregrasp
         t_plan1 = time.time() - t0
@@ -544,9 +540,7 @@ class GraspSequencePlanner:
                     )
                     t_plan_direct += time.time() - t0
                     if path_direct is None:
-                        raise RuntimeError(
-                            f"Planning failed for edge '{direct_edge}'"
-                        )
+                        raise RuntimeError(f"Planning failed for edge '{direct_edge}'")
                     plan_err_direct = None
                     break
                 except Exception as e:
