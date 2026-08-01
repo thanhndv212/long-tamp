@@ -571,10 +571,8 @@ class PyHPPBackend(BackendBase):
     def play_path(self, path_index: int = 0):
         """Play / animate a stored path in the viewer.
 
-        If the active viewer is a `pyhpp_viser.Viewer`, the path is loaded
-        into the GUI path-player dropdown (non-blocking) and returned
-        immediately.  For gepetto-viewer the existing blocking animation loop
-        is used.
+        Blocks until the animation finishes, for both the `pyhpp_viser.Viewer`
+        and gepetto-viewer backends.
 
         Args:
             path_index: Index into the locally stored paths list.
@@ -598,10 +596,11 @@ class PyHPPBackend(BackendBase):
         if self.viewer is None:
             return  # no viewer available — skip playback
 
-        # Viser viewer: load into GUI path-player (non-blocking)
+        # loadPath() alone only loads the path into the GUI dropdown and
+        # shows the t=0 frame; it never starts playback. playPath() plays
+        # and blocks, matching the gepetto branch below.
         if HAS_VISER and isinstance(self.viewer, _ViserViewer):
-            name = f"path_{path_index}"
-            self.viewer.loadPath(path, name=name)
+            self.viewer.playPath(path)
             return
 
         # Gepetto viewer: blocking animation loop
