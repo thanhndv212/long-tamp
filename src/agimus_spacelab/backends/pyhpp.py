@@ -1883,8 +1883,14 @@ class PyHPPBackend(BackendBase):
         """
         edge_name = tr.name() if hasattr(tr, "name") else str(tr)
 
+        # pyhpp.manipulation.TransitionPlanner.setEdge was renamed to
+        # setTransition upstream
+        set_transition = getattr(tp, "setTransition", None)
         try:
-            tp.setEdge(tr)
+            if set_transition is not None:
+                set_transition(tr)
+            else:
+                tp.setEdge(tr)
             print(f"      [TP] Set edge: {edge_name}")
         except Exception as exc:
             raise RuntimeError(
