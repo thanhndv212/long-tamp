@@ -86,3 +86,50 @@ class TestOrderedConfigKeys:
             "q_init",
             "q_goal",
         ]
+
+
+class TestParseFactoryWaypoints:
+    def test_missing_q_init_or_q_goal_returns_empty(self):
+        assert ManipulationTask._parse_factory_waypoints({"q_goal": [0.0]}) == (
+            [],
+            [],
+        )
+        assert ManipulationTask._parse_factory_waypoints({"q_init": [0.0]}) == (
+            [],
+            [],
+        )
+
+    def test_no_waypoint_keys_returns_empty(self):
+        cfgs = {"q_init": [0.0], "q_goal": [1.0], "q_other": [2.0]}
+        assert ManipulationTask._parse_factory_waypoints(cfgs) == ([], [])
+
+    def test_orders_by_index_and_builds_full_waypoint_list(self):
+        cfgs = {
+            "q_init": [0.0],
+            "q_goal": [3.0],
+            "q_wp_1_edgeB": [2.0],
+            "q_wp_0_edgeA": [1.0],
+        }
+        edges, waypoints = ManipulationTask._parse_factory_waypoints(cfgs)
+        assert edges == ["edgeA", "edgeB"]
+        assert waypoints == [[0.0], [1.0], [2.0], [3.0]]
+        # Documents actual (pre-existing, unchanged) behavior: despite the
+        # docstring's claimed len(waypoints) == len(edges) + 1 invariant,
+        # this branch produces len(edges) + 2 (one q_wp_* entry per named
+        # edge, plus separate q_init and q_goal, with no edge name for the
+        # final "last waypoint -> q_goal" transition). This factory-
+        # waypoint naming convention (q_wp_<i>_<edge>) is not produced
+        # anywhere in src/ or script/ today, so this branch -- and this
+        # discrepancy -- is currently dead code. Not fixed here (pure
+        # relocation only); see baseline/README.md.
+        assert len(waypoints) == len(edges) + 2
+
+    def test_edge_name_can_contain_underscores(self):
+        cfgs = {
+            "q_init": [0.0],
+            "q_goal": [1.0],
+            "q_wp_0_some_edge_name": [0.5],
+        }
+        edges, waypoints = ManipulationTask._parse_factory_waypoints(cfgs)
+        assert edges == ["some_edge_name"]
+        assert waypoints == [[0.0], [0.5], [1.0]]

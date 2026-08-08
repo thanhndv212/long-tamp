@@ -489,6 +489,36 @@ class ManipulationTask(ABC):
         ]
         return ["q_init", *mids, "q_goal"]
 
+    @staticmethod
+    def _parse_factory_waypoints(
+        cfgs: Dict[str, Any],
+    ) -> Tuple[List[str], List[List[float]]]:
+        """Parse factory waypoint keys q_wp_<i>_<edgeName>.
+
+        Returns:
+            (edges, waypoints) where len(waypoints)=len(edges)+1.
+        """
+        if "q_init" not in cfgs or "q_goal" not in cfgs:
+            return [], []
+
+        items: List[Tuple[int, str, str]] = []
+        for k in cfgs.keys():
+            m = re.match(r"^q_wp_(\d+)_(.+)$", k)
+            if m:
+                items.append((int(m.group(1)), k, m.group(2)))
+
+        if not items:
+            return [], []
+
+        items_sorted = sorted(items, key=lambda t: t[0])
+        edges = [edge_name for _, _, edge_name in items_sorted]
+        waypoints = [
+            list(cfgs["q_init"]),
+            *[list(cfgs[k]) for _, k, _ in items_sorted],
+            list(cfgs["q_goal"]),
+        ]
+        return edges, waypoints
+
     def run(
         self,
         visualize: bool = True,
@@ -559,35 +589,6 @@ class ManipulationTask(ABC):
                 if callable(reset):
                     reset()
 
-            def _parse_factory_waypoints(
-                cfgs: Dict[str, Any],
-            ) -> Tuple[List[str], List[List[float]]]:
-                """Parse factory waypoint keys q_wp_<i>_<edgeName>.
-
-                Returns:
-                    (edges, waypoints) where len(waypoints)=len(edges)+1.
-                """
-                if "q_init" not in cfgs or "q_goal" not in cfgs:
-                    return [], []
-
-                items: List[Tuple[int, str, str]] = []
-                for k in cfgs.keys():
-                    m = re.match(r"^q_wp_(\d+)_(.+)$", k)
-                    if m:
-                        items.append((int(m.group(1)), k, m.group(2)))
-
-                if not items:
-                    return [], []
-
-                items_sorted = sorted(items, key=lambda t: t[0])
-                edges = [edge_name for _, _, edge_name in items_sorted]
-                waypoints = [
-                    list(cfgs["q_init"]),
-                    *[list(cfgs[k]) for _, k, _ in items_sorted],
-                    list(cfgs["q_goal"]),
-                ]
-                return edges, waypoints
-
             def _compute_transition_inputs(
                 cfgs: Dict[str, Any],
             ) -> Tuple[List[str], List[List[float]]]:
@@ -608,7 +609,7 @@ class ManipulationTask(ABC):
                     return edges, waypoints
 
                 # 2) Parse factory waypoint naming convention.
-                edges, waypoints = _parse_factory_waypoints(cfgs)
+                edges, waypoints = self._parse_factory_waypoints(cfgs)
                 if edges and waypoints:
                     return edges, waypoints
 
