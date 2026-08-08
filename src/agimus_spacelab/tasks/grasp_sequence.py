@@ -1415,6 +1415,124 @@ class GraspSequencePlanner:
                 self.graph_builder._phase_handles,
             )
 
+    def _compute_and_project_edge_sequence(
+        self,
+        phase_idx: int,
+        gripper: str,
+        handle: str | None,
+        q_current: list[float],
+        verbose: bool,
+        emit_logs: bool,
+    ) -> tuple[list[str], list[float]]:
+        """Compute the phase's edge sequence, project q_current onto its source state.
+
+        Shared by ``plan_sequence()`` and ``resume_sequence()`` -- extracted
+        verbatim from both (Phase 1, Step 1.4 of the codebase refactor).
+        On projection failure, appends a partial phase result and updates
+        ``self.last_failure_info``, then re-raises -- same as both original
+        inline blocks.
+
+        Args:
+            emit_logs: Gates two pairs of verbose prints around the
+                projection step ("Projecting q_current onto state..." /
+                "q_current (first 5)..." and "✓ Projected q_current..." /
+                "q_projected (first 5)...") that ``plan_sequence()`` always
+                printed when ``verbose=True`` and ``resume_sequence()``
+                never printed regardless of its own ``verbose`` flag --
+                preserved as a pre-existing asymmetry, not unified.
+
+        Returns:
+            ``(edge_sequence, q_current)`` -- ``q_current`` is the
+            projected configuration.
+
+        Raises:
+            RuntimeError: if computing the edge sequence or projecting
+                fails, same as both original inline blocks.
+        """
+        try:
+            edge_sequence = self.grasp_tracker.get_grasp_edge_sequence(
+                gripper, handle
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Phase {phase_idx + 1}: " f"Failed to compute edge sequence: {e}"
+            ) from e
+
+        if verbose:
+            print(f"  Edge sequence: {edge_sequence}")
+
+        # Project current config onto the phase graph's source state
+        # The phase graph has different constraints, so q_current
+        # might not satisfy them. We need to project onto the
+        # edge's source state.
+        source_state = self.grasp_tracker.get_current_state_name()
+        try:
+            if emit_logs and verbose:
+                print(f"  Projecting q_current onto state: " f"{source_state}")
+                print(f"     q_current (first 5): {q_current[:5]}")
+
+            success, q_projected, error = (
+                self.graph_builder.apply_state_constraints(
+                    state_name=source_state,
+                    q=q_current,
+                    max_iterations=10000,
+                    error_threshold=1e-4,
+                )
+            )
+
+            if not success:
+                raise RuntimeError(
+                    f"Failed to project q_current onto state "
+                    f"'{source_state}' (error={error:.6f})"
+                )
+
+            q_current = list(q_projected)
+
+            if emit_logs and verbose:
+                print(f"  ✓ Projected q_current (error={error:.6e})")
+                print(f"     q_projected (first 5): {q_current[:5]}")
+
+        except Exception as e:
+            # Store partial phase result for projection failure
+            partial_phase_result = {
+                "phase": phase_idx + 1,
+                "gripper": gripper,
+                "handle": handle,
+                "edges": edge_sequence,
+                "paths": [],  # No paths yet in this phase
+                "complete": False,
+                "failed_edge_idx": 0,
+                "failed_edge_name": (edge_sequence[0] if edge_sequence else None),
+                "last_q_start": q_current,
+                "failed_q_target": None,
+                "error_message": f"State projection failed: {e}",
+            }
+            self.phase_results.append(partial_phase_result)
+
+            # Store failure info
+            self.last_failure_info = {
+                "phase_idx": phase_idx,
+                "edge_idx": 0,
+                "edge_name": (edge_sequence[0] if edge_sequence else "unknown"),
+                "q_current": q_current,
+                "error": f"State projection failed: {e}",
+                "completed_phases": len(
+                    [p for p in self.phase_results if p.get("complete", False)]
+                ),
+                "completed_edges_in_phase": 0,
+            }
+
+            if verbose:
+                print(
+                    "\n  ⚠ Stored partial phase result: projection failed at phase start"
+                )
+
+            raise RuntimeError(
+                f"Phase {phase_idx + 1}: State projection failed: {e}"
+            ) from e
+
+        return edge_sequence, q_current
+
     def plan_sequence(
         self,
         grasp_sequence: Sequence[tuple[str, str]],
@@ -1630,89 +1748,14 @@ class GraspSequencePlanner:
                 emit_logs=True,
             )
 
-            # Compute edge sequence from current state
-            # Use waypoints for better constraint satisfaction
-            try:
-                edge_sequence = self.grasp_tracker.get_grasp_edge_sequence(
-                    gripper, handle
-                )
-            except Exception as e:
-                raise RuntimeError(
-                    f"Phase {phase_idx + 1}: " f"Failed to compute edge sequence: {e}"
-                ) from e
-
-            if verbose:
-                print(f"  Edge sequence: {edge_sequence}")
-
-            # Project current config onto the phase graph's source state
-            # The phase graph has different constraints, so q_current
-            # might not satisfy them. We need to project onto the
-            # edge's source state.
-            source_state = self.grasp_tracker.get_current_state_name()
-            try:
-                if verbose:
-                    print(f"  Projecting q_current onto state: " f"{source_state}")
-                    print(f"     q_current (first 5): {q_current[:5]}")
-
-                success, q_projected, error = (
-                    self.graph_builder.apply_state_constraints(
-                        state_name=source_state,
-                        q=q_current,
-                        max_iterations=10000,
-                        error_threshold=1e-4,
-                    )
-                )
-
-                if not success:
-                    raise RuntimeError(
-                        f"Failed to project q_current onto state "
-                        f"'{source_state}' (error={error:.6f})"
-                    )
-
-                q_current = list(q_projected)
-
-                if verbose:
-                    print(f"  ✓ Projected q_current (error={error:.6e})")
-                    print(f"     q_projected (first 5): {q_current[:5]}")
-
-            except Exception as e:
-                # Store partial phase result for projection failure
-                partial_phase_result = {
-                    "phase": phase_idx + 1,
-                    "gripper": gripper,
-                    "handle": handle,
-                    "edges": edge_sequence,
-                    "paths": [],  # No paths yet in this phase
-                    "complete": False,
-                    "failed_edge_idx": 0,
-                    "failed_edge_name": (edge_sequence[0] if edge_sequence else None),
-                    "last_q_start": q_current,
-                    "failed_q_target": None,
-                    "error_message": f"State projection failed: {e}",
-                }
-                self.phase_results.append(partial_phase_result)
-
-                # Store failure info
-                self.last_failure_info = {
-                    "phase_idx": phase_idx,
-                    "edge_idx": 0,
-                    "edge_name": (edge_sequence[0] if edge_sequence else "unknown"),
-                    "q_current": q_current,
-                    "error": f"State projection failed: {e}",
-                    "completed_phases": len(
-                        [p for p in self.phase_results if p.get("complete", False)]
-                    ),
-                    "completed_edges_in_phase": 0,
-                }
-
-                if verbose:
-                    print(
-                        "\n  ⚠ Stored partial phase result: projection failed at phase start"
-                    )
-
-                raise RuntimeError(
-                    f"Phase {phase_idx + 1}: State projection failed: {e}"
-                ) from e
+            edge_sequence, q_current = self._compute_and_project_edge_sequence(
+                phase_idx=phase_idx,
+                gripper=gripper,
+                handle=handle,
+                q_current=q_current,
+                verbose=verbose,
+                emit_logs=True,
+            )
 
             # Plan through waypoint edge sequence
             # Each edge in sequence has its own path constraints
@@ -2471,76 +2514,14 @@ class GraspSequencePlanner:
                 emit_logs=False,
             )
 
-            # Get edge sequence
-            try:
-                edge_sequence = self.grasp_tracker.get_grasp_edge_sequence(
-                    gripper, handle
-                )
-            except Exception as e:
-                raise RuntimeError(
-                    f"Phase {phase_idx + 1}: " f"Failed to compute edge sequence: {e}"
-                ) from e
-
-            if verbose:
-                print(f"  Edge sequence: {edge_sequence}")
-
-            # Project config
-            source_state = self.grasp_tracker.get_current_state_name()
-            try:
-                success, q_projected, error = (
-                    self.graph_builder.apply_state_constraints(
-                        state_name=source_state,
-                        q=q_current,
-                        max_iterations=10000,
-                        error_threshold=1e-4,
-                    )
-                )
-
-                if not success:
-                    raise RuntimeError(
-                        f"Failed to project q_current onto state "
-                        f"'{source_state}' (error={error:.6f})"
-                    )
-
-                q_current = list(q_projected)
-
-            except Exception as e:
-                # Store partial phase result for projection failure
-                partial_phase_result = {
-                    "phase": phase_idx + 1,
-                    "gripper": gripper,
-                    "handle": handle,
-                    "edges": edge_sequence,
-                    "paths": [],
-                    "complete": False,
-                    "failed_edge_idx": 0,
-                    "failed_edge_name": (edge_sequence[0] if edge_sequence else None),
-                    "last_q_start": q_current,
-                    "failed_q_target": None,
-                    "error_message": f"State projection failed: {e}",
-                }
-                self.phase_results.append(partial_phase_result)
-
-                self.last_failure_info = {
-                    "phase_idx": phase_idx,
-                    "edge_idx": 0,
-                    "edge_name": (edge_sequence[0] if edge_sequence else "unknown"),
-                    "q_current": q_current,
-                    "error": f"State projection failed: {e}",
-                    "completed_phases": len(
-                        [p for p in self.phase_results if p.get("complete", False)]
-                    ),
-                    "completed_edges_in_phase": 0,
-                }
-
-                if verbose:
-                    print(
-                        "\n  ⚠ Stored partial phase result: projection failed at phase start"
-                    )
-
-                raise RuntimeError(
-                    f"Phase {phase_idx + 1}: State projection failed: {e}"
-                ) from e
+            edge_sequence, q_current = self._compute_and_project_edge_sequence(
+                phase_idx=phase_idx,
+                gripper=gripper,
+                handle=handle,
+                q_current=q_current,
+                verbose=verbose,
+                emit_logs=False,
+            )
 
             # Plan edges (with selective retry)
             phase_paths = []
