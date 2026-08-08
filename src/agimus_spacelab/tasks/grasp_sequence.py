@@ -954,6 +954,254 @@ class GraspSequencePlanner:
             if verbose:
                 print(f"  ⚠ Checkpoint dump failed: {e}")
 
+    def _plan_release_entry_phase(
+        self,
+        phase_idx: int,
+        gripper: str,
+        currently_held: str | None,
+        q_current: list[float],
+        frozen_arms_mode: str,
+        verbose: bool,
+    ) -> list[float]:
+        """Handle an explicit release entry ``(gripper, None)`` in the sequence.
+
+        Shared by ``plan_sequence()`` and ``resume_sequence()`` — extracted
+        verbatim from both (Phase 1, Step 1.1 of the codebase refactor).
+        Appends to ``self.phase_results`` (no-op skip, success, or
+        failure-then-raise) and updates ``self.last_failure_info`` on
+        failure, exactly as the original inline blocks did.
+
+        Args:
+            frozen_arms_mode: Already resolved to a concrete string by the
+                caller (``resume_sequence`` maps ``None`` -> ``"global"``
+                before calling; ``plan_sequence``'s parameter is never
+                ``None``).
+
+        Returns:
+            The (possibly updated) ``q_current``.
+
+        Raises:
+            Exception: whatever ``_plan_release_subphase`` raises, re-raised
+                after recording partial phase/failure info.
+        """
+        if currently_held is None:
+            # No-op: gripper is already free
+            if verbose:
+                print(f"  ⚠ '{gripper}' is already free — skipping")
+            self.phase_results.append(
+                {
+                    "phase": phase_idx + 1,
+                    "gripper": gripper,
+                    "handle": None,
+                    "edges": [],
+                    "paths": [],
+                    "complete": True,
+                    "skipped": True,
+                }
+            )
+            return q_current
+
+        if verbose:
+            print(f"\n  [Release] '{gripper}' releasing " f"'{currently_held}'")
+        # Compute frozen arms for the release sub-phase
+        release_constraints = None
+        if frozen_arms_mode == "global":
+            release_constraints = self.graph_constraints
+        elif frozen_arms_mode != "none":
+            release_frozen = self.compute_phase_locked_joints(gripper, "auto")
+            if release_frozen:
+                from agimus_spacelab.planning.constraints import (
+                    ConstraintBuilder,
+                )
+
+                cn, _ = ConstraintBuilder.create_locked_joint_constraints(
+                    self.graph_builder.ps,
+                    self.graph_builder.robot,
+                    q_current,
+                    release_frozen,
+                    backend=self.graph_builder.backend,
+                )
+                if cn:
+                    release_constraints = cn
+        try:
+            q_current, _release_info = self._plan_release_subphase(
+                gripper=gripper,
+                q_current=q_current,
+                phase_graph_constraints=release_constraints,
+                verbose=verbose,
+            )
+        except Exception as e:
+            self.phase_results.append(
+                {
+                    "phase": phase_idx + 1,
+                    "gripper": gripper,
+                    "handle": None,
+                    "released": currently_held,
+                    "edges": [],
+                    "paths": [],
+                    "complete": False,
+                    "error_message": f"Release failed: {e}",
+                }
+            )
+            self.last_failure_info = {
+                "phase_idx": phase_idx,
+                "edge_idx": 0,
+                "edge_name": "release_subphase",
+                "q_current": q_current,
+                "error": f"Release failed: {e}",
+                "completed_phases": len(
+                    [p for p in self.phase_results if p.get("complete", False)]
+                ),
+                "completed_edges_in_phase": 0,
+            }
+            if verbose:
+                print("\n  ⚠ Release failed, partial result stored for resume")
+            raise
+        # Record phase result (with full path/timing tracking)
+        self.phase_results.append(
+            {
+                "phase": phase_idx + 1,
+                "gripper": gripper,
+                "handle": None,
+                "released": currently_held,
+                **_release_info,
+                "complete": True,
+            }
+        )
+        return q_current
+
+    def _plan_auto_release_if_needed(
+        self,
+        phase_idx: int,
+        gripper: str,
+        handle: str,
+        currently_held: str | None,
+        q_current: list[float],
+        frozen_arms_mode: str,
+        verbose: bool,
+    ) -> list[float]:
+        """Auto-release ``gripper``'s current object before grasping a new one.
+
+        No-op (returns ``q_current`` unchanged) unless ``gripper`` currently
+        holds a *different* object than ``handle``. Shared by
+        ``plan_sequence()`` and ``resume_sequence()`` -- extracted verbatim
+        from both (Phase 1, Step 1.2 of the codebase refactor).
+
+        Appends to ``self.phase_results`` and updates
+        ``self.last_failure_info`` on failure, exactly as the original
+        inline blocks did.
+
+        Args:
+            frozen_arms_mode: Already resolved to a concrete string by the
+                caller (``resume_sequence`` maps ``None`` -> ``"global"``
+                before calling; ``plan_sequence``'s parameter is never
+                ``None``).
+
+        Returns:
+            The (possibly updated) ``q_current``.
+
+        Raises:
+            Exception: whatever ``_plan_release_subphase`` raises, re-raised
+                after recording partial phase/failure info.
+        """
+        if currently_held is None or currently_held == handle:
+            return q_current
+
+        if verbose:
+            print(
+                f"\n  [Auto-release] '{gripper}' holds "
+                f"'{currently_held}', inserting release before "
+                f"grasping '{handle}'"
+            )
+        # Compute frozen arms for the release sub-phase.
+        # Must NOT freeze arms that hold handles on the same
+        # object being released — otherwise the object becomes
+        # immovable and the pregrasp IK is unreachable.
+        release_constraints = None
+        if frozen_arms_mode == "global":
+            release_constraints = self.graph_constraints
+        elif frozen_arms_mode != "none":
+            # Generalised chain walk: any arm that currently
+            # holds the released object (directly or transitively)
+            # is kept unfrozen by compute_phase_locked_joints.
+            release_frozen = self.compute_phase_locked_joints(
+                gripper, "auto", handle=currently_held
+            )
+            # Defensive fallback: if the chain walk did not
+            # unfreeze the arm that directly holds
+            # ``currently_held``, log a warning and apply the
+            # original 1-link approximation so we never get a
+            # worse result than the pre-fix behaviour.
+            released_obj = currently_held.split("/")[0]
+            direct_holder_arm: str | None = None
+            for g, h in self.grasp_tracker.current_grasps.items():
+                if g == gripper or h is None:
+                    continue
+                if h.split("/")[0] == released_obj:
+                    arm = self._get_arm_for_gripper(g)
+                    if arm:
+                        direct_holder_arm = arm
+                        break
+            if direct_holder_arm and direct_holder_arm in release_frozen:
+                if verbose:
+                    print(
+                        f"    \u26a0 compute_phase_locked_joints did "
+                        f"not unfreeze direct holder arm "
+                        f"'{direct_holder_arm}' of "
+                        f"'{currently_held}'; applying 1-link "
+                        f"fallback."
+                    )
+                release_frozen.remove(direct_holder_arm)
+            if release_frozen:
+                from agimus_spacelab.planning.constraints import (
+                    ConstraintBuilder,
+                )
+
+                cn, _ = ConstraintBuilder.create_locked_joint_constraints(
+                    self.graph_builder.ps,
+                    self.graph_builder.robot,
+                    q_current,
+                    release_frozen,
+                    backend=self.graph_builder.backend,
+                )
+                if cn:
+                    release_constraints = cn
+        try:
+            q_current, _ = self._plan_release_subphase(
+                gripper=gripper,
+                q_current=q_current,
+                phase_graph_constraints=release_constraints,
+                verbose=verbose,
+            )
+        except Exception as e:
+            self.phase_results.append(
+                {
+                    "phase": phase_idx + 1,
+                    "gripper": gripper,
+                    "handle": handle,
+                    "released": currently_held,
+                    "edges": [],
+                    "paths": [],
+                    "complete": False,
+                    "error_message": f"Auto-release failed: {e}",
+                }
+            )
+            self.last_failure_info = {
+                "phase_idx": phase_idx,
+                "edge_idx": 0,
+                "edge_name": "auto_release_subphase",
+                "q_current": q_current,
+                "error": f"Auto-release failed: {e}",
+                "completed_phases": len(
+                    [p for p in self.phase_results if p.get("complete", False)]
+                ),
+                "completed_edges_in_phase": 0,
+            }
+            if verbose:
+                print("\n  \u26a0 Auto-release failed, partial result stored for resume")
+            raise
+        return q_current
+
     def plan_sequence(
         self,
         grasp_sequence: Sequence[tuple[str, str]],
@@ -1132,92 +1380,13 @@ class GraspSequencePlanner:
             currently_held = self.grasp_tracker.current_grasps.get(gripper)
 
             if handle is None:
-                # Explicit release request
-                if currently_held is None:
-                    # No-op: gripper is already free
-                    if verbose:
-                        print(f"  ⚠ '{gripper}' is already free — skipping")
-                    self.phase_results.append(
-                        {
-                            "phase": phase_idx + 1,
-                            "gripper": gripper,
-                            "handle": None,
-                            "edges": [],
-                            "paths": [],
-                            "complete": True,
-                            "skipped": True,
-                        }
-                    )
-                    continue
-
-                if verbose:
-                    print(f"\n  [Release] '{gripper}' releasing " f"'{currently_held}'")
-                # Compute frozen arms for the release sub-phase
-                release_constraints = None
-                if frozen_arms_mode == "global":
-                    release_constraints = self.graph_constraints
-                elif frozen_arms_mode != "none":
-                    release_frozen = self.compute_phase_locked_joints(gripper, "auto")
-                    if release_frozen:
-                        from agimus_spacelab.planning.constraints import (
-                            ConstraintBuilder,
-                        )
-
-                        cn, _ = ConstraintBuilder.create_locked_joint_constraints(
-                            self.graph_builder.ps,
-                            self.graph_builder.robot,
-                            q_current,
-                            release_frozen,
-                            backend=self.graph_builder.backend,
-                        )
-                        if cn:
-                            release_constraints = cn
-                try:
-                    q_current, _release_info = self._plan_release_subphase(
-                        gripper=gripper,
-                        q_current=q_current,
-                        phase_graph_constraints=release_constraints,
-                        verbose=verbose,
-                    )
-                except Exception as e:
-                    self.phase_results.append(
-                        {
-                            "phase": phase_idx + 1,
-                            "gripper": gripper,
-                            "handle": None,
-                            "released": currently_held,
-                            "edges": [],
-                            "paths": [],
-                            "complete": False,
-                            "error_message": f"Release failed: {e}",
-                        }
-                    )
-                    self.last_failure_info = {
-                        "phase_idx": phase_idx,
-                        "edge_idx": 0,
-                        "edge_name": "release_subphase",
-                        "q_current": q_current,
-                        "error": f"Release failed: {e}",
-                        "completed_phases": len(
-                            [p for p in self.phase_results if p.get("complete", False)]
-                        ),
-                        "completed_edges_in_phase": 0,
-                    }
-                    if verbose:
-                        print(
-                            "\n  \u26a0 Release failed, partial result stored for resume"
-                        )
-                    raise
-                # Record phase result (with full path/timing tracking)
-                self.phase_results.append(
-                    {
-                        "phase": phase_idx + 1,
-                        "gripper": gripper,
-                        "handle": None,
-                        "released": currently_held,
-                        **_release_info,
-                        "complete": True,
-                    }
+                q_current = self._plan_release_entry_phase(
+                    phase_idx=phase_idx,
+                    gripper=gripper,
+                    currently_held=currently_held,
+                    q_current=q_current,
+                    frozen_arms_mode=frozen_arms_mode,
+                    verbose=verbose,
                 )
                 continue
 
@@ -1226,102 +1395,15 @@ class GraspSequencePlanner:
             # Insert a release sub-phase before the grasp so the factory can
             # build valid edges.
             # ----------------------------------------------------------------
-            if currently_held is not None and currently_held != handle:
-                if verbose:
-                    print(
-                        f"\n  [Auto-release] '{gripper}' holds "
-                        f"'{currently_held}', inserting release before "
-                        f"grasping '{handle}'"
-                    )
-                # Compute frozen arms for the release sub-phase.
-                # Must NOT freeze arms that hold handles on the same
-                # object being released — otherwise the object becomes
-                # immovable and the pregrasp IK is unreachable.
-                release_constraints = None
-                if frozen_arms_mode == "global":
-                    release_constraints = self.graph_constraints
-                elif frozen_arms_mode != "none":
-                    # Generalised chain walk: any arm that currently
-                    # holds the released object (directly or transitively)
-                    # is kept unfrozen by compute_phase_locked_joints.
-                    release_frozen = self.compute_phase_locked_joints(
-                        gripper, "auto", handle=currently_held
-                    )
-                    # Defensive fallback: if the chain walk did not
-                    # unfreeze the arm that directly holds
-                    # ``currently_held``, log a warning and apply the
-                    # original 1-link approximation so we never get a
-                    # worse result than the pre-fix behaviour.
-                    released_obj = currently_held.split("/")[0]
-                    direct_holder_arm: str | None = None
-                    for g, h in self.grasp_tracker.current_grasps.items():
-                        if g == gripper or h is None:
-                            continue
-                        if h.split("/")[0] == released_obj:
-                            arm = self._get_arm_for_gripper(g)
-                            if arm:
-                                direct_holder_arm = arm
-                                break
-                    if direct_holder_arm and direct_holder_arm in release_frozen:
-                        if verbose:
-                            print(
-                                f"    \u26a0 compute_phase_locked_joints did "
-                                f"not unfreeze direct holder arm "
-                                f"'{direct_holder_arm}' of "
-                                f"'{currently_held}'; applying 1-link "
-                                f"fallback."
-                            )
-                        release_frozen.remove(direct_holder_arm)
-                    if release_frozen:
-                        from agimus_spacelab.planning.constraints import (
-                            ConstraintBuilder,
-                        )
-
-                        cn, _ = ConstraintBuilder.create_locked_joint_constraints(
-                            self.graph_builder.ps,
-                            self.graph_builder.robot,
-                            q_current,
-                            release_frozen,
-                            backend=self.graph_builder.backend,
-                        )
-                        if cn:
-                            release_constraints = cn
-                try:
-                    q_current, _ = self._plan_release_subphase(
-                        gripper=gripper,
-                        q_current=q_current,
-                        phase_graph_constraints=release_constraints,
-                        verbose=verbose,
-                    )
-                except Exception as e:
-                    self.phase_results.append(
-                        {
-                            "phase": phase_idx + 1,
-                            "gripper": gripper,
-                            "handle": handle,
-                            "released": currently_held,
-                            "edges": [],
-                            "paths": [],
-                            "complete": False,
-                            "error_message": f"Auto-release failed: {e}",
-                        }
-                    )
-                    self.last_failure_info = {
-                        "phase_idx": phase_idx,
-                        "edge_idx": 0,
-                        "edge_name": "auto_release_subphase",
-                        "q_current": q_current,
-                        "error": f"Auto-release failed: {e}",
-                        "completed_phases": len(
-                            [p for p in self.phase_results if p.get("complete", False)]
-                        ),
-                        "completed_edges_in_phase": 0,
-                    }
-                    if verbose:
-                        print(
-                            "\n  \u26a0 Auto-release failed, partial result stored for resume"
-                        )
-                    raise
+            q_current = self._plan_auto_release_if_needed(
+                phase_idx=phase_idx,
+                gripper=gripper,
+                handle=handle,
+                currently_held=currently_held,
+                q_current=q_current,
+                frozen_arms_mode=frozen_arms_mode,
+                verbose=verbose,
+            )
 
             # Build minimal phase graph
             held_grasps = {
@@ -2293,185 +2375,28 @@ class GraspSequencePlanner:
             currently_held = self.grasp_tracker.current_grasps.get(gripper)
 
             if handle is None:
-                if currently_held is None:
-                    if verbose:
-                        print(f"  ⚠ '{gripper}' is already free — skipping")
-                    self.phase_results.append(
-                        {
-                            "phase": phase_idx + 1,
-                            "gripper": gripper,
-                            "handle": None,
-                            "edges": [],
-                            "paths": [],
-                            "complete": True,
-                            "skipped": True,
-                        }
-                    )
-                    continue
-
-                if verbose:
-                    print(f"\n  [Release] '{gripper}' releasing " f"'{currently_held}'")
-                release_constraints = None
                 use_fm = frozen_arms_mode if frozen_arms_mode is not None else "global"
-                if use_fm == "global":
-                    release_constraints = self.graph_constraints
-                elif use_fm != "none":
-                    release_frozen = self.compute_phase_locked_joints(gripper, "auto")
-                    if release_frozen:
-                        from agimus_spacelab.planning.constraints import (
-                            ConstraintBuilder,
-                        )
-
-                        cn, _ = ConstraintBuilder.create_locked_joint_constraints(
-                            self.graph_builder.ps,
-                            self.graph_builder.robot,
-                            q_current,
-                            release_frozen,
-                            backend=self.graph_builder.backend,
-                        )
-                        if cn:
-                            release_constraints = cn
-                try:
-                    q_current, _release_info = self._plan_release_subphase(
-                        gripper=gripper,
-                        q_current=q_current,
-                        phase_graph_constraints=release_constraints,
-                        verbose=verbose,
-                    )
-                except Exception as e:
-                    self.phase_results.append(
-                        {
-                            "phase": phase_idx + 1,
-                            "gripper": gripper,
-                            "handle": None,
-                            "released": currently_held,
-                            "edges": [],
-                            "paths": [],
-                            "complete": False,
-                            "error_message": f"Release failed: {e}",
-                        }
-                    )
-                    self.last_failure_info = {
-                        "phase_idx": phase_idx,
-                        "edge_idx": 0,
-                        "edge_name": "release_subphase",
-                        "q_current": q_current,
-                        "error": f"Release failed: {e}",
-                        "completed_phases": len(
-                            [p for p in self.phase_results if p.get("complete", False)]
-                        ),
-                        "completed_edges_in_phase": 0,
-                    }
-                    if verbose:
-                        print(
-                            "\n  \u26a0 Release failed, partial result stored for resume"
-                        )
-                    raise
-                self.phase_results.append(
-                    {
-                        "phase": phase_idx + 1,
-                        "gripper": gripper,
-                        "handle": None,
-                        "released": currently_held,
-                        **_release_info,
-                        "complete": True,
-                    }
+                q_current = self._plan_release_entry_phase(
+                    phase_idx=phase_idx,
+                    gripper=gripper,
+                    currently_held=currently_held,
+                    q_current=q_current,
+                    frozen_arms_mode=use_fm,
+                    verbose=verbose,
                 )
                 continue
 
             # Auto-release detection (same logic as plan_sequence)
-            if currently_held is not None and currently_held != handle:
-                if verbose:
-                    print(
-                        f"\n  [Auto-release] '{gripper}' holds "
-                        f"'{currently_held}', inserting release before "
-                        f"grasping '{handle}'"
-                    )
-                release_constraints = None
-                use_fm = frozen_arms_mode if frozen_arms_mode is not None else "global"
-                if use_fm == "global":
-                    release_constraints = self.graph_constraints
-                elif use_fm != "none":
-                    # Generalised chain walk: any arm that currently
-                    # holds the released object (directly or transitively)
-                    # is kept unfrozen by compute_phase_locked_joints.
-                    release_frozen = self.compute_phase_locked_joints(
-                        gripper, "auto", handle=currently_held
-                    )
-                    # Defensive fallback: if the chain walk did not
-                    # unfreeze the direct holder of ``currently_held``,
-                    # apply the original 1-link approximation so we never
-                    # get a worse result than the pre-fix behaviour.
-                    released_obj = currently_held.split("/")[0]
-                    direct_holder_arm: str | None = None
-                    for g, h in self.grasp_tracker.current_grasps.items():
-                        if g == gripper or h is None:
-                            continue
-                        if h.split("/")[0] == released_obj:
-                            arm = self._get_arm_for_gripper(g)
-                            if arm:
-                                direct_holder_arm = arm
-                                break
-                    if direct_holder_arm and direct_holder_arm in release_frozen:
-                        if verbose:
-                            print(
-                                f"    \u26a0 compute_phase_locked_joints did "
-                                f"not unfreeze direct holder arm "
-                                f"'{direct_holder_arm}' of "
-                                f"'{currently_held}'; applying 1-link "
-                                f"fallback."
-                            )
-                        release_frozen.remove(direct_holder_arm)
-                    if release_frozen:
-                        from agimus_spacelab.planning.constraints import (
-                            ConstraintBuilder,
-                        )
-
-                        cn, _ = ConstraintBuilder.create_locked_joint_constraints(
-                            self.graph_builder.ps,
-                            self.graph_builder.robot,
-                            q_current,
-                            release_frozen,
-                            backend=self.graph_builder.backend,
-                        )
-                        if cn:
-                            release_constraints = cn
-                try:
-                    q_current, _ = self._plan_release_subphase(
-                        gripper=gripper,
-                        q_current=q_current,
-                        phase_graph_constraints=release_constraints,
-                        verbose=verbose,
-                    )
-                except Exception as e:
-                    self.phase_results.append(
-                        {
-                            "phase": phase_idx + 1,
-                            "gripper": gripper,
-                            "handle": handle,
-                            "released": currently_held,
-                            "edges": [],
-                            "paths": [],
-                            "complete": False,
-                            "error_message": f"Auto-release failed: {e}",
-                        }
-                    )
-                    self.last_failure_info = {
-                        "phase_idx": phase_idx,
-                        "edge_idx": 0,
-                        "edge_name": "auto_release_subphase",
-                        "q_current": q_current,
-                        "error": f"Auto-release failed: {e}",
-                        "completed_phases": len(
-                            [p for p in self.phase_results if p.get("complete", False)]
-                        ),
-                        "completed_edges_in_phase": 0,
-                    }
-                    if verbose:
-                        print(
-                            "\n  \u26a0 Auto-release failed, partial result stored for resume"
-                        )
-                    raise
+            use_fm = frozen_arms_mode if frozen_arms_mode is not None else "global"
+            q_current = self._plan_auto_release_if_needed(
+                phase_idx=phase_idx,
+                gripper=gripper,
+                handle=handle,
+                currently_held=currently_held,
+                q_current=q_current,
+                frozen_arms_mode=use_fm,
+                verbose=verbose,
+            )
 
             # Build minimal phase graph
             held_grasps = {
