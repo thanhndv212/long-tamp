@@ -457,6 +457,38 @@ class ManipulationTask(ABC):
 
         return None
 
+    @staticmethod
+    def _ordered_config_keys(
+        cfgs: Dict[str, Any], preferred_configs: List[str]
+    ) -> List[str]:
+        # Always plan from q_init to q_goal.
+        if "q_init" not in cfgs or "q_goal" not in cfgs:
+            return []
+
+        # Factory mode: q_wp_<i>_<edge>
+        wp = []
+        for k in cfgs.keys():
+            m = re.match(r"^q_wp_(\d+)_", k)
+            if m:
+                wp.append((int(m.group(1)), k))
+        if wp:
+            wp_sorted = [k for _, k in sorted(wp, key=lambda t: t[0])]
+            return ["q_init", *wp_sorted, "q_goal"]
+
+        # Manual mode (common naming convention)
+        preferred = preferred_configs
+        mids = [k for k in preferred if k in cfgs]
+        if mids:
+            return ["q_init", *mids, "q_goal"]
+
+        # Fallback: any q_* keys in insertion order.
+        mids = [
+            # k
+            # for k in cfgs.keys()
+            # if k.startswith("q_") and k not in ("q_init", "q_goal")
+        ]
+        return ["q_init", *mids, "q_goal"]
+
     def run(
         self,
         visualize: bool = True,
@@ -526,35 +558,6 @@ class ManipulationTask(ABC):
                 reset = getattr(self.ps, "resetGoalConfigs", None)
                 if callable(reset):
                     reset()
-
-            def _ordered_config_keys(cfgs: Dict[str, Any]) -> List[str]:
-                # Always plan from q_init to q_goal.
-                if "q_init" not in cfgs or "q_goal" not in cfgs:
-                    return []
-
-                # Factory mode: q_wp_<i>_<edge>
-                wp = []
-                for k in cfgs.keys():
-                    m = re.match(r"^q_wp_(\d+)_", k)
-                    if m:
-                        wp.append((int(m.group(1)), k))
-                if wp:
-                    wp_sorted = [k for _, k in sorted(wp, key=lambda t: t[0])]
-                    return ["q_init", *wp_sorted, "q_goal"]
-
-                # Manual mode (common naming convention)
-                preferred = preferred_configs
-                mids = [k for k in preferred if k in cfgs]
-                if mids:
-                    return ["q_init", *mids, "q_goal"]
-
-                # Fallback: any q_* keys in insertion order.
-                mids = [
-                    # k
-                    # for k in cfgs.keys()
-                    # if k.startswith("q_") and k not in ("q_init", "q_goal")
-                ]
-                return ["q_init", *mids, "q_goal"]
 
             def _parse_factory_waypoints(
                 cfgs: Dict[str, Any],
@@ -654,7 +657,7 @@ class ManipulationTask(ABC):
                     "generate_waypoints_via_edges=True."
                 )
 
-            seq = _ordered_config_keys(configs)
+            seq = self._ordered_config_keys(configs, preferred_configs)
 
             if not seq or len(seq) < 2:
                 print("   ⚠ Planning skipped: missing q_init/q_goal")
