@@ -761,7 +761,25 @@ class ManipulationTask(ABC):
         Args:
             visualize: Whether to visualize configurations
             solve: Whether to solve the planning problem
-            preferred_configs: List of intermediate config keys in order
+            preferred_configs: List of intermediate config keys in order.
+                Used by _ordered_config_keys() when configs aren't named
+                via the q_wp_<i>_<edge> factory convention.
+            max_iterations: Max RRT iterations for manipulation-planner
+                mode's solve() calls.
+            solve_mode: "manipulation-planner" (default) or
+                "transition-planner". Note: transition-planner is only
+                honored when the resolved config sequence has more than 2
+                entries -- see docs/plans/refactor-manipulation-task-run.md
+                "Decision needed: the dead solve_mode gate".
+            transition_edges: Edge names for transition-planner mode.
+                Required (with transition_waypoints or
+                generate_waypoints_via_edges) to reach that mode at all.
+            transition_waypoints: Explicit waypoints for transition-planner
+                mode; length must be len(transition_edges) + 1.
+            generate_waypoints_via_edges: If True and transition_edges is
+                set but transition_waypoints isn't, generate intermediate
+                waypoints via self.config_gen.generate_via_edge() for each
+                edge but the last.
             record: If True, record video of path playback (default: True)
             output_dir: Directory for video output (default: /home/dvtnguyen/devel/demos)
             video_name: Optional custom name for video file
