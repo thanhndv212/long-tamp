@@ -689,25 +689,13 @@ class ManipulationTask(ABC):
 
             if not seq or len(seq) < 2:
                 print("   ⚠ Planning skipped: missing q_init/q_goal")
-            elif len(seq) == 2:
-                self._reset_goals_if_possible()
-                self.planner.set_initial_config(configs["q_init"])
-                self.planner.add_goal_config(configs["q_goal"])
-                success = self.planner.solve(
-                    max_iterations=max_iterations,
-                    optimizer=self.optimizer,
-                )
-                if success:
-                    print("   ✓ Planning successful")
-                else:
-                    print("   ⚠ Planning failed")
-
-                if success and visualize:
-                    self._play_and_record(
-                        0, record, video_name, output_dir, framerate
-                    )
             else:
-                if solve_mode == "transition-planner":
+                # solve_mode is only honored for len(seq) > 2 -- a
+                # pre-existing (likely accidental) gate, preserved exactly
+                # here rather than fixed as part of this structural
+                # refactor. See docs/plans/refactor-manipulation-task-run.md
+                # "Decision needed: the dead solve_mode gate".
+                if solve_mode == "transition-planner" and len(seq) > 2:
                     edges, waypoints = self._compute_transition_inputs(
                         configs,
                         transition_edges,
@@ -804,7 +792,13 @@ class ManipulationTask(ABC):
                         except Exception:
                             pass
 
-                if visualize:
+                # len(seq) == 2 (the former dedicated branch) only played
+                # back on success; the N-segment loop always attempted
+                # playback of whatever partial progress exists. Both
+                # preserved exactly via this single condition: for
+                # len(seq) == 2 it reduces to `success`, for len(seq) > 2
+                # it's always True.
+                if visualize and (len(seq) > 2 or success):
                     # Use concatenated path when known, otherwise 0.
                     pid = path_ids[0] if path_ids else 0
                     self._play_and_record(
