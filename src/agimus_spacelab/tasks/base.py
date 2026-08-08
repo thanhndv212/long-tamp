@@ -622,6 +622,18 @@ class ManipulationTask(ABC):
         except Exception as e:
             print(f"   ⚠ Path playback failed: {e}")
 
+    def _build_result(self, configs: Dict[str, Any], **extra: Any) -> Dict[str, Any]:
+        result = {
+            "configs": configs,
+            "planner": self.planner,
+            "robot": self.robot,
+            "ps": self.ps,
+            "graph": self.graph,
+            "viewer": self.planner.viewer if self.planner else None,
+        }
+        result.update(extra)
+        return result
+
     def _solve_transition_planner(
         self,
         configs: Dict[str, Any],
@@ -814,16 +826,9 @@ class ManipulationTask(ABC):
                             path_id, record, video_name, output_dir, framerate
                         )
 
-                    return {
-                        "configs": configs,
-                        "planner": self.planner,
-                        "robot": self.robot,
-                        "ps": self.ps,
-                        "graph": self.graph,
-                        "viewer": (self.planner.viewer if self.planner else None),
-                        "path_id": int(path_id),
-                        "solve_mode": solve_mode,
-                    }
+                    return self._build_result(
+                        configs, path_id=int(path_id), solve_mode=solve_mode
+                    )
 
                 path_ids, success = self._solve_manipulation_planner(
                     configs, seq, max_iterations
@@ -842,14 +847,7 @@ class ManipulationTask(ABC):
                         pid, record, video_name, output_dir, framerate
                     )
 
-        return {
-            "configs": configs,
-            "planner": self.planner,
-            "robot": self.robot,
-            "ps": self.ps,
-            "graph": self.graph,
-            "viewer": self.planner.viewer if self.planner else None,
-        }
+        return self._build_result(configs)
 
 
 __all__ = ["ManipulationTask"]

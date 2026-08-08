@@ -310,3 +310,45 @@ class TestPlayAndRecord:
         task.planner = _FakePlanner(raise_on="record")
         task._play_and_record(0, True, None, "/out", 25)  # must not raise
         assert "Path playback failed" in capsys.readouterr().out
+
+
+class _FakePlannerWithViewer:
+    def __init__(self, viewer):
+        self.viewer = viewer
+
+
+class TestBuildResult:
+    def test_base_fields_no_extra(self):
+        task = _make_task()
+        task.planner = _FakePlannerWithViewer(viewer="the-viewer")
+        task.robot = "the-robot"
+        task.ps = "the-ps"
+        task.graph = "the-graph"
+        result = task._build_result({"q_init": [0.0]})
+        assert result == {
+            "configs": {"q_init": [0.0]},
+            "planner": task.planner,
+            "robot": "the-robot",
+            "ps": "the-ps",
+            "graph": "the-graph",
+            "viewer": "the-viewer",
+        }
+
+    def test_extra_kwargs_are_merged(self):
+        task = _make_task()
+        task.planner = _FakePlannerWithViewer(viewer=None)
+        task.robot = None
+        task.ps = None
+        task.graph = None
+        result = task._build_result({}, path_id=7, solve_mode="transition-planner")
+        assert result["path_id"] == 7
+        assert result["solve_mode"] == "transition-planner"
+
+    def test_viewer_is_none_when_planner_is_none(self):
+        task = _make_task()
+        task.planner = None
+        task.robot = None
+        task.ps = None
+        task.graph = None
+        result = task._build_result({})
+        assert result["viewer"] is None
