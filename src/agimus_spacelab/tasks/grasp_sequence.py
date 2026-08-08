@@ -2065,6 +2065,138 @@ class GraspSequencePlanner:
             "q_pregrasp_for_cache": q_pregrasp_for_cache,
         }
 
+    def _finalize_phase_result(
+        self,
+        phase_idx: int,
+        gripper: str,
+        handle: str | None,
+        edge_sequence: list[str],
+        phase_paths: list[Any],
+        phase_geometric_paths: list[Any],
+        edge_stats_list: list[dict[str, Any]],
+        q_start: list[float],
+        q_pregrasp_for_cache: list[float] | None,
+        skip_phases: set[int] | None,
+        verbose: bool,
+        is_resume: bool,
+    ) -> list[float]:
+        """Finalize a successfully-planned phase: timing, state, save, record.
+
+        Shared by ``plan_sequence()`` and ``resume_sequence()`` -- extracted
+        verbatim from both (Phase 1, Step 1.6 of the codebase refactor).
+        Updates ``self.grasp_tracker``, ``self._last_pregrasp_q``, and
+        appends to ``self.phase_results`` as a side effect.
+
+        Two deliberate order simplifications versus the originals (same
+        spirit as Step 1.3's ConfigGenerator branch-order unification):
+        the auto-save-vs-pregrasp-cache call order was swapped between the
+        two originals, and so was the grasp-tracker-update-vs-timing-calc
+        order. Neither pair of operations reads the other's output, so
+        both orderings are provably interchangeable -- unified on
+        ``plan_sequence()``'s order; not a behavior change.
+
+        Args:
+            is_resume: Selects between the two call sites' pre-existing,
+                genuinely different (not just verbosity) behaviors:
+                  - ``plan_sequence()`` prints "Completed N-edge sequence"
+                    plus phase timing before updating grasp state;
+                    ``resume_sequence()`` has no such print at that point.
+                  - ``plan_sequence()`` emits a ``"phase_end"`` RunLogger
+                    event; ``resume_sequence()`` never has.
+                  - ``plan_sequence()`` has no post-append print;
+                    ``resume_sequence()`` prints "Completed phase N (Xs
+                    total)" *after* appending the phase result.
+
+        Returns:
+            The finalized ``q_current`` (== ``q_start``, the config at
+            the end of the phase), which the caller carries into the
+            next loop iteration.
+        """
+        q_current = q_start
+
+        # Compute phase timing totals
+        phase_total_time = sum(s["total_time"] for s in edge_stats_list)
+        phase_plan_time = sum(s["plan_time"] for s in edge_stats_list)
+        phase_gen_time = sum(s["gen_time"] for s in edge_stats_list)
+
+        if not is_resume and verbose:
+            print(f"  ✓ Completed {len(edge_sequence)}-edge sequence")
+            print(
+                f"     Phase timing: {phase_total_time:.2f}s total "
+                f"(gen: {phase_gen_time:.2f}s, plan: {phase_plan_time:.2f}s)"
+            )
+
+        # Update grasp state after successful planning
+        self.grasp_tracker.update_grasp(gripper, handle)
+
+        # Cache q_pregrasp for potential future auto-release of this gripper.
+        # q_pregrasp = end config of the first (_01) edge (approach/pregrasp node).
+        if handle is not None and q_pregrasp_for_cache is not None:
+            self._last_pregrasp_q[gripper] = q_pregrasp_for_cache
+            if verbose:
+                print(f"  ✓ Cached q_pregrasp for '{gripper}'")
+
+        # Auto-save paths after successful phase
+        saved_files = self._auto_save_phase_paths(
+            phase_idx=phase_idx,
+            phase_paths=phase_paths,
+            edge_names=edge_sequence,
+            verbose=verbose,
+            phase_geometric_paths=(
+                phase_geometric_paths if self.auto_save_dir else None
+            ),
+        )
+
+        # Store phase result with all edge paths and timing stats
+        phase_result = {
+            "phase": phase_idx + 1,
+            "gripper": gripper,
+            "handle": handle,
+            "edges": edge_sequence,
+            "paths": phase_paths,
+            "edge_stats": edge_stats_list,
+            "phase_time": phase_total_time,
+            "phase_plan_time": phase_plan_time,
+            "phase_gen_time": phase_gen_time,
+            "complete": True,
+            "skipped": skip_phases and phase_idx in skip_phases,
+            "final_config": q_current,
+            "state_after": self.grasp_tracker.get_current_state_name(),
+            "saved_files": saved_files,  # Track saved path files
+        }
+
+        if not is_resume:
+            # Emit phase_end before appending so callers can react
+            # even if they iterate self.phase_results incrementally.
+            if self.run_logger is not None:
+                try:
+                    self.run_logger.log(
+                        "phase_end",
+                        phase=phase_idx + 1,
+                        gripper=gripper,
+                        handle=handle,
+                        success=True,
+                        phase_time=phase_total_time,
+                        phase_gen_time=phase_gen_time,
+                        phase_plan_time=phase_plan_time,
+                        final_config=list(q_current),
+                        state_after=self.grasp_tracker.get_current_state_name(),
+                        saved_files=saved_files,
+                        error=None,
+                    )
+                except Exception:
+                    pass
+
+        self.phase_results.append(phase_result)
+
+        if is_resume and verbose:
+            print(
+                f"  ✓ Completed phase {phase_idx + 1} "
+                f"({phase_total_time:.2f}s total)"
+            )
+
+        return q_current
+
     def plan_sequence(
         self,
         grasp_sequence: Sequence[tuple[str, str]],
@@ -2307,81 +2439,20 @@ class GraspSequencePlanner:
             q_start = _edge_result["q_start"]
             q_pregrasp_for_cache = _edge_result["q_pregrasp_for_cache"]
 
-            # Update current config to end of sequence
-            q_current = q_start
-
-            # Compute phase timing totals
-            phase_total_time = sum(s["total_time"] for s in edge_stats_list)
-            phase_plan_time = sum(s["plan_time"] for s in edge_stats_list)
-            phase_gen_time = sum(s["gen_time"] for s in edge_stats_list)
-
-            if verbose:
-                print(f"  ✓ Completed {len(edge_sequence)}-edge sequence")
-                print(
-                    f"     Phase timing: {phase_total_time:.2f}s total "
-                    f"(gen: {phase_gen_time:.2f}s, plan: {phase_plan_time:.2f}s)"
-                )
-
-            # Update grasp state after successful planning
-            self.grasp_tracker.update_grasp(gripper, handle)
-
-            # Cache q_pregrasp for potential future auto-release of this gripper.
-            # q_pregrasp = end config of the first (_01) edge (approach/pregrasp node).
-            if handle is not None and q_pregrasp_for_cache is not None:
-                self._last_pregrasp_q[gripper] = q_pregrasp_for_cache
-                if verbose:
-                    print(f"  ✓ Cached q_pregrasp for '{gripper}'")
-
-            # Auto-save paths after successful phase
-            saved_files = self._auto_save_phase_paths(
+            q_current = self._finalize_phase_result(
                 phase_idx=phase_idx,
+                gripper=gripper,
+                handle=handle,
+                edge_sequence=edge_sequence,
                 phase_paths=phase_paths,
-                edge_names=edge_sequence,
+                phase_geometric_paths=phase_geometric_paths,
+                edge_stats_list=edge_stats_list,
+                q_start=q_start,
+                q_pregrasp_for_cache=q_pregrasp_for_cache,
+                skip_phases=skip_phases,
                 verbose=verbose,
-                phase_geometric_paths=(
-                    phase_geometric_paths if self.auto_save_dir else None
-                ),
+                is_resume=False,
             )
-
-            # Store phase result with all edge paths and timing stats
-            phase_result = {
-                "phase": phase_idx + 1,
-                "gripper": gripper,
-                "handle": handle,
-                "edges": edge_sequence,
-                "paths": phase_paths,
-                "edge_stats": edge_stats_list,
-                "phase_time": phase_total_time,
-                "phase_plan_time": phase_plan_time,
-                "phase_gen_time": phase_gen_time,
-                "complete": True,
-                "skipped": skip_phases and phase_idx in skip_phases,
-                "final_config": q_current,
-                "state_after": self.grasp_tracker.get_current_state_name(),
-                "saved_files": saved_files,  # Track saved path files
-            }
-            # Emit phase_end before appending so callers can react
-            # even if they iterate self.phase_results incrementally.
-            if self.run_logger is not None:
-                try:
-                    self.run_logger.log(
-                        "phase_end",
-                        phase=phase_idx + 1,
-                        gripper=gripper,
-                        handle=handle,
-                        success=True,
-                        phase_time=phase_total_time,
-                        phase_gen_time=phase_gen_time,
-                        phase_plan_time=phase_plan_time,
-                        final_config=list(q_current),
-                        state_after=self.grasp_tracker.get_current_state_name(),
-                        saved_files=saved_files,
-                        error=None,
-                    )
-                except Exception:
-                    pass
-
-            self.phase_results.append(phase_result)
 
         if verbose:
             print("\n" + "=" * 70)
@@ -2687,55 +2758,20 @@ class GraspSequencePlanner:
             q_start = _edge_result["q_start"]
             q_pregrasp_for_cache = _edge_result["q_pregrasp_for_cache"]
 
-            # Phase completed successfully
-            q_current = q_start
-            self.grasp_tracker.update_grasp(gripper, handle)
-
-            # Compute phase timing totals
-            phase_total_time = sum(s["total_time"] for s in edge_stats_list)
-            phase_plan_time = sum(s["plan_time"] for s in edge_stats_list)
-            phase_gen_time = sum(s["gen_time"] for s in edge_stats_list)
-
-            # Auto-save paths after successful phase (resume)
-            saved_files = self._auto_save_phase_paths(
+            q_current = self._finalize_phase_result(
                 phase_idx=phase_idx,
+                gripper=gripper,
+                handle=handle,
+                edge_sequence=edge_sequence,
                 phase_paths=phase_paths,
-                edge_names=edge_sequence,
+                phase_geometric_paths=phase_geometric_paths,
+                edge_stats_list=edge_stats_list,
+                q_start=q_start,
+                q_pregrasp_for_cache=q_pregrasp_for_cache,
+                skip_phases=skip_phases,
                 verbose=verbose,
-                phase_geometric_paths=(
-                    phase_geometric_paths if self.auto_save_dir else None
-                ),
+                is_resume=True,
             )
-
-            # Cache q_pregrasp for potential future auto-release (mirror of plan_sequence)
-            if handle is not None and q_pregrasp_for_cache is not None:
-                self._last_pregrasp_q[gripper] = q_pregrasp_for_cache
-                if verbose:
-                    print(f"  ✓ Cached q_pregrasp for '{gripper}'")
-
-            phase_result = {
-                "phase": phase_idx + 1,
-                "gripper": gripper,
-                "handle": handle,
-                "edges": edge_sequence,
-                "paths": phase_paths,
-                "edge_stats": edge_stats_list,
-                "phase_time": phase_total_time,
-                "phase_plan_time": phase_plan_time,
-                "phase_gen_time": phase_gen_time,
-                "complete": True,
-                "skipped": skip_phases and phase_idx in skip_phases,
-                "final_config": q_current,
-                "state_after": self.grasp_tracker.get_current_state_name(),
-                "saved_files": saved_files,  # Track saved path files
-            }
-            self.phase_results.append(phase_result)
-
-            if verbose:
-                print(
-                    f"  ✓ Completed phase {phase_idx + 1} "
-                    f"({phase_total_time:.2f}s total)"
-                )
 
         # Clear failure info on success
         self.last_failure_info = None
