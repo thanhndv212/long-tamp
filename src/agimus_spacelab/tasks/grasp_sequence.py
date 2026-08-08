@@ -2197,6 +2197,185 @@ class GraspSequencePlanner:
 
         return q_current
 
+    def _run_phase_loop(
+        self,
+        phases: Sequence[tuple[str, str | None]],
+        starting_phase_idx: int,
+        total_phase_count_for_display: int,
+        q_current: list[float],
+        frozen_arms_mode: str,
+        per_phase_frozen_arms: dict[int, list[str]] | None,
+        q_scene_init: list[float] | None,
+        skip_phases: set[int] | None,
+        is_resume: bool,
+        verbose: bool,
+        retry_from_edge: int = 0,
+        completed_edges_in_phase_for_resume: int = 0,
+        loop_start_time: float | None = None,
+    ) -> list[float]:
+        """Run the per-phase planning loop shared by ``plan_sequence()`` and
+        ``resume_sequence()``.
+
+        The final consolidation step of the codebase refactor (Phase 1,
+        Step 1.7): with Steps 1.1-1.6 already pulling every per-phase
+        sub-block into its own shared method, both callers' loop bodies
+        had converged to the same sequence of calls modulo an `is_resume`
+        flag threaded through each -- this extracts that shared sequence
+        itself.
+
+        Args:
+            phases: The (gripper, handle) pairs to iterate.
+                ``plan_sequence()`` passes its full ``grasp_sequence``;
+                ``resume_sequence()`` passes its computed
+                ``remaining_sequence``.
+            starting_phase_idx: Added to this loop's own enumeration index
+                to get the real ``phase_idx`` used in prints/bookkeeping.
+                ``0`` for ``plan_sequence()``; ``incomplete_phase_idx`` for
+                ``resume_sequence()``.
+            total_phase_count_for_display: Denominator for the "Phase
+                X/Y" progress print. ``len(grasp_sequence)`` for
+                ``plan_sequence()``; ``len(self.original_sequence)`` for
+                ``resume_sequence()`` (its own ``phases`` is only the
+                remaining subset, but the display should still show
+                progress against the full original sequence).
+            frozen_arms_mode: Already resolved to a concrete string by the
+                caller. ``resume_sequence()`` used to re-resolve
+                ``None -> "global"`` three times per iteration (once per
+                sub-call) even though the value never changes across the
+                loop; now resolved once, before calling this method --
+                provably equivalent, not a behavior change.
+            is_resume: Threaded through to every sub-call's own
+                ``emit_logs``/``is_resume`` parameter (see each method's
+                own docstring for what it changes).
+            retry_from_edge: Only meaningful when ``is_resume``: which
+                edge to resume the *first* phase processed in this call
+                from (subsequent phases always start at edge 0).
+            completed_edges_in_phase_for_resume: Only meaningful when
+                ``is_resume``: preserved verbatim from the original
+                inline no-op check (``if start_edge_idx < ...: pass``) --
+                dead code in both originals, kept as-is rather than
+                removed, since removing it would be a separate cleanup
+                outside this step's scope.
+            loop_start_time: Only meaningful when not ``is_resume``: see
+                ``_plan_phase_edges``'s docstring.
+
+        Returns:
+            The final ``q_current`` after every phase in ``phases``
+            completes.
+        """
+        for idx_in_call, (gripper, handle) in enumerate(phases):
+            phase_idx = starting_phase_idx + idx_in_call
+
+            if verbose:
+                print("\n" + "-" * 70)
+                print(
+                    f"\n--- Phase {phase_idx + 1}/{total_phase_count_for_display} ---"
+                )
+                if handle is not None:
+                    print(f"  Grasp '{handle}' with '{gripper}'")
+                else:
+                    print(f"  Release with '{gripper}'")
+                current_state = self.grasp_tracker.get_current_state_name()
+                print(f"  Current state: {current_state}")
+
+            self._dump_phase_checkpoint(phase_idx, gripper, handle, q_current, verbose)
+
+            # ----------------------------------------------------------------
+            # Handle explicit release entry: (gripper, None)
+            # ----------------------------------------------------------------
+            currently_held = self.grasp_tracker.current_grasps.get(gripper)
+
+            if handle is None:
+                q_current = self._plan_release_entry_phase(
+                    phase_idx=phase_idx,
+                    gripper=gripper,
+                    currently_held=currently_held,
+                    q_current=q_current,
+                    frozen_arms_mode=frozen_arms_mode,
+                    verbose=verbose,
+                )
+                continue
+
+            # ----------------------------------------------------------------
+            # Auto-detect conflict: gripper holds a different object.
+            # Insert a release sub-phase before the grasp so the factory can
+            # build valid edges.
+            # ----------------------------------------------------------------
+            q_current = self._plan_auto_release_if_needed(
+                phase_idx=phase_idx,
+                gripper=gripper,
+                handle=handle,
+                currently_held=currently_held,
+                q_current=q_current,
+                frozen_arms_mode=frozen_arms_mode,
+                verbose=verbose,
+            )
+
+            self._build_phase_graph_and_constraints(
+                phase_idx=phase_idx,
+                gripper=gripper,
+                handle=handle,
+                q_current=q_current,
+                frozen_arms_mode=frozen_arms_mode,
+                per_phase_frozen_arms=per_phase_frozen_arms,
+                q_scene_init=q_scene_init,
+                verbose=verbose,
+                emit_logs=not is_resume,
+            )
+
+            edge_sequence, q_current = self._compute_and_project_edge_sequence(
+                phase_idx=phase_idx,
+                gripper=gripper,
+                handle=handle,
+                q_current=q_current,
+                verbose=verbose,
+                emit_logs=not is_resume,
+            )
+
+            start_edge_idx = 0
+            if is_resume and idx_in_call == 0 and retry_from_edge >= 0:
+                # Resuming failed phase: start from specified edge
+                start_edge_idx = retry_from_edge
+                if start_edge_idx < completed_edges_in_phase_for_resume:
+                    # Reuse previously completed paths in this phase
+                    # (though this is complex - for now just restart phase)
+                    pass
+
+            _edge_result = self._plan_phase_edges(
+                phase_idx=phase_idx,
+                gripper=gripper,
+                handle=handle,
+                edge_sequence=edge_sequence,
+                q_current=q_current,
+                skip_phases=skip_phases,
+                start_edge_idx=start_edge_idx,
+                is_resume=is_resume,
+                verbose=verbose,
+                loop_start_time=loop_start_time,
+            )
+            phase_paths = _edge_result["phase_paths"]
+            phase_geometric_paths = _edge_result["phase_geometric_paths"]
+            edge_stats_list = _edge_result["edge_stats_list"]
+            q_start = _edge_result["q_start"]
+            q_pregrasp_for_cache = _edge_result["q_pregrasp_for_cache"]
+
+            q_current = self._finalize_phase_result(
+                phase_idx=phase_idx,
+                gripper=gripper,
+                handle=handle,
+                edge_sequence=edge_sequence,
+                phase_paths=phase_paths,
+                phase_geometric_paths=phase_geometric_paths,
+                edge_stats_list=edge_stats_list,
+                q_start=q_start,
+                q_pregrasp_for_cache=q_pregrasp_for_cache,
+                skip_phases=skip_phases,
+                verbose=verbose,
+                is_resume=is_resume,
+            )
+
+        return q_current
+
     def plan_sequence(
         self,
         grasp_sequence: Sequence[tuple[str, str]],
@@ -2356,103 +2535,19 @@ class GraspSequencePlanner:
                 pass
         _loop_start_time = time.time()
 
-        for phase_idx, (gripper, handle) in enumerate(grasp_sequence):
-            if verbose:
-                print("\n" + "-" * 70)
-                print(f"\n--- Phase {phase_idx + 1}/{len(grasp_sequence)} ---")
-                if handle is not None:
-                    print(f"  Grasp '{handle}' with '{gripper}'")
-                else:
-                    print(f"  Release with '{gripper}'")
-                current_state = self.grasp_tracker.get_current_state_name()
-                print(f"  Current state: {current_state}")
-
-            self._dump_phase_checkpoint(phase_idx, gripper, handle, q_current, verbose)
-
-            # ----------------------------------------------------------------
-            # Handle explicit release entry: (gripper, None)
-            # ----------------------------------------------------------------
-            currently_held = self.grasp_tracker.current_grasps.get(gripper)
-
-            if handle is None:
-                q_current = self._plan_release_entry_phase(
-                    phase_idx=phase_idx,
-                    gripper=gripper,
-                    currently_held=currently_held,
-                    q_current=q_current,
-                    frozen_arms_mode=frozen_arms_mode,
-                    verbose=verbose,
-                )
-                continue
-
-            # ----------------------------------------------------------------
-            # Auto-detect conflict: gripper holds a different object.
-            # Insert a release sub-phase before the grasp so the factory can
-            # build valid edges.
-            # ----------------------------------------------------------------
-            q_current = self._plan_auto_release_if_needed(
-                phase_idx=phase_idx,
-                gripper=gripper,
-                handle=handle,
-                currently_held=currently_held,
-                q_current=q_current,
-                frozen_arms_mode=frozen_arms_mode,
-                verbose=verbose,
-            )
-
-            self._build_phase_graph_and_constraints(
-                phase_idx=phase_idx,
-                gripper=gripper,
-                handle=handle,
-                q_current=q_current,
-                frozen_arms_mode=frozen_arms_mode,
-                per_phase_frozen_arms=per_phase_frozen_arms,
-                q_scene_init=_q_scene_init,
-                verbose=verbose,
-                emit_logs=True,
-            )
-
-            edge_sequence, q_current = self._compute_and_project_edge_sequence(
-                phase_idx=phase_idx,
-                gripper=gripper,
-                handle=handle,
-                q_current=q_current,
-                verbose=verbose,
-                emit_logs=True,
-            )
-
-            _edge_result = self._plan_phase_edges(
-                phase_idx=phase_idx,
-                gripper=gripper,
-                handle=handle,
-                edge_sequence=edge_sequence,
-                q_current=q_current,
-                skip_phases=skip_phases,
-                start_edge_idx=0,
-                is_resume=False,
-                verbose=verbose,
-                loop_start_time=_loop_start_time,
-            )
-            phase_paths = _edge_result["phase_paths"]
-            phase_geometric_paths = _edge_result["phase_geometric_paths"]
-            edge_stats_list = _edge_result["edge_stats_list"]
-            q_start = _edge_result["q_start"]
-            q_pregrasp_for_cache = _edge_result["q_pregrasp_for_cache"]
-
-            q_current = self._finalize_phase_result(
-                phase_idx=phase_idx,
-                gripper=gripper,
-                handle=handle,
-                edge_sequence=edge_sequence,
-                phase_paths=phase_paths,
-                phase_geometric_paths=phase_geometric_paths,
-                edge_stats_list=edge_stats_list,
-                q_start=q_start,
-                q_pregrasp_for_cache=q_pregrasp_for_cache,
-                skip_phases=skip_phases,
-                verbose=verbose,
-                is_resume=False,
-            )
+        q_current = self._run_phase_loop(
+            phases=grasp_sequence,
+            starting_phase_idx=0,
+            total_phase_count_for_display=len(grasp_sequence),
+            q_current=q_current,
+            frozen_arms_mode=frozen_arms_mode,
+            per_phase_frozen_arms=per_phase_frozen_arms,
+            q_scene_init=_q_scene_init,
+            skip_phases=skip_phases,
+            is_resume=False,
+            verbose=verbose,
+            loop_start_time=_loop_start_time,
+        )
 
         if verbose:
             print("\n" + "=" * 70)
@@ -2662,116 +2757,21 @@ class GraspSequencePlanner:
             # No completed phases, use the stored q_current from failure
             q_current = resume_state["q_current"]
 
-        # Continue planning from failed phase
-        # Use similar logic to plan_sequence but start from failed phase
-        for phase_idx_offset, (gripper, handle) in enumerate(remaining_sequence):
-            phase_idx = incomplete_phase_idx + phase_idx_offset
-
-            if verbose:
-                print("\n" + "-" * 70)
-                print(f"\n--- Phase {phase_idx + 1}/{len(self.original_sequence)} ---")
-                if handle is not None:
-                    print(f"  Grasp '{handle}' with '{gripper}'")
-                else:
-                    print(f"  Release with '{gripper}'")
-                current_state = self.grasp_tracker.get_current_state_name()
-                print(f"  Current state: {current_state}")
-
-            self._dump_phase_checkpoint(phase_idx, gripper, handle, q_current, verbose)
-
-            # Handle explicit release entry: (gripper, None)
-            currently_held = self.grasp_tracker.current_grasps.get(gripper)
-
-            if handle is None:
-                use_fm = frozen_arms_mode if frozen_arms_mode is not None else "global"
-                q_current = self._plan_release_entry_phase(
-                    phase_idx=phase_idx,
-                    gripper=gripper,
-                    currently_held=currently_held,
-                    q_current=q_current,
-                    frozen_arms_mode=use_fm,
-                    verbose=verbose,
-                )
-                continue
-
-            # Auto-release detection (same logic as plan_sequence)
-            use_fm = frozen_arms_mode if frozen_arms_mode is not None else "global"
-            q_current = self._plan_auto_release_if_needed(
-                phase_idx=phase_idx,
-                gripper=gripper,
-                handle=handle,
-                currently_held=currently_held,
-                q_current=q_current,
-                frozen_arms_mode=use_fm,
-                verbose=verbose,
-            )
-
-            use_frozen_mode = (
-                frozen_arms_mode if frozen_arms_mode is not None else "global"
-            )
-            self._build_phase_graph_and_constraints(
-                phase_idx=phase_idx,
-                gripper=gripper,
-                handle=handle,
-                q_current=q_current,
-                frozen_arms_mode=use_frozen_mode,
-                per_phase_frozen_arms=per_phase_frozen_arms,
-                q_scene_init=getattr(self, "_q_scene_init", None),
-                verbose=verbose,
-                emit_logs=False,
-            )
-
-            edge_sequence, q_current = self._compute_and_project_edge_sequence(
-                phase_idx=phase_idx,
-                gripper=gripper,
-                handle=handle,
-                q_current=q_current,
-                verbose=verbose,
-                emit_logs=False,
-            )
-
-            # Plan edges (with selective retry)
-            # For first phase in resume, decide where to start
-            start_edge_idx = 0
-            if phase_idx_offset == 0 and retry_from_edge >= 0:
-                # Resuming failed phase: start from specified edge
-                start_edge_idx = retry_from_edge
-                if start_edge_idx < resume_state["completed_edges_in_phase"]:
-                    # Reuse previously completed paths in this phase
-                    # (though this is complex - for now just restart phase)
-                    pass
-
-            _edge_result = self._plan_phase_edges(
-                phase_idx=phase_idx,
-                gripper=gripper,
-                handle=handle,
-                edge_sequence=edge_sequence,
-                q_current=q_current,
-                skip_phases=skip_phases,
-                start_edge_idx=start_edge_idx,
-                is_resume=True,
-                verbose=verbose,
-            )
-            phase_paths = _edge_result["phase_paths"]
-            phase_geometric_paths = _edge_result["phase_geometric_paths"]
-            edge_stats_list = _edge_result["edge_stats_list"]
-            q_start = _edge_result["q_start"]
-            q_pregrasp_for_cache = _edge_result["q_pregrasp_for_cache"]
-
-            q_current = self._finalize_phase_result(
-                phase_idx=phase_idx,
-                gripper=gripper,
-                handle=handle,
-                edge_sequence=edge_sequence,
-                phase_paths=phase_paths,
-                phase_geometric_paths=phase_geometric_paths,
-                edge_stats_list=edge_stats_list,
-                q_start=q_start,
-                q_pregrasp_for_cache=q_pregrasp_for_cache,
-                skip_phases=skip_phases,
-                verbose=verbose,
-                is_resume=True,
-            )
+        use_fm = frozen_arms_mode if frozen_arms_mode is not None else "global"
+        q_current = self._run_phase_loop(
+            phases=remaining_sequence,
+            starting_phase_idx=incomplete_phase_idx,
+            total_phase_count_for_display=len(self.original_sequence),
+            q_current=q_current,
+            frozen_arms_mode=use_fm,
+            per_phase_frozen_arms=per_phase_frozen_arms,
+            q_scene_init=getattr(self, "_q_scene_init", None),
+            skip_phases=skip_phases,
+            is_resume=True,
+            verbose=verbose,
+            retry_from_edge=retry_from_edge,
+            completed_edges_in_phase_for_resume=resume_state["completed_edges_in_phase"],
+        )
 
         # Clear failure info on success
         self.last_failure_info = None
