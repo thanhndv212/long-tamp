@@ -519,6 +519,13 @@ class ManipulationTask(ABC):
         ]
         return edges, waypoints
 
+    def _reset_goals_if_possible(self) -> None:
+        if self.ps is None:
+            return
+        reset = getattr(self.ps, "resetGoalConfigs", None)
+        if callable(reset):
+            reset()
+
     def run(
         self,
         visualize: bool = True,
@@ -581,13 +588,6 @@ class ManipulationTask(ABC):
         # 6. Solve
         if solve and "q_goal" in configs:
             print("\n6. Solving planning problem...")
-
-            def _reset_goals_if_possible() -> None:
-                if self.ps is None:
-                    return
-                reset = getattr(self.ps, "resetGoalConfigs", None)
-                if callable(reset):
-                    reset()
 
             def _compute_transition_inputs(
                 cfgs: Dict[str, Any],
@@ -663,7 +663,7 @@ class ManipulationTask(ABC):
             if not seq or len(seq) < 2:
                 print("   ⚠ Planning skipped: missing q_init/q_goal")
             elif len(seq) == 2:
-                _reset_goals_if_possible()
+                self._reset_goals_if_possible()
                 self.planner.set_initial_config(configs["q_init"])
                 self.planner.add_goal_config(configs["q_goal"])
                 success = self.planner.solve(
@@ -767,7 +767,7 @@ class ManipulationTask(ABC):
                     a, b = seq[i], seq[i + 1]
                     seg = f"{i + 1}/{len(seq) - 1}"
                     print(f"\n   Segment {seg}: {a} -> {b}")
-                    _reset_goals_if_possible()
+                    self._reset_goals_if_possible()
                     self.planner.set_initial_config(configs[a])
                     self.planner.add_goal_config(configs[b])
                     success = self.planner.solve(
