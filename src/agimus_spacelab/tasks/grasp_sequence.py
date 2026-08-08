@@ -1202,6 +1202,219 @@ class GraspSequencePlanner:
             raise
         return q_current
 
+    def _build_phase_graph_and_constraints(
+        self,
+        phase_idx: int,
+        gripper: str,
+        handle: str | None,
+        q_current: list[float],
+        frozen_arms_mode: str,
+        per_phase_frozen_arms: dict[int, list[str]] | None,
+        q_scene_init: list[float] | None,
+        verbose: bool,
+        emit_logs: bool,
+    ) -> None:
+        """Build the phase-local constraint graph and locked-joint constraints.
+
+        Shared by ``plan_sequence()`` and ``resume_sequence()`` -- extracted
+        verbatim from both (Phase 1, Step 1.3 of the codebase refactor).
+        Mutates ``self.graph_builder``'s graph, ``self.planner.graph``,
+        ``self.config_gen``, and ``self.grasp_tracker``'s phase indices as a
+        side effect; no return value, matching the original inline code.
+
+        One deliberate simplification versus the original: the ConfigGenerator
+        init-vs-update branch order was ``if is None: init / elif hasattr: update``
+        in plan_sequence()'s inline code and the reverse order in
+        resume_sequence()'s -- both orders are equivalent since the two
+        conditions are mutually exclusive. Unified on plan_sequence()'s
+        order; not a behavior change.
+
+        Args:
+            frozen_arms_mode: Already resolved to a concrete string by the
+                caller (``resume_sequence`` maps ``None`` -> ``"global"``
+                before calling; ``plan_sequence``'s parameter is never
+                ``None``).
+            q_scene_init: Value to pass through as ``build_phase_graph``'s
+                ``q_init_original``. ``plan_sequence`` always has
+                ``self._q_scene_init`` set earlier in the same call;
+                ``resume_sequence`` may not, hence
+                ``getattr(self, "_q_scene_init", None)`` at that call site.
+            emit_logs: Whether to emit the ``phase_start`` RunLogger event
+                and the verbose confirmation prints around the graph/
+                ConfigGenerator updates. ``plan_sequence`` has always done
+                both; ``resume_sequence`` has never done either -- preserved
+                exactly as a pre-existing asymmetry, not unified here (see
+                the codebase refactor plan's logging-asymmetry section).
+
+        Raises:
+            RuntimeError: if graph building fails, wrapping the original
+                exception (same as both original inline blocks).
+        """
+        held_grasps = {
+            g: h
+            for g, h in self.grasp_tracker.current_grasps.items()
+            if h is not None
+        }
+        print(f"  Held grasps: {held_grasps}")
+
+        if emit_logs and self.run_logger is not None:
+            try:
+                self.run_logger.log(
+                    "phase_start",
+                    phase=phase_idx + 1,
+                    gripper=gripper,
+                    handle=handle,
+                    q_start=list(q_current),
+                    held_grasps={g: str(h) for g, h in held_grasps.items()},
+                )
+            except Exception:
+                pass
+
+        # Compute phase-specific locked joint constraints
+        phase_graph_constraints = None
+
+        if frozen_arms_mode == "global":
+            # Use global constraints from task.setup()
+            phase_graph_constraints = self.graph_constraints
+            if verbose and phase_graph_constraints:
+                print("  Using global locked joint constraints")
+        elif frozen_arms_mode != "none":
+            # Determine which arms to freeze for this phase
+            if frozen_arms_mode == "interactive":
+                # Interactive mode: use callback if available
+                if self.interactive_arm_selector_callback:
+                    try:
+                        frozen_arms = self.interactive_arm_selector_callback(
+                            phase_idx, gripper, self.ALL_ARM_KEYWORDS
+                        )
+                    except Exception as e:
+                        # Fallback to auto if callback fails
+                        if verbose:
+                            print(
+                                f"  \u26a0 Interactive selection failed: "
+                                f"{e}, using auto mode"
+                            )
+                        frozen_arms = self.compute_phase_locked_joints(
+                            gripper, "auto", handle=handle
+                        )
+                else:
+                    # No callback set, fall back to auto
+                    if verbose:
+                        print(
+                            "  \u26a0 Interactive mode requested but no "
+                            "callback set, using auto mode"
+                        )
+                    frozen_arms = self.compute_phase_locked_joints(
+                        gripper, "auto", handle=handle
+                    )
+            elif frozen_arms_mode == "manual" and per_phase_frozen_arms:
+                # Manual mode with explicit specification
+                frozen_arms = per_phase_frozen_arms.get(phase_idx, [])
+            else:
+                # Auto mode: freeze all except active gripper's arm
+                # (plus any arm in the kinematic chain that carries
+                # the target handle's owning object).
+                frozen_arms = self.compute_phase_locked_joints(
+                    gripper, "auto", handle=handle
+                )
+
+            # Create locked joint constraints for this phase
+            if frozen_arms:
+                if verbose:
+                    print(f"  Freezing arms: {frozen_arms}")
+
+                from agimus_spacelab.planning.constraints import (
+                    ConstraintBuilder,
+                )
+
+                constraint_names, joint_names = (
+                    ConstraintBuilder.create_locked_joint_constraints(
+                        self.graph_builder.ps,
+                        self.graph_builder.robot,
+                        q_current,  # Use current config for joint values
+                        frozen_arms,
+                        backend=self.graph_builder.backend,
+                    )
+                )
+
+                if constraint_names:
+                    phase_graph_constraints = constraint_names
+                    if verbose:
+                        joint_list = ", ".join(sorted(joint_names))
+                        print(
+                            f"  \u2713 Created {len(joint_names)} locked joint constraints: {joint_list}"
+                        )
+                        print(f"     Constraint names: {constraint_names}")
+
+            # Dynamically set TOPPRA active joints from unfrozen arms
+            if hasattr(self.planner, "set_toppra_active_joints"):
+                active_joints = self._get_active_joints_for_unfrozen_arms(
+                    frozen_arms
+                )
+                if active_joints:
+                    self.planner.set_toppra_active_joints(active_joints)
+                    if verbose:
+                        print(
+                            f"  TOPPRA active joints: "
+                            f"{len(active_joints)} joints from "
+                            f"unfrozen arms"
+                        )
+
+        try:
+            self.graph_builder.build_phase_graph(
+                config=self.task_config,
+                held_grasps=held_grasps,
+                next_grasp=(gripper, handle),
+                graph_constraints=phase_graph_constraints,
+                q_init=q_current,
+                q_init_original=q_scene_init,
+            )
+
+            # Update planner backend's graph reference after rebuild
+            # The graph_builder has the new graph, but the planner backend
+            # still has the old reference and needs to be updated
+            new_graph = self.graph_builder.get_graph()
+            if hasattr(self.planner, "graph"):
+                self.planner.graph = new_graph
+                if emit_logs and verbose:
+                    print("  \u2713 Updated planner graph reference")
+                    print(f"     Graph object: {type(new_graph).__name__}")
+                    if hasattr(new_graph, "edges"):
+                        print(f"     Graph has {len(new_graph.edges)} edges")
+
+            # Update ConfigGenerator's graph reference (or initialize it)
+            # ConfigGenerator needs current graph for edge-based config generation
+            if self.config_gen is None:
+                # First phase: initialize ConfigGenerator with phase graph
+                from agimus_spacelab.planning import ConfigGenerator
+
+                self.config_gen = ConfigGenerator(
+                    self.graph_builder.robot,
+                    new_graph,
+                    self.planner,
+                    self.graph_builder.ps,
+                    backend=self.backend,
+                )
+                if emit_logs and verbose:
+                    print("  \u2713 Initialized ConfigGenerator with phase graph")
+            elif hasattr(self.config_gen, "update_graph"):
+                # Subsequent phases: update graph reference
+                self.config_gen.update_graph(new_graph)
+                if emit_logs and verbose:
+                    print("  \u2713 Updated ConfigGenerator graph reference")
+
+        except Exception as e:
+            raise RuntimeError(
+                f"Phase {phase_idx + 1}: Failed to build graph: {e}"
+            ) from e
+
+        # Sync tracker indices with phase-local factory ordering
+        if hasattr(self.graph_builder, "_phase_grippers"):
+            self.grasp_tracker.set_phase_indices(
+                self.graph_builder._phase_grippers,
+                self.graph_builder._phase_handles,
+            )
+
     def plan_sequence(
         self,
         grasp_sequence: Sequence[tuple[str, str]],
@@ -1405,172 +1618,17 @@ class GraspSequencePlanner:
                 verbose=verbose,
             )
 
-            # Build minimal phase graph
-            held_grasps = {
-                g: h
-                for g, h in self.grasp_tracker.current_grasps.items()
-                if h is not None
-            }
-            print(f"  Held grasps: {held_grasps}")
-
-            # Emit phase_start with current config before graph build.
-            if self.run_logger is not None:
-                try:
-                    self.run_logger.log(
-                        "phase_start",
-                        phase=phase_idx + 1,
-                        gripper=gripper,
-                        handle=handle,
-                        q_start=list(q_current),
-                        held_grasps={g: str(h) for g, h in held_grasps.items()},
-                    )
-                except Exception:
-                    pass
-
-            # Compute phase-specific locked joint constraints
-            phase_graph_constraints = None
-
-            if frozen_arms_mode == "global":
-                # Use global constraints from task.setup()
-                phase_graph_constraints = self.graph_constraints
-                if verbose and phase_graph_constraints:
-                    print("  Using global locked joint constraints")
-            elif frozen_arms_mode != "none":
-                # Determine which arms to freeze for this phase
-                if frozen_arms_mode == "interactive":
-                    # Interactive mode: use callback if available
-                    if self.interactive_arm_selector_callback:
-                        try:
-                            frozen_arms = self.interactive_arm_selector_callback(
-                                phase_idx, gripper, self.ALL_ARM_KEYWORDS
-                            )
-                        except Exception as e:
-                            # Fallback to auto if callback fails
-                            if verbose:
-                                print(
-                                    f"  \u26a0 Interactive selection failed: "
-                                    f"{e}, using auto mode"
-                                )
-                            frozen_arms = self.compute_phase_locked_joints(
-                                gripper, "auto", handle=handle
-                            )
-                    else:
-                        # No callback set, fall back to auto
-                        if verbose:
-                            print(
-                                "  \u26a0 Interactive mode requested but no "
-                                "callback set, using auto mode"
-                            )
-                        frozen_arms = self.compute_phase_locked_joints(
-                            gripper, "auto", handle=handle
-                        )
-                elif frozen_arms_mode == "manual" and per_phase_frozen_arms:
-                    # Manual mode with explicit specification
-                    frozen_arms = per_phase_frozen_arms.get(phase_idx, [])
-                else:
-                    # Auto mode: freeze all except active gripper's arm
-                    # (plus any arm in the kinematic chain that carries
-                    # the target handle's owning object).
-                    frozen_arms = self.compute_phase_locked_joints(
-                        gripper, "auto", handle=handle
-                    )
-
-                # Create locked joint constraints for this phase
-                if frozen_arms:
-                    if verbose:
-                        print(f"  Freezing arms: {frozen_arms}")
-
-                    from agimus_spacelab.planning.constraints import (
-                        ConstraintBuilder,
-                    )
-
-                    constraint_names, joint_names = (
-                        ConstraintBuilder.create_locked_joint_constraints(
-                            self.graph_builder.ps,
-                            self.graph_builder.robot,
-                            q_current,  # Use current config for joint values
-                            frozen_arms,
-                            backend=self.graph_builder.backend,
-                        )
-                    )
-
-                    if constraint_names:
-                        phase_graph_constraints = constraint_names
-                        if verbose:
-                            joint_list = ", ".join(sorted(joint_names))
-                            print(
-                                f"  \u2713 Created {len(joint_names)} locked joint constraints: {joint_list}"
-                            )
-                            print(f"     Constraint names: {constraint_names}")
-
-                # Dynamically set TOPPRA active joints from unfrozen arms
-                if hasattr(self.planner, "set_toppra_active_joints"):
-                    active_joints = self._get_active_joints_for_unfrozen_arms(
-                        frozen_arms
-                    )
-                    if active_joints:
-                        self.planner.set_toppra_active_joints(active_joints)
-                        if verbose:
-                            print(
-                                f"  TOPPRA active joints: "
-                                f"{len(active_joints)} joints from "
-                                f"unfrozen arms"
-                            )
-
-            try:
-                self.graph_builder.build_phase_graph(
-                    config=self.task_config,
-                    held_grasps=held_grasps,
-                    next_grasp=(gripper, handle),
-                    graph_constraints=phase_graph_constraints,
-                    q_init=q_current,
-                    q_init_original=_q_scene_init,
-                )
-
-                # Update planner backend's graph reference after rebuild
-                # The graph_builder has the new graph, but the planner backend
-                # still has the old reference and needs to be updated
-                new_graph = self.graph_builder.get_graph()
-                if hasattr(self.planner, "graph"):
-                    self.planner.graph = new_graph
-                    if verbose:
-                        print("  \u2713 Updated planner graph reference")
-                        print(f"     Graph object: {type(new_graph).__name__}")
-                        if hasattr(new_graph, "edges"):
-                            print(f"     Graph has {len(new_graph.edges)} edges")
-
-                # Update ConfigGenerator's graph reference (or initialize it)
-                # ConfigGenerator needs current graph for edge-based config generation
-                if self.config_gen is None:
-                    # First phase: initialize ConfigGenerator with phase graph
-                    from agimus_spacelab.planning import ConfigGenerator
-
-                    self.config_gen = ConfigGenerator(
-                        self.graph_builder.robot,
-                        new_graph,
-                        self.planner,
-                        self.graph_builder.ps,
-                        backend=self.backend,
-                    )
-                    if verbose:
-                        print("  \u2713 Initialized ConfigGenerator with phase graph")
-                elif hasattr(self.config_gen, "update_graph"):
-                    # Subsequent phases: update graph reference
-                    self.config_gen.update_graph(new_graph)
-                    if verbose:
-                        print("  \u2713 Updated ConfigGenerator graph reference")
-
-            except Exception as e:
-                raise RuntimeError(
-                    f"Phase {phase_idx + 1}: Failed to build graph: {e}"
-                ) from e
-
-            # Sync tracker indices with phase-local factory ordering
-            if hasattr(self.graph_builder, "_phase_grippers"):
-                self.grasp_tracker.set_phase_indices(
-                    self.graph_builder._phase_grippers,
-                    self.graph_builder._phase_handles,
-                )
+            self._build_phase_graph_and_constraints(
+                phase_idx=phase_idx,
+                gripper=gripper,
+                handle=handle,
+                q_current=q_current,
+                frozen_arms_mode=frozen_arms_mode,
+                per_phase_frozen_arms=per_phase_frozen_arms,
+                q_scene_init=_q_scene_init,
+                verbose=verbose,
+                emit_logs=True,
+            )
 
             # Compute edge sequence from current state
             # Use waypoints for better constraint satisfaction
@@ -2398,140 +2456,20 @@ class GraspSequencePlanner:
                 verbose=verbose,
             )
 
-            # Build minimal phase graph
-            held_grasps = {
-                g: h
-                for g, h in self.grasp_tracker.current_grasps.items()
-                if h is not None
-            }
-            print(f"  Held grasps: {held_grasps}")
-
-            # Compute phase-specific locked joint constraints (reuse original mode if not overridden)
             use_frozen_mode = (
                 frozen_arms_mode if frozen_arms_mode is not None else "global"
             )
-            phase_graph_constraints = None
-
-            if use_frozen_mode == "global":
-                # Use global constraints from task.setup()
-                phase_graph_constraints = self.graph_constraints
-                if verbose and phase_graph_constraints:
-                    print("  Using global locked joint constraints")
-            elif use_frozen_mode != "none":
-                # Determine which arms to freeze for this phase
-                if use_frozen_mode == "interactive":
-                    # Interactive mode: use callback if available
-                    if self.interactive_arm_selector_callback:
-                        try:
-                            frozen_arms = self.interactive_arm_selector_callback(
-                                phase_idx, gripper, self.ALL_ARM_KEYWORDS
-                            )
-                        except Exception as e:
-                            if verbose:
-                                print(
-                                    f"  \u26a0 Interactive selection failed: "
-                                    f"{e}, using auto mode"
-                                )
-                            frozen_arms = self.compute_phase_locked_joints(
-                                gripper, "auto", handle=handle
-                            )
-                    else:
-                        if verbose:
-                            print(
-                                "  \u26a0 Interactive mode requested but no "
-                                "callback set, using auto mode"
-                            )
-                        frozen_arms = self.compute_phase_locked_joints(
-                            gripper, "auto", handle=handle
-                        )
-                elif use_frozen_mode == "manual" and per_phase_frozen_arms:
-                    frozen_arms = per_phase_frozen_arms.get(phase_idx, [])
-                else:
-                    # Auto mode
-                    frozen_arms = self.compute_phase_locked_joints(
-                        gripper, "auto", handle=handle
-                    )
-
-                # Create locked joint constraints
-                if frozen_arms:
-                    if verbose:
-                        print(f"  Freezing arms: {frozen_arms}")
-
-                    from agimus_spacelab.planning.constraints import (
-                        ConstraintBuilder,
-                    )
-
-                    constraint_names, joint_names = (
-                        ConstraintBuilder.create_locked_joint_constraints(
-                            self.graph_builder.ps,
-                            self.graph_builder.robot,
-                            q_current,
-                            frozen_arms,
-                            backend=self.graph_builder.backend,
-                        )
-                    )
-
-                    if constraint_names:
-                        phase_graph_constraints = constraint_names
-                        if verbose:
-                            joint_list = ", ".join(sorted(joint_names))
-                            print(
-                                f"  \u2713 Created {len(joint_names)} "
-                                f"locked joint constraints: {joint_list}"
-                            )
-
-                # Dynamically set TOPPRA active joints from unfrozen arms
-                if hasattr(self.planner, "set_toppra_active_joints"):
-                    active_joints = self._get_active_joints_for_unfrozen_arms(
-                        frozen_arms
-                    )
-                    if active_joints:
-                        self.planner.set_toppra_active_joints(active_joints)
-                        if verbose:
-                            print(
-                                f"  TOPPRA active joints: "
-                                f"{len(active_joints)} joints from "
-                                f"unfrozen arms"
-                            )
-
-            try:
-                self.graph_builder.build_phase_graph(
-                    config=self.task_config,
-                    held_grasps=held_grasps,
-                    next_grasp=(gripper, handle),
-                    graph_constraints=phase_graph_constraints,
-                    q_init=q_current,
-                    q_init_original=getattr(self, "_q_scene_init", None),
-                )
-
-                new_graph = self.graph_builder.get_graph()
-                if hasattr(self.planner, "graph"):
-                    self.planner.graph = new_graph
-
-                if self.config_gen and hasattr(self.config_gen, "update_graph"):
-                    self.config_gen.update_graph(new_graph)
-                elif self.config_gen is None:
-                    from agimus_spacelab.planning import ConfigGenerator
-
-                    self.config_gen = ConfigGenerator(
-                        self.graph_builder.robot,
-                        new_graph,
-                        self.planner,
-                        self.graph_builder.ps,
-                        backend=self.backend,
-                    )
-
-            except Exception as e:
-                raise RuntimeError(
-                    f"Phase {phase_idx + 1}: Failed to build graph: {e}"
-                ) from e
-
-            # Sync tracker indices with phase-local factory ordering
-            if hasattr(self.graph_builder, "_phase_grippers"):
-                self.grasp_tracker.set_phase_indices(
-                    self.graph_builder._phase_grippers,
-                    self.graph_builder._phase_handles,
-                )
+            self._build_phase_graph_and_constraints(
+                phase_idx=phase_idx,
+                gripper=gripper,
+                handle=handle,
+                q_current=q_current,
+                frozen_arms_mode=use_frozen_mode,
+                per_phase_frozen_arms=per_phase_frozen_arms,
+                q_scene_init=getattr(self, "_q_scene_init", None),
+                verbose=verbose,
+                emit_logs=False,
+            )
 
             # Get edge sequence
             try:
