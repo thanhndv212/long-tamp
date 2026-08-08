@@ -248,3 +248,65 @@ class TestComputeTransitionInputs:
                 transition_waypoints=None,
                 generate_waypoints_via_edges=False,
             )
+
+
+class _FakePlanner:
+    """Records calls instead of touching real HPP/viewer state."""
+
+    def __init__(self, has_record_method=True, raise_on="none"):
+        self.play_and_record_calls = []
+        self.play_calls = []
+        self._raise_on = raise_on
+        if has_record_method:
+            self.play_and_record_path = self._play_and_record_path
+
+    def _play_and_record_path(self, path_index, video_name, output_dir, framerate):
+        if self._raise_on == "record":
+            raise RuntimeError("boom")
+        self.play_and_record_calls.append(
+            (path_index, video_name, output_dir, framerate)
+        )
+        return "/tmp/fake_video.mp4"
+
+    def play_path(self, path_index):
+        if self._raise_on == "play":
+            raise RuntimeError("boom")
+        self.play_calls.append(path_index)
+
+
+class TestPlayAndRecord:
+    """No real script in this environment reaches success=True through
+    run()'s solve() call (see baseline/README.md), so _play_and_record's
+    real relocated control flow -- not the HPP physics underneath it -- is
+    verified here via a fake planner instead of a real successful run.
+    """
+
+    def test_record_true_uses_play_and_record_path(self, capsys):
+        task = _make_task()
+        task.planner = _FakePlanner()
+        task._play_and_record(3, True, "clip", "/out", 25)
+        assert task.planner.play_and_record_calls == [(3, "clip", "/out", 25)]
+        assert task.planner.play_calls == []
+        out = capsys.readouterr().out
+        assert "Path playback complete" in out
+        assert "Video recorded" in out
+
+    def test_record_false_falls_back_to_play_path(self, capsys):
+        task = _make_task()
+        task.planner = _FakePlanner()
+        task._play_and_record(2, False, None, "/out", 25)
+        assert task.planner.play_calls == [2]
+        assert task.planner.play_and_record_calls == []
+        assert "Path playback complete" in capsys.readouterr().out
+
+    def test_missing_record_method_falls_back_to_play_path(self, capsys):
+        task = _make_task()
+        task.planner = _FakePlanner(has_record_method=False)
+        task._play_and_record(0, True, None, "/out", 25)
+        assert task.planner.play_calls == [0]
+
+    def test_exception_is_caught_not_raised(self, capsys):
+        task = _make_task()
+        task.planner = _FakePlanner(raise_on="record")
+        task._play_and_record(0, True, None, "/out", 25)  # must not raise
+        assert "Path playback failed" in capsys.readouterr().out

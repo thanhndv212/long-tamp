@@ -597,6 +597,31 @@ class ManipulationTask(ABC):
             "generate_waypoints_via_edges=True."
         )
 
+    def _play_and_record(
+        self,
+        path_index: int,
+        record: bool,
+        video_name: Optional[str],
+        output_dir: str,
+        framerate: int,
+    ) -> None:
+        print("\n7. Playing solution path...")
+        try:
+            if record and hasattr(self.planner, "play_and_record_path"):
+                video_file = self.planner.play_and_record_path(
+                    path_index=path_index,
+                    video_name=video_name,
+                    output_dir=output_dir,
+                    framerate=framerate,
+                )
+                print("   ✓ Path playback complete")
+                print(f"   📹 Video recorded: {video_file}")
+            else:
+                self.planner.play_path(path_index)
+                print("   ✓ Path playback complete")
+        except Exception as e:
+            print(f"   ⚠ Path playback failed: {e}")
+
     def run(
         self,
         visualize: bool = True,
@@ -678,22 +703,9 @@ class ManipulationTask(ABC):
                     print("   ⚠ Planning failed")
 
                 if success and visualize:
-                    print("\n7. Playing solution path...")
-                    try:
-                        if record and hasattr(self.planner, "play_and_record_path"):
-                            video_file = self.planner.play_and_record_path(
-                                path_index=0,
-                                video_name=video_name,
-                                output_dir=output_dir,
-                                framerate=framerate,
-                            )
-                            print("   ✓ Path playback complete")
-                            print(f"   📹 Video recorded: {video_file}")
-                        else:
-                            self.planner.play_path(0)
-                            print("   ✓ Path playback complete")
-                    except Exception as e:
-                        print(f"   ⚠ Path playback failed: {e}")
+                    self._play_and_record(
+                        0, record, video_name, output_dir, framerate
+                    )
             else:
                 if solve_mode == "transition-planner":
                     edges, waypoints = self._compute_transition_inputs(
@@ -741,22 +753,9 @@ class ManipulationTask(ABC):
                         raise RuntimeError(f"transition-planner planning failed: {exc}")
 
                     if visualize:
-                        print("\n7. Playing solution path...")
-                        try:
-                            if record and hasattr(self.planner, "play_and_record_path"):
-                                video_file = self.planner.play_and_record_path(
-                                    path_index=int(path_id),
-                                    video_name=video_name,
-                                    output_dir=output_dir,
-                                    framerate=framerate,
-                                )
-                                print("   ✓ Path playback complete")
-                                print(f"   📹 Video recorded: {video_file}")
-                            else:
-                                self.planner.play_path(int(path_id))
-                                print("   ✓ Path playback complete")
-                        except Exception as e:
-                            print(f"   ⚠ Path playback failed: {e}")
+                        self._play_and_record(
+                            int(path_id), record, video_name, output_dir, framerate
+                        )
 
                     return {
                         "configs": configs,
@@ -806,24 +805,11 @@ class ManipulationTask(ABC):
                             pass
 
                 if visualize:
-                    print("\n7. Playing solution path...")
-                    try:
-                        # Use concatenated path when known, otherwise 0.
-                        pid = path_ids[0] if path_ids else 0
-                        if record and hasattr(self.planner, "play_and_record_path"):
-                            video_file = self.planner.play_and_record_path(
-                                path_index=pid,
-                                video_name=video_name,
-                                output_dir=output_dir,
-                                framerate=framerate,
-                            )
-                            print("   ✓ Path playback complete")
-                            print(f"   📹 Video recorded: {video_file}")
-                        else:
-                            self.planner.play_path(pid)
-                            print("   ✓ Path playback complete")
-                    except Exception as e:
-                        print(f"   ⚠ Path playback failed: {e}")
+                    # Use concatenated path when known, otherwise 0.
+                    pid = path_ids[0] if path_ids else 0
+                    self._play_and_record(
+                        pid, record, video_name, output_dir, framerate
+                    )
 
         return {
             "configs": configs,
