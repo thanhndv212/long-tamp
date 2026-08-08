@@ -526,6 +526,77 @@ class ManipulationTask(ABC):
         if callable(reset):
             reset()
 
+    def _compute_transition_inputs(
+        self,
+        cfgs: Dict[str, Any],
+        transition_edges: Optional[Sequence[str]],
+        transition_waypoints: Optional[Sequence[Sequence[float]]],
+        generate_waypoints_via_edges: bool,
+    ) -> Tuple[List[str], List[List[float]]]:
+        """Compute (edges, waypoints) for transition-planner mode."""
+        # 1) Explicit waypoints take precedence.
+        if transition_waypoints is not None:
+            if not transition_edges:
+                raise ValueError("transition_waypoints requires transition_edges")
+            edges = [str(e) for e in transition_edges]
+            waypoints = [list(w) for w in transition_waypoints]
+            if len(waypoints) != len(edges) + 1:
+                raise ValueError(
+                    "Expected len(transition_waypoints) == "
+                    "len(transition_edges) + 1"
+                )
+            return edges, waypoints
+
+        # 2) Parse factory waypoint naming convention.
+        edges, waypoints = self._parse_factory_waypoints(cfgs)
+        if edges and waypoints:
+            return edges, waypoints
+
+        # 3) Optional generation via edges.
+        if transition_edges:
+            edges = [str(e) for e in transition_edges]
+            if not generate_waypoints_via_edges:
+                raise ValueError(
+                    "transition_edges provided but no waypoints "
+                    "found. Either pass transition_waypoints, "
+                    "provide configs named q_wp_<i>_<edge>, or "
+                    "set generate_waypoints_via_edges=True."
+                )
+            if self.config_gen is None:
+                raise RuntimeError(
+                    "ConfigGenerator not initialized; " "call setup() first"
+                )
+            if "q_init" not in cfgs or "q_goal" not in cfgs:
+                raise ValueError("Missing q_init/q_goal in configs")
+
+            q_current = list(cfgs["q_init"])
+            waypoints = [q_current]
+            # Generate intermediate waypoints for all but last edge.
+            for i, edge_name in enumerate(edges[:-1]):
+                label = f"q_wp_{i}_{edge_name}"
+                ok, q_next = self.config_gen.generate_via_edge(
+                    edge_name,
+                    q_current,
+                    config_label=label,
+                )
+                if not ok or q_next is None:
+                    raise RuntimeError(
+                        "Failed to generate waypoint via edge " f"'{edge_name}'"
+                    )
+                q_current = list(q_next)
+                waypoints.append(q_current)
+
+            # Use task-provided goal as final waypoint.
+            waypoints.append(list(cfgs["q_goal"]))
+            return edges, waypoints
+
+        raise ValueError(
+            "transition-planner mode requires explicit inputs. "
+            "Provide (transition_edges, transition_waypoints), or add "
+            "q_wp_<i>_<edge> configs, or pass transition_edges with "
+            "generate_waypoints_via_edges=True."
+        )
+
     def run(
         self,
         visualize: bool = True,
@@ -589,75 +660,6 @@ class ManipulationTask(ABC):
         if solve and "q_goal" in configs:
             print("\n6. Solving planning problem...")
 
-            def _compute_transition_inputs(
-                cfgs: Dict[str, Any],
-            ) -> Tuple[List[str], List[List[float]]]:
-                """Compute (edges, waypoints) for transition-planner mode."""
-                # 1) Explicit waypoints take precedence.
-                if transition_waypoints is not None:
-                    if not transition_edges:
-                        raise ValueError(
-                            "transition_waypoints requires transition_edges"
-                        )
-                    edges = [str(e) for e in transition_edges]
-                    waypoints = [list(w) for w in transition_waypoints]
-                    if len(waypoints) != len(edges) + 1:
-                        raise ValueError(
-                            "Expected len(transition_waypoints) == "
-                            "len(transition_edges) + 1"
-                        )
-                    return edges, waypoints
-
-                # 2) Parse factory waypoint naming convention.
-                edges, waypoints = self._parse_factory_waypoints(cfgs)
-                if edges and waypoints:
-                    return edges, waypoints
-
-                # 3) Optional generation via edges.
-                if transition_edges:
-                    edges = [str(e) for e in transition_edges]
-                    if not generate_waypoints_via_edges:
-                        raise ValueError(
-                            "transition_edges provided but no waypoints "
-                            "found. Either pass transition_waypoints, "
-                            "provide configs named q_wp_<i>_<edge>, or "
-                            "set generate_waypoints_via_edges=True."
-                        )
-                    if self.config_gen is None:
-                        raise RuntimeError(
-                            "ConfigGenerator not initialized; " "call setup() first"
-                        )
-                    if "q_init" not in cfgs or "q_goal" not in cfgs:
-                        raise ValueError("Missing q_init/q_goal in configs")
-
-                    q_current = list(cfgs["q_init"])
-                    waypoints = [q_current]
-                    # Generate intermediate waypoints for all but last edge.
-                    for i, edge_name in enumerate(edges[:-1]):
-                        label = f"q_wp_{i}_{edge_name}"
-                        ok, q_next = self.config_gen.generate_via_edge(
-                            edge_name,
-                            q_current,
-                            config_label=label,
-                        )
-                        if not ok or q_next is None:
-                            raise RuntimeError(
-                                "Failed to generate waypoint via edge " f"'{edge_name}'"
-                            )
-                        q_current = list(q_next)
-                        waypoints.append(q_current)
-
-                    # Use task-provided goal as final waypoint.
-                    waypoints.append(list(cfgs["q_goal"]))
-                    return edges, waypoints
-
-                raise ValueError(
-                    "transition-planner mode requires explicit inputs. "
-                    "Provide (transition_edges, transition_waypoints), or add "
-                    "q_wp_<i>_<edge> configs, or pass transition_edges with "
-                    "generate_waypoints_via_edges=True."
-                )
-
             seq = self._ordered_config_keys(configs, preferred_configs)
 
             if not seq or len(seq) < 2:
@@ -694,7 +696,12 @@ class ManipulationTask(ABC):
                         print(f"   ⚠ Path playback failed: {e}")
             else:
                 if solve_mode == "transition-planner":
-                    edges, waypoints = _compute_transition_inputs(configs)
+                    edges, waypoints = self._compute_transition_inputs(
+                        configs,
+                        transition_edges,
+                        transition_waypoints,
+                        generate_waypoints_via_edges,
+                    )
 
                     # Apply transition-planner optimizer config (optional)
                     global_opts = getattr(

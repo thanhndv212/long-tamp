@@ -7,7 +7,30 @@ correction) even though the helpers under test have no HPP dependency
 themselves, so these tests must run inside the hpp-arm64 container.
 """
 
+import pytest
+
 from agimus_spacelab.tasks.base import ManipulationTask
+
+
+class _ConcreteTask(ManipulationTask):
+    """Minimal concrete subclass so the abstract base can be instantiated
+    directly, bypassing __init__ (which needs real scene/backend wiring)."""
+
+    def build_initial_config(self):
+        raise NotImplementedError
+
+
+def _make_task(config_gen=None):
+    """Bare ManipulationTask instance, bypassing __init__.
+
+    _compute_transition_inputs only reads self.config_gen and calls the
+    already-tested self._parse_factory_waypoints, so a minimal object with
+    just that attribute set is sufficient -- no need to construct a full
+    task with real scene/backend wiring.
+    """
+    task = object.__new__(_ConcreteTask)
+    task.config_gen = config_gen
+    return task
 
 
 class TestOrderedConfigKeys:
@@ -133,3 +156,95 @@ class TestParseFactoryWaypoints:
         edges, waypoints = ManipulationTask._parse_factory_waypoints(cfgs)
         assert edges == ["some_edge_name"]
         assert waypoints == [[0.0], [0.5], [1.0]]
+
+
+class TestComputeTransitionInputs:
+    """Covers the branches reachable without a real HPP config_gen.
+
+    Branch 3's success path (self.config_gen.generate_via_edge(...)) needs
+    a real HPP-backed ConfigGenerator and has no real-script coverage in
+    this environment (see baseline/README.md's "solve_mode is a no-op"
+    finding) -- only its guard clauses are covered here, disclosed gap
+    rather than claimed coverage.
+    """
+
+    def test_explicit_waypoints_take_precedence(self):
+        task = _make_task()
+        cfgs = {"q_init": [0.0], "q_goal": [9.0]}
+        edges, waypoints = task._compute_transition_inputs(
+            cfgs,
+            transition_edges=["e0", "e1"],
+            transition_waypoints=[[0.0], [1.0], [9.0]],
+            generate_waypoints_via_edges=False,
+        )
+        assert edges == ["e0", "e1"]
+        assert waypoints == [[0.0], [1.0], [9.0]]
+
+    def test_explicit_waypoints_without_edges_raises(self):
+        task = _make_task()
+        with pytest.raises(ValueError, match="requires transition_edges"):
+            task._compute_transition_inputs(
+                {},
+                transition_edges=None,
+                transition_waypoints=[[0.0], [1.0]],
+                generate_waypoints_via_edges=False,
+            )
+
+    def test_explicit_waypoints_length_mismatch_raises(self):
+        task = _make_task()
+        with pytest.raises(ValueError, match="len.transition_waypoints"):
+            task._compute_transition_inputs(
+                {},
+                transition_edges=["e0", "e1"],
+                transition_waypoints=[[0.0], [1.0]],  # needs 3, has 2
+                generate_waypoints_via_edges=False,
+            )
+
+    def test_factory_waypoints_used_when_no_explicit_waypoints(self):
+        task = _make_task()
+        cfgs = {
+            "q_init": [0.0],
+            "q_goal": [1.0],
+            "q_wp_0_edgeA": [0.5],
+        }
+        edges, waypoints = task._compute_transition_inputs(
+            cfgs,
+            transition_edges=None,
+            transition_waypoints=None,
+            generate_waypoints_via_edges=False,
+        )
+        assert edges == ["edgeA"]
+        assert waypoints == [[0.0], [0.5], [1.0]]
+
+    def test_edges_without_generate_flag_raises(self):
+        task = _make_task()
+        cfgs = {"q_init": [0.0], "q_goal": [1.0]}
+        with pytest.raises(ValueError, match="no waypoints"):
+            task._compute_transition_inputs(
+                cfgs,
+                transition_edges=["e0"],
+                transition_waypoints=None,
+                generate_waypoints_via_edges=False,
+            )
+
+    def test_generate_flag_without_config_gen_raises(self):
+        task = _make_task(config_gen=None)
+        cfgs = {"q_init": [0.0], "q_goal": [1.0]}
+        with pytest.raises(RuntimeError, match="ConfigGenerator not initialized"):
+            task._compute_transition_inputs(
+                cfgs,
+                transition_edges=["e0"],
+                transition_waypoints=None,
+                generate_waypoints_via_edges=True,
+            )
+
+    def test_no_inputs_at_all_raises(self):
+        task = _make_task()
+        cfgs = {"q_init": [0.0], "q_goal": [1.0]}
+        with pytest.raises(ValueError, match="requires explicit inputs"):
+            task._compute_transition_inputs(
+                cfgs,
+                transition_edges=None,
+                transition_waypoints=None,
+                generate_waypoints_via_edges=False,
+            )
