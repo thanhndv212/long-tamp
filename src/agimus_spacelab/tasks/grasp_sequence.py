@@ -1533,6 +1533,538 @@ class GraspSequencePlanner:
 
         return edge_sequence, q_current
 
+    def _plan_phase_edges(
+        self,
+        phase_idx: int,
+        gripper: str,
+        handle: str | None,
+        edge_sequence: list[str],
+        q_current: list[float],
+        skip_phases: set[int] | None,
+        start_edge_idx: int,
+        is_resume: bool,
+        verbose: bool,
+        loop_start_time: float | None = None,
+    ) -> dict[str, Any]:
+        """Plan every edge in the phase's edge sequence, with collision-retry.
+
+        Shared by ``plan_sequence()`` and ``resume_sequence()`` -- extracted
+        verbatim from both (Phase 1, Step 1.5 of the codebase refactor),
+        the largest single block in either function.
+
+        Handles: user-interrupt (stop-request) checkpointing, per-edge
+        target generation via ``ConfigGenerator``, the ``skip_phases``
+        short-circuit, and the collision-retry loop around
+        ``plan_transition_edge`` (up to ``self._MAX_COLLISION_RETRIES``
+        attempts, regenerating the target config between attempts).
+        Appends a partial phase result and updates ``self.last_failure_info``
+        on any failure (interrupt, generation failure, or planning failure)
+        before raising -- same as both original inline blocks.
+
+        Args:
+            start_edge_idx: Which edge in ``edge_sequence`` to start
+                planning from. ``plan_sequence()`` always passes ``0``;
+                ``resume_sequence()`` passes its own computed resume point
+                (resume-specific bookkeeping that stays in that caller).
+            is_resume: Selects between the two call sites' pre-existing,
+                genuinely different behaviors in this block -- not just a
+                verbosity toggle, preserved exactly rather than unified:
+                  - ``edge_stat["attempt"]``: hardcoded ``1`` when
+                    ``False``; looked up from ``self.edge_stats`` (prior
+                    attempt + 1) when ``True``, with an
+                    ``"is_resume": True`` key added to the dict.
+                  - Target generation: ``False`` additionally checks the
+                    generated config is finite (NaN/inf guard), prints a
+                    verbose debug dump of ``q_target``, and attempts to
+                    visualize it before planning; ``True`` does none of
+                    that (plain ok/None check only).
+                  - RunLogger ``"edge_start"``/``"edge_end"`` events and
+                    the ``"run_end"`` event on user interrupt: emitted
+                    when ``False``, never emitted when ``True``.
+                  - The per-attempt "Planning: q_start -> q_target" print
+                    on the first collision-retry attempt: printed when
+                    ``False``; skipped when ``True`` (that case's
+                    "Planning waypoint edge..." line above already
+                    includes an "(attempt #N)" suffix).
+                  - The console message on planning failure: "Stored
+                    partial phase result: N edges completed" when
+                    ``False``; "Failed after Xs (attempt #N)" when
+                    ``True``.
+            loop_start_time: ``plan_sequence()``'s loop-start timestamp,
+                needed only for the ``run_end``-on-interrupt log emitted
+                when ``is_resume`` is ``False``.
+
+        Returns:
+            Dict with keys ``phase_paths``, ``phase_geometric_paths``,
+            ``edge_stats_list``, ``q_start`` (end config of the last
+            successfully planned edge), ``q_pregrasp_for_cache``.
+
+        Raises:
+            KeyboardInterrupt: on a graceful-stop request.
+            RuntimeError: on target-generation or planning failure,
+                wrapping the original exception.
+        """
+        phase_paths = []
+        phase_geometric_paths = []  # Geometric paths (no time param) for saving
+        edge_stats_list = []  # Per-edge timing stats for this phase
+        q_start = q_current
+        q_pregrasp_for_cache = None  # end config of the _01 edge (pregrasp)
+
+        for edge_idx in range(start_edge_idx, len(edge_sequence)):
+            # Resolve the edge name first so the stop-request handler below
+            # can record it (otherwise a stop on the first iteration would
+            # reference an undefined `edge_name`).
+            edge_name = edge_sequence[edge_idx]
+
+            # Check for stop request
+            if is_stop_requested():
+                if verbose:
+                    print("\n  ⚠️  Stop requested - saving progress...")
+                partial_phase_result = {
+                    "phase": phase_idx + 1,
+                    "gripper": gripper,
+                    "handle": handle,
+                    "edges": edge_sequence,
+                    "paths": phase_paths,
+                    "edge_stats": edge_stats_list,
+                    "complete": False,
+                    "failed_edge_idx": edge_idx,
+                    "failed_edge_name": edge_name,
+                    "last_q_start": q_start,
+                    "stopped": True,
+                    "error_message": "Stopped by user request",
+                }
+                self.phase_results.append(partial_phase_result)
+
+                self.last_failure_info = {
+                    "phase_idx": phase_idx,
+                    "edge_idx": edge_idx,
+                    "edge_name": edge_name,
+                    "q_current": q_current,
+                    "error": "Stopped by user request (Ctrl+C)",
+                    "completed_phases": len(
+                        [p for p in self.phase_results if p.get("complete", False)]
+                    ),
+                    "completed_edges_in_phase": len(phase_paths),
+                    "stopped": True,
+                }
+
+                if verbose:
+                    print(
+                        f"\n  ⚠️  Stored partial phase result: {len(phase_paths)} edges completed"
+                    )
+                    print(
+                        f"     You can resume from Phase {phase_idx + 1}, Edge {edge_idx + 1}"
+                    )
+
+                # Disable signal handler before raising
+                disable_graceful_stop()
+                if not is_resume:
+                    # Emit run_end on user interrupt (plan_sequence only).
+                    if self.run_logger is not None:
+                        try:
+                            self.run_logger.log(
+                                "run_end",
+                                success=False,
+                                total_time=time.time() - loop_start_time,
+                                total_planning_time=self.total_planning_time,
+                                phase_count=len(self.phase_results),
+                                final_config=None,
+                                error="user_interrupt",
+                            )
+                            self.run_logger.close()
+                        except Exception:
+                            pass
+                raise KeyboardInterrupt("Planning stopped by user request")
+
+            edge_start_time = time.time()
+
+            if is_resume:
+                # Get previous attempt count for this edge
+                prev_stat = self.edge_stats.get((phase_idx, edge_idx))
+                attempt_num = (prev_stat["attempt"] + 1) if prev_stat else 1
+            else:
+                attempt_num = 1
+
+            edge_stat = {
+                "edge_idx": edge_idx,
+                "edge_name": edge_name,
+                "attempt": attempt_num,
+                "gen_time": 0.0,
+                "plan_time": 0.0,
+                "total_time": 0.0,
+                "success": False,
+            }
+            if is_resume:
+                edge_stat["is_resume"] = True
+
+            if not is_resume and self.run_logger is not None:
+                try:
+                    self.run_logger.log(
+                        "edge_start",
+                        phase=phase_idx + 1,
+                        edge_idx=edge_idx,
+                        edge_name=edge_name,
+                        q_from=list(q_start),
+                    )
+                except Exception:
+                    pass
+
+            attempt_str = (
+                f" (attempt #{attempt_num})" if is_resume and attempt_num > 1 else ""
+            )
+            if verbose:
+                print(
+                    f"  Planning waypoint edge "
+                    f"{edge_idx + 1}/{len(edge_sequence)}: "
+                    f"{edge_name}{attempt_str}"
+                )
+
+            # Generate target configuration via this edge
+            gen_start = time.time()
+            q_target = None
+            try:
+                config_label = f"q_phase{phase_idx}_edge{edge_idx}"
+                if is_resume:
+                    config_label += "_resume"
+                ok, q_target = self.config_gen.generate_via_edge(
+                    edge_name=edge_name,
+                    q_from=q_start,
+                    config_label=config_label,
+                )
+
+                if is_resume:
+                    if not ok or q_target is None:
+                        raise RuntimeError(
+                            f"Failed to generate target via edge '{edge_name}'"
+                        )
+                    edge_stat["gen_time"] = time.time() - gen_start
+                else:
+                    # Print and check the generated configuration
+                    import numpy as np
+
+                    edge_stat["gen_time"] = time.time() - gen_start
+
+                    # Check for NaN/inf or None
+                    if (
+                        not ok
+                        or q_target is None
+                        or not np.all(np.isfinite(q_target))
+                    ):
+                        raise RuntimeError(
+                            f"Failed to generate valid target via edge '{edge_name}': q_target={q_target}"
+                        )
+                    else:
+                        if verbose:
+                            print(
+                                f"     ✓ Generated target config ({edge_stat['gen_time']:.2f}s)"
+                            )
+                            print(f"     q_target: {q_target}")
+
+                    # Visualize the configuration before planning.
+                    # Only attempted if the backend viewer has been explicitly
+                    # set up via setup_viewer(); skipped otherwise to avoid
+                    # SIGSEGV from omniORB when gepetto-viewer is not running.
+                    try:
+                        if (
+                            verbose
+                            and hasattr(self.planner, "viewer")
+                            and self.planner.viewer is not None
+                        ):
+                            print(
+                                f"     Visualizing q_target for edge '{edge_name}' before planning..."
+                            )
+                            self.planner.visualize(q_target)
+                            print("     ✓ q_target sent to viewer")
+                    except Exception as e:
+                        print(f"     ⚠ Could not visualize q_target: {e}")
+
+            except Exception as e:
+                edge_stat["gen_time"] = time.time() - gen_start
+                edge_stat["total_time"] = time.time() - edge_start_time
+                edge_stats_list.append(edge_stat)
+
+                if not is_resume and self.run_logger is not None:
+                    try:
+                        self.run_logger.log(
+                            "edge_end",
+                            phase=phase_idx + 1,
+                            edge_idx=edge_idx,
+                            edge_name=edge_name,
+                            success=False,
+                            gen_time=edge_stat["gen_time"],
+                            plan_time=0.0,
+                            total_time=edge_stat["total_time"],
+                            q_to=None,
+                            error=str(e),
+                        )
+                    except Exception:
+                        pass
+
+                # Store partial phase result
+                partial_phase_result = {
+                    "phase": phase_idx + 1,
+                    "gripper": gripper,
+                    "handle": handle,
+                    "edges": edge_sequence,
+                    "paths": phase_paths,
+                    "edge_stats": edge_stats_list,
+                    "complete": False,
+                    "failed_edge_idx": edge_idx,
+                    "failed_edge_name": edge_name,
+                    "last_q_start": q_start,
+                    "failed_q_target": None,
+                    "error_message": f"Target generation failed: {e}",
+                }
+                self.phase_results.append(partial_phase_result)
+
+                # Store failure info for resume
+                self.last_failure_info = {
+                    "phase_idx": phase_idx,
+                    "edge_idx": edge_idx,
+                    "edge_name": edge_name,
+                    "q_current": q_current,
+                    "error": f"Target generation failed: {e}",
+                    "completed_phases": len(
+                        [p for p in self.phase_results if p.get("complete", False)]
+                    ),
+                    "completed_edges_in_phase": len(phase_paths),
+                }
+
+                if verbose:
+                    print(
+                        f"\n  ⚠ Stored partial phase result: {len(phase_paths)} edges completed"
+                    )
+
+                raise RuntimeError(
+                    f"Phase {phase_idx + 1}, edge {edge_idx + 1}: "
+                    f"Target generation failed: {e}"
+                ) from e
+
+            # Check if this phase should skip motion planning
+            if skip_phases and phase_idx in skip_phases:
+                # Skip motion planning, use q_target directly
+                edge_stat["total_time"] = time.time() - edge_start_time
+                edge_stat["skipped"] = True
+                edge_stat["success"] = True
+                edge_stats_list.append(edge_stat)
+                self.total_planning_time += edge_stat["total_time"]
+                self.edge_stats[(phase_idx, edge_idx)] = edge_stat
+
+                # Use q_target as next start config
+                q_start = q_target
+
+                # Append None placeholder for skipped path
+                phase_paths.append(None)
+                if self.auto_save_dir:
+                    phase_geometric_paths.append(None)
+
+                if verbose:
+                    print(
+                        f"     ⏭ Skipped motion planning "
+                        f"({edge_stat['total_time']:.2f}s total)"
+                    )
+
+                continue
+
+            # Plan transition using TransitionPlanner.
+            # Retry with a fresh q_target if the planner detects a
+            # collision in the generated config (ps.isConfigValid only
+            # checks joint bounds, not self-collision; the planner may
+            # still reject a kinematically valid IK solution as colliding).
+            import numpy as _np
+
+            plan_start = time.time()
+            last_plan_exc = None
+            path = None
+            geometric_path = None
+
+            for _plan_attempt in range(self._MAX_COLLISION_RETRIES):
+                try:
+                    if verbose:
+                        if _plan_attempt == 0:
+                            if not is_resume:
+                                print("     Planning: q_start -> q_target")
+                            # else: label already printed above (with attempt suffix)
+                        else:
+                            _prev_reason = (
+                                str(last_plan_exc).split("\n")[0]
+                                if last_plan_exc
+                                else ""
+                            )
+                            print(
+                                f"     Planning (attempt {_plan_attempt + 1}) "
+                                f"[prev failed: {_prev_reason}]"
+                            )
+
+                    path, geometric_path = self.planner.plan_transition_edge(
+                        edge=edge_name,
+                        q1=q_start,
+                        q2=q_target,
+                    )
+
+                    if path is None:
+                        raise RuntimeError(
+                            f"Planning failed for edge '{edge_name}'"
+                        )
+
+                    last_plan_exc = None
+                    break  # success
+
+                except Exception as _plan_exc:
+                    last_plan_exc = _plan_exc
+                    if _plan_attempt < self._MAX_COLLISION_RETRIES - 1:
+                        if verbose:
+                            print(
+                                f"     ⚠ Planning failed "
+                                f"(attempt {_plan_attempt + 1}), "
+                                f"regenerating target config..."
+                            )
+                        _ok2, _q_new = self.config_gen.generate_via_edge(
+                            edge_name=edge_name,
+                            q_from=q_start,
+                            config_label=(f"q_phase{phase_idx}_edge{edge_idx}"),
+                        )
+                        if (
+                            _ok2
+                            and _q_new is not None
+                            and _np.all(_np.isfinite(_np.array(_q_new)))
+                        ):
+                            q_target = _q_new
+                            if verbose:
+                                print("     Regenerated target config")
+
+            if last_plan_exc is not None:
+                e = last_plan_exc
+                edge_stat["plan_time"] = time.time() - plan_start
+                edge_stat["total_time"] = time.time() - edge_start_time
+                edge_stats_list.append(edge_stat)
+                self.total_planning_time += edge_stat["total_time"]
+
+                if not is_resume and self.run_logger is not None:
+                    try:
+                        self.run_logger.log(
+                            "edge_end",
+                            phase=phase_idx + 1,
+                            edge_idx=edge_idx,
+                            edge_name=edge_name,
+                            success=False,
+                            gen_time=edge_stat["gen_time"],
+                            plan_time=edge_stat["plan_time"],
+                            total_time=edge_stat["total_time"],
+                            q_to=None,
+                            error=str(e),
+                        )
+                    except Exception:
+                        pass
+
+                # Store partial phase result before raising
+                partial_phase_result = {
+                    "phase": phase_idx + 1,
+                    "gripper": gripper,
+                    "handle": handle,
+                    "edges": edge_sequence,
+                    "paths": phase_paths,  # Successfully completed edges
+                    "edge_stats": edge_stats_list,
+                    "complete": False,
+                    "failed_edge_idx": edge_idx,
+                    "failed_edge_name": edge_name,
+                    "last_q_start": q_start,
+                    "failed_q_target": q_target,
+                    "error_message": str(e),
+                }
+                self.phase_results.append(partial_phase_result)
+
+                if is_resume and verbose:
+                    print(
+                        f"     ⚠ Failed after {edge_stat['total_time']:.2f}s "
+                        f"(attempt #{attempt_num})"
+                    )
+
+                # Store failure info for resume
+                self.last_failure_info = {
+                    "phase_idx": phase_idx,
+                    "edge_idx": edge_idx,
+                    "edge_name": edge_name,
+                    "q_current": q_current,
+                    "error": str(e),
+                    "completed_phases": len(
+                        [p for p in self.phase_results if p.get("complete", False)]
+                    ),
+                    "completed_edges_in_phase": len(phase_paths),
+                }
+
+                if not is_resume and verbose:
+                    print(
+                        f"\n  ⚠ Stored partial phase result: "
+                        f"{len(phase_paths)} edges completed"
+                    )
+
+                if is_resume:
+                    raise RuntimeError(
+                        f"Resume failed at Phase {phase_idx + 1}, edge {edge_idx + 1}: {e}"
+                    ) from e
+                else:
+                    raise RuntimeError(
+                        f"Phase {phase_idx + 1}, edge {edge_idx + 1}: "
+                        f"Planning failed for '{edge_name}': {e}"
+                    ) from e
+
+            # Planning succeeded — record stats and advance
+            # Store geometric path if auto-save is enabled
+            if self.auto_save_dir:
+                phase_geometric_paths.append(geometric_path)
+
+            edge_stat["plan_time"] = time.time() - plan_start
+            edge_stat["total_time"] = time.time() - edge_start_time
+            edge_stat["success"] = True
+            edge_stats_list.append(edge_stat)
+            self.total_planning_time += edge_stat["total_time"]
+            self.edge_stats[(phase_idx, edge_idx)] = edge_stat
+
+            if not is_resume and self.run_logger is not None:
+                try:
+                    self.run_logger.log(
+                        "edge_end",
+                        phase=phase_idx + 1,
+                        edge_idx=edge_idx,
+                        edge_name=edge_name,
+                        success=True,
+                        gen_time=edge_stat["gen_time"],
+                        plan_time=edge_stat["plan_time"],
+                        total_time=edge_stat["total_time"],
+                        q_to=list(q_target) if q_target is not None else None,
+                        error=None,
+                    )
+                except Exception:
+                    pass
+
+            phase_paths.append(path)
+
+            # Update start config for next edge
+            if hasattr(path, "getInitialConfig") and hasattr(path, "getEndConfig"):
+                q_start = list(path.getEndConfig())
+            else:
+                q_start = q_target
+
+            # Capture end config of the first (_01) edge as the pregrasp config
+            if edge_idx == 0:
+                q_pregrasp_for_cache = list(q_start)
+
+            if verbose:
+                print(
+                    f"     ✓ Path found ({edge_stat['plan_time']:.2f}s plan, "
+                    f"{edge_stat['total_time']:.2f}s total)"
+                )
+
+        return {
+            "phase_paths": phase_paths,
+            "phase_geometric_paths": phase_geometric_paths,
+            "edge_stats_list": edge_stats_list,
+            "q_start": q_start,
+            "q_pregrasp_for_cache": q_pregrasp_for_cache,
+        }
+
     def plan_sequence(
         self,
         grasp_sequence: Sequence[tuple[str, str]],
@@ -1757,419 +2289,23 @@ class GraspSequencePlanner:
                 emit_logs=True,
             )
 
-            # Plan through waypoint edge sequence
-            # Each edge in sequence has its own path constraints
-            # that are easier to satisfy
-            phase_paths = []
-            phase_geometric_paths = []  # Geometric paths (no time param) for saving
-            edge_stats_list = []  # Per-edge timing stats for this phase
-            q_start = q_current
-            q_pregrasp_for_cache = None  # end config of the _01 edge (pregrasp)
-
-            for edge_idx, edge_name in enumerate(edge_sequence):
-                # Check for stop request
-                if is_stop_requested():
-                    if verbose:
-                        print("\n  ⚠️  Stop requested - saving progress...")
-                    # Save partial result
-                    partial_phase_result = {
-                        "phase": phase_idx + 1,
-                        "gripper": gripper,
-                        "handle": handle,
-                        "edges": edge_sequence,
-                        "paths": phase_paths,
-                        "edge_stats": edge_stats_list,
-                        "complete": False,
-                        "failed_edge_idx": edge_idx,
-                        "failed_edge_name": edge_name,
-                        "last_q_start": q_start,
-                        "stopped": True,
-                        "error_message": "Stopped by user request",
-                    }
-                    self.phase_results.append(partial_phase_result)
-
-                    self.last_failure_info = {
-                        "phase_idx": phase_idx,
-                        "edge_idx": edge_idx,
-                        "edge_name": edge_name,
-                        "q_current": q_current,
-                        "error": "Stopped by user request (Ctrl+C)",
-                        "completed_phases": len(
-                            [p for p in self.phase_results if p.get("complete", False)]
-                        ),
-                        "completed_edges_in_phase": len(phase_paths),
-                        "stopped": True,
-                    }
-
-                    if verbose:
-                        print(
-                            f"\n  ⚠️  Stored partial phase result: {len(phase_paths)} edges completed"
-                        )
-                        print(
-                            f"     You can resume from Phase {phase_idx + 1}, Edge {edge_idx + 1}"
-                        )
-
-                    # Disable signal handler before raising
-                    disable_graceful_stop()
-                    # Emit run_end on user interrupt (plan_sequence only).
-                    if self.run_logger is not None:
-                        try:
-                            self.run_logger.log(
-                                "run_end",
-                                success=False,
-                                total_time=time.time() - _loop_start_time,
-                                total_planning_time=self.total_planning_time,
-                                phase_count=len(self.phase_results),
-                                final_config=None,
-                                error="user_interrupt",
-                            )
-                            self.run_logger.close()
-                        except Exception:
-                            pass
-                    raise KeyboardInterrupt("Planning stopped by user request")
-
-                edge_start_time = time.time()
-                edge_stat = {
-                    "edge_idx": edge_idx,
-                    "edge_name": edge_name,
-                    "attempt": 1,
-                    "gen_time": 0.0,
-                    "plan_time": 0.0,
-                    "total_time": 0.0,
-                    "success": False,
-                }
-
-                if self.run_logger is not None:
-                    try:
-                        self.run_logger.log(
-                            "edge_start",
-                            phase=phase_idx + 1,
-                            edge_idx=edge_idx,
-                            edge_name=edge_name,
-                            q_from=list(q_start),
-                        )
-                    except Exception:
-                        pass
-
-                if verbose:
-                    print(
-                        f"  Planning waypoint edge "
-                        f"{edge_idx + 1}/{len(edge_sequence)}: "
-                        f"{edge_name}"
-                    )
-
-                # Generate target configuration via this edge
-                gen_start = time.time()
-                q_target = None
-                try:
-                    ok, q_target = self.config_gen.generate_via_edge(
-                        edge_name=edge_name,
-                        q_from=q_start,
-                        config_label=f"q_phase{phase_idx}_edge{edge_idx}",
-                    )
-                    # Print and check the generated configuration
-                    import numpy as np
-
-                    edge_stat["gen_time"] = time.time() - gen_start
-
-                    # Check for NaN/inf or None
-                    if not ok or q_target is None or not np.all(np.isfinite(q_target)):
-                        raise RuntimeError(
-                            f"Failed to generate valid target via edge '{edge_name}': q_target={q_target}"
-                        )
-                    else:
-                        if verbose:
-                            print(
-                                f"     ✓ Generated target config ({edge_stat['gen_time']:.2f}s)"
-                            )
-                            print(f"     q_target: {q_target}")
-                            # if q_target is not None:
-                            #     arr = np.array(q_target)
-                            #     print(f"     q_target finite: {np.all(np.isfinite(arr))}")
-                            #     print(f"     q_target min/max: {arr.min()} / {arr.max()}")
-
-                    # Visualize the configuration before planning.
-                    # Only attempted if the backend viewer has been explicitly
-                    # set up via setup_viewer(); skipped otherwise to avoid
-                    # SIGSEGV from omniORB when gepetto-viewer is not running.
-                    try:
-                        if (
-                            verbose
-                            and hasattr(self.planner, "viewer")
-                            and self.planner.viewer is not None
-                        ):
-                            print(
-                                f"     Visualizing q_target for edge '{edge_name}' before planning..."
-                            )
-                            self.planner.visualize(q_target)
-                            print("     ✓ q_target sent to viewer")
-                    except Exception as e:
-                        print(f"     ⚠ Could not visualize q_target: {e}")
-
-                except Exception as e:
-                    edge_stat["gen_time"] = time.time() - gen_start
-                    edge_stat["total_time"] = time.time() - edge_start_time
-                    edge_stats_list.append(edge_stat)
-
-                    if self.run_logger is not None:
-                        try:
-                            self.run_logger.log(
-                                "edge_end",
-                                phase=phase_idx + 1,
-                                edge_idx=edge_idx,
-                                edge_name=edge_name,
-                                success=False,
-                                gen_time=edge_stat["gen_time"],
-                                plan_time=0.0,
-                                total_time=edge_stat["total_time"],
-                                q_to=None,
-                                error=str(e),
-                            )
-                        except Exception:
-                            pass
-
-                    # Store partial phase result
-                    partial_phase_result = {
-                        "phase": phase_idx + 1,
-                        "gripper": gripper,
-                        "handle": handle,
-                        "edges": edge_sequence,
-                        "paths": phase_paths,
-                        "edge_stats": edge_stats_list,
-                        "complete": False,
-                        "failed_edge_idx": edge_idx,
-                        "failed_edge_name": edge_name,
-                        "last_q_start": q_start,
-                        "failed_q_target": None,
-                        "error_message": f"Target generation failed: {e}",
-                    }
-                    self.phase_results.append(partial_phase_result)
-
-                    # Store failure info for resume
-                    self.last_failure_info = {
-                        "phase_idx": phase_idx,
-                        "edge_idx": edge_idx,
-                        "edge_name": edge_name,
-                        "q_current": q_current,
-                        "error": f"Target generation failed: {e}",
-                        "completed_phases": len(
-                            [p for p in self.phase_results if p.get("complete", False)]
-                        ),
-                        "completed_edges_in_phase": len(phase_paths),
-                    }
-
-                    if verbose:
-                        print(
-                            f"\n  ⚠ Stored partial phase result: {len(phase_paths)} edges completed"
-                        )
-
-                    raise RuntimeError(
-                        f"Phase {phase_idx + 1}, edge {edge_idx + 1}: "
-                        f"Target generation failed: {e}"
-                    ) from e
-
-                # Check if this phase should skip motion planning
-                if skip_phases and phase_idx in skip_phases:
-                    # Skip motion planning, use q_target directly
-                    edge_stat["total_time"] = time.time() - edge_start_time
-                    edge_stat["skipped"] = True
-                    edge_stat["success"] = True
-                    edge_stats_list.append(edge_stat)
-                    self.total_planning_time += edge_stat["total_time"]
-                    self.edge_stats[(phase_idx, edge_idx)] = edge_stat
-
-                    # Use q_target as next start config
-                    q_start = q_target
-
-                    # Append None placeholder for skipped path
-                    phase_paths.append(None)
-                    if self.auto_save_dir:
-                        phase_geometric_paths.append(None)
-
-                    if verbose:
-                        print(
-                            f"     ⏭ Skipped motion planning "
-                            f"({edge_stat['total_time']:.2f}s total)"
-                        )
-
-                    continue
-
-                # Plan transition using TransitionPlanner.
-                # Retry with a fresh q_target if the planner detects a
-                # collision in the generated config (ps.isConfigValid only
-                # checks joint bounds, not self-collision; the planner may
-                # still reject a kinematically valid IK solution as colliding).
-                import numpy as _np
-
-                plan_start = time.time()
-                last_plan_exc = None
-                path = None
-                geometric_path = None
-
-                for _plan_attempt in range(self._MAX_COLLISION_RETRIES):
-                    try:
-                        if verbose:
-                            if _plan_attempt == 0:
-                                print("     Planning: q_start -> q_target")
-                            else:
-                                _prev_reason = (
-                                    str(last_plan_exc).split("\n")[0]
-                                    if last_plan_exc
-                                    else ""
-                                )
-                                print(
-                                    f"     Planning (attempt {_plan_attempt + 1}) "
-                                    f"[prev failed: {_prev_reason}]"
-                                )
-
-                        path, geometric_path = self.planner.plan_transition_edge(
-                            edge=edge_name,
-                            q1=q_start,
-                            q2=q_target,
-                        )
-
-                        if path is None:
-                            raise RuntimeError(
-                                f"Planning failed for edge '{edge_name}'"
-                            )
-
-                        last_plan_exc = None
-                        break  # success
-
-                    except Exception as _plan_exc:
-                        last_plan_exc = _plan_exc
-                        if _plan_attempt < self._MAX_COLLISION_RETRIES - 1:
-                            if verbose:
-                                print(
-                                    f"     ⚠ Planning failed "
-                                    f"(attempt {_plan_attempt + 1}), "
-                                    f"regenerating target config..."
-                                )
-                            _ok2, _q_new = self.config_gen.generate_via_edge(
-                                edge_name=edge_name,
-                                q_from=q_start,
-                                config_label=(f"q_phase{phase_idx}_edge{edge_idx}"),
-                            )
-                            if (
-                                _ok2
-                                and _q_new is not None
-                                and _np.all(_np.isfinite(_np.array(_q_new)))
-                            ):
-                                q_target = _q_new
-                                if verbose:
-                                    print("     Regenerated target config")
-
-                if last_plan_exc is not None:
-                    e = last_plan_exc
-                    edge_stat["plan_time"] = time.time() - plan_start
-                    edge_stat["total_time"] = time.time() - edge_start_time
-                    edge_stats_list.append(edge_stat)
-                    self.total_planning_time += edge_stat["total_time"]
-
-                    if self.run_logger is not None:
-                        try:
-                            self.run_logger.log(
-                                "edge_end",
-                                phase=phase_idx + 1,
-                                edge_idx=edge_idx,
-                                edge_name=edge_name,
-                                success=False,
-                                gen_time=edge_stat["gen_time"],
-                                plan_time=edge_stat["plan_time"],
-                                total_time=edge_stat["total_time"],
-                                q_to=None,
-                                error=str(e),
-                            )
-                        except Exception:
-                            pass
-
-                    # Store partial phase result before raising
-                    partial_phase_result = {
-                        "phase": phase_idx + 1,
-                        "gripper": gripper,
-                        "handle": handle,
-                        "edges": edge_sequence,
-                        "paths": phase_paths,  # Successfully completed edges
-                        "edge_stats": edge_stats_list,
-                        "complete": False,
-                        "failed_edge_idx": edge_idx,
-                        "failed_edge_name": edge_name,
-                        "last_q_start": q_start,
-                        "failed_q_target": q_target,
-                        "error_message": str(e),
-                    }
-                    self.phase_results.append(partial_phase_result)
-
-                    # Store failure info for resume
-                    self.last_failure_info = {
-                        "phase_idx": phase_idx,
-                        "edge_idx": edge_idx,
-                        "edge_name": edge_name,
-                        "q_current": q_current,
-                        "error": str(e),
-                        "completed_phases": len(
-                            [p for p in self.phase_results if p.get("complete", False)]
-                        ),
-                        "completed_edges_in_phase": len(phase_paths),
-                    }
-
-                    if verbose:
-                        print(
-                            f"\n  ⚠ Stored partial phase result: "
-                            f"{len(phase_paths)} edges completed"
-                        )
-
-                    raise RuntimeError(
-                        f"Phase {phase_idx + 1}, edge {edge_idx + 1}: "
-                        f"Planning failed for '{edge_name}': {e}"
-                    ) from e
-
-                # Planning succeeded — record stats and advance
-                # Store geometric path if auto-save is enabled
-                if self.auto_save_dir:
-                    phase_geometric_paths.append(geometric_path)
-
-                edge_stat["plan_time"] = time.time() - plan_start
-                edge_stat["total_time"] = time.time() - edge_start_time
-                edge_stat["success"] = True
-                edge_stats_list.append(edge_stat)
-                self.total_planning_time += edge_stat["total_time"]
-                self.edge_stats[(phase_idx, edge_idx)] = edge_stat
-
-                if self.run_logger is not None:
-                    try:
-                        self.run_logger.log(
-                            "edge_end",
-                            phase=phase_idx + 1,
-                            edge_idx=edge_idx,
-                            edge_name=edge_name,
-                            success=True,
-                            gen_time=edge_stat["gen_time"],
-                            plan_time=edge_stat["plan_time"],
-                            total_time=edge_stat["total_time"],
-                            q_to=list(q_target) if q_target is not None else None,
-                            error=None,
-                        )
-                    except Exception:
-                        pass
-
-                phase_paths.append(path)
-
-                # Update start config for next edge
-                if hasattr(path, "getInitialConfig") and hasattr(path, "getEndConfig"):
-                    q_start = list(path.getEndConfig())
-                else:
-                    q_start = q_target
-
-                # Capture end config of the first (_01) edge as the pregrasp config
-                if edge_idx == 0:
-                    q_pregrasp_for_cache = list(q_start)
-
-                if verbose:
-                    print(
-                        f"     ✓ Path found ({edge_stat['plan_time']:.2f}s plan, "
-                        f"{edge_stat['total_time']:.2f}s total)"
-                    )
+            _edge_result = self._plan_phase_edges(
+                phase_idx=phase_idx,
+                gripper=gripper,
+                handle=handle,
+                edge_sequence=edge_sequence,
+                q_current=q_current,
+                skip_phases=skip_phases,
+                start_edge_idx=0,
+                is_resume=False,
+                verbose=verbose,
+                loop_start_time=_loop_start_time,
+            )
+            phase_paths = _edge_result["phase_paths"]
+            phase_geometric_paths = _edge_result["phase_geometric_paths"]
+            edge_stats_list = _edge_result["edge_stats_list"]
+            q_start = _edge_result["q_start"]
+            q_pregrasp_for_cache = _edge_result["q_pregrasp_for_cache"]
 
             # Update current config to end of sequence
             q_current = q_start
@@ -2524,12 +2660,6 @@ class GraspSequencePlanner:
             )
 
             # Plan edges (with selective retry)
-            phase_paths = []
-            phase_geometric_paths = []  # Geometric paths for saving
-            edge_stats_list = []  # Per-edge timing stats for this phase
-            q_start = q_current
-            q_pregrasp_for_cache = None  # end config of the _01 edge (pregrasp)
-
             # For first phase in resume, decide where to start
             start_edge_idx = 0
             if phase_idx_offset == 0 and retry_from_edge >= 0:
@@ -2540,301 +2670,22 @@ class GraspSequencePlanner:
                     # (though this is complex - for now just restart phase)
                     pass
 
-            for edge_idx in range(start_edge_idx, len(edge_sequence)):
-                # Resolve the edge name first so the stop-request handler below
-                # can record it (otherwise a stop on the first iteration would
-                # reference an undefined `edge_name`).
-                edge_name = edge_sequence[edge_idx]
-
-                # Check for stop request
-                if is_stop_requested():
-                    if verbose:
-                        print("\n  ⚠️  Stop requested - saving progress...")
-                    # Save partial result
-                    partial_phase_result = {
-                        "phase": phase_idx + 1,
-                        "gripper": gripper,
-                        "handle": handle,
-                        "edges": edge_sequence,
-                        "paths": phase_paths,
-                        "edge_stats": edge_stats_list,
-                        "complete": False,
-                        "failed_edge_idx": edge_idx,
-                        "failed_edge_name": edge_name,
-                        "last_q_start": q_start,
-                        "stopped": True,
-                        "error_message": "Stopped by user request",
-                    }
-                    self.phase_results.append(partial_phase_result)
-
-                    self.last_failure_info = {
-                        "phase_idx": phase_idx,
-                        "edge_idx": edge_idx,
-                        "edge_name": edge_name,
-                        "q_current": q_current,
-                        "error": "Stopped by user request (Ctrl+C)",
-                        "completed_phases": len(
-                            [p for p in self.phase_results if p.get("complete", False)]
-                        ),
-                        "completed_edges_in_phase": len(phase_paths),
-                        "stopped": True,
-                    }
-
-                    if verbose:
-                        print(
-                            f"\n  ⚠️  Stored partial phase result: {len(phase_paths)} edges completed"
-                        )
-                        print(
-                            f"     You can resume from Phase {phase_idx + 1}, Edge {edge_idx + 1}"
-                        )
-
-                    # Disable signal handler before raising
-                    disable_graceful_stop()
-                    raise KeyboardInterrupt("Planning stopped by user request")
-
-                edge_start_time = time.time()
-
-                # Get previous attempt count for this edge
-                prev_stat = self.edge_stats.get((phase_idx, edge_idx))
-                attempt_num = (prev_stat["attempt"] + 1) if prev_stat else 1
-
-                edge_stat = {
-                    "edge_idx": edge_idx,
-                    "edge_name": edge_name,
-                    "attempt": attempt_num,
-                    "gen_time": 0.0,
-                    "plan_time": 0.0,
-                    "total_time": 0.0,
-                    "success": False,
-                    "is_resume": True,
-                }
-
-                attempt_str = f" (attempt #{attempt_num})" if attempt_num > 1 else ""
-                if verbose:
-                    print(
-                        f"  Planning waypoint edge "
-                        f"{edge_idx + 1}/{len(edge_sequence)}: "
-                        f"{edge_name}{attempt_str}"
-                    )
-
-                # Generate target
-                gen_start = time.time()
-                q_target = None
-                try:
-                    ok, q_target = self.config_gen.generate_via_edge(
-                        edge_name=edge_name,
-                        q_from=q_start,
-                        config_label=f"q_phase{phase_idx}_edge{edge_idx}_resume",
-                    )
-                    if not ok or q_target is None:
-                        raise RuntimeError(
-                            f"Failed to generate target via edge '{edge_name}'"
-                        )
-                    edge_stat["gen_time"] = time.time() - gen_start
-                except Exception as e:
-                    edge_stat["gen_time"] = time.time() - gen_start
-                    edge_stat["total_time"] = time.time() - edge_start_time
-                    edge_stats_list.append(edge_stat)
-
-                    # Store partial result
-                    partial_phase_result = {
-                        "phase": phase_idx + 1,
-                        "gripper": gripper,
-                        "handle": handle,
-                        "edges": edge_sequence,
-                        "paths": phase_paths,
-                        "edge_stats": edge_stats_list,
-                        "complete": False,
-                        "failed_edge_idx": edge_idx,
-                        "failed_edge_name": edge_name,
-                        "last_q_start": q_start,
-                        "failed_q_target": None,
-                        "error_message": f"Target generation failed: {e}",
-                    }
-                    self.phase_results.append(partial_phase_result)
-
-                    self.last_failure_info = {
-                        "phase_idx": phase_idx,
-                        "edge_idx": edge_idx,
-                        "edge_name": edge_name,
-                        "q_current": q_current,
-                        "error": f"Target generation failed: {e}",
-                        "completed_phases": len(
-                            [p for p in self.phase_results if p.get("complete", False)]
-                        ),
-                        "completed_edges_in_phase": len(phase_paths),
-                    }
-
-                    if verbose:
-                        print(
-                            f"\n  ⚠ Stored partial phase result: {len(phase_paths)} edges completed"
-                        )
-
-                    raise RuntimeError(
-                        f"Phase {phase_idx + 1}, edge {edge_idx + 1}: "
-                        f"Target generation failed: {e}"
-                    ) from e
-
-                # Check if this phase should skip motion planning
-                if skip_phases and phase_idx in skip_phases:
-                    # Skip motion planning, use q_target directly
-                    edge_stat["total_time"] = time.time() - edge_start_time
-                    edge_stat["skipped"] = True
-                    edge_stat["success"] = True
-                    edge_stats_list.append(edge_stat)
-                    self.total_planning_time += edge_stat["total_time"]
-                    self.edge_stats[(phase_idx, edge_idx)] = edge_stat
-
-                    # Use q_target as next start config
-                    q_start = q_target
-
-                    # Append None placeholder for skipped path
-                    phase_paths.append(None)
-                    if self.auto_save_dir:
-                        phase_geometric_paths.append(None)
-
-                    if verbose:
-                        print(
-                            f"     ⏭ Skipped motion planning "
-                            f"({edge_stat['total_time']:.2f}s total)"
-                        )
-
-                    continue
-
-                # Plan edge — retry with regenerated q_target on any failure
-                import numpy as _np
-
-                plan_start = time.time()
-                last_plan_exc = None
-                path = None
-                geometric_path = None
-
-                for _plan_attempt in range(self._MAX_COLLISION_RETRIES):
-                    try:
-                        if verbose:
-                            if _plan_attempt == 0:
-                                pass  # label printed above
-                            else:
-                                _prev_reason = (
-                                    str(last_plan_exc).split("\n")[0]
-                                    if last_plan_exc
-                                    else ""
-                                )
-                                print(
-                                    f"     Planning (attempt {_plan_attempt + 1}) "
-                                    f"[prev failed: {_prev_reason}]"
-                                )
-                        # Always get both timed and geometric paths
-                        path, geometric_path = self.planner.plan_transition_edge(
-                            edge=edge_name,
-                            q1=q_start,
-                            q2=q_target,
-                        )
-
-                        if path is None:
-                            raise RuntimeError(
-                                f"Planning failed for edge '{edge_name}'"
-                            )
-
-                        last_plan_exc = None
-                        break  # success
-
-                    except Exception as _plan_exc:
-                        last_plan_exc = _plan_exc
-                        if _plan_attempt < self._MAX_COLLISION_RETRIES - 1:
-                            if verbose:
-                                print(
-                                    f"     ⚠ Planning failed "
-                                    f"(attempt {_plan_attempt + 1}), "
-                                    f"regenerating target config..."
-                                )
-                            _ok2, _q_new = self.config_gen.generate_via_edge(
-                                edge_name=edge_name,
-                                q_from=q_start,
-                                config_label=(f"q_phase{phase_idx}_edge{edge_idx}"),
-                            )
-                            if (
-                                _ok2
-                                and _q_new is not None
-                                and _np.all(_np.isfinite(_np.array(_q_new)))
-                            ):
-                                q_target = _q_new
-                                if verbose:
-                                    print("     Regenerated target config")
-
-                if last_plan_exc is not None:
-                    e = last_plan_exc
-                    edge_stat["plan_time"] = time.time() - plan_start
-                    edge_stat["total_time"] = time.time() - edge_start_time
-                    edge_stats_list.append(edge_stat)
-                    self.total_planning_time += edge_stat["total_time"]
-
-                    # Store partial result again
-                    partial_phase_result = {
-                        "phase": phase_idx + 1,
-                        "gripper": gripper,
-                        "handle": handle,
-                        "edges": edge_sequence,
-                        "paths": phase_paths,
-                        "edge_stats": edge_stats_list,
-                        "complete": False,
-                        "failed_edge_idx": edge_idx,
-                        "failed_edge_name": edge_name,
-                        "last_q_start": q_start,
-                        "failed_q_target": q_target,
-                        "error_message": str(e),
-                    }
-                    self.phase_results.append(partial_phase_result)
-
-                    if verbose:
-                        print(
-                            f"     ⚠ Failed after {edge_stat['total_time']:.2f}s "
-                            f"(attempt #{attempt_num})"
-                        )
-
-                    self.last_failure_info = {
-                        "phase_idx": phase_idx,
-                        "edge_idx": edge_idx,
-                        "edge_name": edge_name,
-                        "q_current": q_current,
-                        "error": str(e),
-                        "completed_phases": len(
-                            [p for p in self.phase_results if p.get("complete", False)]
-                        ),
-                        "completed_edges_in_phase": len(phase_paths),
-                    }
-
-                    raise RuntimeError(
-                        f"Resume failed at Phase {phase_idx + 1}, edge {edge_idx + 1}: {e}"
-                    ) from e
-
-                # Store geometric path if auto-save is enabled
-                if self.auto_save_dir:
-                    phase_geometric_paths.append(geometric_path)
-
-                edge_stat["plan_time"] = time.time() - plan_start
-                edge_stat["total_time"] = time.time() - edge_start_time
-                edge_stat["success"] = True
-                edge_stats_list.append(edge_stat)
-                self.total_planning_time += edge_stat["total_time"]
-                self.edge_stats[(phase_idx, edge_idx)] = edge_stat
-
-                phase_paths.append(path)
-
-                if hasattr(path, "getInitialConfig") and hasattr(path, "getEndConfig"):
-                    q_start = list(path.getEndConfig())
-                else:
-                    q_start = q_target
-
-                # Capture end config of the first (_01) edge as the pregrasp config
-                if edge_idx == 0:
-                    q_pregrasp_for_cache = list(q_start)
-
-                if verbose:
-                    print(
-                        f"     ✓ Path found ({edge_stat['plan_time']:.2f}s plan, "
-                        f"{edge_stat['total_time']:.2f}s total)"
-                    )
+            _edge_result = self._plan_phase_edges(
+                phase_idx=phase_idx,
+                gripper=gripper,
+                handle=handle,
+                edge_sequence=edge_sequence,
+                q_current=q_current,
+                skip_phases=skip_phases,
+                start_edge_idx=start_edge_idx,
+                is_resume=True,
+                verbose=verbose,
+            )
+            phase_paths = _edge_result["phase_paths"]
+            phase_geometric_paths = _edge_result["phase_geometric_paths"]
+            edge_stats_list = _edge_result["edge_stats_list"]
+            q_start = _edge_result["q_start"]
+            q_pregrasp_for_cache = _edge_result["q_pregrasp_for_cache"]
 
             # Phase completed successfully
             q_current = q_start
