@@ -622,6 +622,60 @@ class ManipulationTask(ABC):
         except Exception as e:
             print(f"   ⚠ Path playback failed: {e}")
 
+    def _solve_manipulation_planner(
+        self,
+        configs: Dict[str, Any],
+        seq: List[str],
+        max_iterations: int,
+    ) -> Tuple[List[int], bool]:
+        """Solve by iterating seq pairwise via the manipulation-planner.
+
+        Returns (path_ids, success): path_ids is the per-segment CORBA
+        path id list (always empty for backends without numberPaths, e.g.
+        pyhpp), success is the last-attempted segment's solve() result.
+        Callers need both to decide whether/what to play back -- see
+        docs/plans/refactor-manipulation-task-run.md Step 6a for why a
+        single `success` bool isn't sufficient on its own (the len(seq)==2
+        vs len(seq)>2 playback-gating difference this preserves).
+        """
+        path_ids: List[int] = []
+        for i in range(len(seq) - 1):
+            a, b = seq[i], seq[i + 1]
+            seg = f"{i + 1}/{len(seq) - 1}"
+            print(f"\n   Segment {seg}: {a} -> {b}")
+            self._reset_goals_if_possible()
+            self.planner.set_initial_config(configs[a])
+            self.planner.add_goal_config(configs[b])
+            success = self.planner.solve(
+                max_iterations=max_iterations,
+                optimizer=self.optimizer,
+            )
+            if success:
+                print("   ✓ Planning successful")
+            else:
+                print("   ⚠ Planning failed")
+                break
+            # Record the latest path id when available (CORBA).
+            if self.ps is not None:
+                num_paths = getattr(self.ps, "numberPaths", None)
+                if callable(num_paths):
+                    try:
+                        path_ids.append(int(num_paths()) - 1)
+                    except Exception:
+                        pass
+
+        # Concatenate path segments when available (CORBA).
+        if len(path_ids) > 1 and self.ps is not None:
+            concat = getattr(self.ps, "concatenatePath", None)
+            if callable(concat):
+                try:
+                    for j in range(1, len(path_ids)):
+                        concat(path_ids[0], path_ids[j])
+                except Exception:
+                    pass
+
+        return path_ids, success
+
     def run(
         self,
         visualize: bool = True,
@@ -756,41 +810,9 @@ class ManipulationTask(ABC):
                         "solve_mode": solve_mode,
                     }
 
-                path_ids: List[int] = []
-                for i in range(len(seq) - 1):
-                    a, b = seq[i], seq[i + 1]
-                    seg = f"{i + 1}/{len(seq) - 1}"
-                    print(f"\n   Segment {seg}: {a} -> {b}")
-                    self._reset_goals_if_possible()
-                    self.planner.set_initial_config(configs[a])
-                    self.planner.add_goal_config(configs[b])
-                    success = self.planner.solve(
-                        max_iterations=max_iterations,
-                        optimizer=self.optimizer,
-                    )
-                    if success:
-                        print("   ✓ Planning successful")
-                    else:
-                        print("   ⚠ Planning failed")
-                        break
-                    # Record the latest path id when available (CORBA).
-                    if self.ps is not None:
-                        num_paths = getattr(self.ps, "numberPaths", None)
-                        if callable(num_paths):
-                            try:
-                                path_ids.append(int(num_paths()) - 1)
-                            except Exception:
-                                pass
-
-                # Concatenate path segments when available (CORBA).
-                if len(path_ids) > 1 and self.ps is not None:
-                    concat = getattr(self.ps, "concatenatePath", None)
-                    if callable(concat):
-                        try:
-                            for j in range(1, len(path_ids)):
-                                concat(path_ids[0], path_ids[j])
-                        except Exception:
-                            pass
+                path_ids, success = self._solve_manipulation_planner(
+                    configs, seq, max_iterations
+                )
 
                 # len(seq) == 2 (the former dedicated branch) only played
                 # back on success; the N-segment loop always attempted
