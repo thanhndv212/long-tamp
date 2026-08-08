@@ -622,6 +622,58 @@ class ManipulationTask(ABC):
         except Exception as e:
             print(f"   ⚠ Path playback failed: {e}")
 
+    def _solve_transition_planner(
+        self,
+        configs: Dict[str, Any],
+        transition_edges: Optional[Sequence[str]],
+        transition_waypoints: Optional[Sequence[Sequence[float]]],
+        generate_waypoints_via_edges: bool,
+    ) -> int:
+        """Solve via transition-planner: resolve edges/waypoints, apply
+        per-edge/global optimizer config, plan the full transition
+        sequence. Returns the resulting path id.
+        """
+        edges, waypoints = self._compute_transition_inputs(
+            configs,
+            transition_edges,
+            transition_waypoints,
+            generate_waypoints_via_edges,
+        )
+
+        # Apply transition-planner optimizer config (optional)
+        global_opts = getattr(self.task_config, "TRANSITION_OPTIMIZERS", None)
+        per_edge = getattr(self.task_config, "TRANSITION_OPTIMIZERS_BY_EDGE", None)
+        if isinstance(per_edge, dict):
+            per_edge_opts = per_edge
+        else:
+            per_edge_opts = {}
+
+        for e in edges:
+            opts = per_edge_opts.get(e, global_opts)
+            if opts:
+                try:
+                    self.planner.set_transition_optimizers(
+                        e, list(opts), clear_existing=True
+                    )
+                except Exception as exc:
+                    raise RuntimeError(
+                        "Failed to set transition optimizers " f"for '{e}': {exc}"
+                    )
+
+        try:
+            path_id = self.planner.plan_transition_sequence(
+                edges,
+                waypoints,
+                validate=True,
+                reset_roadmap=True,
+                time_parameterize=True,
+                store=True,
+            )
+        except Exception as exc:
+            raise RuntimeError(f"transition-planner planning failed: {exc}")
+
+        return int(path_id)
+
     def _solve_manipulation_planner(
         self,
         configs: Dict[str, Any],
@@ -750,53 +802,16 @@ class ManipulationTask(ABC):
                 # refactor. See docs/plans/refactor-manipulation-task-run.md
                 # "Decision needed: the dead solve_mode gate".
                 if solve_mode == "transition-planner" and len(seq) > 2:
-                    edges, waypoints = self._compute_transition_inputs(
+                    path_id = self._solve_transition_planner(
                         configs,
                         transition_edges,
                         transition_waypoints,
                         generate_waypoints_via_edges,
                     )
 
-                    # Apply transition-planner optimizer config (optional)
-                    global_opts = getattr(
-                        self.task_config, "TRANSITION_OPTIMIZERS", None
-                    )
-                    per_edge = getattr(
-                        self.task_config, "TRANSITION_OPTIMIZERS_BY_EDGE", None
-                    )
-                    if isinstance(per_edge, dict):
-                        per_edge_opts = per_edge
-                    else:
-                        per_edge_opts = {}
-
-                    for e in edges:
-                        opts = per_edge_opts.get(e, global_opts)
-                        if opts:
-                            try:
-                                self.planner.set_transition_optimizers(
-                                    e, list(opts), clear_existing=True
-                                )
-                            except Exception as exc:
-                                raise RuntimeError(
-                                    "Failed to set transition optimizers "
-                                    f"for '{e}': {exc}"
-                                )
-
-                    try:
-                        path_id = self.planner.plan_transition_sequence(
-                            edges,
-                            waypoints,
-                            validate=True,
-                            reset_roadmap=True,
-                            time_parameterize=True,
-                            store=True,
-                        )
-                    except Exception as exc:
-                        raise RuntimeError(f"transition-planner planning failed: {exc}")
-
                     if visualize:
                         self._play_and_record(
-                            int(path_id), record, video_name, output_dir, framerate
+                            path_id, record, video_name, output_dir, framerate
                         )
 
                     return {
