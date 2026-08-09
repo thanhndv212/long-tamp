@@ -240,181 +240,34 @@ class GraspSequencePlanner:
                 paths, edges, edge_stats, state_after, final_config,
                 phase_time, phase_gen_time, phase_plan_time.
         """
-        import numpy as np
-
-        released_handle = self.grasp_tracker.current_grasps[gripper]
-        release_held_grasps = {
-            g: h for g, h in self.grasp_tracker.current_grasps.items() if h is not None
-        }
-
-        if verbose:
-            print(
-                f"    Building release graph: '{gripper}' releases "
-                f"'{released_handle}'"
-            )
-
-        try:
-            self.graph_builder.build_phase_graph(
-                config=self.task_config,
-                held_grasps=release_held_grasps,
-                next_grasp=(gripper, None),
-                graph_constraints=phase_graph_constraints,
-                q_init=q_current,
-                q_init_original=getattr(self, "_q_scene_init", None),
-            )
-            new_graph = self.graph_builder.get_graph()
-            if hasattr(self.planner, "graph"):
-                self.planner.graph = new_graph
-            if self.config_gen is None:
-                from agimus_spacelab.planning import ConfigGenerator
-
-                self.config_gen = ConfigGenerator(
-                    self.graph_builder.robot,
-                    new_graph,
-                    self.planner,
-                    self.graph_builder.ps,
-                    backend=self.backend,
-                )
-            elif hasattr(self.config_gen, "update_graph"):
-                self.config_gen.update_graph(new_graph)
-        except Exception as e:
-            raise RuntimeError(
-                f"Auto-release of '{released_handle}' from '{gripper}': "
-                f"Failed to build release graph: {e}"
-            ) from e
-
-        # Sync tracker indices with phase-local factory ordering
-        if hasattr(self.graph_builder, "_phase_grippers"):
-            self.grasp_tracker.set_phase_indices(
-                self.graph_builder._phase_grippers,
-                self.graph_builder._phase_handles,
-            )
-
-        release_edges = self.grasp_tracker.get_release_edge_sequence(gripper)
-        if verbose:
-            print(f"    Release edge sequence: {release_edges}")
-
-        # Project onto source state (current grasp state with object held)
-        source_state = self.grasp_tracker.get_current_state_name()
-        try:
-            success, q_projected, error = self.graph_builder.apply_state_constraints(
-                state_name=source_state,
-                q=q_current,
-                max_iterations=10000,
-                error_threshold=1e-4,
-            )
-            if success:
-                q_current = list(q_projected)
-                if verbose:
-                    print(
-                        f"    ✓ Projected onto '{source_state}' " f"(error={error:.2e})"
-                    )
-            elif verbose:
-                print(
-                    f"    ⚠ Projection onto '{source_state}' failed "
-                    f"(error={error:.2e}), using unprojected q"
-                )
-        except Exception as e:
-            if verbose:
-                print(f"    ⚠ State projection failed: {e}, continuing")
-
-        # Plan through release waypoint edges: _21 (grasped→pregrasp) then _10 (pregrasp→free).
-        #
-        # _21 target (q_pregrasp) cannot be found with generateTargetConfig(edge_21):
-        # the path-fold RHS = "gripper at contact" but pregrasp leaf requires
-        # "gripper at approach offset" — conflicting, solver always diverges.
-        # Also cannot use applyStateConstraints(pregrasp_node, q_grasped):
-        # rightHandSideFromConfig(q_grasped) again sets fold "at contact", same conflict.
-        #
-        # Fix: generate q_pregrasp via the FORWARD _01 edge (released_state → pregrasp).
-        # The _01 fold only encodes the OTHER grasps (no FG/RS1 fold), so the pregrasp
-        # leaf is free to position the arm at approach distance.  q_grasped is a
-        # valid q_from for _01: it already satisfies all _01 fold constraints.
         import time
 
+        released_handle = self.grasp_tracker.current_grasps[gripper]
+
+        # Build the release phase graph and sync the grasp-state tracker.
+        release_edges = self._setup_release_phase_graph(
+            gripper, q_current, phase_graph_constraints, verbose
+        )
+
+        # Project q_current onto the source (currently-held) state.
+        q_current = self._project_onto_release_source_state(q_current, verbose)
+
+        # Plan through release waypoint edges: _21 (grasped→pregrasp) then
+        # _10 (pregrasp→free).  See _plan_release_pregrasp_edge and
+        # _generate_and_plan_edge_with_retry for the per-edge retry logic.
         q_start = q_current
         edge_21, edge_10 = release_edges[0], release_edges[1]
         edge_01 = self.grasp_tracker.get_approach_edge_from_released(gripper)
 
-        # --- Step 1: generate q_pregrasp via forward approach edge (no conflict) ---
-        #
-        # SEED STRATEGY: Use the q_pregrasp cached from the previous grasping phase
-        # as the warm-start hint.  The naive seed (q_grasped = contact state) fails
-        # for large-clearance handles (e.g. h_RS1_FG has clearance=0.25 m, giving
-        # 26 cm pregrasp offset).  The IK copies frame_gripper/root_joint from
-        # q_grasped which pins FG at the contact position; then g_ur10_tool-grasps-FG
-        # fold keeps FG pinned there, making the 26 cm pregrasp unreachable via
-        # Newton-Raphson.  Using q_start as the hint keeps RS1 at its current
-        # (assembly) position: attempt 1 starts from the contact config (FG just
-        # needs to retract by the clearance distance, well within NR convergence),
-        # and attempts 2-N use random arm seeds with RS1 still at q_from's position
-        # (the root-joint copying logic in generate_via_edge guarantees this).
-        # Do NOT use a cached Phase-2 pregrasp here: it would drag RS1 from the
-        # assembly position back to the ground-level initial pose, producing a
-        # long-range path that collides with ground_demo/link_NYX_0.
-        if verbose:
-            print(f"    Planning release edge: {edge_21}")
-            print(f"      (pregrasp via forward edge '{edge_01}')")
-
-        t0 = time.time()
-        ok, q_pregrasp = self.config_gen.generate_via_edge(
-            edge_name=edge_01,
-            q_from=q_start,
-            config_label=f"q_autorelease_{gripper}_pregrasp",
-            q_hint=q_start,
-        )
-        t_gen1 = time.time() - t0
-        if not ok or q_pregrasp is None or not np.all(np.isfinite(q_pregrasp)):
-            raise RuntimeError(
-                f"Auto-release of '{released_handle}': failed to generate "
-                f"pregrasp config via forward edge '{edge_01}'"
+        # Step 1: generate q_pregrasp via the forward approach edge and plan
+        # edge_21 (with pregrasp regeneration on plan failure).
+        path21, q_pregrasp, t_gen1, t_plan1, plan_err_21 = (
+            self._plan_release_pregrasp_edge(
+                gripper, released_handle, edge_21, edge_01, q_start, verbose
             )
-        # Update cache so any subsequent release of the same gripper starts
-        # from the current context, not a stale Phase-2 configuration.
-        self._last_pregrasp_q[gripper] = q_pregrasp
+        )
 
-        # Retry edge_21 planning with fresh (unhinted, randomly-seeded)
-        # pregrasp targets on failure, mirroring the regenerate-and-retry
-        # pattern used for the main grasp-edge planning below (see
-        # _MAX_COLLISION_RETRIES loops later in this file): a particular
-        # IK solution may be kinematically valid but sit in a region the
-        # RRT can't reach, so resampling the target before giving up on
-        # this edge (and falling back to the direct release edge) is
-        # cheap insurance against an unlucky first sample.
-        path21 = None
-        t_plan1 = 0.0
-        plan_err_21 = None
-        t0 = time.time()
-        for _attempt_21 in range(self._MAX_COLLISION_RETRIES):
-            try:
-                path21, _ = self.planner.plan_transition_edge(
-                    edge=edge_21, q1=q_start, q2=q_pregrasp
-                )
-                if path21 is None:
-                    raise RuntimeError(f"Planning failed for edge '{edge_21}'")
-                plan_err_21 = None
-                break
-            except Exception as e:
-                plan_err_21 = e
-                path21 = None
-                if _attempt_21 < self._MAX_COLLISION_RETRIES - 1:
-                    if verbose:
-                        print(
-                            f"    ⚠ Planning '{edge_21}' failed "
-                            f"(attempt {_attempt_21 + 1}), "
-                            "regenerating pregrasp config..."
-                        )
-                    _ok21, _q_new21 = self.config_gen.generate_via_edge(
-                        edge_name=edge_01,
-                        q_from=q_start,
-                        config_label=f"q_autorelease_{gripper}_pregrasp",
-                    )
-                    if _ok21 and _q_new21 is not None and np.all(np.isfinite(_q_new21)):
-                        q_pregrasp = _q_new21
-                        self._last_pregrasp_q[gripper] = q_pregrasp
-        t_plan1 = time.time() - t0
-
-        # --- Step 2 (primary): pregrasp -> free ---
+        # Step 2 (primary): pregrasp -> free, OR direct fallback.
         t_gen2 = 0.0
         t_plan2 = 0.0
         path_direct = None
@@ -432,51 +285,15 @@ class GraspSequencePlanner:
             if verbose:
                 print(f"    Planning release edge: {edge_10}")
 
-            # Same regenerate-and-retry treatment as edge_21 above: retry
-            # target generation + planning together up to
-            # _MAX_COLLISION_RETRIES times before giving up on this edge.
-            q_free = None
-            path10 = None
-            plan_err_10 = None
-            for _attempt_10 in range(self._MAX_COLLISION_RETRIES):
-                _t0 = time.time()
-                ok, q_free_candidate = self.config_gen.generate_via_edge(
+            path10, q_free, t_gen2, t_plan2, plan_err_10 = (
+                self._generate_and_plan_edge_with_retry(
                     edge_name=edge_10,
                     q_from=q_start,
                     config_label=f"q_autorelease_{gripper}_free",
+                    verbose=verbose,
+                    gen_fail_noun="target config",
                 )
-                t_gen2 += time.time() - _t0
-                if (
-                    not ok
-                    or q_free_candidate is None
-                    or not np.all(np.isfinite(q_free_candidate))
-                ):
-                    plan_err_10 = RuntimeError(
-                        f"failed to generate target config via edge '{edge_10}'"
-                    )
-                    continue
-                q_free = q_free_candidate
-
-                _t0 = time.time()
-                try:
-                    path10, _ = self.planner.plan_transition_edge(
-                        edge=edge_10, q1=q_start, q2=q_free
-                    )
-                    t_plan2 += time.time() - _t0
-                    if path10 is None:
-                        raise RuntimeError(f"Planning failed for edge '{edge_10}'")
-                    plan_err_10 = None
-                    break
-                except Exception as e:
-                    t_plan2 += time.time() - _t0
-                    plan_err_10 = e
-                    path10 = None
-                    if verbose and _attempt_10 < self._MAX_COLLISION_RETRIES - 1:
-                        print(
-                            f"    ⚠ Planning '{edge_10}' failed "
-                            f"(attempt {_attempt_10 + 1}), "
-                            "regenerating target config..."
-                        )
+            )
             if path10 is None:
                 raise RuntimeError(
                     f"Auto-release of '{released_handle}': failed to "
@@ -510,50 +327,16 @@ class GraspSequencePlanner:
             if verbose:
                 print(f"    Planning direct release edge: {direct_edge}")
 
-            # Same regenerate-and-retry treatment as edge_21/edge_10 above.
-            q_free_d = None
-            path_direct = None
-            plan_err_direct = None
-            for _attempt_d in range(self._MAX_COLLISION_RETRIES):
-                t0 = time.time()
-                ok_d, q_free_d_candidate = self.config_gen.generate_via_edge(
+            path_direct, q_free_d, t_gen_direct, t_plan_direct, plan_err_direct = (
+                self._generate_and_plan_edge_with_retry(
                     edge_name=direct_edge,
                     q_from=q_start,
                     config_label=f"q_autorelease_{gripper}_free_direct",
+                    verbose=verbose,
+                    gen_fail_noun="a free config",
                     q_hint=None,  # random arm seeds — avoids NYX-blocked direction
                 )
-                t_gen_direct += time.time() - t0
-                if (
-                    not ok_d
-                    or q_free_d_candidate is None
-                    or not np.all(np.isfinite(q_free_d_candidate))
-                ):
-                    plan_err_direct = RuntimeError(
-                        f"failed to generate a free config via edge '{direct_edge}'"
-                    )
-                    continue
-                q_free_d = q_free_d_candidate
-
-                t0 = time.time()
-                try:
-                    path_direct, _ = self.planner.plan_transition_edge(
-                        edge=direct_edge, q1=q_start, q2=q_free_d
-                    )
-                    t_plan_direct += time.time() - t0
-                    if path_direct is None:
-                        raise RuntimeError(f"Planning failed for edge '{direct_edge}'")
-                    plan_err_direct = None
-                    break
-                except Exception as e:
-                    t_plan_direct += time.time() - t0
-                    plan_err_direct = e
-                    path_direct = None
-                    if verbose and _attempt_d < self._MAX_COLLISION_RETRIES - 1:
-                        print(
-                            f"    ⚠ Planning '{direct_edge}' failed "
-                            f"(attempt {_attempt_d + 1}), "
-                            "regenerating target config..."
-                        )
+            )
             if path_direct is None:
                 raise RuntimeError(
                     f"Auto-release of '{released_handle}': _21 failed "
@@ -575,8 +358,396 @@ class GraspSequencePlanner:
         if verbose:
             print(f"    ✓ Released '{released_handle}' from '{gripper}'")
 
+        direct_edge = edge_21[:-3] if used_direct else None
+        phase_info = self._build_release_phase_info(
+            q_start=q_start,
+            used_direct=used_direct,
+            path21=path21,
+            path10=path10,
+            path_direct=path_direct,
+            edge_21=edge_21,
+            edge_10=edge_10,
+            direct_edge=direct_edge,
+            t_gen1=t_gen1,
+            t_plan1=t_plan1,
+            t_gen2=t_gen2,
+            t_plan2=t_plan2,
+            t_gen_direct=t_gen_direct,
+            t_plan_direct=t_plan_direct,
+        )
+        return q_start, phase_info
+
+    def _setup_release_phase_graph(
+        self,
+        gripper: str,
+        q_current: list,
+        phase_graph_constraints: list | None,
+        verbose: bool,
+    ) -> list:
+        """Build the release phase graph and sync the grasp-state tracker.
+
+        Constructs a minimal phase graph for the release transition (the named
+        gripper releasing its currently-held handle), wires the new graph onto
+        ``self.planner.graph`` and ``self.config_gen``, syncs the tracker's
+        phase-local indices with the factory ordering, and returns the release
+        edge sequence for the gripper.
+
+        Args:
+            gripper: Gripper name that must release its current object.
+            q_current: Current robot configuration (passed as q_init to the
+                phase graph build).
+            phase_graph_constraints: Optional locked-joint constraint names.
+            verbose: Whether to print progress.
+
+        Returns:
+            The release edge sequence (e.g. ``[edge_21, edge_10]``) for the
+            gripper, from ``grasp_tracker.get_release_edge_sequence``.
+        """
+        release_held_grasps = {
+            g: h for g, h in self.grasp_tracker.current_grasps.items() if h is not None
+        }
+
+        if verbose:
+            print(
+                f"    Building release graph: '{gripper}' releases "
+                f"'{self.grasp_tracker.current_grasps[gripper]}'"
+            )
+
+        try:
+            self.graph_builder.build_phase_graph(
+                config=self.task_config,
+                held_grasps=release_held_grasps,
+                next_grasp=(gripper, None),
+                graph_constraints=phase_graph_constraints,
+                q_init=q_current,
+                q_init_original=getattr(self, "_q_scene_init", None),
+            )
+            new_graph = self.graph_builder.get_graph()
+            if hasattr(self.planner, "graph"):
+                self.planner.graph = new_graph
+            if self.config_gen is None:
+                from agimus_spacelab.planning import ConfigGenerator
+
+                self.config_gen = ConfigGenerator(
+                    self.graph_builder.robot,
+                    new_graph,
+                    self.planner,
+                    self.graph_builder.ps,
+                    backend=self.backend,
+                )
+            elif hasattr(self.config_gen, "update_graph"):
+                self.config_gen.update_graph(new_graph)
+        except Exception as e:
+            raise RuntimeError(
+                f"Auto-release of '{self.grasp_tracker.current_grasps[gripper]}' "
+                f"from '{gripper}': Failed to build release graph: {e}"
+            ) from e
+
+        # Sync tracker indices with phase-local factory ordering
+        if hasattr(self.graph_builder, "_phase_grippers"):
+            self.grasp_tracker.set_phase_indices(
+                self.graph_builder._phase_grippers,
+                self.graph_builder._phase_handles,
+            )
+
+        release_edges = self.grasp_tracker.get_release_edge_sequence(gripper)
+        if verbose:
+            print(f"    Release edge sequence: {release_edges}")
+        return release_edges
+
+    def _project_onto_release_source_state(
+        self, q_current: list, verbose: bool
+    ) -> list:
+        """Project q_current onto the current (held-grasp) source state.
+
+        Best-effort: on success q_current is replaced with the projected config;
+        on failure (projection doesn't converge or raises) the unprojected
+        q_current is kept and a warning is printed when verbose.
+
+        Args:
+            q_current: Current robot configuration.
+            verbose: Whether to print progress.
+
+        Returns:
+            The (possibly projected) q_current as a list.
+        """
+        source_state = self.grasp_tracker.get_current_state_name()
+        try:
+            success, q_projected, error = self.graph_builder.apply_state_constraints(
+                state_name=source_state,
+                q=q_current,
+                max_iterations=10000,
+                error_threshold=1e-4,
+            )
+            if success:
+                q_current = list(q_projected)
+                if verbose:
+                    print(
+                        f"    ✓ Projected onto '{source_state}' " f"(error={error:.2e})"
+                    )
+            elif verbose:
+                print(
+                    f"    ⚠ Projection onto '{source_state}' failed "
+                    f"(error={error:.2e}), using unprojected q"
+                )
+        except Exception as e:
+            if verbose:
+                print(f"    ⚠ State projection failed: {e}, continuing")
+        return q_current
+
+    def _plan_release_pregrasp_edge(
+        self,
+        gripper: str,
+        released_handle: str,
+        edge_21: str,
+        edge_01: str,
+        q_start: list,
+        verbose: bool,
+    ):
+        """Generate q_pregrasp via the forward approach edge and plan edge_21.
+
+        The _21 target (q_pregrasp) cannot be found with
+        generateTargetConfig(edge_21): the path-fold RHS = "gripper at contact"
+        but the pregrasp leaf requires "gripper at approach offset" —
+        conflicting, the solver always diverges. applyStateConstraints(
+        pregrasp_node, q_grasped) hits the same conflict. Fix: generate
+        q_pregrasp via the FORWARD _01 edge (released_state → pregrasp), whose
+        fold only encodes the OTHER grasps, leaving the pregrasp leaf free to
+        position the arm at approach distance.
+
+        SEED STRATEGY: q_start (the held config) is used as the warm-start hint
+        for the initial generation. The naive seed (q_grasped = contact state)
+        fails for large-clearance handles (e.g. h_RS1_FG has clearance=0.25 m,
+        giving 26 cm pregrasp offset): the IK copies frame_gripper/root_joint
+        from q_grasped, pinning FG at the contact position, and the
+        g_ur10_tool-grasps-FG fold keeps it pinned there, making the 26 cm
+        pregrasp unreachable via Newton-Raphson. Using q_start as the hint
+        keeps RS1 at its current (assembly) position. Do NOT use a cached
+        Phase-2 pregrasp here: it would drag RS1 from the assembly position
+        back to the ground-level initial pose, producing a long-range path that
+        collides with ground_demo/link_NYX_0.
+
+        After the initial generation, edge_21 planning is retried up to
+        _MAX_COLLISION_RETRIES times, regenerating a fresh (unhinted,
+        randomly-seeded) pregrasp target on each plan failure — a particular
+        IK solution may be kinematically valid but sit in a region the RRT
+        can't reach, so resampling before falling back to the direct release
+        edge is cheap insurance against an unlucky first sample.
+
+        Args:
+            gripper: Gripper name being released.
+            released_handle: Handle being released (for error messages).
+            edge_21: The grasped→pregrasp edge name to plan.
+            edge_01: The forward released→pregrasp edge used to generate the
+                pregrasp target.
+            q_start: Current configuration (q_from for both edges).
+            verbose: Whether to print progress.
+
+        Returns:
+            Tuple (path21, q_pregrasp, t_gen1, t_plan1, plan_err_21) where
+            path21 is the planned path or None on exhaustion, q_pregrasp is the
+            last generated pregrasp config, t_gen1 is the initial generation
+            time, t_plan1 is the total edge_21 retry-loop time, and plan_err_21
+            is the last plan exception (None on success).
+        """
+        import numpy as np
+        import time
+
+        if verbose:
+            print(f"    Planning release edge: {edge_21}")
+            print(f"      (pregrasp via forward edge '{edge_01}')")
+
+        t0 = time.time()
+        ok, q_pregrasp = self.config_gen.generate_via_edge(
+            edge_name=edge_01,
+            q_from=q_start,
+            config_label=f"q_autorelease_{gripper}_pregrasp",
+            q_hint=q_start,
+        )
+        t_gen1 = time.time() - t0
+        if not ok or q_pregrasp is None or not np.all(np.isfinite(q_pregrasp)):
+            raise RuntimeError(
+                f"Auto-release of '{released_handle}': failed to generate "
+                f"pregrasp config via forward edge '{edge_01}'"
+            )
+        # Update cache so any subsequent release of the same gripper starts
+        # from the current context, not a stale Phase-2 configuration.
+        self._last_pregrasp_q[gripper] = q_pregrasp
+
+        path21 = None
+        t_plan1 = 0.0
+        plan_err_21 = None
+        t0 = time.time()
+        for _attempt_21 in range(self._MAX_COLLISION_RETRIES):
+            try:
+                path21, _ = self.planner.plan_transition_edge(
+                    edge=edge_21, q1=q_start, q2=q_pregrasp
+                )
+                if path21 is None:
+                    raise RuntimeError(f"Planning failed for edge '{edge_21}'")
+                plan_err_21 = None
+                break
+            except Exception as e:
+                plan_err_21 = e
+                path21 = None
+                if _attempt_21 < self._MAX_COLLISION_RETRIES - 1:
+                    if verbose:
+                        print(
+                            f"    ⚠ Planning '{edge_21}' failed "
+                            f"(attempt {_attempt_21 + 1}), "
+                            "regenerating pregrasp config..."
+                        )
+                    _ok21, _q_new21 = self.config_gen.generate_via_edge(
+                        edge_name=edge_01,
+                        q_from=q_start,
+                        config_label=f"q_autorelease_{gripper}_pregrasp",
+                    )
+                    if _ok21 and _q_new21 is not None and np.all(np.isfinite(_q_new21)):
+                        q_pregrasp = _q_new21
+                        self._last_pregrasp_q[gripper] = q_pregrasp
+        t_plan1 = time.time() - t0
+        return path21, q_pregrasp, t_gen1, t_plan1, plan_err_21
+
+    def _generate_and_plan_edge_with_retry(
+        self,
+        edge_name: str,
+        q_from: list,
+        config_label: str,
+        verbose: bool,
+        gen_fail_noun: str,
+        q_hint: list | None = None,
+    ):
+        """Generate a target config via an edge and plan it, retrying together.
+
+        Shared shape used by both the primary pregrasp→free edge (_10) and the
+        direct release fallback edge: regenerate the target config via
+        ``generate_via_edge`` and plan the edge via ``plan_transition_edge``
+        together, up to ``_MAX_COLLISION_RETRIES`` times before giving up.
+
+        The two original inline blocks worded their generation-failure message
+        differently ("failed to generate target config via edge '...'" for the
+        primary _10 edge vs "failed to generate a free config via edge '...'"
+        for the direct fallback). That difference is preserved verbatim via the
+        ``gen_fail_noun`` parameter ("target config" / "a free config") rather
+        than silently unified. All other messages (plan-fail, retry-print) are
+        identical between the two originals and parameterized only by
+        ``edge_name``.
+
+        Does NOT raise on retry exhaustion — returns the last error so each
+        caller can raise its own verbatim exhaustion message (the primary and
+        direct-fallback paths have structurally different exhaustion messages
+        that reference different surrounding state).
+
+        Args:
+            edge_name: Edge to generate the target config with and plan.
+            q_from: Source configuration.
+            config_label: Label passed to generate_via_edge.
+            verbose: Whether to print progress.
+            gen_fail_noun: Noun phrase used in the generation-failure message
+                ("target config" or "a free config") — preserved verbatim per
+                the original inline blocks.
+            q_hint: Optional warm-start hint for generate_via_edge (None for the
+                direct fallback, which uses random arm seeds).
+
+        Returns:
+            Tuple (path, q_result, t_gen, t_plan, error) where path is the
+            planned path or None on exhaustion, q_result is the last generated
+            target config, t_gen/t_plan are the total generation/planning times
+            accumulated across all attempts, and error is the last
+            exception/RuntimeError (None on success).
+        """
+        import numpy as np
+        import time
+
+        q_result = None
+        path = None
+        plan_err = None
+        t_gen = 0.0
+        t_plan = 0.0
+        for _attempt in range(self._MAX_COLLISION_RETRIES):
+            _t0 = time.time()
+            ok, q_candidate = self.config_gen.generate_via_edge(
+                edge_name=edge_name,
+                q_from=q_from,
+                config_label=config_label,
+                q_hint=q_hint,
+            )
+            t_gen += time.time() - _t0
+            if (
+                not ok
+                or q_candidate is None
+                or not np.all(np.isfinite(q_candidate))
+            ):
+                plan_err = RuntimeError(
+                    f"failed to generate {gen_fail_noun} via edge '{edge_name}'"
+                )
+                continue
+            q_result = q_candidate
+
+            _t0 = time.time()
+            try:
+                path, _ = self.planner.plan_transition_edge(
+                    edge=edge_name, q1=q_from, q2=q_result
+                )
+                t_plan += time.time() - _t0
+                if path is None:
+                    raise RuntimeError(f"Planning failed for edge '{edge_name}'")
+                plan_err = None
+                break
+            except Exception as e:
+                t_plan += time.time() - _t0
+                plan_err = e
+                path = None
+                if verbose and _attempt < self._MAX_COLLISION_RETRIES - 1:
+                    print(
+                        f"    ⚠ Planning '{edge_name}' failed "
+                        f"(attempt {_attempt + 1}), "
+                        "regenerating target config..."
+                    )
+        return path, q_result, t_gen, t_plan, plan_err
+
+    def _build_release_phase_info(
+        self,
+        q_start: list,
+        used_direct: bool,
+        path21,
+        path10,
+        path_direct,
+        edge_21: str,
+        edge_10: str,
+        direct_edge: str | None,
+        t_gen1: float,
+        t_plan1: float,
+        t_gen2: float,
+        t_plan2: float,
+        t_gen_direct: float,
+        t_plan_direct: float,
+    ) -> dict:
+        """Build the phase_info dict for a release sub-phase.
+
+        Consolidates the two near-identical end-of-method dict literals the
+        original _plan_release_subphase carried (one for the direct-fallback
+        path, one for the waypoint path), differing only in which
+        paths/edges/edge_stats and which timing sums they contain.
+
+        Args:
+            q_start: Final configuration of the release (final_config).
+            used_direct: True if the direct fallback edge was used.
+            path21: Planned edge_21 path (None if direct fallback was used).
+            path10: Planned edge_10 path (None if direct fallback was used).
+            path_direct: Planned direct-edge path (None unless used_direct).
+            edge_21: The grasped→pregrasp edge name.
+            edge_10: The pregrasp→free edge name.
+            direct_edge: The direct release edge name (only when used_direct).
+            t_gen1/t_plan1: edge_21 generation/planning times.
+            t_gen2/t_plan2: edge_10 generation/planning times.
+            t_gen_direct/t_plan_direct: direct-edge generation/planning times.
+
+        Returns:
+            phase_info dict with keys paths, edges, state_after, final_config,
+            edge_stats, phase_time, phase_gen_time, phase_plan_time.
+        """
         if used_direct:
-            direct_edge = edge_21[:-3]
             phase_info = {
                 "paths": [path_direct],
                 "edges": [direct_edge],
@@ -624,7 +795,7 @@ class GraspSequencePlanner:
                 "phase_gen_time": t_gen1 + t_gen2,
                 "phase_plan_time": t_plan1 + t_plan2,
             }
-        return q_start, phase_info
+        return phase_info
 
     def _auto_save_phase_paths(
         self,
@@ -2881,50 +3052,21 @@ class GraspSequencePlanner:
 
                     print(f"    Path {idx + 1}/{len(phase['paths'])}: ", end="")
 
-                    # Generate video name if recording
-                    video_name_for_path = None
-                    if record:
-                        if video_prefix:
-                            video_name_for_path = f"{video_prefix}_phase_{phase['phase']:02d}_path_{idx + 1:02d}"
-                        else:
-                            video_name_for_path = (
-                                f"phase_{phase['phase']:02d}_path_{idx + 1:02d}"
-                            )
-                        if edge_name:
-                            video_name_for_path += f"_{sanitize_filename(edge_name)}"
-
-                    if record and hasattr(self.planner, "play_and_record_path_vector"):
-                        # Record the playback
-                        path_idx, video_file = self.planner.play_and_record_path_vector(
-                            path,
-                            video_name=video_name_for_path,
-                            output_dir=output_dir,
-                            framerate=framerate,
-                            dt=dt,
-                            speed=speed,
-                        )
-                        print(f"✓ Recorded (index {path_idx}): {video_file}")
+                    video_file = self._play_single_phase_path(
+                        path=path,
+                        edge_name=edge_name,
+                        phase=phase,
+                        idx=idx,
+                        record=record,
+                        visualizer=visualizer,
+                        output_dir=output_dir,
+                        video_prefix=video_prefix,
+                        framerate=framerate,
+                        dt=dt,
+                        speed=speed,
+                    )
+                    if video_file is not None:
                         recorded_videos.append(video_file)
-                    elif visualizer and hasattr(
-                        self.planner, "play_path_vector_with_viz"
-                    ):
-                        # Use visualization-enabled playback
-                        path_idx = self.planner.play_path_vector_with_viz(
-                            path,
-                            edge_name=edge_name,
-                            visualizer=visualizer,
-                            speed=speed,
-                        )
-                        print(
-                            f"✓ Played with visualization (stored as index {path_idx})"
-                        )
-                    elif hasattr(self.planner, "play_path_vector"):
-                        # Standard playback without visualization
-                        path_idx = self.planner.play_path_vector(path, speed=speed)
-                        print(f"✓ Played (stored as index {path_idx})")
-                    else:
-                        print("⚠ Backend does not support PathVector playback")
-                        print(f"      Path type: {type(path).__name__}")
             except Exception as e:
                 print(f"\n  ⚠ Failed to replay: {e}")
 
@@ -2937,6 +3079,93 @@ class GraspSequencePlanner:
         if record and recorded_videos:
             print(f"\n📹 Recorded {len(recorded_videos)} videos to {output_dir}")
             return recorded_videos
+        return None
+
+    def _play_single_phase_path(
+        self,
+        path,
+        edge_name: str | None,
+        phase: dict,
+        idx: int,
+        record: bool,
+        visualizer,
+        output_dir: str,
+        video_prefix: str | None,
+        framerate: int,
+        dt: float,
+        speed: float,
+    ):
+        """Play back a single waypoint path, dispatching on backend capability.
+
+        4-way dispatch mirroring the original inline block in replay_sequence():
+        record via play_and_record_path_vector → visualizer via
+        play_path_vector_with_viz → plain play_path_vector → unsupported-backend
+        warning. Pure legibility split (no second caller); the phase-iteration
+        loop and the before/after get_num_stored_paths() bookkeeping stay in
+        replay_sequence().
+
+        Args:
+            path: The path vector to play.
+            edge_name: Edge name for this path (for visualization-enabled
+                playback), or None.
+            phase: The phase_results dict this path belongs to (used to build
+                the video filename).
+            idx: 0-based path index within the phase (used for the video
+                filename).
+            record: If True, prefer the record-and-play branch.
+            visualizer: Optional visualizer for visualization-enabled playback.
+            output_dir: Directory for video output.
+            video_prefix: Optional prefix for video filenames.
+            framerate: Video framerate in fps.
+            dt: Time step for path sampling.
+            speed: Playback speed multiplier.
+
+        Returns:
+            The recorded video file path if the record branch ran, else None
+            (caller appends non-None results to its recorded_videos list).
+        """
+        # Generate video name if recording
+        video_name_for_path = None
+        if record:
+            if video_prefix:
+                video_name_for_path = f"{video_prefix}_phase_{phase['phase']:02d}_path_{idx + 1:02d}"
+            else:
+                video_name_for_path = (
+                    f"phase_{phase['phase']:02d}_path_{idx + 1:02d}"
+                )
+            if edge_name:
+                video_name_for_path += f"_{sanitize_filename(edge_name)}"
+
+        if record and hasattr(self.planner, "play_and_record_path_vector"):
+            # Record the playback
+            path_idx, video_file = self.planner.play_and_record_path_vector(
+                path,
+                video_name=video_name_for_path,
+                output_dir=output_dir,
+                framerate=framerate,
+                dt=dt,
+                speed=speed,
+            )
+            print(f"✓ Recorded (index {path_idx}): {video_file}")
+            return video_file
+        elif visualizer and hasattr(self.planner, "play_path_vector_with_viz"):
+            # Use visualization-enabled playback
+            path_idx = self.planner.play_path_vector_with_viz(
+                path,
+                edge_name=edge_name,
+                visualizer=visualizer,
+                speed=speed,
+            )
+            print(
+                f"✓ Played with visualization (stored as index {path_idx})"
+            )
+        elif hasattr(self.planner, "play_path_vector"):
+            # Standard playback without visualization
+            path_idx = self.planner.play_path_vector(path, speed=speed)
+            print(f"✓ Played (stored as index {path_idx})")
+        else:
+            print("⚠ Backend does not support PathVector playback")
+            print(f"      Path type: {type(path).__name__}")
         return None
 
     def get_phase_summary(self) -> str:
