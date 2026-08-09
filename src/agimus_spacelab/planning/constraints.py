@@ -11,6 +11,10 @@ This module contains two layers:
 
 from typing import Any, Dict, Iterable, List
 
+from agimus_spacelab.logging import get_logger
+
+logger = get_logger("planning.constraints")
+
 # Import PyHPP constraint types (optional)
 try:
     from pinocchio import SE3
@@ -119,14 +123,18 @@ class ConstraintBuilder:
             mask = [True] * 6
 
         if backend_obj is not None:
-            print(
-                f"[ConstraintBuilder] create_grasp_constraint '{name}': using backend_obj dispatch ({type(backend_obj).__name__})"
+            logger.debug(
+                "create_grasp_constraint '%s': using backend_obj dispatch (%s)",
+                name,
+                type(backend_obj).__name__,
             )
             return backend_obj.create_grasp_constraint(
                 ps, name, gripper, tool, transform, mask
             )
-        print(
-            f"[ConstraintBuilder] create_grasp_constraint '{name}': using legacy string dispatch (backend={backend!r})"
+        logger.debug(
+            "create_grasp_constraint '%s': using legacy string dispatch (backend=%r)",
+            name,
+            backend,
         )
 
         if backend == "pyhpp":
@@ -169,12 +177,12 @@ class ConstraintBuilder:
 
             # Create implicit constraint
             constraint = Implicit(pc, cts, mask_vec)
-            print(f"    ✓ {name}: {gripper} -> {tool} (PyHPP)")
+            logger.info("✓ %s: %s -> %s (PyHPP)", name, gripper, tool)
             return constraint
         else:
             # CORBA backend
             ps.createTransformationConstraint(name, gripper, tool, transform, mask)
-            print(f"    ✓ {name}: {gripper} -> {tool}")
+            logger.info("✓ %s: %s -> %s", name, gripper, tool)
             return None
 
     @staticmethod
@@ -205,14 +213,19 @@ class ConstraintBuilder:
             Implicit constraint for PyHPP, None for CORBA
         """
         if backend_obj is not None:
-            print(
-                f"[ConstraintBuilder] create_placement_constraint '{name}': using backend_obj dispatch ({type(backend_obj).__name__})"
+            logger.debug(
+                "create_placement_constraint '%s': using backend_obj dispatch (%s)",
+                name,
+                type(backend_obj).__name__,
             )
             return backend_obj.create_placement_constraint(
                 ps, name, tool, world_pose, mask
             )
-        print(
-            f"[ConstraintBuilder] create_placement_constraint '{name}': using legacy string dispatch (backend={backend!r})"
+        logger.debug(
+            "create_placement_constraint '%s': using legacy string dispatch "
+            "(backend=%r)",
+            name,
+            backend,
         )
 
         if backend == "pyhpp":
@@ -250,12 +263,12 @@ class ConstraintBuilder:
 
             # Create implicit constraint
             constraint = Implicit(pc, cts, implicit_mask)
-            print(f"    ✓ {name}: tool at {world_pose[:3]} (PyHPP)")
+            logger.info("✓ %s: tool at %s (PyHPP)", name, world_pose[:3])
             return constraint
         else:
             # CORBA backend
             ps.createTransformationConstraint(name, "", tool, world_pose, mask)
-            print(f"    ✓ {name}: tool at {world_pose[:3]}")
+            logger.info("✓ %s: tool at %s", name, world_pose[:3])
             return None
 
     @staticmethod
@@ -286,14 +299,19 @@ class ConstraintBuilder:
             Implicit constraint for PyHPP, None for CORBA
         """
         if backend_obj is not None:
-            print(
-                f"[ConstraintBuilder] create_complement_constraint '{base_name}': using backend_obj dispatch ({type(backend_obj).__name__})"
+            logger.debug(
+                "create_complement_constraint '%s': using backend_obj dispatch (%s)",
+                base_name,
+                type(backend_obj).__name__,
             )
             return backend_obj.create_complement_constraint(
                 ps, base_name, tool, world_pose, complement_mask
             )
-        print(
-            f"[ConstraintBuilder] create_complement_constraint '{base_name}': using legacy string dispatch (backend={backend!r})"
+        logger.debug(
+            "create_complement_constraint '%s': using legacy string dispatch "
+            "(backend=%r)",
+            base_name,
+            backend,
         )
 
         constraint_name = f"{base_name}/complement"
@@ -328,14 +346,14 @@ class ConstraintBuilder:
 
             # Create implicit constraint
             constraint = Implicit(pc, cts, implicit_mask)
-            print(f"    ✓ {constraint_name}: free DOFs (PyHPP)")
+            logger.info("✓ %s: free DOFs (PyHPP)", constraint_name)
             return constraint
         else:
             # CORBA backend
             ps.createTransformationConstraint(
                 constraint_name, "", tool, world_pose, complement_mask
             )
-            print(f"    ✓ {constraint_name}: free DOFs")
+            logger.info("✓ %s: free DOFs", constraint_name)
             return None
 
     @staticmethod
@@ -484,9 +502,11 @@ class ConstraintBuilder:
                     locked = LockedJoint(robot, jn, values, comp)
                     locked_constraints.append(locked)
                     frozen_names.append(jn)
-                    print(f"    ✓ Locked joint (PyHPP): {jn} (nq={size}, nv={nv})")
+                    logger.info(
+                        "✓ Locked joint (PyHPP): %s (nq=%d, nv=%d)", jn, size, nv
+                    )
                 except Exception as e:
-                    print(f"   ⚠ Failed to lock {jn}: {e}")
+                    logger.warning("Failed to lock %s: %s", jn, e)
 
             return locked_constraints, frozen_names
 
@@ -531,9 +551,9 @@ class ConstraintBuilder:
                         set_rhs(constraint_name, True)
                     constraint_names.append(constraint_name)
                     frozen_names.append(jn)
-                    print(f"    ✓ Locked joint: {jn} (size={size})")
+                    logger.info("✓ Locked joint: %s (size=%d)", jn, size)
                 except Exception as e:
-                    print(f"   ⚠ Failed to lock {jn}: {e}")
+                    logger.warning("Failed to lock %s: %s", jn, e)
 
             return constraint_names, frozen_names
 

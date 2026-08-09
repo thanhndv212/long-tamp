@@ -7,6 +7,8 @@ correction) even though the helpers under test have no HPP dependency
 themselves, so these tests must run inside the hpp-arm64 container.
 """
 
+import logging
+
 import pytest
 
 from agimus_spacelab.tasks.base import ManipulationTask
@@ -281,23 +283,24 @@ class TestPlayAndRecord:
     verified here via a fake planner instead of a real successful run.
     """
 
-    def test_record_true_uses_play_and_record_path(self, capsys):
+    def test_record_true_uses_play_and_record_path(self, caplog):
         task = _make_task()
         task.planner = _FakePlanner()
-        task._play_and_record(3, True, "clip", "/out", 25)
+        with caplog.at_level(logging.INFO, logger="agimus_spacelab"):
+            task._play_and_record(3, True, "clip", "/out", 25)
         assert task.planner.play_and_record_calls == [(3, "clip", "/out", 25)]
         assert task.planner.play_calls == []
-        out = capsys.readouterr().out
-        assert "Path playback complete" in out
-        assert "Video recorded" in out
+        assert "Path playback complete" in caplog.text
+        assert "Video recorded" in caplog.text
 
-    def test_record_false_falls_back_to_play_path(self, capsys):
+    def test_record_false_falls_back_to_play_path(self, caplog):
         task = _make_task()
         task.planner = _FakePlanner()
-        task._play_and_record(2, False, None, "/out", 25)
+        with caplog.at_level(logging.INFO, logger="agimus_spacelab"):
+            task._play_and_record(2, False, None, "/out", 25)
         assert task.planner.play_calls == [2]
         assert task.planner.play_and_record_calls == []
-        assert "Path playback complete" in capsys.readouterr().out
+        assert "Path playback complete" in caplog.text
 
     def test_missing_record_method_falls_back_to_play_path(self, capsys):
         task = _make_task()
@@ -305,11 +308,12 @@ class TestPlayAndRecord:
         task._play_and_record(0, True, None, "/out", 25)
         assert task.planner.play_calls == [0]
 
-    def test_exception_is_caught_not_raised(self, capsys):
+    def test_exception_is_caught_not_raised(self, caplog):
         task = _make_task()
         task.planner = _FakePlanner(raise_on="record")
-        task._play_and_record(0, True, None, "/out", 25)  # must not raise
-        assert "Path playback failed" in capsys.readouterr().out
+        with caplog.at_level(logging.WARNING, logger="agimus_spacelab"):
+            task._play_and_record(0, True, None, "/out", 25)  # must not raise
+        assert "Path playback failed" in caplog.text
 
 
 class _FakePlannerWithViewer:
@@ -520,7 +524,7 @@ class TestSetupLockedJointConstraints:
     real HPP/ps/robot is needed.
     """
 
-    def test_explicit_patterns_return_constraints(self, monkeypatch, capsys):
+    def test_explicit_patterns_return_constraints(self, monkeypatch, caplog):
         captured = {}
 
         def fake_create(ps, robot, q_ref, patterns, backend):
@@ -535,11 +539,11 @@ class TestSetupLockedJointConstraints:
         task = _make_setup_task(q_init=[0.0, 0.0])
         task.ps = "ps"
         task.robot = "robot"
-        result = task._setup_locked_joint_constraints(["j1", "j2"])
+        with caplog.at_level(logging.INFO, logger="agimus_spacelab"):
+            result = task._setup_locked_joint_constraints(["j1", "j2"])
         assert result == ["locked::j1", "locked::j2"]
         assert captured["patterns"] == ["j1", "j2"]
-        out = capsys.readouterr().out
-        assert "✓ Created locked joint constraints: j1, j2" in out
+        assert "✓ Created locked joint constraints: j1, j2" in caplog.text
 
     def test_empty_frozen_names_returns_none(self, monkeypatch):
         monkeypatch.setattr(

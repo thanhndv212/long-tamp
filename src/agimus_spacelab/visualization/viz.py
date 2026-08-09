@@ -9,7 +9,10 @@ supported transparently — functions detect the viewer type at call time.
 
 from typing import Any, Dict, List, Optional, Tuple
 
+from agimus_spacelab.logging import get_logger
 from agimus_spacelab.planning.graph import GraphBuilder
+
+logger = get_logger("visualization.viz")
 
 
 def print_joint_info(robot):
@@ -232,7 +235,7 @@ def displayHandle(
             viewer.client.gui.applyConfiguration(hname, pose)
         return True
     except Exception as e:
-        print(f"  Warning: Could not display handle {handle_name}: {e}")
+        logger.warning("Could not display handle %s: %s", handle_name, e)
         return False
 
 
@@ -280,7 +283,7 @@ def displayGripper(
             viewer.client.gui.applyConfiguration(gname, pose)
         return True
     except Exception as e:
-        print(f"  Warning: Could not display gripper {gripper_name}: {e}")
+        logger.warning("Could not display gripper %s: %s", gripper_name, e)
         return False
 
 
@@ -359,7 +362,7 @@ def displayHandleApproach(
                 viewer.client.gui.addToGroup(arrow_name, robot.name)
         return True
     except Exception as e:
-        print(f"  Warning: Could not display approach arrow for {handle_name}: {e}")
+        logger.warning("Could not display approach arrow for %s: %s", handle_name, e)
         return False
 
 
@@ -437,7 +440,7 @@ def displayGripperApproach(
                 viewer.client.gui.addToGroup(arrow_name, robot.name)
         return True
     except Exception as e:
-        print(f"  Warning: Could not display approach arrow for {gripper_name}: {e}")
+        logger.warning("Could not display approach arrow for %s: %s", gripper_name, e)
         return False
 
 
@@ -469,11 +472,11 @@ def visualize_all_handles(
     Returns:
         Number of successfully visualized handles
     """
-    print(f"\nDisplaying {len(handle_names)} handles...")
+    logger.info("Displaying %d handles...", len(handle_names))
     success_count = 0
 
     for handle_name in handle_names:
-        print(f"  {handle_name}")
+        logger.debug("  %s", handle_name)
         frame_ok = displayHandle(
             viewer,
             handle_name,
@@ -494,15 +497,17 @@ def visualize_all_handles(
         if frame_ok and arrow_ok:
             success_count += 1
             status = "frame and arrow" if show_approach else "frame"
-            print(f"    ✓ {status} added")
+            logger.debug("    ✓ %s added", status)
         elif frame_ok:
-            print("    ✓ Frame added (arrow failed)")
+            logger.debug("    ✓ Frame added (arrow failed)")
         else:
-            print("    ✗ Failed")
+            logger.debug("    ✗ Failed")
 
     if not _is_viser_viewer(viewer):
         viewer.client.gui.refresh()
-    print(f"\nSuccessfully displayed {success_count}/{len(handle_names)} handles")
+    logger.info(
+        "Successfully displayed %d/%d handles", success_count, len(handle_names)
+    )
     return success_count
 
 
@@ -536,11 +541,11 @@ def visualize_all_grippers(
     Returns:
         Number of successfully visualized grippers
     """
-    print(f"\nDisplaying {len(gripper_names)} grippers...")
+    logger.info("Displaying %d grippers...", len(gripper_names))
     success_count = 0
 
     for gripper_name in gripper_names:
-        print(f"  {gripper_name}")
+        logger.debug("  %s", gripper_name)
         frame_ok = displayGripper(
             viewer,
             gripper_name,
@@ -562,15 +567,17 @@ def visualize_all_grippers(
         if frame_ok and arrow_ok:
             success_count += 1
             status = "frame and arrow" if show_approach else "frame"
-            print(f"    ✓ {status} added")
+            logger.debug("    ✓ %s added", status)
         elif frame_ok:
-            print("    ✓ Frame added (arrow failed)")
+            logger.debug("    ✓ Frame added (arrow failed)")
         else:
-            print("    ✗ Failed")
+            logger.debug("    ✗ Failed")
 
     if not _is_viser_viewer(viewer):
         viewer.client.gui.refresh()
-    print(f"\nSuccessfully displayed {success_count}/{len(gripper_names)} grippers")
+    logger.info(
+        "Successfully displayed %d/%d grippers", success_count, len(gripper_names)
+    )
     return success_count
 
 
@@ -656,7 +663,7 @@ def clear_handle_visualizations(viewer) -> int:
                         count += 1
             viewer.client.gui.refresh()
         except Exception as e:
-            print(f"Warning: Could not clear handle visualizations: {e}")
+            logger.warning("Could not clear handle visualizations: %s", e)
     return count
 
 
@@ -690,7 +697,7 @@ def clear_gripper_visualizations(viewer) -> int:
                         count += 1
             viewer.client.gui.refresh()
         except Exception as e:
-            print(f"Warning: Could not clear gripper visualizations: {e}")
+            logger.warning("Could not clear gripper visualizations: %s", e)
     return count
 
 
@@ -749,9 +756,9 @@ def visualize_constraint_graph(
         nodes = list(graph_builder.get_states().keys())
         edges = list(graph_builder.get_edges().keys())
 
-        print("\n📊 Constraint Graph Structure:")
-        print(f"  Nodes: {len(nodes)}")
-        print(f"  Edges: {len(edges)}")
+        logger.info("📊 Constraint Graph Structure:")
+        logger.info("  Nodes: %d", len(nodes))
+        logger.info("  Edges: %d", len(edges))
 
         # Create directed graph
         G = nx.DiGraph()
@@ -815,35 +822,35 @@ def visualize_constraint_graph(
         # Save to file
         png_path = f"{output_path}.png"
         plt.savefig(png_path, dpi=150, bbox_inches="tight")
-        print(f"  ✓ Saved graph visualization to: {png_path}")
+        logger.info("✓ Saved graph visualization to: %s", png_path)
 
-        # Print node/edge details
-        print("  Nodes:")
+        # Log node/edge details
+        logger.debug("  Nodes:")
         for node in nodes:
-            print(f"    • {node}")
+            logger.debug("    • %s", node)
 
-        print("  Edges:")
+        logger.debug("  Edges:")
         for from_node, to_node in G.edges():
             edge_name = edge_labels.get((from_node, to_node), "?")
-            print(f"    • {edge_name}: {from_node} → {to_node}")
+            logger.debug("    • %s: %s → %s", edge_name, from_node, to_node)
 
         # Optionally display
         if show_png:
             try:
                 plt.show()
             except Exception:
-                print("  ⚠ Could not display PNG (no display available)")
+                logger.warning("Could not display PNG (no display available)")
         else:
             plt.close()
 
         return png_path
 
     except ImportError as e:
-        print(f"  ⚠ Visualization requires networkx and matplotlib: {e}")
-        print("  Install with: pip install networkx matplotlib")
+        logger.warning("Visualization requires networkx and matplotlib: %s", e)
+        logger.warning("Install with: pip install networkx matplotlib")
         return None
     except Exception as e:
-        print(f"  ⚠ Failed to visualize graph: {e}")
+        logger.warning("Failed to visualize graph: %s", e)
         import traceback
 
         traceback.print_exc()
@@ -889,9 +896,11 @@ def visualize_constraint_graph_interactive(
         )
 
         if not HAS_GRAPH_TOOL:
-            print("⚠ graph-tool not available. Install with:")
-            print("  conda install -c conda-forge graph-tool")
-            print("  Falling back to static visualization...")
+            logger.warning(
+                "graph-tool not available. Install with: "
+                "conda install -c conda-forge graph-tool. "
+                "Falling back to static visualization..."
+            )
             return None
 
         # Create visualizer
@@ -911,12 +920,14 @@ def visualize_constraint_graph_interactive(
         return visualizer
 
     except ImportError as e:
-        print(f"⚠ Failed to import live graph visualization: {e}")
-        print("  Ensure graph-tool is installed:")
-        print("  conda install -c conda-forge graph-tool")
+        logger.warning(
+            "Failed to import live graph visualization: %s. "
+            "Ensure graph-tool is installed: conda install -c conda-forge graph-tool",
+            e,
+        )
         return None
     except Exception as e:
-        print(f"⚠ Failed to create interactive visualization: {e}")
+        logger.warning("Failed to create interactive visualization: %s", e)
         import traceback
 
         traceback.print_exc()

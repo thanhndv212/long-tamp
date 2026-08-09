@@ -9,6 +9,7 @@ import re
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from agimus_spacelab.logging import get_logger
 from agimus_spacelab.planning import (
     ConfigGenerator,
     ConstraintBuilder,
@@ -16,6 +17,8 @@ from agimus_spacelab.planning import (
     GraphBuilder,
     SceneBuilder,
 )
+
+logger = get_logger("tasks.base")
 
 
 class ManipulationTask(ABC):
@@ -75,6 +78,18 @@ class ManipulationTask(ABC):
             slug = re.sub(r"[^a-zA-Z0-9]+", "_", task_name).strip("_").lower()
             stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             log_dir = os.path.join("/tmp", "agimus_spacelab", f"{slug}_{stamp}")
+
+        # Console (and, when log_dir is set, file-mirrored) output for the
+        # `logging`-based progress messages modules emit via
+        # agimus_spacelab.logging.get_logger(__name__) -- e.g.
+        # planning/config.py's ConfigGenerator. Idempotent (configure_logging
+        # skips re-attaching handlers), and independent of RunLogger below:
+        # this is human-readable terminal/text output, RunLogger is the
+        # separate structured JSONL event stream.
+        from agimus_spacelab.logging import configure_logging
+
+        configure_logging(log_dir=log_dir)
+
         self.run_logger = None
         if log_dir is not None:
             try:
@@ -129,13 +144,13 @@ class ManipulationTask(ABC):
         """
         robot = self.robot
         if self.use_factory:
-            print("    Registering constraints for factory mode...")
+            logger.info("Registering constraints for factory mode...")
             self._create_factory_constraints(robot)
         else:
-            print("    Creating constraints manually...")
+            logger.info("Creating constraints manually...")
             self._create_manual_constraints(robot)
 
-        print("   ✓ Created transformation constraints")
+        logger.info("✓ Created transformation constraints")
 
     def _create_factory_constraints(self, robot) -> None:
         """Create constraints with factory naming.
@@ -299,7 +314,7 @@ class ManipulationTask(ABC):
         )
 
         # 1. Scene setup
-        print("\n1. Setting up scene...")
+        logger.info("1. Setting up scene...")
         self.planner, self.robot, self.ps = self.scene_builder.build(
             robot_names=self.get_robot_names(),
             environment_names=self.get_environment_names(),
@@ -322,7 +337,7 @@ class ManipulationTask(ABC):
         self.setup_collision_management()
 
         # 3. Create constraints
-        print("\n2. Creating constraints...")
+        logger.info("2. Creating constraints...")
         self.create_constraints()
 
         # 4. Create locked joint constraints if requested (factory mode only)
@@ -338,7 +353,7 @@ class ManipulationTask(ABC):
 
         self._finalize_graph_setup(graph_constraints, skip_graph)
 
-        print("\n   ✓ Task setup complete")
+        logger.info("✓ Task setup complete")
 
     def _log_setup_snapshot(self, setup_params: dict) -> None:
         """Emit the task-config snapshot to the run logger.
@@ -455,9 +470,9 @@ class ManipulationTask(ABC):
                     )
                 )
                 if frozen_names:
-                    print(
-                        f"    ✓ Created locked joint constraints: "
-                        f"{', '.join(sorted(frozen_names))}"
+                    logger.info(
+                        "✓ Created locked joint constraints: %s",
+                        ", ".join(sorted(frozen_names)),
                     )
                     graph_constraints = constraint_names
 
@@ -475,8 +490,8 @@ class ManipulationTask(ABC):
         if skip_graph:
             # Skip graph creation for grasp sequence mode
             # GraspSequencePlanner will build minimal phase graphs
-            print("\n3. Skipping graph creation (will be built by planner)")
-            print("   ✓ Scene and constraints ready for phase graph building")
+            logger.info("3. Skipping graph creation (will be built by planner)")
+            logger.info("✓ Scene and constraints ready for phase graph building")
             # Initialize GraphBuilder without creating graph yet
             self.graph_builder = GraphBuilder(
                 self.planner, self.robot, self.ps, backend=self.backend
@@ -488,7 +503,7 @@ class ManipulationTask(ABC):
             self.config_gen = None
         else:
             # 5. Create graph (with global constraints added before init)
-            print("\n3. Creating constraint graph...")
+            logger.info("3. Creating constraint graph...")
             self.graph = self.create_graph(graph_constraints=graph_constraints)
 
             # Make graph available to backend for validation/introspection
@@ -679,7 +694,7 @@ class ManipulationTask(ABC):
         output_dir: Optional[str],
         framerate: int,
     ) -> None:
-        print("\n7. Playing solution path...")
+        logger.info("7. Playing solution path...")
         try:
             if record and hasattr(self.planner, "play_and_record_path"):
                 video_file = self.planner.play_and_record_path(
@@ -688,13 +703,13 @@ class ManipulationTask(ABC):
                     output_dir=output_dir,
                     framerate=framerate,
                 )
-                print("   ✓ Path playback complete")
-                print(f"   📹 Video recorded: {video_file}")
+                logger.info("✓ Path playback complete")
+                logger.info("📹 Video recorded: %s", video_file)
             else:
                 self.planner.play_path(path_index)
-                print("   ✓ Path playback complete")
+                logger.info("✓ Path playback complete")
         except Exception as e:
-            print(f"   ⚠ Path playback failed: {e}")
+            logger.warning("Path playback failed: %s", e)
 
     def _build_result(self, configs: Dict[str, Any], **extra: Any) -> Dict[str, Any]:
         result = {
@@ -780,7 +795,7 @@ class ManipulationTask(ABC):
         for i in range(len(seq) - 1):
             a, b = seq[i], seq[i + 1]
             seg = f"{i + 1}/{len(seq) - 1}"
-            print(f"\n   Segment {seg}: {a} -> {b}")
+            logger.info("Segment %s: %s -> %s", seg, a, b)
             self._reset_goals_if_possible()
             self.planner.set_initial_config(configs[a])
             self.planner.add_goal_config(configs[b])
@@ -789,9 +804,9 @@ class ManipulationTask(ABC):
                 optimizer=self.optimizer,
             )
             if success:
-                print("   ✓ Planning successful")
+                logger.info("✓ Planning successful")
             else:
-                print("   ⚠ Planning failed")
+                logger.warning("Planning failed")
                 break
             # Record the latest path id when available (CORBA).
             if self.ps is not None:
@@ -876,7 +891,7 @@ class ManipulationTask(ABC):
             )
 
         # 4. Generate configurations
-        print("\n4. Generating configurations...")
+        logger.info("4. Generating configurations...")
         q_init = self.q_init
         configs = self.generate_configurations(q_init)
         # check if PATH_OPTIMIZER is set in task_config
@@ -886,21 +901,21 @@ class ManipulationTask(ABC):
             self.optimizer = "RandomShortcut"
         # 5. Visualize
         if visualize:
-            print("\n5. Starting visualization...")
+            logger.info("5. Starting visualization...")
             try:
                 self.planner.visualize(configs.get("q_init", q_init))
-                print("   ✓ Initial configuration displayed")
+                logger.info("✓ Initial configuration displayed")
             except Exception as e:
-                print(f"   ⚠ Visualization failed: {e}")
+                logger.warning("Visualization failed: %s", e)
 
         # 6. Solve
         if solve and "q_goal" in configs:
-            print("\n6. Solving planning problem...")
+            logger.info("6. Solving planning problem...")
 
             seq = self._ordered_config_keys(configs, preferred_configs)
 
             if not seq or len(seq) < 2:
-                print("   ⚠ Planning skipped: missing q_init/q_goal")
+                logger.warning("Planning skipped: missing q_init/q_goal")
             else:
                 # solve_mode is only honored for len(seq) > 2 -- a
                 # pre-existing (likely accidental) gate, preserved exactly

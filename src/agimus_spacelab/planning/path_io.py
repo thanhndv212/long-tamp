@@ -11,8 +11,12 @@ import glob
 import os
 from typing import TYPE_CHECKING, Any
 
+from agimus_spacelab.logging import get_logger
+
 if TYPE_CHECKING:
     pass
+
+logger = get_logger("planning.path_io")
 
 
 __all__ = [
@@ -119,7 +123,7 @@ def load_paths_from_directory(
 
     # Try JSON first if preferred and available
     if prefer_json and json_files and hasattr(planner, "load_path_from_waypoints"):
-        print(f"\nLoading {len(json_files)} JSON waypoint files...")
+        logger.info("Loading %d JSON waypoint files...", len(json_files))
         for filepath in json_files:
             try:
                 idx = planner.load_path_from_waypoints(
@@ -128,9 +132,13 @@ def load_paths_from_directory(
                     auto_setup_graph=auto_setup_graph,
                 )
                 indices.append(idx)
-                print(f"  ✓ Loaded {os.path.basename(filepath)} -> index {idx}")
+                logger.info(
+                    "✓ Loaded %s -> index %d", os.path.basename(filepath), idx
+                )
             except Exception as e:
-                print(f"  ✗ Failed to load {os.path.basename(filepath)}: {e}")
+                logger.warning(
+                    "✗ Failed to load %s: %s", os.path.basename(filepath), e
+                )
         return indices
 
     # Try native paths
@@ -184,12 +192,12 @@ def replay_paths(
 
     for idx in indices:
         if verbose:
-            print(f"  Playing path {idx}...")
+            logger.info("Playing path %d...", idx)
         try:
             planner.play_path(idx)
         except Exception as e:
             if verbose:
-                print(f"    Failed: {e}")
+                logger.warning("Failed: %s", e)
             failed.append(idx)
 
     return {

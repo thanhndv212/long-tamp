@@ -17,6 +17,10 @@ from typing import Optional
 
 import numpy as np
 
+from agimus_spacelab.logging import get_logger
+
+logger = get_logger("visualization.video_recorder")
+
 
 def default_video_output_dir() -> str:
     """Default directory for video-recording output.
@@ -143,7 +147,7 @@ class VideoRecorder:
         )
 
         # Start capture using gepetto-viewer-corba API
-        print(f"[VideoRecorder] Starting recording: {self._video_file}")
+        logger.info("Starting recording: %s", self._video_file)
         self.viewer.client.gui.startCapture(
             self.viewer.windowId, self._frame_prefix, self.frame_extension
         )
@@ -163,7 +167,7 @@ class VideoRecorder:
 
         # Stop frame capture
         self.viewer.client.gui.stopCapture(self.viewer.windowId)
-        print("[VideoRecorder] Stopped frame capture")
+        logger.info("Stopped frame capture")
 
         self._recording = False
 
@@ -227,8 +231,8 @@ class VideoRecorder:
 
         total_time = path.length()
         n_frames = max(2, int(total_time / speed * self.framerate))
-        print(
-            f"[VideoRecorder] Capturing {n_frames} viser frames (path length {total_time:.3f} s)..."
+        logger.info(
+            "Capturing %d viser frames (path length %.3f s)...", n_frames, total_time
         )
 
         for i, t in enumerate(np.linspace(0.0, total_time, n_frames)):
@@ -249,7 +253,7 @@ class VideoRecorder:
             frame_path = f"{self._frame_prefix}_{i}.{self.frame_extension}"
             img.save(frame_path)
 
-        print(f"[VideoRecorder] Encoding video: {self._video_file}")
+        logger.info("Encoding video: %s", self._video_file)
         self._encode_video()
         return self._video_file
 
@@ -268,13 +272,16 @@ class VideoRecorder:
                 check=True,
             )
         except (subprocess.CalledProcessError, FileNotFoundError):
-            print(
-                "[VideoRecorder] Warning: ffmpeg not found. Frames saved but video not encoded."
+            logger.warning(
+                "ffmpeg not found. Frames saved but video not encoded."
             )
-            print(f"[VideoRecorder] Frame pattern: {frame_pattern}")
-            print("[VideoRecorder] You can manually encode with:")
-            print(
-                f"  ffmpeg -r {self.framerate} -i {frame_pattern} -c:v libx264 -pix_fmt yuv420p {self._video_file}"
+            logger.warning("Frame pattern: %s", frame_pattern)
+            logger.warning(
+                "You can manually encode with: "
+                "ffmpeg -r %s -i %s -c:v libx264 -pix_fmt yuv420p %s",
+                self.framerate,
+                frame_pattern,
+                self._video_file,
             )
             return
 
@@ -295,18 +302,20 @@ class VideoRecorder:
             self._video_file,
         ]
 
-        print("[VideoRecorder] Encoding video with ffmpeg...")
+        logger.info("Encoding video with ffmpeg...")
         try:
             subprocess.run(cmd, capture_output=True, text=True, check=True)
-            print(f"[VideoRecorder] Video saved: {self._video_file}")
+            logger.info("Video saved: %s", self._video_file)
 
             # Auto cleanup frames if enabled
             if self.auto_cleanup:
                 self._cleanup_frames()
         except subprocess.CalledProcessError as e:
-            print(f"[VideoRecorder] Error encoding video: {e.stderr}")
-            print(
-                f"[VideoRecorder] Frames preserved at: {self._frame_prefix}_*.{self.frame_extension}"
+            logger.error("Error encoding video: %s", e.stderr)
+            logger.error(
+                "Frames preserved at: %s_*.%s",
+                self._frame_prefix,
+                self.frame_extension,
             )
 
     def _cleanup_frames(self):
@@ -314,14 +323,12 @@ class VideoRecorder:
         frame_files = glob.glob(f"{self._frame_prefix}_*.{self.frame_extension}")
 
         if frame_files:
-            print(f"[VideoRecorder] Cleaning up {len(frame_files)} frame files...")
+            logger.info("Cleaning up %d frame files...", len(frame_files))
             for frame_file in frame_files:
                 try:
                     os.remove(frame_file)
                 except OSError as e:
-                    print(
-                        f"[VideoRecorder] Warning: Could not remove {frame_file}: {e}"
-                    )
+                    logger.warning("Could not remove %s: %s", frame_file, e)
 
     @property
     def is_recording(self) -> bool:

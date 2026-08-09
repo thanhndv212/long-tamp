@@ -7,7 +7,10 @@ Provides SceneBuilder for loading robots, environment, and objects.
 
 from typing import Any, Dict, List, Optional, Tuple
 
+from agimus_spacelab.logging import get_logger
 from agimus_spacelab.planning import create_planner
+
+logger = get_logger("planning.scene")
 
 # Import unified backend interfaces
 try:
@@ -89,7 +92,7 @@ class SceneBuilder:
         self, composite_names: List[str], robot_names: List[str]
     ) -> "SceneBuilder":
         """Load the composite robot (UR10 + VISPA)."""
-        print(f"   Loading robot ({robot_names})...")
+        logger.info("Loading robot (%s)...", robot_names)
         for id, rb_name in enumerate(robot_names):
             if rb_name in self.FILE_PATHS["robot"]:
                 self.planner.load_robot(
@@ -100,25 +103,27 @@ class SceneBuilder:
                     composite_name=composite_names[id],
                 )
             else:
-                print(f"      ⚠ Unknown robot: {rb_name}")
+                logger.warning("Unknown robot: %s", rb_name)
         return self
 
     def load_environment(
         self, environment_names: List[str], pose=None
     ) -> "SceneBuilder":
         """Load the environment (dispenser, ground, etc.)."""
-        print(f"   Loading environment ({environment_names})...")
+        logger.info("Loading environment (%s)...", environment_names)
         for id, env_name in enumerate(environment_names):
             if env_name in self.FILE_PATHS["environment"]:
-                print(f"      Loading environment: {env_name}")
-                print(f"         from: {self.FILE_PATHS['environment'][env_name]}")
+                logger.debug("Loading environment: %s", env_name)
+                logger.debug(
+                    "  from: %s", self.FILE_PATHS["environment"][env_name]
+                )
                 self.planner.load_environment(
                     name=env_name,
                     urdf_path=self.FILE_PATHS["environment"][env_name],
                     pose=pose[id] if pose is not None else None,
                 )
             else:
-                print(f"      ⚠ Unknown environment: {env_name}")
+                logger.warning("Unknown environment: %s", env_name)
         return self
 
     def load_objects(self, object_names: List[str]) -> "SceneBuilder":
@@ -128,10 +133,10 @@ class SceneBuilder:
         Args:
             object_names: List of object names to load
         """
-        print(f"   Loading {len(object_names)} object(s)...")
+        logger.info("Loading %d object(s)...", len(object_names))
         for obj_name in object_names:
             if obj_name not in self.FILE_PATHS["objects"]:
-                print(f"      ⚠ Unknown object: {obj_name}")
+                logger.warning("Unknown object: %s", obj_name)
                 continue
 
             obj_config = self.FILE_PATHS["objects"][obj_name]
@@ -158,7 +163,7 @@ class SceneBuilder:
 
     def set_joint_bounds(self) -> "SceneBuilder":
         """Set joint bounds for all loaded freeflyer objects."""
-        print("   Setting joint bounds...")
+        logger.info("Setting joint bounds...")
         bounds = self.joint_bounds.freeflyer_bounds()
 
         for obj_name in self.loaded_objects:
@@ -171,7 +176,7 @@ class SceneBuilder:
         self, validation_step: float = 0.01, projector_step: float = 0.1
     ) -> "SceneBuilder":
         """Configure path validation parameters."""
-        print("   Configuring path validation...")
+        logger.info("Configuring path validation...")
         self.planner.configure_path_validation(
             validation_step=validation_step, projector_step=projector_step
         )
@@ -193,7 +198,7 @@ class SceneBuilder:
             remove_collision: Remove from collision checking
             remove_distance: Remove from distance checking
         """
-        print(f"   Disabling collision: {obstacle_name} <-> {joint_name}")
+        logger.info("Disabling collision: %s <-> %s", obstacle_name, joint_name)
         if self.backend == "corba":
             ps = self.planner.get_problem()
             ps.removeObstacleFromJoint(
@@ -210,8 +215,8 @@ class SceneBuilder:
             try:
                 from pinocchio import CollisionPair
             except ImportError:
-                print(
-                    "      [warn] pinocchio not available; cannot remove collision pairs"
+                logger.warning(
+                    "pinocchio not available; cannot remove collision pairs"
                 )
                 return self
 
@@ -226,7 +231,7 @@ class SceneBuilder:
                 )
             ]
             if not obs_ids:
-                print(f"      [warn] no geometry found matching {obstacle_name!r}")
+                logger.warning("No geometry found matching %r", obstacle_name)
 
             # Resolve joint_name → pinocchio joint index
             joint_id = None
@@ -236,7 +241,7 @@ class SceneBuilder:
                 fid = m.getFrameId(joint_name)
                 joint_id = int(m.frames[fid].parentJoint)
             if joint_id is None:
-                print(f"      [warn] {joint_name!r} not found in device model")
+                logger.warning("%r not found in device model", joint_name)
                 return self
 
             # Find geometry objects directly attached to this joint
@@ -256,9 +261,11 @@ class SceneBuilder:
                     if gm.existCollisionPair(cp):
                         gm.removeCollisionPair(cp)
                         removed += 1
-            print(
-                f"      [pyhpp] removed {removed} collision pair(s) "
-                f"({obstacle_name!r} <-> {joint_name!r})"
+            logger.info(
+                "[pyhpp] removed %d collision pair(s) (%r <-> %r)",
+                removed,
+                obstacle_name,
+                joint_name,
             )
         return self
 
@@ -287,8 +294,10 @@ class SceneBuilder:
             obstacle_root_joint: Root joint of the obstacle/object (e.g.
                 `frame_gripper/root_joint`). Child joints are included.
         """
-        print(
-            f"   Disabling collisions (subtrees): {robot_frame_or_joint} <-> {obstacle_root_joint}"
+        logger.info(
+            "Disabling collisions (subtrees): %s <-> %s",
+            robot_frame_or_joint,
+            obstacle_root_joint,
         )
 
         if self.backend == "pyhpp":
@@ -329,9 +338,7 @@ class SceneBuilder:
         try:
             from pinocchio import CollisionPair
         except ImportError:
-            print(
-                "      [warn] pinocchio not available; cannot remove collision pairs"
-            )
+            logger.warning("pinocchio not available; cannot remove collision pairs")
             return self
 
         def _resolve_joint_id(name):
@@ -384,22 +391,20 @@ class SceneBuilder:
         obs_geom_ids = _geom_ids_for(obstacle_root_joint)
 
         if not robot_geom_ids:
-            print(f"      [warn] no geometry found for {robot_frame_or_joint!r}")
+            logger.warning("No geometry found for %r", robot_frame_or_joint)
             return self
         if not obs_geom_ids:
-            print(f"      [warn] no geometry found for {obstacle_root_joint!r}")
+            logger.warning("No geometry found for %r", obstacle_root_joint)
             return self
 
         if verbose:
             robot_names = [gm.geometryObjects[i].name for i in robot_geom_ids]
             obs_names = [gm.geometryObjects[i].name for i in obs_geom_ids]
-            print(
-                f"      Robot geoms ({len(robot_geom_ids)}): "
-                f"{robot_names[:max_pairs]}"
+            logger.debug(
+                "Robot geoms (%d): %s", len(robot_geom_ids), robot_names[:max_pairs]
             )
-            print(
-                f"      Obstacle geoms ({len(obs_geom_ids)}): "
-                f"{obs_names[:max_pairs]}"
+            logger.debug(
+                "Obstacle geoms (%d): %s", len(obs_geom_ids), obs_names[:max_pairs]
             )
 
         removed = 0
@@ -411,10 +416,11 @@ class SceneBuilder:
                 if gm.existCollisionPair(cp):
                     gm.removeCollisionPair(cp)
                     removed += 1
-        print(
-            f"      [pyhpp] removed {removed} collision pair(s) between "
-            f"{robot_frame_or_joint!r} subtree and "
-            f"{obstacle_root_joint!r} subtree"
+        logger.info(
+            "[pyhpp] removed %d collision pair(s) between %r subtree and %r subtree",
+            removed,
+            robot_frame_or_joint,
+            obstacle_root_joint,
         )
         return self
 
@@ -480,13 +486,15 @@ class SceneBuilder:
 
         before_pairs: List[tuple[str, str]] = _pairs_between_by_prefix()
         if verbose:
-            print(f"      Robot joints: {robot_joints}")
-            print(f"      Target obstacle prefix: {obstacle_prefix}")
-            print(f"      Found {len(before_pairs)} existing collision pairs to filter")
+            logger.debug("Robot joints: %s", robot_joints)
+            logger.debug("Target obstacle prefix: %s", obstacle_prefix)
+            logger.debug(
+                "Found %d existing collision pairs to filter", len(before_pairs)
+            )
             for rj, obj in before_pairs[:max_pairs]:
-                print(f"        - {rj} <-> {obj}")
+                logger.debug("  - %s <-> %s", rj, obj)
             if len(before_pairs) > max_pairs:
-                print(f"        ... ({len(before_pairs) - max_pairs} more)")
+                logger.debug("  ... (%d more)", len(before_pairs) - max_pairs)
 
         removed = 0
         for rj, obj in before_pairs:
@@ -497,15 +505,15 @@ class SceneBuilder:
                 continue
 
         if verbose:
-            print(f"      removeObstacleFromJoint calls attempted: {removed}")
+            logger.debug("removeObstacleFromJoint calls attempted: %d", removed)
             after_pairs = _pairs_between_by_prefix()
-            print(
-                f"      Remaining collision pairs after filtering: {len(after_pairs)}"
+            logger.debug(
+                "Remaining collision pairs after filtering: %d", len(after_pairs)
             )
             for rj, obj in after_pairs[:max_pairs]:
-                print(f"        - {rj} <-> {obj}")
+                logger.debug("  - %s <-> %s", rj, obj)
             if len(after_pairs) > max_pairs:
-                print(f"        ... ({len(after_pairs) - max_pairs} more)")
+                logger.debug("  ... (%d more)", len(after_pairs) - max_pairs)
 
         return self
 
@@ -526,9 +534,9 @@ class SceneBuilder:
             # PYHPP-GAP: pyhpp Problem has no moveObstacle binding.
             # Obstacle placement must be set before building the problem
             # via the pinocchio model's placement map.
-            print(
-                f"      [PYHPP-GAP] move_obstacle({obstacle_name!r})"
-                " is not yet implemented for PyHPP."
+            logger.warning(
+                "[PYHPP-GAP] move_obstacle(%r) is not yet implemented for PyHPP.",
+                obstacle_name,
             )
         return self
 
@@ -563,7 +571,7 @@ class SceneBuilder:
         Returns:
             Tuple of (planner, robot, ps)
         """
-        print("\n1. Setting up scene...")
+        logger.info("1. Setting up scene...")
         (
             self.load_robot(composite_names=composite_names, robot_names=robot_names)
             .load_environment(environment_names=environment_names)
@@ -572,7 +580,7 @@ class SceneBuilder:
             .configure_path_validation(validation_step, projector_step)
         )
 
-        print("   ✓ Scene setup complete")
+        logger.info("✓ Scene setup complete")
         return self.get_instances()
 
 

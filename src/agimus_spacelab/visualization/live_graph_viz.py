@@ -21,7 +21,10 @@ except ImportError:
     gt = None
     GraphWindow = None
 
+from agimus_spacelab.logging import get_logger
 from agimus_spacelab.planning.graph import GraphBuilder
+
+logger = get_logger("visualization.live_graph_viz")
 
 
 class LiveConstraintGraphVisualizer:
@@ -125,8 +128,10 @@ class LiveConstraintGraphVisualizer:
         self.edge_text = self.gt_graph.new_edge_property("string")
 
         # Add vertices (states)
-        print(
-            f"Building graph with {len(states)} states and {len(edge_topology)} edges..."
+        logger.info(
+            "Building graph with %d states and %d edges...",
+            len(states),
+            len(edge_topology),
         )
         for state_name in states.keys():
             v = self.gt_graph.add_vertex()
@@ -152,8 +157,11 @@ class LiveConstraintGraphVisualizer:
                 from_state not in self.state_to_vertex
                 or to_state not in self.state_to_vertex
             ):
-                print(
-                    f"Warning: Edge {edge_name} references unknown states: {from_state} -> {to_state}"
+                logger.warning(
+                    "Edge %s references unknown states: %s -> %s",
+                    edge_name,
+                    from_state,
+                    to_state,
                 )
                 continue
 
@@ -172,8 +180,10 @@ class LiveConstraintGraphVisualizer:
 
             edges_added += 1
 
-        print(
-            f"Graph built successfully: {self.gt_graph.num_vertices()} vertices, {self.gt_graph.num_edges()} edges"
+        logger.info(
+            "Graph built successfully: %d vertices, %d edges",
+            self.gt_graph.num_vertices(),
+            self.gt_graph.num_edges(),
         )
 
     def _format_state_name(self, state_name: str) -> str:
@@ -217,7 +227,7 @@ class LiveConstraintGraphVisualizer:
 
     def compute_layout(self) -> gt.VertexPropertyMap:
         """Compute graph layout using SFDP algorithm."""
-        print("Computing SFDP layout (this may take a moment for large graphs)...")
+        logger.info("Computing SFDP layout (this may take a moment for large graphs)...")
 
         # SFDP works well for hierarchical constraint graphs
         # Use higher K for more spacing between nodes
@@ -231,7 +241,7 @@ class LiveConstraintGraphVisualizer:
             max_iter=1000,  # Maximum iterations
         )
 
-        print("Layout computed successfully")
+        logger.info("Layout computed successfully")
         return pos
 
     def show(self, blocking: bool = False) -> None:
@@ -247,7 +257,7 @@ class LiveConstraintGraphVisualizer:
         if self.pos is None:
             self.pos = self.compute_layout()
 
-        print("Opening interactive graph window...")
+        logger.info("Opening interactive graph window...")
 
         # Initialize GTK
         import threading
@@ -293,7 +303,7 @@ class LiveConstraintGraphVisualizer:
         elif hasattr(self.window, "show"):
             self.window.show()
 
-        print(
+        logger.info(
             "Graph window opened. You can now zoom, pan, and interact with the graph."
         )
 
@@ -332,7 +342,7 @@ class LiveConstraintGraphVisualizer:
                 self.vertex_halo_color[v] = self.colors["halo_current"]
                 self.vertex_size[v] = 12  # Larger for current state
 
-                print(f"Current state: {state_name}")
+                logger.info("Current state: %s", state_name)
 
             # Refresh display
             self._refresh_display()
@@ -347,7 +357,7 @@ class LiveConstraintGraphVisualizer:
         """
         with self._update_lock:
             if edge_name not in self.edge_name_to_edge:
-                print(f"Warning: Edge {edge_name} not found in graph")
+                logger.warning("Edge %s not found in graph", edge_name)
                 return
 
             e = self.edge_name_to_edge[edge_name]
@@ -357,11 +367,11 @@ class LiveConstraintGraphVisualizer:
                 self.edge_pen_width[e] = 3.0
                 if edge_name not in self.traversed_edges:
                     self.traversed_edges.append(edge_name)
-                print(f"Edge traversed: {edge_name}")
+                logger.info("Edge traversed: %s", edge_name)
             else:
                 self.edge_color[e] = self.colors["edge_active"]
                 self.edge_pen_width[e] = 5.0
-                print(f"Edge active: {edge_name}")
+                logger.info("Edge active: %s", edge_name)
 
             self.current_edge = edge_name
 
@@ -385,7 +395,7 @@ class LiveConstraintGraphVisualizer:
             self.current_edge = None
             self.traversed_edges = []
 
-            print("Highlights reset")
+            logger.info("Highlights reset")
             self._refresh_display()
 
     def _refresh_display(self) -> None:
@@ -404,7 +414,7 @@ class LiveConstraintGraphVisualizer:
                 while Gtk.events_pending():
                     Gtk.main_iteration_do(False)
             except Exception as e:
-                print(f"Warning: Failed to refresh display: {e}")
+                logger.warning("Failed to refresh display: %s", e)
 
     def get_state_update_callback(self) -> Callable[[str], None]:
         """
@@ -507,7 +517,7 @@ class LivePathPlayer:
             length = _end * full_length
             t = _start * full_length
 
-            print(f"Playing path {path_id} via CORBA (length: {length:.2f})")
+            logger.info("Playing path %d via CORBA (length: %.2f)", path_id, length)
 
             while t < length:
                 step_start = time.time()
@@ -530,9 +540,8 @@ class LivePathPlayer:
             # ---- PyHPP path ----
             stored = self.path_player._stored_paths
             if path_id < 0 or path_id >= len(stored):
-                print(
-                    f"[LivePathPlayer] Invalid path_id {path_id} "
-                    f"(stored: {len(stored)})"
+                logger.warning(
+                    "Invalid path_id %d (stored: %d)", path_id, len(stored)
                 )
                 return
 
@@ -545,7 +554,7 @@ class LivePathPlayer:
             length = path.length()
             t = 0.0
 
-            print(f"Playing path {path_id} via PyHPP (length: {length:.2f})")
+            logger.info("Playing path %d via PyHPP (length: %.2f)", path_id, length)
 
             while t <= length:
                 step_start = time.time()
@@ -563,17 +572,17 @@ class LivePathPlayer:
                     time.sleep(dt - elapsed)
 
         else:
-            print(
-                "[LivePathPlayer] Unsupported path_player type: "
-                f"{type(self.path_player).__name__}. "
+            logger.warning(
+                "Unsupported path_player type: %s. "
                 "Expected CORBA PathPlayer (with .client) or "
-                "PyHPP backend (with ._stored_paths)."
+                "PyHPP backend (with ._stored_paths).",
+                type(self.path_player).__name__,
             )
 
         # Mark edge as traversed
         if edge_name:
             self.edge_callback(edge_name, True)  # Traversed
-            print(f"Path {path_id} completed")
+            logger.info("Path %d completed", path_id)
 
     def _detect_state(
         self,

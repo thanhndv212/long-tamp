@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from agimus_spacelab.logging import get_logger
+
 # Import transformation utilities
 # NOTE: InitialConfigurations is imported lazily inside build_robot_config()
 # and build_object_configs() so that importing this module does not
@@ -19,6 +21,8 @@ try:
     from agimus_spacelab.utils import xyzrpy_to_xyzquat
 except ImportError:
     xyzrpy_to_xyzquat = None
+
+logger = get_logger("planning.config")
 
 
 def bfs_edge_path(
@@ -199,9 +203,9 @@ class ConfigGenerator:
 
         if verbose:
             if is_valid:
-                print("       ✓ Configuration is valid")
+                logger.debug("✓ Configuration is valid")
             else:
-                print(f"       ⚠ Configuration invalid: {error_msg}")
+                logger.debug("⚠ Configuration invalid: %s", error_msg)
 
         return is_valid, error_msg
 
@@ -267,9 +271,11 @@ class ConfigGenerator:
                 if is_valid:
                     if config_label:
                         self.configs[config_label] = config
-                        print(
-                            f"       ✓ SUCCESS   {config_label} projected onto node "
-                            f"'{node_name}' after {attempt + 1} attempts"
+                        logger.info(
+                            "✓ SUCCESS   %s projected onto node '%s' after %d attempts",
+                            config_label,
+                            node_name,
+                            attempt + 1,
                         )
                     return True, config
                 last_valid_err = valid_err
@@ -278,9 +284,10 @@ class ConfigGenerator:
         if config_label:
             self.configs[config_label] = list(q)
             if verbose:
-                print(
-                    f"       ⚠ Projection onto node FAILED: {node_name} "
-                    f"({last_valid_err or last_err or 'unknown'})"
+                logger.warning(
+                    "⚠ Projection onto node FAILED: %s (%s)",
+                    node_name,
+                    last_valid_err or last_err or "unknown",
                 )
 
         return False, list(q)
@@ -324,11 +331,14 @@ class ConfigGenerator:
         for i in range(self.max_attempts):
             if timeout is not None and (time.time() - _t_start) > timeout:
                 if verbose:
-                    print(
-                        f"       ⚠ Generation via edge TIMED OUT: {edge_name} "
-                        f"after {i} attempts / {timeout:.0f}s "
-                        f"({n_solver_fail} solver-failed, "
-                        f"{n_collision_invalid} invalid/in-collision)"
+                    logger.warning(
+                        "⚠ Generation via edge TIMED OUT: %s after %d attempts "
+                        "/ %.0fs (%d solver-failed, %d invalid/in-collision)",
+                        edge_name,
+                        i,
+                        timeout,
+                        n_solver_fail,
+                        n_collision_invalid,
                     )
                 return False, None
             use_hint = i == 0 and q_hint is not None
@@ -351,19 +361,22 @@ class ConfigGenerator:
 
             if config_label:
                 self.configs[config_label] = config
-                print(
-                    f"       ✓ SUCCESS {config_label} generated via edge "
-                    f"'{edge_name}' after {i + 1} attempts"
+                logger.info(
+                    "✓ SUCCESS %s generated via edge '%s' after %d attempts",
+                    config_label,
+                    edge_name,
+                    i + 1,
                 )
             return True, config
 
         if config_label and verbose:
-            print(
-                f"       ⚠ Generation via edge FAILED: {edge_name} "
-                f"({last_valid_err or last_err or 'unknown'})"
+            logger.warning(
+                "⚠ Generation via edge FAILED: %s (%s)",
+                edge_name,
+                last_valid_err or last_err or "unknown",
             )
-            # Diagnostic: print solver details on failure
-            self._print_edge_failure_diagnostics(
+            # Diagnostic: log solver details on failure
+            self._log_edge_failure_diagnostics(
                 edge_name, q_from, q_hint, last_err, last_valid_err
             )
         return False, None
@@ -461,31 +474,32 @@ class ConfigGenerator:
     def _check_config_finite(
         self, config: Optional[List[float]], edge_name: str, attempt_idx: int
     ) -> bool:
-        """Debug-print `config` and check it contains no NaN/inf values.
+        """Debug-log `config` and check it contains no NaN/inf values.
 
         Only called when verbose=True (see generate_via_edge) -- matches
         the original inline behavior exactly, including that the finite
         check itself was only ever performed under verbose=True.
         """
-        print(
-            f"       [DEBUG] Generated config via edge '{edge_name}' "
-            f"(attempt {attempt_idx + 1}):"
+        logger.debug(
+            "[DEBUG] Generated config via edge '%s' (attempt %d):",
+            edge_name,
+            attempt_idx + 1,
         )
-        print(f"         config = {config}")
+        logger.debug("  config = %s", config)
         if config is None:
-            print("         [ERROR] Config is None!")
+            logger.error("[ERROR] Config is None!")
             return False
         config_arr = np.array(config)
         if not np.all(np.isfinite(config_arr)):
-            print(f"         [ERROR] Config contains non-finite values: {config_arr}")
-            # Print offending indices and values
+            logger.error("[ERROR] Config contains non-finite values: %s", config_arr)
+            # Log offending indices and values
             for idx, val in enumerate(config_arr):
                 if not np.isfinite(val):
-                    print(f"           [BAD] idx={idx}, value={val}")
+                    logger.error("  [BAD] idx=%d, value=%s", idx, val)
             return False
         return True
 
-    def _print_edge_failure_diagnostics(
+    def _log_edge_failure_diagnostics(
         self,
         edge_name,
         q_from,
@@ -493,26 +507,28 @@ class ConfigGenerator:
         last_err,
         last_valid_err,
     ):
-        """Print diagnostic info when generate_via_edge exhausts all attempts."""
-        print(f"       --- Edge failure diagnostics for '{edge_name}' ---")
-        print(f"       Last solver residual: {last_err}")
-        print(f"       Last validity error: {last_valid_err}")
+        """Log diagnostic info when generate_via_edge exhausts all attempts."""
+        logger.debug("--- Edge failure diagnostics for '%s' ---", edge_name)
+        logger.debug("Last solver residual: %s", last_err)
+        logger.debug("Last validity error: %s", last_valid_err)
         if q_hint is not None:
             q_from_arr = np.array(q_from, dtype=float)
             q_hint_arr = np.array(q_hint, dtype=float)
             diff = np.abs(q_hint_arr - q_from_arr)
             sig = np.where(diff > 1e-6)[0]
             if len(sig) > 0:
-                print(f"       q_hint vs q_from differ at {len(sig)} DOFs:")
+                logger.debug("q_hint vs q_from differ at %d DOFs:", len(sig))
                 for idx in sig[:20]:  # cap output
-                    print(
-                        f"         [{idx}] q_from={q_from_arr[idx]:.6f}  "
-                        f"q_hint={q_hint_arr[idx]:.6f}  "
-                        f"delta={diff[idx]:.6f}"
+                    logger.debug(
+                        "  [%d] q_from=%.6f  q_hint=%.6f  delta=%.6f",
+                        idx,
+                        q_from_arr[idx],
+                        q_hint_arr[idx],
+                        diff[idx],
                     )
             else:
-                print(
-                    "       q_hint == q_from (identical — cached pregrasp not available)"
+                logger.debug(
+                    "q_hint == q_from (identical — cached pregrasp not available)"
                 )
         # Try applying targetConstraint of the edge to diagnose residuals
         # Use targetConstraint (end-state constraints) rather than
@@ -540,13 +556,15 @@ class ConfigGenerator:
                                 proj.rightHandSideFromConfig(q_from_arr)
                                 ok_from = proj.apply(q_test_from)
                                 res_from = proj.residualError()
-                                print(
-                                    f"       targetConstraint.apply(q_from):  "
-                                    f"residual={res_from:.6e}, success={ok_from}"
+                                logger.debug(
+                                    "targetConstraint.apply(q_from):  "
+                                    "residual=%.6e, success=%s",
+                                    res_from,
+                                    ok_from,
                                 )
                             except Exception as de:
-                                print(
-                                    f"       targetConstraint.apply(q_from) failed: {de}"
+                                logger.debug(
+                                    "targetConstraint.apply(q_from) failed: %s", de
                                 )
                             # Test 2: apply to q_hint if different from q_from
                             if q_hint is not None:
@@ -557,17 +575,20 @@ class ConfigGenerator:
                                         proj.rightHandSideFromConfig(q_from_arr)
                                         ok_hint = proj.apply(q_test_hint)
                                         res_hint = proj.residualError()
-                                        print(
-                                            f"       targetConstraint.apply(q_hint): "
-                                            f"residual={res_hint:.6e}, success={ok_hint}"
+                                        logger.debug(
+                                            "targetConstraint.apply(q_hint): "
+                                            "residual=%.6e, success=%s",
+                                            res_hint,
+                                            ok_hint,
                                         )
                                     except Exception as de2:
-                                        print(
-                                            f"       targetConstraint.apply(q_hint) failed: {de2}"
+                                        logger.debug(
+                                            "targetConstraint.apply(q_hint) failed: %s",
+                                            de2,
                                         )
         except Exception as e:
-            print(f"       Could not retrieve edge constraints: {e}")
-        print("       --- End diagnostics ---")
+            logger.debug("Could not retrieve edge constraints: %s", e)
+        logger.debug("--- End diagnostics ---")
 
 
 # Alias for backward compatibility
