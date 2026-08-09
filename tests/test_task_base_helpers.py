@@ -352,3 +352,236 @@ class TestBuildResult:
         task.graph = None
         result = task._build_result({})
         assert result["viewer"] is None
+
+
+class _FakeTaskConfig:
+    """Minimal attribute-bag standing in for a task_config object.
+
+    Only the fields the configure_* helpers look up are set; absent fields
+    are intentionally missing so hasattr() returns False, mirroring a real
+    config that doesn't define them.
+    """
+
+    def __init__(self, **attrs):
+        for k, v in attrs.items():
+            setattr(self, k, v)
+
+
+class _RecordingPlanner:
+    """Planner double that records configure_* calls and their kwargs."""
+
+    def __init__(self, has_optimizer=True, has_time_param=True):
+        self.configure_transition_planner_calls = []
+        self.configure_time_parameterization_method_calls = []
+        if has_optimizer:
+            self.configure_transition_planner = self._opt
+        if has_time_param:
+            self.configure_time_parameterization_method = self._tp
+
+    def _opt(self, **kwargs):
+        self.configure_transition_planner_calls.append(kwargs)
+
+    def _tp(self, **kwargs):
+        self.configure_time_parameterization_method_calls.append(kwargs)
+
+
+def _make_setup_task(task_config=None, planner=None, run_logger=None,
+                     use_factory=False, q_init=None):
+    """Bare ManipulationTask for setup-helper tests.
+
+    The setup helpers read self.task_config / self.planner / self.run_logger /
+    self.use_factory / self.q_init / self.ps / self.robot / self.backend /
+    self.task_name / self.pyhpp_constraints. Only the attributes a given test
+    touches need to be set.
+    """
+    task = object.__new__(_ConcreteTask)
+    task.task_config = task_config
+    task.planner = planner
+    task.run_logger = run_logger
+    task.use_factory = use_factory
+    task.q_init = q_init
+    task.backend = "pyhpp"
+    task.task_name = "test-task"
+    return task
+
+
+class TestApplyOptimizerConfig:
+    def test_forwards_present_fields_as_kwargs(self):
+        cfg = _FakeTaskConfig(
+            RANDOM_SHORTCUT_LOOPS=50,
+            SPLINE_ZERO_DERIVATIVES_AT_STATE=True,
+        )
+        planner = _RecordingPlanner()
+        task = _make_setup_task(task_config=cfg, planner=planner)
+        task._apply_optimizer_config()
+        assert planner.configure_transition_planner_calls == [
+            {"random_shortcut_loops": 50, "spline_zero_derivatives_at_state": True}
+        ]
+
+    def test_no_fields_means_no_call(self):
+        cfg = _FakeTaskConfig()  # neither field present
+        planner = _RecordingPlanner()
+        task = _make_setup_task(task_config=cfg, planner=planner)
+        task._apply_optimizer_config()
+        assert planner.configure_transition_planner_calls == []
+
+    def test_none_task_config_is_noop(self):
+        planner = _RecordingPlanner()
+        task = _make_setup_task(task_config=None, planner=planner)
+        task._apply_optimizer_config()
+        assert planner.configure_transition_planner_calls == []
+
+    def test_planner_without_method_is_noop(self):
+        cfg = _FakeTaskConfig(RANDOM_SHORTCUT_LOOPS=50)
+        planner = _RecordingPlanner(has_optimizer=False)
+        task = _make_setup_task(task_config=cfg, planner=planner)
+        task._apply_optimizer_config()  # must not raise
+        assert not hasattr(planner, "configure_transition_planner")
+
+
+class TestApplyTimeParameterizationConfig:
+    def test_forwards_present_fields_as_kwargs(self):
+        cfg = _FakeTaskConfig(
+            TIME_PARAM_METHOD="toppra",
+            TOPPRA_VELOCITY_SCALE=0.9,
+            TOPPRA_N=501,
+        )
+        planner = _RecordingPlanner()
+        task = _make_setup_task(task_config=cfg, planner=planner)
+        task._apply_time_parameterization_config()
+        assert planner.configure_time_parameterization_method_calls == [
+            {"method": "toppra", "toppra_velocity_scale": 0.9, "toppra_N": 501}
+        ]
+
+    def test_no_fields_means_no_call(self):
+        cfg = _FakeTaskConfig()
+        planner = _RecordingPlanner()
+        task = _make_setup_task(task_config=cfg, planner=planner)
+        task._apply_time_parameterization_config()
+        assert planner.configure_time_parameterization_method_calls == []
+
+    def test_none_task_config_is_noop(self):
+        planner = _RecordingPlanner()
+        task = _make_setup_task(task_config=None, planner=planner)
+        task._apply_time_parameterization_config()
+        assert planner.configure_time_parameterization_method_calls == []
+
+    def test_planner_without_method_is_noop(self):
+        cfg = _FakeTaskConfig(TIME_PARAM_METHOD="trapezoidal")
+        planner = _RecordingPlanner(has_time_param=False)
+        task = _make_setup_task(task_config=cfg, planner=planner)
+        task._apply_time_parameterization_config()  # must not raise
+        assert not hasattr(planner, "configure_time_parameterization_method")
+
+
+class _FakeRunLogger:
+    def __init__(self, raise_on_log=False):
+        self.log_calls = []
+        self._raise_on_log = raise_on_log
+
+    def log_task_config(self, **kwargs):
+        if self._raise_on_log:
+            raise RuntimeError("logger exploded")
+        self.log_calls.append(kwargs)
+
+
+class TestLogSetupSnapshot:
+    def test_no_logger_is_noop(self):
+        task = _make_setup_task(run_logger=None)
+        task._log_setup_snapshot({"validation_step": 0.01})  # must not raise
+
+    def test_logger_called_with_params(self):
+        logger = _FakeRunLogger()
+        task = _make_setup_task(run_logger=logger)
+        task.backend = "pyhpp"
+        task.task_name = "tn"
+        task.task_config = _FakeTaskConfig()
+        params = {"validation_step": 0.01, "skip_graph": False}
+        task._log_setup_snapshot(params)
+        assert len(logger.log_calls) == 1
+        call = logger.log_calls[0]
+        assert call["setup_params"] == params
+        assert call["backend"] == "pyhpp"
+        assert call["task_name"] == "tn"
+
+    def test_logger_exception_is_swallowed(self, capsys):
+        logger = _FakeRunLogger(raise_on_log=True)
+        task = _make_setup_task(run_logger=logger)
+        task.backend = "pyhpp"
+        task.task_name = "tn"
+        task.task_config = _FakeTaskConfig()
+        task._log_setup_snapshot({})  # must not raise
+
+
+class TestSetupLockedJointConstraints:
+    """Covers the pattern-resolution + ConstraintBuilder dispatch.
+
+    ConstraintBuilder.create_locked_joint_constraints is monkeypatched so no
+    real HPP/ps/robot is needed.
+    """
+
+    def test_explicit_patterns_return_constraints(self, monkeypatch, capsys):
+        captured = {}
+
+        def fake_create(ps, robot, q_ref, patterns, backend):
+            captured["patterns"] = patterns
+            return (["locked::j1", "locked::j2"], ["j1", "j2"])
+
+        monkeypatch.setattr(
+            "agimus_spacelab.tasks.base.ConstraintBuilder"
+            ".create_locked_joint_constraints",
+            staticmethod(fake_create),
+        )
+        task = _make_setup_task(q_init=[0.0, 0.0])
+        task.ps = "ps"
+        task.robot = "robot"
+        result = task._setup_locked_joint_constraints(["j1", "j2"])
+        assert result == ["locked::j1", "locked::j2"]
+        assert captured["patterns"] == ["j1", "j2"]
+        out = capsys.readouterr().out
+        assert "✓ Created locked joint constraints: j1, j2" in out
+
+    def test_empty_frozen_names_returns_none(self, monkeypatch):
+        monkeypatch.setattr(
+            "agimus_spacelab.tasks.base.ConstraintBuilder"
+            ".create_locked_joint_constraints",
+            staticmethod(lambda *a, **k: (["c"], [])),  # frozen_names empty
+        )
+        task = _make_setup_task(q_init=[0.0])
+        task.ps = "ps"
+        task.robot = "robot"
+        assert task._setup_locked_joint_constraints(["j1"]) is None
+
+    def test_no_patterns_returns_none(self):
+        task = _make_setup_task(use_factory=False)
+        # patterns=None, use_factory False -> no task_config fallback, no call
+        assert task._setup_locked_joint_constraints(None) is None
+
+    def test_patterns_from_task_config_when_factory_and_none_arg(
+        self, monkeypatch
+    ):
+        captured = {}
+
+        def fake_create(ps, robot, q_ref, patterns, backend):
+            captured["patterns"] = patterns
+            return (["c::x"], ["x"])
+
+        monkeypatch.setattr(
+            "agimus_spacelab.tasks.base.ConstraintBuilder"
+            ".create_locked_joint_constraints",
+            staticmethod(fake_create),
+        )
+        cfg = _FakeTaskConfig(FREEZE_JOINT_SUBSTRINGS=["x"])
+        task = _make_setup_task(task_config=cfg, use_factory=True, q_init=[0.0])
+        task.ps = "ps"
+        task.robot = "robot"
+        result = task._setup_locked_joint_constraints(None)
+        assert result == ["c::x"]
+        assert captured["patterns"] == ["x"]
+
+    def test_no_q_init_skips_constraint_creation(self):
+        # q_ref falsy -> the inner if q_ref: block is skipped
+        task = _make_setup_task(q_init=None)
+        task.ps = "ps"
+        task.robot = "robot"
+        assert task._setup_locked_joint_constraints(["j1"]) is None

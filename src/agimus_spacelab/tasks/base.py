@@ -289,21 +289,14 @@ class ManipulationTask(ABC):
         # Emit config snapshot so the full task configuration is captured
         # before any scene loading (crash-safe: even if setup fails later,
         # the snapshot has been flushed to the JSONL file).
-        if self.run_logger is not None:
-            try:
-                self.run_logger.log_task_config(
-                    task_config=self.task_config,
-                    setup_params={
-                        "validation_step": validation_step,
-                        "projector_step": projector_step,
-                        "freeze_joint_substrings": freeze_joint_substrings,
-                        "skip_graph": skip_graph,
-                    },
-                    backend=self.backend,
-                    task_name=self.task_name,
-                )
-            except Exception:
-                pass
+        self._log_setup_snapshot(
+            {
+                "validation_step": validation_step,
+                "projector_step": projector_step,
+                "freeze_joint_substrings": freeze_joint_substrings,
+                "skip_graph": skip_graph,
+            }
+        )
 
         # 1. Scene setup
         print("\n1. Setting up scene...")
@@ -320,6 +313,63 @@ class ManipulationTask(ABC):
 
         # Apply optimizer config from task_config (overrides backend defaults).
         # This wires YAML optimization: fields set via yaml_loader into the backend.
+        self._apply_optimizer_config()
+
+        # Apply time parameterization method config (stp / trapezoidal / toppra)
+        self._apply_time_parameterization_config()
+
+        # 2. Custom collision management
+        self.setup_collision_management()
+
+        # 3. Create constraints
+        print("\n2. Creating constraints...")
+        self.create_constraints()
+
+        # 4. Create locked joint constraints if requested (factory mode only)
+        # In manual mode, tasks typically handle joint freezing at config
+        # generation time via _freeze_unused_joints(), so we skip adding
+        # locked constraints to the graph which would conflict.
+        graph_constraints = self._setup_locked_joint_constraints(
+            freeze_joint_substrings
+        )
+
+        # Store for use by GraspSequencePlanner (phase graph rebuilding)
+        self._graph_constraints = graph_constraints
+
+        self._finalize_graph_setup(graph_constraints, skip_graph)
+
+        print("\n   ✓ Task setup complete")
+
+    def _log_setup_snapshot(self, setup_params: dict) -> None:
+        """Emit the task-config snapshot to the run logger.
+
+        Crash-safe: even if setup fails later, the snapshot has been flushed
+        to the JSONL file. No-op when no run logger is configured; any
+        logging error is swallowed so a logger failure can't break setup.
+
+        Args:
+            setup_params: dict of setup parameters to record alongside the
+                task config (validation_step, projector_step,
+                freeze_joint_substrings, skip_graph).
+        """
+        if self.run_logger is not None:
+            try:
+                self.run_logger.log_task_config(
+                    task_config=self.task_config,
+                    setup_params=setup_params,
+                    backend=self.backend,
+                    task_name=self.task_name,
+                )
+            except Exception:
+                pass
+
+    def _apply_optimizer_config(self) -> None:
+        """Apply optimizer config from task_config (overrides backend defaults).
+
+        Wires YAML optimization fields (set via yaml_loader) into the backend's
+        transition planner. Only fields present on task_config are forwarded;
+        no call is made if none are set or the planner lacks the method.
+        """
         if self.task_config is not None and hasattr(
             self.planner, "configure_transition_planner"
         ):
@@ -336,7 +386,16 @@ class ManipulationTask(ABC):
             if opt_kwargs:
                 self.planner.configure_transition_planner(**opt_kwargs)
 
-        # Apply time parameterization method config (stp / trapezoidal / toppra)
+    def _apply_time_parameterization_config(self) -> None:
+        """Apply time parameterization method config (stp / trapezoidal / toppra).
+
+        Forwards the TOPPRA/time-parameterization fields present on task_config
+        to the backend. No call is made if none are set or the planner lacks
+        the method. Kept as a separate named method from _apply_optimizer_config
+        (rather than generalized into a shared helper) per the refactor plan:
+        two call sites is thin justification for an abstraction layer, and the
+        configure method names differ per call.
+        """
         if self.task_config is not None and hasattr(
             self.planner, "configure_time_parameterization_method"
         ):
@@ -356,17 +415,26 @@ class ManipulationTask(ABC):
             if tp_kwargs:
                 self.planner.configure_time_parameterization_method(**tp_kwargs)
 
-        # 2. Custom collision management
-        self.setup_collision_management()
+    def _setup_locked_joint_constraints(
+        self, freeze_joint_substrings: Optional[List[str]] = None
+    ) -> Optional[List[str]]:
+        """Create locked joint constraints if requested (factory mode only).
 
-        # 3. Create constraints
-        print("\n2. Creating constraints...")
-        self.create_constraints()
+        In manual mode, tasks typically handle joint freezing at config
+        generation time via _freeze_unused_joints(), so we skip adding locked
+        constraints to the graph which would conflict.
 
-        # 4. Create locked joint constraints if requested (factory mode only)
-        # In manual mode, tasks typically handle joint freezing at config
-        # generation time via _freeze_unused_joints(), so we skip adding
-        # locked constraints to the graph which would conflict.
+        When ``freeze_joint_substrings`` is None and the task is in factory
+        mode, freeze patterns are read from task_config.FREEZE_JOINT_SUBSTRINGS
+        (set by the YAML loader).
+
+        Args:
+            freeze_joint_substrings: Joint name patterns to lock globally.
+
+        Returns:
+            List of constraint names to add before graph init, or None when no
+            locked joint constraints are created.
+        """
         graph_constraints = None
         patterns = freeze_joint_substrings
         if patterns is None and self.use_factory:
@@ -393,9 +461,17 @@ class ManipulationTask(ABC):
                     )
                     graph_constraints = constraint_names
 
-        # Store for use by GraspSequencePlanner (phase graph rebuilding)
-        self._graph_constraints = graph_constraints
+        return graph_constraints
 
+    def _finalize_graph_setup(
+        self, graph_constraints: Optional[List[str]], skip_graph: bool
+    ) -> None:
+        """Finalize graph setup: either skip (grasp-sequence mode) or build.
+
+        When ``skip_graph`` is True, initialize a graph-less GraphBuilder so
+        GraspSequencePlanner can build minimal phase graphs later. Otherwise
+        create the full constraint graph and initialize the ConfigGenerator.
+        """
         if skip_graph:
             # Skip graph creation for grasp sequence mode
             # GraspSequencePlanner will build minimal phase graphs
@@ -427,8 +503,6 @@ class ManipulationTask(ABC):
                 self.ps,
                 backend=self.backend,
             )
-
-        print("\n   ✓ Task setup complete")
 
     def _build_reference_config_for_locking(self) -> Optional[List[float]]:
         """Build a reference config for locked joint constraints.
