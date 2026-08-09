@@ -2002,99 +2002,7 @@ class PyHPPBackend(BackendBase):
 
         # Validate configurations before planning (if requested)
         if validate:
-            # PYHPP-WORKAROUND: Use graph.getNodesConnectedByTransition() to
-            # get the source/dest states for an edge, then validate configs
-            # with graph.getConfigErrorForState(state, q).
-            state_from = None
-            state_to = None
-
-            if self.graph is not None and hasattr(
-                self.graph, "getNodesConnectedByTransition"
-            ):
-                try:
-                    nodes = self.graph.getNodesConnectedByTransition(tr)
-                    if nodes and len(nodes) >= 2:
-                        # getNodesConnectedByTransition returns state names (str)
-                        # — convert to PyWState objects via getState()
-                        state_from = self.graph.getState(nodes[0])
-                        state_to = self.graph.getState(nodes[1])
-                except Exception as exc:
-                    print(
-                        f"      [TP] Warning: getNodesConnectedByTransition"
-                        f"('{edge_name}') failed: {exc}"
-                    )
-
-            has_states = state_from is not None and state_to is not None
-            if has_states:
-                state_from_name = (
-                    state_from.name()
-                    if hasattr(state_from, "name") and callable(state_from.name)
-                    else str(state_from)
-                )
-                state_to_name = (
-                    state_to.name()
-                    if hasattr(state_to, "name") and callable(state_to.name)
-                    else str(state_to)
-                )
-
-                # Validate q1 against source state
-                try:
-                    # getConfigErrorForState returns (error_vector, belongs)
-                    err_q1, _belongs_q1 = self.graph.getConfigErrorForState(
-                        state_from, q1_arr
-                    )
-                    error_q1_scalar = float(
-                        np.linalg.norm(np.asarray(err_q1, dtype=float))
-                    )
-                    threshold = float(self.graph.errorThreshold())
-                    success_q1 = error_q1_scalar < threshold
-                    print(
-                        f"      [TP] Validate q1 in state '{state_from_name}': "
-                        f"{'✓' if success_q1 else '✗'} "
-                        f"(error={error_q1_scalar:.6f}, "
-                        f"threshold={threshold:.6f})"
-                    )
-                    if not success_q1:
-                        print(
-                            f"      [TP] Warning: q1 may not satisfy "
-                            f"'{state_from_name}' constraints "
-                            f"(error={error_q1_scalar:.6f}); "
-                            "proceeding — TransitionPlanner will validate."
-                        )
-                except Exception as exc:
-                    print(f"      [TP] Warning: Could not validate q1: {exc}")
-
-                # Validate q2 against destination state
-                try:
-                    # getConfigErrorForState returns (error_vector, belongs)
-                    err_q2, _belongs_q2 = self.graph.getConfigErrorForState(
-                        state_to, q2_arr
-                    )
-                    error_q2_scalar = float(
-                        np.linalg.norm(np.asarray(err_q2, dtype=float))
-                    )
-                    threshold = float(self.graph.errorThreshold())
-                    success_q2 = error_q2_scalar < threshold
-                    print(
-                        f"      [TP] Validate q2 in state '{state_to_name}': "
-                        f"{'✓' if success_q2 else '✗'} "
-                        f"(error={error_q2_scalar:.6f}, "
-                        f"threshold={threshold:.6f})"
-                    )
-                    if not success_q2:
-                        print(
-                            f"      [TP] Warning: q2 may not satisfy "
-                            f"'{state_to_name}' constraints "
-                            f"(error={error_q2_scalar:.6f}); "
-                            "proceeding — TransitionPlanner will validate."
-                        )
-                except Exception as exc:
-                    print(f"      [TP] Warning: Could not validate q2: {exc}")
-            else:
-                print(
-                    "      [TP] Warning: Cannot validate configurations "
-                    "(graph or transition states not available)"
-                )
+            self._validate_edge_endpoints(tr, edge_name, q1_arr, q2_arr)
 
         # MANDATORY: Project q2 onto the constraint leaf defined by q1.
         # TransitionPlanner strictly requires this (CORBA does it internally, pyhpp doesn't).
@@ -2126,75 +2034,19 @@ class PyHPPBackend(BackendBase):
 
         # Try directPath first for transit and release-retraction edges
         if not skip_direct_path:
-            label = "release retract (_21)" if is_release_retract_edge else "transit"
-            print(f"      [TP] {label} edge, trying directPath first")
-            try:
-                success, path, status = tp.directPath(q1_arr, q2_arr, bool(validate))
-                if success:
-                    print("      [TP] directPath succeeded")
-                    try:
-                        pv = tp.optimizePath(path)
-                        print("      [TP] Path optimized")
-                    except Exception:
-                        print(
-                            "      [TP] Optimization failed, " "using unoptimized path"
-                        )
-                        pv = path
-                else:
-                    print(f"      [TP] directPath failed: {status}")
-            except Exception as exc:
-                # directPath failed, will fall back to planPath
-                print(f"      [TP] directPath threw exception: {exc}")
+            pv = self._try_direct_path(
+                tp, edge_name, q1_arr, q2_arr, validate, is_release_retract_edge
+            )
         else:
             edge_type = "pregrasp" if is_waypoint_pregrasp else "forward grasp (_12)"
             print(f"      [TP] Waypoint {edge_type} edge, " "skipping directPath")
 
         # Fall back to computePath (preferred) if directPath didn't work or
-        # was skipped. computePath was only added to hpp-python/hpp-manipulation
-        # in mid-2026; older builds only expose the 0-arg base-class
-        # computePath(), which raises a boost::python signature-mismatch
-        # TypeError when called with (qInit, qGoals, resetRoadmap). In that
-        # case fall back to the older planPath API (goals as rows), which
-        # exists across both old and new hpp-python versions, so this keeps
-        # working regardless of which hpp-python build is installed.
+        # was skipped -- see _compute_or_plan_path for why the fallback exists.
         if pv is None:
-            try:
-                print("      [TP] Falling back to computePath")
-                # computePath convention: goals as columns (configSize x numGoals).
-                # The Python binding wrapper in hpp-python handles the eigenpy
-                # Stride<0,0> ColMajor workaround for (N,1) arrays.
-                q_goals_col = q2_arr.reshape(-1, 1)
-                pv = tp.computePath(q1_arr, q_goals_col, bool(reset_roadmap))
-                print("      [TP] computePath succeeded")
-            except TypeError as exc:
-                print(
-                    f"      [TP] computePath signature mismatch ({exc}), "
-                    "falling back to planPath (older hpp-python build)"
-                )
-                try:
-                    # planPath handles (1,N) numpy arrays via an internal
-                    # RowMajor re-map that bypasses the eigenpy Stride<0,0> bug.
-                    q_goals_2D = q2_arr.reshape(1, -1)
-                    pv = tp.planPath(q1_arr, q_goals_2D, bool(reset_roadmap))
-                    print("      [TP] planPath succeeded")
-                except Exception as exc2:
-                    edge_type = "waypoint" if skip_direct_path else "transit"
-                    raise RuntimeError(
-                        f"TransitionPlanner.planPath failed for {edge_type} edge "
-                        f"{edge_name}: {exc2}"
-                    )
-            except Exception as exc:
-                edge_type = "waypoint" if skip_direct_path else "transit"
-                raise RuntimeError(
-                    f"TransitionPlanner.computePath failed for {edge_type} edge "
-                    f"{edge_name}: {exc}"
-                )
-
-            try:
-                pv = tp.optimizePath(pv)
-                print("      [TP] Path optimized")
-            except Exception:
-                print("      [TP] Optimization failed, " "using unoptimized path")
+            pv = self._compute_or_plan_path(
+                tp, q1_arr, q2_arr, reset_roadmap, edge_name, skip_direct_path
+            )
 
         if pv is None:
             return None, None
@@ -2213,6 +2065,193 @@ class PyHPPBackend(BackendBase):
         path_id = self.store_path(pv)
         print(f"      [TP] Path stored with ID: {path_id}")
         return path_id, pv_geometric
+
+    def _validate_edge_endpoints(
+        self, tr: Any, edge_name: str, q1_arr: np.ndarray, q2_arr: np.ndarray
+    ) -> None:
+        """Best-effort, diagnostic-only validation of q1/q2 against the
+        edge's source/dest states -- only prints warnings, never raises or
+        affects control flow; TransitionPlanner performs the authoritative
+        validation regardless of this method's outcome.
+
+        PYHPP-WORKAROUND: Use graph.getNodesConnectedByTransition() to
+        get the source/dest states for an edge, then validate configs
+        with graph.getConfigErrorForState(state, q).
+        """
+        state_from = None
+        state_to = None
+
+        if self.graph is not None and hasattr(
+            self.graph, "getNodesConnectedByTransition"
+        ):
+            try:
+                nodes = self.graph.getNodesConnectedByTransition(tr)
+                if nodes and len(nodes) >= 2:
+                    # getNodesConnectedByTransition returns state names (str)
+                    # — convert to PyWState objects via getState()
+                    state_from = self.graph.getState(nodes[0])
+                    state_to = self.graph.getState(nodes[1])
+            except Exception as exc:
+                print(
+                    f"      [TP] Warning: getNodesConnectedByTransition"
+                    f"('{edge_name}') failed: {exc}"
+                )
+
+        has_states = state_from is not None and state_to is not None
+        if not has_states:
+            print(
+                "      [TP] Warning: Cannot validate configurations "
+                "(graph or transition states not available)"
+            )
+            return
+
+        state_from_name = (
+            state_from.name()
+            if hasattr(state_from, "name") and callable(state_from.name)
+            else str(state_from)
+        )
+        state_to_name = (
+            state_to.name()
+            if hasattr(state_to, "name") and callable(state_to.name)
+            else str(state_to)
+        )
+
+        # Validate q1 against source state
+        try:
+            # getConfigErrorForState returns (error_vector, belongs)
+            err_q1, _belongs_q1 = self.graph.getConfigErrorForState(state_from, q1_arr)
+            error_q1_scalar = float(np.linalg.norm(np.asarray(err_q1, dtype=float)))
+            threshold = float(self.graph.errorThreshold())
+            success_q1 = error_q1_scalar < threshold
+            print(
+                f"      [TP] Validate q1 in state '{state_from_name}': "
+                f"{'✓' if success_q1 else '✗'} "
+                f"(error={error_q1_scalar:.6f}, "
+                f"threshold={threshold:.6f})"
+            )
+            if not success_q1:
+                print(
+                    f"      [TP] Warning: q1 may not satisfy "
+                    f"'{state_from_name}' constraints "
+                    f"(error={error_q1_scalar:.6f}); "
+                    "proceeding — TransitionPlanner will validate."
+                )
+        except Exception as exc:
+            print(f"      [TP] Warning: Could not validate q1: {exc}")
+
+        # Validate q2 against destination state
+        try:
+            # getConfigErrorForState returns (error_vector, belongs)
+            err_q2, _belongs_q2 = self.graph.getConfigErrorForState(state_to, q2_arr)
+            error_q2_scalar = float(np.linalg.norm(np.asarray(err_q2, dtype=float)))
+            threshold = float(self.graph.errorThreshold())
+            success_q2 = error_q2_scalar < threshold
+            print(
+                f"      [TP] Validate q2 in state '{state_to_name}': "
+                f"{'✓' if success_q2 else '✗'} "
+                f"(error={error_q2_scalar:.6f}, "
+                f"threshold={threshold:.6f})"
+            )
+            if not success_q2:
+                print(
+                    f"      [TP] Warning: q2 may not satisfy "
+                    f"'{state_to_name}' constraints "
+                    f"(error={error_q2_scalar:.6f}); "
+                    "proceeding — TransitionPlanner will validate."
+                )
+        except Exception as exc:
+            print(f"      [TP] Warning: Could not validate q2: {exc}")
+
+    def _try_direct_path(
+        self,
+        tp: Any,
+        edge_name: str,
+        q1_arr: np.ndarray,
+        q2_arr: np.ndarray,
+        validate: bool,
+        is_release_retract_edge: bool,
+    ) -> Any:
+        """Attempt tp.directPath() for a transit or release-retraction
+        edge. Returns the (optimized, if possible) PathVector on success,
+        or None if directPath failed/threw -- the caller falls back to
+        _compute_or_plan_path in that case."""
+        label = "release retract (_21)" if is_release_retract_edge else "transit"
+        print(f"      [TP] {label} edge, trying directPath first")
+        try:
+            success, path, status = tp.directPath(q1_arr, q2_arr, bool(validate))
+            if success:
+                print("      [TP] directPath succeeded")
+                try:
+                    pv = tp.optimizePath(path)
+                    print("      [TP] Path optimized")
+                    return pv
+                except Exception:
+                    print("      [TP] Optimization failed, " "using unoptimized path")
+                    return path
+            print(f"      [TP] directPath failed: {status}")
+        except Exception as exc:
+            # directPath failed, will fall back to planPath
+            print(f"      [TP] directPath threw exception: {exc}")
+        return None
+
+    def _compute_or_plan_path(
+        self,
+        tp: Any,
+        q1_arr: np.ndarray,
+        q2_arr: np.ndarray,
+        reset_roadmap: bool,
+        edge_name: str,
+        skip_direct_path: bool,
+    ) -> Any:
+        """Fall back to computePath (preferred), or planPath for older
+        hpp-python builds.
+
+        computePath was only added to hpp-python/hpp-manipulation in
+        mid-2026; older builds only expose the 0-arg base-class
+        computePath(), which raises a boost::python signature-mismatch
+        TypeError when called with (qInit, qGoals, resetRoadmap). In that
+        case fall back to the older planPath API (goals as rows), which
+        exists across both old and new hpp-python versions, so this keeps
+        working regardless of which hpp-python build is installed.
+        """
+        try:
+            print("      [TP] Falling back to computePath")
+            # computePath convention: goals as columns (configSize x numGoals).
+            # The Python binding wrapper in hpp-python handles the eigenpy
+            # Stride<0,0> ColMajor workaround for (N,1) arrays.
+            q_goals_col = q2_arr.reshape(-1, 1)
+            pv = tp.computePath(q1_arr, q_goals_col, bool(reset_roadmap))
+            print("      [TP] computePath succeeded")
+        except TypeError as exc:
+            print(
+                f"      [TP] computePath signature mismatch ({exc}), "
+                "falling back to planPath (older hpp-python build)"
+            )
+            try:
+                # planPath handles (1,N) numpy arrays via an internal
+                # RowMajor re-map that bypasses the eigenpy Stride<0,0> bug.
+                q_goals_2D = q2_arr.reshape(1, -1)
+                pv = tp.planPath(q1_arr, q_goals_2D, bool(reset_roadmap))
+                print("      [TP] planPath succeeded")
+            except Exception as exc2:
+                edge_type = "waypoint" if skip_direct_path else "transit"
+                raise RuntimeError(
+                    f"TransitionPlanner.planPath failed for {edge_type} edge "
+                    f"{edge_name}: {exc2}"
+                )
+        except Exception as exc:
+            edge_type = "waypoint" if skip_direct_path else "transit"
+            raise RuntimeError(
+                f"TransitionPlanner.computePath failed for {edge_type} edge "
+                f"{edge_name}: {exc}"
+            )
+
+        try:
+            pv = tp.optimizePath(pv)
+            print("      [TP] Path optimized")
+        except Exception:
+            print("      [TP] Optimization failed, " "using unoptimized path")
+        return pv
 
     def plan_transition_sequence(
         self,

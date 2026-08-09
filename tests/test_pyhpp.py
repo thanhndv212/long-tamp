@@ -6,6 +6,7 @@ These tests require hpp-python to be installed.
 
 import pytest
 import numpy as np
+from unittest.mock import MagicMock
 
 try:
     from agimus_spacelab.backends.pyhpp import PyHPPBackend as PyHPPManipulationPlanner, HAS_PYHPP
@@ -270,6 +271,180 @@ class TestPyHPPBackend:
         cleared = planner.clear_stored_paths(verbose=False)
         assert cleared == 1
         assert planner.get_num_stored_paths() == 0
+
+
+@pytest.mark.skipif(not HAS_PYHPP, reason="PyHPP backend not available")
+class TestValidateEdgeEndpoints:
+    """_validate_edge_endpoints() (Phase 3 Step 3.3 extraction from
+    plan_transition_edge()) -- diagnostic-only, never raises, never
+    affects return value; verify it degrades gracefully when graph
+    introspection isn't available."""
+
+    def test_no_graph_prints_warning_and_returns_none(self, capsys):
+        planner = PyHPPManipulationPlanner()
+        planner.graph = None
+
+        result = planner._validate_edge_endpoints(
+            object(), "edge01", np.array([0.0]), np.array([1.0])
+        )
+
+        assert result is None
+        captured = capsys.readouterr()
+        assert "Cannot validate configurations" in captured.out
+
+    def test_graph_without_get_nodes_method_returns_none(self, capsys):
+        planner = PyHPPManipulationPlanner()
+
+        class _FakeGraph:
+            pass
+
+        planner.graph = _FakeGraph()
+
+        result = planner._validate_edge_endpoints(
+            object(), "edge01", np.array([0.0]), np.array([1.0])
+        )
+
+        assert result is None
+        captured = capsys.readouterr()
+        assert "Cannot validate configurations" in captured.out
+
+    def test_valid_states_prints_success_markers(self, capsys):
+        planner = PyHPPManipulationPlanner()
+        graph = MagicMock()
+        state_from = MagicMock()
+        state_from.name.return_value = "state_from"
+        state_to = MagicMock()
+        state_to.name.return_value = "state_to"
+        graph.getNodesConnectedByTransition.return_value = ["n0", "n1"]
+        graph.getState.side_effect = [state_from, state_to]
+        graph.getConfigErrorForState.return_value = ([0.0, 0.0], True)
+        graph.errorThreshold.return_value = 1e-3
+        planner.graph = graph
+
+        planner._validate_edge_endpoints(
+            object(), "edge01", np.array([0.0]), np.array([1.0])
+        )
+
+        captured = capsys.readouterr()
+        assert "Validate q1 in state 'state_from'" in captured.out
+        assert "Validate q2 in state 'state_to'" in captured.out
+        assert "✓" in captured.out
+
+
+@pytest.mark.skipif(not HAS_PYHPP, reason="PyHPP backend not available")
+class TestTryDirectPath:
+    """_try_direct_path() (Phase 3 Step 3.3 extraction)."""
+
+    def test_success_returns_optimized_path(self):
+        planner = PyHPPManipulationPlanner()
+        tp = MagicMock()
+        tp.directPath.return_value = (True, "raw_path", "ok")
+        tp.optimizePath.return_value = "optimized_path"
+
+        result = planner._try_direct_path(
+            tp, "edge01", np.array([0.0]), np.array([1.0]), True, False
+        )
+
+        assert result == "optimized_path"
+
+    def test_success_optimize_failure_returns_raw_path(self):
+        planner = PyHPPManipulationPlanner()
+        tp = MagicMock()
+        tp.directPath.return_value = (True, "raw_path", "ok")
+        tp.optimizePath.side_effect = RuntimeError("boom")
+
+        result = planner._try_direct_path(
+            tp, "edge01", np.array([0.0]), np.array([1.0]), True, False
+        )
+
+        assert result == "raw_path"
+
+    def test_directpath_failure_returns_none(self):
+        planner = PyHPPManipulationPlanner()
+        tp = MagicMock()
+        tp.directPath.return_value = (False, None, "no path")
+
+        result = planner._try_direct_path(
+            tp, "edge01", np.array([0.0]), np.array([1.0]), True, False
+        )
+
+        assert result is None
+
+    def test_directpath_exception_returns_none(self):
+        planner = PyHPPManipulationPlanner()
+        tp = MagicMock()
+        tp.directPath.side_effect = RuntimeError("boom")
+
+        result = planner._try_direct_path(
+            tp, "edge01", np.array([0.0]), np.array([1.0]), True, False
+        )
+
+        assert result is None
+
+
+@pytest.mark.skipif(not HAS_PYHPP, reason="PyHPP backend not available")
+class TestComputeOrPlanPath:
+    """_compute_or_plan_path() (Phase 3 Step 3.3 extraction)."""
+
+    def test_compute_path_success(self):
+        planner = PyHPPManipulationPlanner()
+        tp = MagicMock()
+        tp.computePath.return_value = "computed_path"
+        tp.optimizePath.return_value = "optimized_path"
+
+        result = planner._compute_or_plan_path(
+            tp, np.array([0.0]), np.array([1.0]), True, "edge01", False
+        )
+
+        assert result == "optimized_path"
+        tp.planPath.assert_not_called()
+
+    def test_compute_path_type_error_falls_back_to_plan_path(self):
+        planner = PyHPPManipulationPlanner()
+        tp = MagicMock()
+        tp.computePath.side_effect = TypeError("signature mismatch")
+        tp.planPath.return_value = "planned_path"
+        tp.optimizePath.return_value = "optimized_path"
+
+        result = planner._compute_or_plan_path(
+            tp, np.array([0.0]), np.array([1.0]), True, "edge01", False
+        )
+
+        assert result == "optimized_path"
+        tp.planPath.assert_called_once()
+
+    def test_both_compute_and_plan_path_fail_raises(self):
+        planner = PyHPPManipulationPlanner()
+        tp = MagicMock()
+        tp.computePath.side_effect = TypeError("signature mismatch")
+        tp.planPath.side_effect = RuntimeError("also failed")
+
+        with pytest.raises(RuntimeError, match="planPath failed"):
+            planner._compute_or_plan_path(
+                tp, np.array([0.0]), np.array([1.0]), True, "edge01", False
+            )
+
+    def test_compute_path_other_exception_raises(self):
+        planner = PyHPPManipulationPlanner()
+        tp = MagicMock()
+        tp.computePath.side_effect = RuntimeError("unexpected")
+
+        with pytest.raises(RuntimeError, match="computePath failed"):
+            planner._compute_or_plan_path(
+                tp, np.array([0.0]), np.array([1.0]), True, "edge01", False
+            )
+
+    def test_optimize_failure_after_compute_returns_unoptimized(self):
+        planner = PyHPPManipulationPlanner()
+        tp = MagicMock()
+        tp.computePath.return_value = "computed_path"
+        tp.optimizePath.side_effect = RuntimeError("boom")
+
+        result = planner._compute_or_plan_path(
+            tp, np.array([0.0]), np.array([1.0]), True, "edge01", False
+        )
+
+        assert result == "computed_path"
 
 
 if __name__ == "__main__":
