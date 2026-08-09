@@ -12,6 +12,7 @@ import numpy as np
 from unittest.mock import MagicMock
 
 from agimus_spacelab.planning.config import ConfigGenerator
+from agimus_spacelab.planning.graph import GraphBuilder
 from agimus_spacelab.planning.scene import SceneBuilder
 
 
@@ -185,3 +186,133 @@ class TestGenerateCandidateConfig:
         assert success is False
         assert config is None
         assert err == "diverged"
+
+
+class TestBuildPhaseValidPairs:
+    """_build_phase_valid_pairs() (Phase 3 Step 3.4 extraction from
+    build_phase_graph()) -- pure function, no HPP calls needed."""
+
+    def test_empty_held_grasps_new_grasp(self):
+        result = GraphBuilder._build_phase_valid_pairs({}, ("g1", "h1"))
+        assert result == {"g1": ["h1"]}
+
+    def test_held_grasps_preserved_plus_new_grasp(self):
+        result = GraphBuilder._build_phase_valid_pairs(
+            {"g1": "h1"}, ("g2", "h2")
+        )
+        assert result == {"g1": ["h1"], "g2": ["h2"]}
+
+    def test_release_includes_currently_held_handle(self):
+        result = GraphBuilder._build_phase_valid_pairs(
+            {"g1": "h1"}, ("g1", None)
+        )
+        assert result == {"g1": ["h1"]}
+
+    def test_release_with_nothing_held_omits_gripper(self):
+        result = GraphBuilder._build_phase_valid_pairs({}, ("g1", None))
+        assert result == {}
+
+    def test_duplicate_handle_not_added_twice(self):
+        result = GraphBuilder._build_phase_valid_pairs(
+            {"g1": "h1"}, ("g1", "h1")
+        )
+        assert result == {"g1": ["h1"]}
+
+
+class TestLockNonphaseObjects:
+    """_lock_nonphase_objects() (Phase 3 Step 3.4 extraction)."""
+
+    def _make_graph_builder(self, backend="pyhpp"):
+        gb = object.__new__(GraphBuilder)
+        gb.backend = backend
+        gb.ps = MagicMock()
+        gb.robot = MagicMock()
+        return gb
+
+    def test_no_nonphase_objects_returns_constraints_unchanged(self):
+        gb = self._make_graph_builder()
+        result = gb._lock_nonphase_objects(
+            ["obj1"], ["obj1"], [0.0], ["existing"]
+        )
+        assert result == ["existing"]
+
+    def test_no_q_init_returns_constraints_unchanged(self):
+        gb = self._make_graph_builder()
+        result = gb._lock_nonphase_objects(["obj1", "obj2"], ["obj1"], None, None)
+        assert result is None
+
+    def test_locks_nonphase_objects_and_extends_constraints(self, monkeypatch):
+        gb = self._make_graph_builder()
+        fake_builder = MagicMock()
+        fake_builder.create_locked_joint_constraints.return_value = (
+            ["lock_c1"],
+            ["obj2/root_joint"],
+        )
+        monkeypatch.setattr(
+            "agimus_spacelab.planning.constraints.ConstraintBuilder",
+            fake_builder,
+        )
+
+        result = gb._lock_nonphase_objects(
+            ["obj1", "obj2"], ["obj1"], [0.0], ["existing"]
+        )
+
+        assert result == ["existing", "lock_c1"]
+
+    def test_locking_exception_returns_constraints_unchanged(self, monkeypatch):
+        gb = self._make_graph_builder()
+        fake_builder = MagicMock()
+        fake_builder.create_locked_joint_constraints.side_effect = RuntimeError(
+            "boom"
+        )
+        monkeypatch.setattr(
+            "agimus_spacelab.planning.constraints.ConstraintBuilder",
+            fake_builder,
+        )
+
+        result = gb._lock_nonphase_objects(
+            ["obj1", "obj2"], ["obj1"], [0.0], ["existing"]
+        )
+
+        assert result == ["existing"]
+
+
+class TestApplySequentialFilter:
+    """_apply_sequential_filter() (Phase 3 Step 3.4 extraction)."""
+
+    def _make_graph_builder(self):
+        gb = object.__new__(GraphBuilder)
+        gb.backend = "pyhpp"
+        return gb
+
+    def test_import_error_returns_false(self, monkeypatch):
+        import builtins
+
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "agimus_spacelab.planning.sequential_grasp_filter":
+                raise ImportError("not available")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+
+        gb = self._make_graph_builder()
+        phase_config = MagicMock()
+        phase_config.GRIPPERS = ["g1"]
+        phase_config.HANDLES_PER_OBJECT = [["h1"]]
+
+        result = gb._apply_sequential_filter(phase_config, {}, ("g1", "h1"))
+
+        assert result is False
+
+    def test_success_attaches_filter_and_returns_true(self):
+        gb = self._make_graph_builder()
+        phase_config = MagicMock()
+        phase_config.GRIPPERS = ["g1"]
+        phase_config.HANDLES_PER_OBJECT = [["h1"]]
+
+        result = gb._apply_sequential_filter(phase_config, {}, ("g1", "h1"))
+
+        assert result is True
+        assert phase_config._SEQUENTIAL_FILTER is not None

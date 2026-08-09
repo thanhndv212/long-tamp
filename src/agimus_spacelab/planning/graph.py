@@ -1098,43 +1098,112 @@ class GraphBuilder:
         else:
             print("    Using setPossibleGrasps (allows intermediate states)")
 
-        # Delete existing graph to allow recreation (CORBA stores by name)
-        if self.graph is not None:
-            try:
-                if self.backend == "corba":
-                    # CORBA: delete graph by name on server
-                    graph_name = "graph"
-                    self.ps.client.manipulation.graph.deleteGraph(graph_name)
-                    print(f"    ✓ Deleted existing graph '{graph_name}'")
+        self._teardown_existing_graph()
 
-                    # CORBA: also reset cached TransitionPlanner
-                    # It holds a reference to the old graph
-                    if hasattr(self.planner, "reset_transition_planner"):
-                        self.planner.reset_transition_planner()
-                        print("    ✓ Reset TransitionPlanner")
-                else:
-                    # PyHPP: graph is local object, just clear reference.
-                    # Also reset cached TransitionPlanner — it holds a C++
-                    # graph::GraphPtr_t to the old graph.  If not reset, the
-                    # first C++ call on the stale planner object (tp.setEdge,
-                    # tp.timeOut, …) will dereference a freed pointer → SIGSEGV.
-                    if hasattr(self.planner, "reset_transition_planner"):
-                        self.planner.reset_transition_planner()
-                        print("    ✓ Reset TransitionPlanner (PyHPP graph rebuild)")
-                    print("    ✓ Clearing existing graph reference")
+        phase_valid_pairs = self._build_phase_valid_pairs(held_grasps, next_grasp)
+        print(f"    Phase VALID_PAIRS: {phase_valid_pairs}")
 
-                # Clear internal state
-                self.graph = None
-                self.factory = None
-                self.states = {}
-                self.edges = {}
-                self.edge_topology = {}
-            except Exception as e:
-                # Graph might not exist, that's ok
-                print(f"    ⓘ Note: {e}")
+        phase_config, phase_objects = self._build_phase_config(
+            config, phase_valid_pairs
+        )
 
-        # Build minimal VALID_PAIRS for this phase
-        phase_valid_pairs = {}
+        graph_constraints = self._lock_nonphase_objects(
+            list(getattr(config, "OBJECTS", [])),
+            phase_objects,
+            q_init,
+            graph_constraints,
+        )
+
+        # Also override RULES to None (setPossibleGrasps takes precedence)
+        phase_config.RULES = None
+
+        # Apply sequential filter to enforce strict 2-state limit
+        # This prevents the factory from generating intermediate states
+        if use_sequential_filter:
+            use_sequential_filter = self._apply_sequential_filter(
+                phase_config, held_grasps, next_grasp
+            )
+
+        # Reset free (unheld) objects to their initial scene positions in
+        # q_init.  Phase N's config generation leaves unconstrained objects
+        # at random positions.  The factory's LockedJoint foliation locks
+        # each object at robot.currentConfiguration() — so if RS1 ended up
+        # at a random position from Phase 1, Phase 2 would lock RS1 there
+        # (unreachable for the arm).  By restoring free objects to their
+        # original positions we ensure the LockedJoint locks them where they
+        # actually are in the scene.
+        if (
+            q_init is not None
+            and q_init_original is not None
+            and self.backend == "pyhpp"
+        ):
+            q_init = self._reset_free_objects_in_q_init(
+                q_init, q_init_original, phase_objects, held_grasps
+            )
+
+        # Use the factory graph creation with restricted pairs
+        # This will call factory.setPossibleGrasps(phase_valid_pairs)
+        # and optionally factory.graspIsAllowed.append(seq_filter)
+        return self.create_factory_graph(
+            phase_config,
+            graph_constraints=graph_constraints,
+            q_init=q_init,
+        )
+
+    def _teardown_existing_graph(self) -> None:
+        """Delete/clear any existing graph so build_phase_graph can create
+        a fresh one.
+
+        CORBA stores graphs by name on the server, so deletion is an
+        explicit RPC. pyhpp holds a local graph object plus a cached
+        TransitionPlanner wrapping a C++ graph::GraphPtr_t to it -- if that
+        cache isn't reset, the first C++ call on the stale planner object
+        (tp.setEdge, tp.timeOut, ...) dereferences a freed pointer and
+        segfaults.
+        """
+        if self.graph is None:
+            return
+        try:
+            if self.backend == "corba":
+                # CORBA: delete graph by name on server
+                graph_name = "graph"
+                self.ps.client.manipulation.graph.deleteGraph(graph_name)
+                print(f"    ✓ Deleted existing graph '{graph_name}'")
+
+                # CORBA: also reset cached TransitionPlanner
+                # It holds a reference to the old graph
+                if hasattr(self.planner, "reset_transition_planner"):
+                    self.planner.reset_transition_planner()
+                    print("    ✓ Reset TransitionPlanner")
+            else:
+                # PyHPP: graph is local object, just clear reference.
+                # Also reset cached TransitionPlanner — it holds a C++
+                # graph::GraphPtr_t to the old graph.  If not reset, the
+                # first C++ call on the stale planner object (tp.setEdge,
+                # tp.timeOut, …) will dereference a freed pointer → SIGSEGV.
+                if hasattr(self.planner, "reset_transition_planner"):
+                    self.planner.reset_transition_planner()
+                    print("    ✓ Reset TransitionPlanner (PyHPP graph rebuild)")
+                print("    ✓ Clearing existing graph reference")
+
+            # Clear internal state
+            self.graph = None
+            self.factory = None
+            self.states = {}
+            self.edges = {}
+            self.edge_topology = {}
+        except Exception as e:
+            # Graph might not exist, that's ok
+            print(f"    ⓘ Note: {e}")
+
+    @staticmethod
+    def _build_phase_valid_pairs(
+        held_grasps: dict[str, str], next_grasp: tuple[str, str]
+    ) -> dict[str, list[str]]:
+        """Build the minimal VALID_PAIRS dict for a single-transition phase
+        graph: already-held grasps (must remain valid) plus the next
+        grasp/release transition."""
+        phase_valid_pairs: dict[str, list[str]] = {}
 
         # Include already-held grasps (must remain valid in graph)
         for gripper, handle in held_grasps.items():
@@ -1161,8 +1230,19 @@ class GraphBuilder:
                 if released_handle not in phase_valid_pairs[next_gripper]:
                     phase_valid_pairs[next_gripper].append(released_handle)
 
-        print(f"    Phase VALID_PAIRS: {phase_valid_pairs}")
+        return phase_valid_pairs
 
+    def _build_phase_config(
+        self, config: BaseTaskConfig, phase_valid_pairs: dict[str, list[str]]
+    ) -> tuple[Any, list[str]]:
+        """Derive a phase-restricted config (SimpleNamespace copy of
+        `config`) with VALID_PAIRS/GRIPPERS/OBJECTS/HANDLES_PER_OBJECT/
+        CONTACT_SURFACES_PER_OBJECT narrowed to only what this phase
+        transition needs.
+
+        Returns (phase_config, phase_objects). Also sets
+        self._phase_grippers/self._phase_handles for GraspStateTracker sync.
+        """
         # Create a derived config with filtered VALID_PAIRS
         # Use a simple namespace to avoid full class copying
         from types import SimpleNamespace
@@ -1225,115 +1305,110 @@ class GraphBuilder:
             h for obj_handles in phase_handles_per_obj for h in obj_handles
         ]
 
-        # Lock non-participating objects' root joints so they cannot drift
-        # during planning.  Objects excluded from phase_objects have no
-        # LockedJoint produced by the factory, leaving their freeflyer DOFs
-        # completely unconstrained (they would float to random positions).
-        _nonphase_objects = [o for o in _orig_objects if o not in phase_objects]
-        if _nonphase_objects and q_init is not None:
-            _lock_patterns = [f"{o}/root_joint" for o in _nonphase_objects]
-            try:
-                from agimus_spacelab.planning.constraints import (
-                    ConstraintBuilder,
+        return phase_config, phase_objects
+
+    def _lock_nonphase_objects(
+        self,
+        orig_objects: list[str],
+        phase_objects: list[str],
+        q_init: list[float] | None,
+        graph_constraints: list[str] | None,
+    ) -> list[str] | None:
+        """Lock non-participating objects' root joints so they cannot drift
+        during planning.
+
+        Objects excluded from phase_objects have no LockedJoint produced by
+        the factory, leaving their freeflyer DOFs completely unconstrained
+        (they would float to random positions). Returns graph_constraints,
+        extended with the new lock constraint names if any were created
+        (unchanged otherwise).
+        """
+        _nonphase_objects = [o for o in orig_objects if o not in phase_objects]
+        if not (_nonphase_objects and q_init is not None):
+            return graph_constraints
+
+        _lock_patterns = [f"{o}/root_joint" for o in _nonphase_objects]
+        try:
+            from agimus_spacelab.planning.constraints import ConstraintBuilder
+
+            _np_cnames, _np_jnames = (
+                ConstraintBuilder.create_locked_joint_constraints(
+                    self.ps,
+                    self.robot,
+                    q_init,
+                    _lock_patterns,
+                    backend=self.backend,
                 )
-
-                _np_cnames, _np_jnames = (
-                    ConstraintBuilder.create_locked_joint_constraints(
-                        self.ps,
-                        self.robot,
-                        q_init,
-                        _lock_patterns,
-                        backend=self.backend,
-                    )
+            )
+            if _np_cnames:
+                if graph_constraints is None:
+                    graph_constraints = list(_np_cnames)
+                else:
+                    graph_constraints = list(graph_constraints) + list(_np_cnames)
+                print(
+                    f"    \u2713 Locked {len(_np_jnames)} non-phase "
+                    f"object joints: {_nonphase_objects}"
                 )
-                if _np_cnames:
-                    if graph_constraints is None:
-                        graph_constraints = list(_np_cnames)
-                    else:
-                        graph_constraints = list(graph_constraints) + list(_np_cnames)
-                    print(
-                        f"    \u2713 Locked {len(_np_jnames)} non-phase "
-                        f"object joints: {_nonphase_objects}"
-                    )
-            except Exception as _e:
-                print(f"    \u26a0 Could not lock non-phase objects: {_e}")
+        except Exception as _e:
+            print(f"    \u26a0 Could not lock non-phase objects: {_e}")
 
-        # Also override RULES to None (setPossibleGrasps takes precedence)
-        phase_config.RULES = None
+        return graph_constraints
 
-        # Apply sequential filter to enforce strict 2-state limit
-        # This prevents the factory from generating intermediate states
-        if use_sequential_filter:
-            # Import the sequential filter
-            try:
-                from agimus_spacelab.planning.sequential_grasp_filter import (
-                    SequentialGraspFilter,
-                    grasps_dict_to_tuple,
-                )
+    def _apply_sequential_filter(
+        self,
+        phase_config: Any,
+        held_grasps: dict[str, str],
+        next_grasp: tuple[str, str],
+    ) -> bool:
+        """Attach a SequentialGraspFilter to `phase_config` so the factory
+        strictly limits generation to current -> next state only.
 
-                # Use RESTRICTED gripper/handle lists to keep state-space tiny.
-                # The full config (DisplayAllStates) has 5+ grippers × 50+
-                # handles; using the restricted lists keeps the state-space at
-                # most (n_handles+1)^n_phase_grippers which is usually 2.
-                grippers = list(phase_config.GRIPPERS)
-                handles = []
-                for obj_handles in phase_config.HANDLES_PER_OBJECT:
-                    handles.extend(obj_handles)
-
-                # Build current grasps dict for phase grippers only
-                current_grasps_full = {g: None for g in grippers}
-                current_grasps_full.update(
-                    {g: h for g, h in held_grasps.items() if g in grippers}
-                )
-
-                # Create the sequential filter
-                seq_filter = SequentialGraspFilter(
-                    grippers=grippers,
-                    handles=handles,
-                    current_grasps=current_grasps_full,
-                    next_grasp=next_grasp,
-                )
-
-                print("    ✓ Created SequentialGraspFilter:")
-                current_tuple = grasps_dict_to_tuple(
-                    current_grasps_full, grippers, handles
-                )
-                print(f"      Current: {current_tuple}")
-                print(f"      Next: {seq_filter.next_grasps}")
-
-                # Store filter for factory injection
-                phase_config._SEQUENTIAL_FILTER = seq_filter
-
-            except ImportError as e:
-                print(f"    ⚠ SequentialGraspFilter not available: {e}")
-                print("    ⚠ Falling back to setPossibleGrasps")
-                use_sequential_filter = False
-
-        # Reset free (unheld) objects to their initial scene positions in
-        # q_init.  Phase N's config generation leaves unconstrained objects
-        # at random positions.  The factory's LockedJoint foliation locks
-        # each object at robot.currentConfiguration() — so if RS1 ended up
-        # at a random position from Phase 1, Phase 2 would lock RS1 there
-        # (unreachable for the arm).  By restoring free objects to their
-        # original positions we ensure the LockedJoint locks them where they
-        # actually are in the scene.
-        if (
-            q_init is not None
-            and q_init_original is not None
-            and self.backend == "pyhpp"
-        ):
-            q_init = self._reset_free_objects_in_q_init(
-                q_init, q_init_original, phase_objects, held_grasps
+        Returns False if SequentialGraspFilter isn't importable (caller
+        falls back to setPossibleGrasps), True otherwise. Only called when
+        use_sequential_filter was already True.
+        """
+        try:
+            from agimus_spacelab.planning.sequential_grasp_filter import (
+                SequentialGraspFilter,
+                grasps_dict_to_tuple,
             )
 
-        # Use the factory graph creation with restricted pairs
-        # This will call factory.setPossibleGrasps(phase_valid_pairs)
-        # and optionally factory.graspIsAllowed.append(seq_filter)
-        return self.create_factory_graph(
-            phase_config,
-            graph_constraints=graph_constraints,
-            q_init=q_init,
-        )
+            # Use RESTRICTED gripper/handle lists to keep state-space tiny.
+            # The full config (DisplayAllStates) has 5+ grippers × 50+
+            # handles; using the restricted lists keeps the state-space at
+            # most (n_handles+1)^n_phase_grippers which is usually 2.
+            grippers = list(phase_config.GRIPPERS)
+            handles = []
+            for obj_handles in phase_config.HANDLES_PER_OBJECT:
+                handles.extend(obj_handles)
+
+            # Build current grasps dict for phase grippers only
+            current_grasps_full = {g: None for g in grippers}
+            current_grasps_full.update(
+                {g: h for g, h in held_grasps.items() if g in grippers}
+            )
+
+            # Create the sequential filter
+            seq_filter = SequentialGraspFilter(
+                grippers=grippers,
+                handles=handles,
+                current_grasps=current_grasps_full,
+                next_grasp=next_grasp,
+            )
+
+            print("    ✓ Created SequentialGraspFilter:")
+            current_tuple = grasps_dict_to_tuple(current_grasps_full, grippers, handles)
+            print(f"      Current: {current_tuple}")
+            print(f"      Next: {seq_filter.next_grasps}")
+
+            # Store filter for factory injection
+            phase_config._SEQUENTIAL_FILTER = seq_filter
+            return True
+
+        except ImportError as e:
+            print(f"    ⚠ SequentialGraspFilter not available: {e}")
+            print("    ⚠ Falling back to setPossibleGrasps")
+            return False
 
     def _reset_free_objects_in_q_init(
         self,
