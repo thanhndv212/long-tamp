@@ -8,6 +8,8 @@ helper under test has no HPP dependency itself, so these tests must run
 inside the hpp-arm64 container.
 """
 
+import logging
+
 from agimus_spacelab.tasks.grasp_sequence import GraspSequencePlanner
 
 
@@ -65,14 +67,15 @@ def _phase(phase_num=3):
 
 
 class TestPlaySinglePhasePath:
-    def test_record_branch_returns_video_file(self, capsys):
+    def test_record_branch_returns_video_file(self, caplog):
         planner = _make_planner()
         planner.planner = _FakeBackend()
-        result = planner._play_single_phase_path(
-            path="p0", edge_name="e0", phase=_phase(), idx=0,
-            record=True, visualizer=None, output_dir="/out",
-            video_prefix="pre", framerate=25, dt=0.01, speed=1.0,
-        )
+        with caplog.at_level(logging.INFO, logger="agimus_spacelab"):
+            result = planner._play_single_phase_path(
+                path="p0", edge_name="e0", phase=_phase(), idx=0,
+                record=True, visualizer=None, output_dir="/out",
+                video_prefix="pre", framerate=25, dt=0.01, speed=1.0,
+            )
         assert result == "/tmp/clip.mp4"
         assert len(planner.planner.record_calls) == 1
         path, vname, outdir, fps, dt, speed = planner.planner.record_calls[0]
@@ -81,8 +84,7 @@ class TestPlaySinglePhasePath:
         assert outdir == "/out" and fps == 25 and dt == 0.01 and speed == 1.0
         assert planner.planner.viz_calls == []
         assert planner.planner.plain_calls == []
-        out = capsys.readouterr().out
-        assert "✓ Recorded (index 7): /tmp/clip.mp4" in out
+        assert "✓ Recorded (index 7): /tmp/clip.mp4" in caplog.text
 
     def test_record_video_name_without_prefix(self, capsys):
         planner = _make_planner()
@@ -95,50 +97,50 @@ class TestPlaySinglePhasePath:
         vname = planner.planner.record_calls[0][1]
         assert vname == "phase_05_path_03"  # no prefix, no edge suffix
 
-    def test_visualizer_branch_when_not_recording(self, capsys):
+    def test_visualizer_branch_when_not_recording(self, caplog):
         planner = _make_planner()
         planner.planner = _FakeBackend()
-        result = planner._play_single_phase_path(
-            path="p0", edge_name="e0", phase=_phase(), idx=0,
-            record=False, visualizer="viz-obj", output_dir="/out",
-            video_prefix=None, framerate=25, dt=0.01, speed=2.0,
-        )
+        with caplog.at_level(logging.INFO, logger="agimus_spacelab"):
+            result = planner._play_single_phase_path(
+                path="p0", edge_name="e0", phase=_phase(), idx=0,
+                record=False, visualizer="viz-obj", output_dir="/out",
+                video_prefix=None, framerate=25, dt=0.01, speed=2.0,
+            )
         assert result is None  # nothing recorded
         assert planner.planner.record_calls == []
         assert planner.planner.viz_calls == [("p0", "e0", "viz-obj", 2.0)]
         assert planner.planner.plain_calls == []
-        out = capsys.readouterr().out
-        assert "✓ Played with visualization (stored as index 9)" in out
+        assert "✓ Played with visualization (stored as index 9)" in caplog.text
 
-    def test_plain_fallback_when_no_record_and_no_viz(self, capsys):
+    def test_plain_fallback_when_no_record_and_no_viz(self, caplog):
         planner = _make_planner()
         planner.planner = _FakeBackend()
-        result = planner._play_single_phase_path(
-            path="p0", edge_name="e0", phase=_phase(), idx=0,
-            record=False, visualizer=None, output_dir="/out",
-            video_prefix=None, framerate=25, dt=0.01, speed=1.0,
-        )
+        with caplog.at_level(logging.INFO, logger="agimus_spacelab"):
+            result = planner._play_single_phase_path(
+                path="p0", edge_name="e0", phase=_phase(), idx=0,
+                record=False, visualizer=None, output_dir="/out",
+                video_prefix=None, framerate=25, dt=0.01, speed=1.0,
+            )
         assert result is None
         assert planner.planner.record_calls == []
         assert planner.planner.viz_calls == []
         assert planner.planner.plain_calls == [("p0", 1.0)]
-        out = capsys.readouterr().out
-        assert "✓ Played (stored as index 11)" in out
+        assert "✓ Played (stored as index 11)" in caplog.text
 
-    def test_unsupported_backend_warning(self, capsys):
+    def test_unsupported_backend_warning(self, caplog):
         planner = _make_planner()
         # Backend with none of the three methods
         planner.planner = _FakeBackend(has_record=False, has_viz=False,
                                        has_plain=False)
-        result = planner._play_single_phase_path(
-            path="p0", edge_name="e0", phase=_phase(), idx=0,
-            record=False, visualizer=None, output_dir="/out",
-            video_prefix=None, framerate=25, dt=0.01, speed=1.0,
-        )
+        with caplog.at_level(logging.WARNING, logger="agimus_spacelab"):
+            result = planner._play_single_phase_path(
+                path="p0", edge_name="e0", phase=_phase(), idx=0,
+                record=False, visualizer=None, output_dir="/out",
+                video_prefix=None, framerate=25, dt=0.01, speed=1.0,
+            )
         assert result is None
-        out = capsys.readouterr().out
-        assert "⚠ Backend does not support PathVector playback" in out
-        assert "Path type: str" in out  # type("p0").__name__
+        assert "⚠ Backend does not support PathVector playback" in caplog.text
+        assert "Path type: str" in caplog.text  # type("p0").__name__
 
     def test_record_takes_precedence_over_visualizer(self, capsys):
         # When record=True and the record method exists, the visualizer branch

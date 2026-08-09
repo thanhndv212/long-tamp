@@ -15,9 +15,12 @@ import signal
 import time
 from typing import Any, Sequence
 
+from agimus_spacelab.logging import get_logger
 from agimus_spacelab.planning.config import ConfigGenerator
 from agimus_spacelab.planning.graph import GraphBuilder
 from agimus_spacelab.planning.grasp_state import GraspStateTracker
+
+logger = get_logger("tasks.grasp_sequence")
 
 # =============================================================================
 # Filename Utilities
@@ -283,7 +286,7 @@ class GraspSequencePlanner:
             )
 
             if verbose:
-                print(f"    Planning release edge: {edge_10}")
+                logger.info("Planning release edge: %s", edge_10)
 
             path10, q_free, t_gen2, t_plan2, plan_err_10 = (
                 self._generate_and_plan_edge_with_retry(
@@ -319,13 +322,13 @@ class GraspSequencePlanner:
             # g_FG_part is free to escape in any direction — giving the RRT full
             # ur10 DOFs to find a collision-free path around the structure.
             if verbose:
-                print(
-                    f"    ⚠ _21 planning failed ({plan_err_21}), "
-                    f"trying direct release edge"
+                logger.warning(
+                    "_21 planning failed (%s), trying direct release edge",
+                    plan_err_21,
                 )
             direct_edge = edge_21[:-3]  # strip "_21" suffix
             if verbose:
-                print(f"    Planning direct release edge: {direct_edge}")
+                logger.info("Planning direct release edge: %s", direct_edge)
 
             path_direct, q_free_d, t_gen_direct, t_plan_direct, plan_err_direct = (
                 self._generate_and_plan_edge_with_retry(
@@ -356,7 +359,7 @@ class GraspSequencePlanner:
         # Update grasp state: gripper is now free
         self.grasp_tracker.update_grasp(gripper, None)
         if verbose:
-            print(f"    ✓ Released '{released_handle}' from '{gripper}'")
+            logger.info("✓ Released '%s' from '%s'", released_handle, gripper)
 
         direct_edge = edge_21[:-3] if used_direct else None
         phase_info = self._build_release_phase_info(
@@ -408,9 +411,10 @@ class GraspSequencePlanner:
         }
 
         if verbose:
-            print(
-                f"    Building release graph: '{gripper}' releases "
-                f"'{self.grasp_tracker.current_grasps[gripper]}'"
+            logger.info(
+                "Building release graph: '%s' releases '%s'",
+                gripper,
+                self.grasp_tracker.current_grasps[gripper],
             )
 
         try:
@@ -452,7 +456,7 @@ class GraspSequencePlanner:
 
         release_edges = self.grasp_tracker.get_release_edge_sequence(gripper)
         if verbose:
-            print(f"    Release edge sequence: {release_edges}")
+            logger.debug("Release edge sequence: %s", release_edges)
         return release_edges
 
     def _project_onto_release_source_state(
@@ -482,17 +486,16 @@ class GraspSequencePlanner:
             if success:
                 q_current = list(q_projected)
                 if verbose:
-                    print(
-                        f"    ✓ Projected onto '{source_state}' " f"(error={error:.2e})"
-                    )
+                    logger.debug("✓ Projected onto '%s' (error=%.2e)", source_state, error)
             elif verbose:
-                print(
-                    f"    ⚠ Projection onto '{source_state}' failed "
-                    f"(error={error:.2e}), using unprojected q"
+                logger.warning(
+                    "Projection onto '%s' failed (error=%.2e), using unprojected q",
+                    source_state,
+                    error,
                 )
         except Exception as e:
             if verbose:
-                print(f"    ⚠ State projection failed: {e}, continuing")
+                logger.warning("State projection failed: %s, continuing", e)
         return q_current
 
     def _plan_release_pregrasp_edge(
@@ -554,8 +557,8 @@ class GraspSequencePlanner:
         import time
 
         if verbose:
-            print(f"    Planning release edge: {edge_21}")
-            print(f"      (pregrasp via forward edge '{edge_01}')")
+            logger.info("Planning release edge: %s", edge_21)
+            logger.info("  (pregrasp via forward edge '%s')", edge_01)
 
         t0 = time.time()
         ok, q_pregrasp = self.config_gen.generate_via_edge(
@@ -592,10 +595,11 @@ class GraspSequencePlanner:
                 path21 = None
                 if _attempt_21 < self._MAX_COLLISION_RETRIES - 1:
                     if verbose:
-                        print(
-                            f"    ⚠ Planning '{edge_21}' failed "
-                            f"(attempt {_attempt_21 + 1}), "
-                            "regenerating pregrasp config..."
+                        logger.warning(
+                            "Planning '%s' failed (attempt %d), regenerating "
+                            "pregrasp config...",
+                            edge_21,
+                            _attempt_21 + 1,
                         )
                     _ok21, _q_new21 = self.config_gen.generate_via_edge(
                         edge_name=edge_01,
@@ -699,10 +703,11 @@ class GraspSequencePlanner:
                 plan_err = e
                 path = None
                 if verbose and _attempt < self._MAX_COLLISION_RETRIES - 1:
-                    print(
-                        f"    ⚠ Planning '{edge_name}' failed "
-                        f"(attempt {_attempt + 1}), "
-                        "regenerating target config..."
+                    logger.warning(
+                        "Planning '%s' failed (attempt %d), regenerating "
+                        "target config...",
+                        edge_name,
+                        _attempt + 1,
                     )
         return path, q_result, t_gen, t_plan, plan_err
 
@@ -859,10 +864,10 @@ class GraspSequencePlanner:
                     )
                     saved_files.append(json_filepath)
                     if verbose:
-                        print(f"       ✓ Auto-saved (portable): {base_filename}.json")
+                        logger.info("✓ Auto-saved (portable): %s.json", base_filename)
                 except Exception as e:
                     if verbose:
-                        print(f"       ⚠ Failed to save JSON waypoints: {e}")
+                        logger.warning("Failed to save JSON waypoints: %s", e)
 
             # Also try to save native .path format (may fail for graph paths, but worth trying)
             if hasattr(self.planner, "save_path_vector"):
@@ -873,23 +878,25 @@ class GraspSequencePlanner:
                     self.planner.save_path_vector(path, path_filepath)
                     saved_files.append(path_filepath)
                     if verbose:
-                        print(f"       ✓ Auto-saved (native): {base_filename}.path")
+                        logger.info("✓ Auto-saved (native): %s.path", base_filename)
                 except Exception as e:
                     # Native format may fail, but JSON should have succeeded
                     if verbose:
                         error_msg = str(e)
                         if "time parameterization" in error_msg.lower():
-                            print(
-                                "       ⚠ Native format skipped: Time-parameterized paths not serializable"
+                            logger.warning(
+                                "Native format skipped: Time-parameterized paths "
+                                "not serializable"
                             )
                         elif (
                             "graph" in error_msg.lower() or "edge" in error_msg.lower()
                         ):
-                            print(
-                                "       ⚠ Native format skipped: Graph-constrained paths (JSON format works)"
+                            logger.warning(
+                                "Native format skipped: Graph-constrained paths "
+                                "(JSON format works)"
                             )
                         else:
-                            print(f"       ⚠ Native format failed: {e}")
+                            logger.warning("Native format failed: %s", e)
 
         self.saved_path_files.extend(saved_files)
         return saved_files
@@ -926,7 +933,7 @@ class GraspSequencePlanner:
         """
         if not self.auto_save_dir:
             if verbose:
-                print("No auto_save_dir configured")
+                logger.warning("No auto_save_dir configured")
             return []
 
         if hasattr(self.planner, "load_paths_from_directory"):
@@ -937,7 +944,7 @@ class GraspSequencePlanner:
             )
         else:
             if verbose:
-                print("Backend does not support path loading")
+                logger.warning("Backend does not support path loading")
             return []
 
     def compute_phase_locked_joints(
@@ -999,7 +1006,7 @@ class GraspSequencePlanner:
         unfrozen_arms: set[str] = {active_arm} if active_arm is not None else set()
 
         if verbose:
-            print(f"Active gripper '{active_gripper}' uses arm '{active_arm}'")
+            logger.debug("Active gripper '%s' uses arm '%s'", active_gripper, active_arm)
 
         # Walk the held-object chain: if the target is held (directly or
         # transitively) by another arm, that arm must stay free so the
@@ -1027,11 +1034,13 @@ class GraspSequencePlanner:
                 if holding_arm:
                     unfrozen_arms.add(holding_arm)
                     if verbose:
-                        print(
-                            f"  Chain trace: '{holder_gripper}' (arm "
-                            f"'{holding_arm}') holds object "
-                            f"'{target_obj}' — keeping "
-                            f"'{holding_arm}' unfrozen"
+                        logger.debug(
+                            "Chain trace: '%s' (arm '%s') holds object '%s' — "
+                            "keeping '%s' unfrozen",
+                            holder_gripper,
+                            holding_arm,
+                            target_obj,
+                            holding_arm,
                         )
                 # Walk up: the holder gripper itself is mounted on some
                 # parent object (e.g. 'g_FG_part' → 'frame_gripper',
@@ -1123,7 +1132,7 @@ class GraspSequencePlanner:
                 )
         except Exception as e:
             if verbose:
-                print(f"  ⚠ Checkpoint dump failed: {e}")
+                logger.warning("Checkpoint dump failed: %s", e)
 
     def _plan_release_entry_phase(
         self,
@@ -1158,7 +1167,7 @@ class GraspSequencePlanner:
         if currently_held is None:
             # No-op: gripper is already free
             if verbose:
-                print(f"  ⚠ '{gripper}' is already free — skipping")
+                logger.info("'%s' is already free — skipping", gripper)
             self.phase_results.append(
                 {
                     "phase": phase_idx + 1,
@@ -1173,7 +1182,7 @@ class GraspSequencePlanner:
             return q_current
 
         if verbose:
-            print(f"\n  [Release] '{gripper}' releasing " f"'{currently_held}'")
+            logger.info("[Release] '%s' releasing '%s'", gripper, currently_held)
         # Compute frozen arms for the release sub-phase
         release_constraints = None
         if frozen_arms_mode == "global":
@@ -1226,7 +1235,7 @@ class GraspSequencePlanner:
                 "completed_edges_in_phase": 0,
             }
             if verbose:
-                print("\n  ⚠ Release failed, partial result stored for resume")
+                logger.warning("Release failed, partial result stored for resume")
             raise
         # Record phase result (with full path/timing tracking)
         self.phase_results.append(
@@ -1279,10 +1288,12 @@ class GraspSequencePlanner:
             return q_current
 
         if verbose:
-            print(
-                f"\n  [Auto-release] '{gripper}' holds "
-                f"'{currently_held}', inserting release before "
-                f"grasping '{handle}'"
+            logger.info(
+                "[Auto-release] '%s' holds '%s', inserting release before "
+                "grasping '%s'",
+                gripper,
+                currently_held,
+                handle,
             )
         # Compute frozen arms for the release sub-phase.
         # Must NOT freeze arms that hold handles on the same
@@ -1315,12 +1326,12 @@ class GraspSequencePlanner:
                         break
             if direct_holder_arm and direct_holder_arm in release_frozen:
                 if verbose:
-                    print(
-                        f"    \u26a0 compute_phase_locked_joints did "
-                        f"not unfreeze direct holder arm "
-                        f"'{direct_holder_arm}' of "
-                        f"'{currently_held}'; applying 1-link "
-                        f"fallback."
+                    logger.warning(
+                        "\u26a0 compute_phase_locked_joints did not "
+                        "unfreeze direct holder arm '%s' of '%s'; applying "
+                        "1-link fallback.",
+                        direct_holder_arm,
+                        currently_held,
                     )
                 release_frozen.remove(direct_holder_arm)
             if release_frozen:
@@ -1369,7 +1380,7 @@ class GraspSequencePlanner:
                 "completed_edges_in_phase": 0,
             }
             if verbose:
-                print("\n  \u26a0 Auto-release failed, partial result stored for resume")
+                logger.warning("\u26a0 Auto-release failed, partial result stored for resume")
             raise
         return q_current
 
@@ -1430,7 +1441,7 @@ class GraspSequencePlanner:
             for g, h in self.grasp_tracker.current_grasps.items()
             if h is not None
         }
-        print(f"  Held grasps: {held_grasps}")
+        logger.debug("Held grasps: %s", held_grasps)
 
         # Always emitted (regardless of `emit_logs`/resume status) so that
         # RunLogger-based analysis/replay can see resumed phases too --
@@ -1455,7 +1466,7 @@ class GraspSequencePlanner:
             # Use global constraints from task.setup()
             phase_graph_constraints = self.graph_constraints
             if verbose and phase_graph_constraints:
-                print("  Using global locked joint constraints")
+                logger.debug("Using global locked joint constraints")
         elif frozen_arms_mode != "none":
             # Determine which arms to freeze for this phase
             if frozen_arms_mode == "interactive":
@@ -1468,9 +1479,10 @@ class GraspSequencePlanner:
                     except Exception as e:
                         # Fallback to auto if callback fails
                         if verbose:
-                            print(
-                                f"  \u26a0 Interactive selection failed: "
-                                f"{e}, using auto mode"
+                            logger.warning(
+                                "\u26a0 Interactive selection failed: %s, "
+                                "using auto mode",
+                                e,
                             )
                         frozen_arms = self.compute_phase_locked_joints(
                             gripper, "auto", handle=handle
@@ -1478,8 +1490,8 @@ class GraspSequencePlanner:
                 else:
                     # No callback set, fall back to auto
                     if verbose:
-                        print(
-                            "  \u26a0 Interactive mode requested but no "
+                        logger.warning(
+                            "\u26a0 Interactive mode requested but no "
                             "callback set, using auto mode"
                         )
                     frozen_arms = self.compute_phase_locked_joints(
@@ -1499,7 +1511,7 @@ class GraspSequencePlanner:
             # Create locked joint constraints for this phase
             if frozen_arms:
                 if verbose:
-                    print(f"  Freezing arms: {frozen_arms}")
+                    logger.debug("Freezing arms: %s", frozen_arms)
 
                 from agimus_spacelab.planning.constraints import (
                     ConstraintBuilder,
@@ -1519,10 +1531,12 @@ class GraspSequencePlanner:
                     phase_graph_constraints = constraint_names
                     if verbose:
                         joint_list = ", ".join(sorted(joint_names))
-                        print(
-                            f"  \u2713 Created {len(joint_names)} locked joint constraints: {joint_list}"
+                        logger.debug(
+                            "\u2713 Created %d locked joint constraints: %s",
+                            len(joint_names),
+                            joint_list,
                         )
-                        print(f"     Constraint names: {constraint_names}")
+                        logger.debug("Constraint names: %s", constraint_names)
 
             # Dynamically set TOPPRA active joints from unfrozen arms
             if hasattr(self.planner, "set_toppra_active_joints"):
@@ -1532,10 +1546,9 @@ class GraspSequencePlanner:
                 if active_joints:
                     self.planner.set_toppra_active_joints(active_joints)
                     if verbose:
-                        print(
-                            f"  TOPPRA active joints: "
-                            f"{len(active_joints)} joints from "
-                            f"unfrozen arms"
+                        logger.debug(
+                            "TOPPRA active joints: %d joints from unfrozen arms",
+                            len(active_joints),
                         )
 
         try:
@@ -1555,10 +1568,10 @@ class GraspSequencePlanner:
             if hasattr(self.planner, "graph"):
                 self.planner.graph = new_graph
                 if emit_logs and verbose:
-                    print("  \u2713 Updated planner graph reference")
-                    print(f"     Graph object: {type(new_graph).__name__}")
+                    logger.debug("\u2713 Updated planner graph reference")
+                    logger.debug("Graph object: %s", type(new_graph).__name__)
                     if hasattr(new_graph, "edges"):
-                        print(f"     Graph has {len(new_graph.edges)} edges")
+                        logger.debug("Graph has %d edges", len(new_graph.edges))
 
             # Update ConfigGenerator's graph reference (or initialize it)
             # ConfigGenerator needs current graph for edge-based config generation
@@ -1574,12 +1587,12 @@ class GraspSequencePlanner:
                     backend=self.backend,
                 )
                 if emit_logs and verbose:
-                    print("  \u2713 Initialized ConfigGenerator with phase graph")
+                    logger.debug("\u2713 Initialized ConfigGenerator with phase graph")
             elif hasattr(self.config_gen, "update_graph"):
                 # Subsequent phases: update graph reference
                 self.config_gen.update_graph(new_graph)
                 if emit_logs and verbose:
-                    print("  \u2713 Updated ConfigGenerator graph reference")
+                    logger.debug("\u2713 Updated ConfigGenerator graph reference")
 
         except Exception as e:
             raise RuntimeError(
@@ -1637,7 +1650,7 @@ class GraspSequencePlanner:
             ) from e
 
         if verbose:
-            print(f"  Edge sequence: {edge_sequence}")
+            logger.debug("Edge sequence: %s", edge_sequence)
 
         # Project current config onto the phase graph's source state
         # The phase graph has different constraints, so q_current
@@ -1646,8 +1659,8 @@ class GraspSequencePlanner:
         source_state = self.grasp_tracker.get_current_state_name()
         try:
             if emit_logs and verbose:
-                print(f"  Projecting q_current onto state: " f"{source_state}")
-                print(f"     q_current (first 5): {q_current[:5]}")
+                logger.debug("Projecting q_current onto state: %s", source_state)
+                logger.debug("q_current (first 5): %s", q_current[:5])
 
             success, q_projected, error = (
                 self.graph_builder.apply_state_constraints(
@@ -1667,8 +1680,8 @@ class GraspSequencePlanner:
             q_current = list(q_projected)
 
             if emit_logs and verbose:
-                print(f"  ✓ Projected q_current (error={error:.6e})")
-                print(f"     q_projected (first 5): {q_current[:5]}")
+                logger.debug("✓ Projected q_current (error=%.6e)", error)
+                logger.debug("q_projected (first 5): %s", q_current[:5])
 
         except Exception as e:
             # Store partial phase result for projection failure
@@ -1701,8 +1714,8 @@ class GraspSequencePlanner:
             }
 
             if verbose:
-                print(
-                    "\n  ⚠ Stored partial phase result: projection failed at phase start"
+                logger.warning(
+                    "Stored partial phase result: projection failed at phase start"
                 )
 
             raise RuntimeError(
@@ -1802,7 +1815,7 @@ class GraspSequencePlanner:
             # Check for stop request
             if is_stop_requested():
                 if verbose:
-                    print("\n  ⚠️  Stop requested - saving progress...")
+                    logger.warning("Stop requested - saving progress...")
                 partial_phase_result = {
                     "phase": phase_idx + 1,
                     "gripper": gripper,
@@ -1833,11 +1846,14 @@ class GraspSequencePlanner:
                 }
 
                 if verbose:
-                    print(
-                        f"\n  ⚠️  Stored partial phase result: {len(phase_paths)} edges completed"
+                    logger.warning(
+                        "Stored partial phase result: %d edges completed",
+                        len(phase_paths),
                     )
-                    print(
-                        f"     You can resume from Phase {phase_idx + 1}, Edge {edge_idx + 1}"
+                    logger.warning(
+                        "You can resume from Phase %d, Edge %d",
+                        phase_idx + 1,
+                        edge_idx + 1,
                     )
 
                 # Disable signal handler before raising
@@ -1898,10 +1914,12 @@ class GraspSequencePlanner:
                 f" (attempt #{attempt_num})" if is_resume and attempt_num > 1 else ""
             )
             if verbose:
-                print(
-                    f"  Planning waypoint edge "
-                    f"{edge_idx + 1}/{len(edge_sequence)}: "
-                    f"{edge_name}{attempt_str}"
+                logger.info(
+                    "Planning waypoint edge %d/%d: %s%s",
+                    edge_idx + 1,
+                    len(edge_sequence),
+                    edge_name,
+                    attempt_str,
                 )
 
             # Generate target configuration via this edge
@@ -1940,10 +1958,11 @@ class GraspSequencePlanner:
                         )
                     else:
                         if verbose:
-                            print(
-                                f"     ✓ Generated target config ({edge_stat['gen_time']:.2f}s)"
+                            logger.info(
+                                "✓ Generated target config (%.2fs)",
+                                edge_stat["gen_time"],
                             )
-                            print(f"     q_target: {q_target}")
+                            logger.debug("q_target: %s", q_target)
 
                     # Visualize the configuration before planning.
                     # Only attempted if the backend viewer has been explicitly
@@ -1955,13 +1974,14 @@ class GraspSequencePlanner:
                             and hasattr(self.planner, "viewer")
                             and self.planner.viewer is not None
                         ):
-                            print(
-                                f"     Visualizing q_target for edge '{edge_name}' before planning..."
+                            logger.debug(
+                                "Visualizing q_target for edge '%s' before planning...",
+                                edge_name,
                             )
                             self.planner.visualize(q_target)
-                            print("     ✓ q_target sent to viewer")
+                            logger.debug("✓ q_target sent to viewer")
                     except Exception as e:
-                        print(f"     ⚠ Could not visualize q_target: {e}")
+                        logger.warning("Could not visualize q_target: %s", e)
 
             except Exception as e:
                 edge_stat["gen_time"] = time.time() - gen_start
@@ -2016,8 +2036,9 @@ class GraspSequencePlanner:
                 }
 
                 if verbose:
-                    print(
-                        f"\n  ⚠ Stored partial phase result: {len(phase_paths)} edges completed"
+                    logger.warning(
+                        "Stored partial phase result: %d edges completed",
+                        len(phase_paths),
                     )
 
                 raise RuntimeError(
@@ -2044,9 +2065,9 @@ class GraspSequencePlanner:
                     phase_geometric_paths.append(None)
 
                 if verbose:
-                    print(
-                        f"     ⏭ Skipped motion planning "
-                        f"({edge_stat['total_time']:.2f}s total)"
+                    logger.info(
+                        "⏭ Skipped motion planning (%.2fs total)",
+                        edge_stat["total_time"],
                     )
 
                 continue
@@ -2068,17 +2089,18 @@ class GraspSequencePlanner:
                     if verbose:
                         if _plan_attempt == 0:
                             if not is_resume:
-                                print("     Planning: q_start -> q_target")
-                            # else: label already printed above (with attempt suffix)
+                                logger.debug("Planning: q_start -> q_target")
+                            # else: label already logged above (with attempt suffix)
                         else:
                             _prev_reason = (
                                 str(last_plan_exc).split("\n")[0]
                                 if last_plan_exc
                                 else ""
                             )
-                            print(
-                                f"     Planning (attempt {_plan_attempt + 1}) "
-                                f"[prev failed: {_prev_reason}]"
+                            logger.debug(
+                                "Planning (attempt %d) [prev failed: %s]",
+                                _plan_attempt + 1,
+                                _prev_reason,
                             )
 
                     path, geometric_path = self.planner.plan_transition_edge(
@@ -2099,10 +2121,10 @@ class GraspSequencePlanner:
                     last_plan_exc = _plan_exc
                     if _plan_attempt < self._MAX_COLLISION_RETRIES - 1:
                         if verbose:
-                            print(
-                                f"     ⚠ Planning failed "
-                                f"(attempt {_plan_attempt + 1}), "
-                                f"regenerating target config..."
+                            logger.warning(
+                                "Planning failed (attempt %d), "
+                                "regenerating target config...",
+                                _plan_attempt + 1,
                             )
                         _ok2, _q_new = self.config_gen.generate_via_edge(
                             edge_name=edge_name,
@@ -2116,7 +2138,7 @@ class GraspSequencePlanner:
                         ):
                             q_target = _q_new
                             if verbose:
-                                print("     Regenerated target config")
+                                logger.debug("Regenerated target config")
 
             if last_plan_exc is not None:
                 e = last_plan_exc
@@ -2160,9 +2182,10 @@ class GraspSequencePlanner:
                 self.phase_results.append(partial_phase_result)
 
                 if is_resume and verbose:
-                    print(
-                        f"     ⚠ Failed after {edge_stat['total_time']:.2f}s "
-                        f"(attempt #{attempt_num})"
+                    logger.warning(
+                        "Failed after %.2fs (attempt #%d)",
+                        edge_stat["total_time"],
+                        attempt_num,
                     )
 
                 # Store failure info for resume
@@ -2179,9 +2202,9 @@ class GraspSequencePlanner:
                 }
 
                 if not is_resume and verbose:
-                    print(
-                        f"\n  ⚠ Stored partial phase result: "
-                        f"{len(phase_paths)} edges completed"
+                    logger.warning(
+                        "Stored partial phase result: %d edges completed",
+                        len(phase_paths),
                     )
 
                 if is_resume:
@@ -2236,9 +2259,10 @@ class GraspSequencePlanner:
                 q_pregrasp_for_cache = list(q_start)
 
             if verbose:
-                print(
-                    f"     ✓ Path found ({edge_stat['plan_time']:.2f}s plan, "
-                    f"{edge_stat['total_time']:.2f}s total)"
+                logger.info(
+                    "✓ Path found (%.2fs plan, %.2fs total)",
+                    edge_stat["plan_time"],
+                    edge_stat["total_time"],
                 )
 
         return {
@@ -2307,10 +2331,12 @@ class GraspSequencePlanner:
         phase_gen_time = sum(s["gen_time"] for s in edge_stats_list)
 
         if not is_resume and verbose:
-            print(f"  ✓ Completed {len(edge_sequence)}-edge sequence")
-            print(
-                f"     Phase timing: {phase_total_time:.2f}s total "
-                f"(gen: {phase_gen_time:.2f}s, plan: {phase_plan_time:.2f}s)"
+            logger.info("✓ Completed %d-edge sequence", len(edge_sequence))
+            logger.info(
+                "Phase timing: %.2fs total (gen: %.2fs, plan: %.2fs)",
+                phase_total_time,
+                phase_gen_time,
+                phase_plan_time,
             )
 
         # Update grasp state after successful planning
@@ -2321,7 +2347,7 @@ class GraspSequencePlanner:
         if handle is not None and q_pregrasp_for_cache is not None:
             self._last_pregrasp_q[gripper] = q_pregrasp_for_cache
             if verbose:
-                print(f"  ✓ Cached q_pregrasp for '{gripper}'")
+                logger.info("✓ Cached q_pregrasp for '%s'", gripper)
 
         # Auto-save paths after successful phase
         saved_files = self._auto_save_phase_paths(
@@ -2377,9 +2403,10 @@ class GraspSequencePlanner:
         self.phase_results.append(phase_result)
 
         if is_resume and verbose:
-            print(
-                f"  ✓ Completed phase {phase_idx + 1} "
-                f"({phase_total_time:.2f}s total)"
+            logger.info(
+                "✓ Completed phase %d (%.2fs total)",
+                phase_idx + 1,
+                phase_total_time,
             )
 
         return q_current
@@ -2455,15 +2482,17 @@ class GraspSequencePlanner:
 
             if verbose:
                 print("\n" + "-" * 70)
-                print(
-                    f"\n--- Phase {phase_idx + 1}/{total_phase_count_for_display} ---"
+                logger.info(
+                    "--- Phase %d/%d ---",
+                    phase_idx + 1,
+                    total_phase_count_for_display,
                 )
                 if handle is not None:
-                    print(f"  Grasp '{handle}' with '{gripper}'")
+                    logger.info("Grasp '%s' with '%s'", handle, gripper)
                 else:
-                    print(f"  Release with '{gripper}'")
+                    logger.info("Release with '%s'", gripper)
                 current_state = self.grasp_tracker.get_current_state_name()
-                print(f"  Current state: {current_state}")
+                logger.info("Current state: %s", current_state)
 
             self._dump_phase_checkpoint(phase_idx, gripper, handle, q_current, verbose)
 
@@ -2636,10 +2665,10 @@ class GraspSequencePlanner:
                 max_iterations=max_iterations_per_edge,
             )
             if verbose:
-                print(
-                    f"Configured TransitionPlanner: "
-                    f"timeout={timeout_per_edge}s, "
-                    f"max_iterations={max_iterations_per_edge}"
+                logger.info(
+                    "Configured TransitionPlanner: timeout=%ss, max_iterations=%s",
+                    timeout_per_edge,
+                    max_iterations_per_edge,
                 )
 
         # Apply time parameterization settings from task config
@@ -2655,7 +2684,7 @@ class GraspSequencePlanner:
             if tp_kwargs:
                 self.planner.configure_time_parameterization(**tp_kwargs)
                 if verbose:
-                    print(f"Configured time parameterization: {tp_kwargs}")
+                    logger.info("Configured time parameterization: %s", tp_kwargs)
 
         # Apply time parameterization method (stp / trapezoidal / toppra)
         if hasattr(self.planner, "configure_time_parameterization_method"):
@@ -2676,18 +2705,20 @@ class GraspSequencePlanner:
             if tp_method_kwargs:
                 self.planner.configure_time_parameterization_method(**tp_method_kwargs)
                 if verbose:
-                    print(
-                        f"Configured time parameterization method: "
-                        f"{tp_method_kwargs}"
+                    logger.info(
+                        "Configured time parameterization method: %s",
+                        tp_method_kwargs,
                     )
 
         if verbose:
             print("\n" + "=" * 70)
-            print("Grasp Sequence Planning")
+            logger.info("Grasp Sequence Planning")
             print("=" * 70)
-            print(f"Sequence: {grasp_sequence}")
-            print(f"Initial state: {self.grasp_tracker.get_current_state_name()}")
-            print("\nℹ️  Press Ctrl+C to stop gracefully (saves progress)")
+            logger.info("Sequence: %s", grasp_sequence)
+            logger.info(
+                "Initial state: %s", self.grasp_tracker.get_current_state_name()
+            )
+            logger.info("Press Ctrl+C to stop gracefully (saves progress)")
 
         # Enable graceful stop and clear any previous stop request
         clear_stop_request()
@@ -2738,11 +2769,13 @@ class GraspSequencePlanner:
 
         if verbose:
             print("\n" + "=" * 70)
-            print("Sequence Planning Complete")
+            logger.info("Sequence Planning Complete")
             print("=" * 70)
-            print(f"Final state: {self.grasp_tracker.get_current_state_name()}")
-            print(f"Completed {len(self.phase_results)} phases")
-            print(f"Total planning time: {self.total_planning_time:.2f}s")
+            logger.info(
+                "Final state: %s", self.grasp_tracker.get_current_state_name()
+            )
+            logger.info("Completed %d phases", len(self.phase_results))
+            logger.info("Total planning time: %.2fs", self.total_planning_time)
 
         # Disable signal handler before returning
         disable_graceful_stop()
@@ -2866,21 +2899,23 @@ class GraspSequencePlanner:
 
         if verbose:
             print("\n" + "=" * 70)
-            print(
-                f"Resuming Grasp Sequence Planning (attempt #{self.resume_attempt_count})"
+            logger.info(
+                "Resuming Grasp Sequence Planning (attempt #%d)",
+                self.resume_attempt_count,
             )
             print("=" * 70)
-            print(
-                f"Resuming from Phase {resume_state['phase_idx'] + 1}, "
-                f"Edge {resume_state['edge_idx'] + 1}"
+            logger.info(
+                "Resuming from Phase %d, Edge %d",
+                resume_state["phase_idx"] + 1,
+                resume_state["edge_idx"] + 1,
             )
-            print(f"Previous error: {resume_state['error']}")
-            print(f"Completed phases: {resume_state['completed_phases']}")
-            print(
-                f"Completed edges in current phase: "
-                f"{resume_state['completed_edges_in_phase']}"
+            logger.info("Previous error: %s", resume_state["error"])
+            logger.info("Completed phases: %s", resume_state["completed_phases"])
+            logger.info(
+                "Completed edges in current phase: %s",
+                resume_state["completed_edges_in_phase"],
             )
-            print("\nℹ️  Press Ctrl+C to stop gracefully (saves progress)")
+            logger.info("Press Ctrl+C to stop gracefully (saves progress)")
 
         # Enable graceful stop and clear any previous stop request
         clear_stop_request()
@@ -2896,7 +2931,7 @@ class GraspSequencePlanner:
                     kwargs["max_iterations"] = max_iterations_per_edge
                 self.planner.configure_transition_planner(**kwargs)
                 if verbose:
-                    print(f"Updated TransitionPlanner config: {kwargs}")
+                    logger.info("Updated TransitionPlanner config: %s", kwargs)
 
         # Restore grasp tracker state from completed phases
         # Reset to free state first
@@ -2928,7 +2963,9 @@ class GraspSequencePlanner:
                         self.grasp_tracker.update_grasp(g, h)
 
         if verbose:
-            print(f"Restored state: {self.grasp_tracker.get_current_state_name()}")
+            logger.info(
+                "Restored state: %s", self.grasp_tracker.get_current_state_name()
+            )
 
         # Remove incomplete phase from results (will be recreated)
         incomplete_phase_idx = resume_state["phase_idx"]
@@ -2938,7 +2975,7 @@ class GraspSequencePlanner:
         remaining_sequence = self.original_sequence[incomplete_phase_idx:]
 
         if verbose:
-            print(f"Remaining sequence: {remaining_sequence}")
+            logger.info("Remaining sequence: %s", remaining_sequence)
 
         # Determine starting config
         if self.phase_results:
@@ -2971,9 +3008,9 @@ class GraspSequencePlanner:
 
         if verbose:
             print("\n" + "=" * 70)
-            print("Resume Complete - All Phases Succeeded")
-            print(f"Total planning time: {self.total_planning_time:.2f}s")
-            print(f"Resume attempts: {self.resume_attempt_count}")
+            logger.info("Resume Complete - All Phases Succeeded")
+            logger.info("Total planning time: %.2fs", self.total_planning_time)
+            logger.info("Resume attempts: %d", self.resume_attempt_count)
             print("=" * 70)
 
         # Disable signal handler before returning
@@ -3038,7 +3075,7 @@ class GraspSequencePlanner:
             List of video file paths if recording enabled, None otherwise
         """
         if not self.phase_results:
-            print("No phases to replay (run plan_sequence first)")
+            logger.warning("No phases to replay (run plan_sequence first)")
             return
 
         if record:
@@ -3047,11 +3084,11 @@ class GraspSequencePlanner:
             output_dir = output_dir or default_video_output_dir()
 
         print("\n" + "=" * 70)
-        print("Replaying Grasp Sequence")
+        logger.info("Replaying Grasp Sequence")
         if visualizer:
-            print("Live graph visualization: ENABLED")
+            logger.info("Live graph visualization: ENABLED")
         if record:
-            print(f"Video recording: ENABLED (output: {output_dir})")
+            logger.info("Video recording: ENABLED (output: %s)", output_dir)
         print("=" * 70)
 
         recorded_videos = []
@@ -3060,32 +3097,39 @@ class GraspSequencePlanner:
         if hasattr(self.planner, "get_num_stored_paths"):
             num_stored = self.planner.get_num_stored_paths()
             if num_stored > 0:
-                print(f"\nNote: {num_stored} paths already stored in ProblemSolver")
-                print("      Replay will add more paths (hpp has no clear API)")
+                logger.info(
+                    "Note: %d paths already stored in ProblemSolver", num_stored
+                )
+                logger.info("Replay will add more paths (hpp has no clear API)")
                 if clear_paths_first:
-                    print("      Consider restarting to clear memory")
+                    logger.info("Consider restarting to clear memory")
 
         for phase in self.phase_results:
             is_complete = phase.get("complete", True)
             status = "✓" if is_complete else "⚠ INCOMPLETE"
 
-            print(
-                f"\nPhase {phase['phase']}: "
-                f"{phase['gripper']} grasps {phase['handle']} [{status}]"
+            logger.info(
+                "Phase %s: %s grasps %s [%s]",
+                phase["phase"],
+                phase["gripper"],
+                phase["handle"],
+                status,
             )
-            print(f"  Edges: {', '.join(phase['edges'])}")
+            logger.info("Edges: %s", ", ".join(phase["edges"]))
 
             # Check if phase was skipped
             if phase.get("skipped"):
-                print("  ⏭ Phase skipped (no paths to replay)")
+                logger.info("⏭ Phase skipped (no paths to replay)")
                 continue
 
             if not is_complete:
                 failed_edge = phase.get("failed_edge_idx", -1)
-                print(
-                    f"  ⚠ Failed at edge {failed_edge + 1}: {phase.get('failed_edge_name', 'unknown')}"
+                logger.warning(
+                    "Failed at edge %d: %s",
+                    failed_edge + 1,
+                    phase.get("failed_edge_name", "unknown"),
                 )
-                print(f"  Error: {phase.get('error_message', 'unknown')}")
+                logger.warning("Error: %s", phase.get("error_message", "unknown"))
 
             # Filter out None paths from skipped edges
             valid_paths = [
@@ -3093,7 +3137,7 @@ class GraspSequencePlanner:
                 for idx, path in enumerate(phase["paths"])
                 if path is not None
             ]
-            print(f"  Playing {len(valid_paths)} waypoint paths...")
+            logger.info("Playing %d waypoint paths...", len(valid_paths))
 
             try:
                 # Play each waypoint path in the sequence
@@ -3101,7 +3145,9 @@ class GraspSequencePlanner:
                 for idx, path in valid_paths:
                     edge_name = edge_names[idx] if idx < len(edge_names) else None
 
-                    print(f"    Path {idx + 1}/{len(phase['paths'])}: ", end="")
+                    logger.info(
+                        "Path %d/%d:", idx + 1, len(phase["paths"])
+                    )
 
                     video_file = self._play_single_phase_path(
                         path=path,
@@ -3119,16 +3165,16 @@ class GraspSequencePlanner:
                     if video_file is not None:
                         recorded_videos.append(video_file)
             except Exception as e:
-                print(f"\n  ⚠ Failed to replay: {e}")
+                logger.warning("Failed to replay: %s", e)
 
         # Final path count
         if hasattr(self.planner, "get_num_stored_paths"):
             final_count = self.planner.get_num_stored_paths()
-            print(f"\n{'='*70}")
-            print(f"Total paths now in ProblemSolver: {final_count}")
+            print("=" * 70)
+            logger.info("Total paths now in ProblemSolver: %d", final_count)
 
         if record and recorded_videos:
-            print(f"\n📹 Recorded {len(recorded_videos)} videos to {output_dir}")
+            logger.info("📹 Recorded %d videos to %s", len(recorded_videos), output_dir)
             return recorded_videos
         return None
 
@@ -3197,7 +3243,7 @@ class GraspSequencePlanner:
                 dt=dt,
                 speed=speed,
             )
-            print(f"✓ Recorded (index {path_idx}): {video_file}")
+            logger.info("✓ Recorded (index %s): %s", path_idx, video_file)
             return video_file
         elif visualizer and hasattr(self.planner, "play_path_vector_with_viz"):
             # Use visualization-enabled playback
@@ -3207,16 +3253,14 @@ class GraspSequencePlanner:
                 visualizer=visualizer,
                 speed=speed,
             )
-            print(
-                f"✓ Played with visualization (stored as index {path_idx})"
-            )
+            logger.info("✓ Played with visualization (stored as index %s)", path_idx)
         elif hasattr(self.planner, "play_path_vector"):
             # Standard playback without visualization
             path_idx = self.planner.play_path_vector(path, speed=speed)
-            print(f"✓ Played (stored as index {path_idx})")
+            logger.info("✓ Played (stored as index %s)", path_idx)
         else:
-            print("⚠ Backend does not support PathVector playback")
-            print(f"      Path type: {type(path).__name__}")
+            logger.warning("⚠ Backend does not support PathVector playback")
+            logger.warning("Path type: %s", type(path).__name__)
         return None
 
     def get_phase_summary(self) -> str:
