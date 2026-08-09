@@ -7,7 +7,7 @@ Provides ConfigGenerator for generating and validating configurations.
 
 import time
 from collections import deque
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -332,109 +332,16 @@ class ConfigGenerator:
                     )
                 return False, None
             use_hint = i == 0 and q_hint is not None
-            # Generate random config (or use hint on first attempt)
-            if self.backend == "corba":
-                q_rand = list(q_hint) if use_hint else self.planner.random_config()
-
-                # omniORB stubs expect plain Python sequences (list/tuple),
-                # not numpy arrays.
-                q_from_seq = (
-                    q_from.tolist() if isinstance(q_from, np.ndarray) else list(q_from)
-                )
-                q_rand_seq = (
-                    q_rand.tolist() if isinstance(q_rand, np.ndarray) else list(q_rand)
-                )
-
-                res, q_target, err = self.graph.generateTargetConfig(
-                    edge_name, q_from_seq, q_rand_seq
-                )
-                success = res
-                config = q_target
-                last_err = err
-            else:  # pyhpp
-                q_rand = (
-                    np.array(q_hint, dtype=float)
-                    if use_hint
-                    else self.planner.random_config()
-                )
-                q_from_arr = (
-                    np.array(q_from) if not isinstance(q_from, np.ndarray) else q_from
-                )
-
-                # Keep all object freeflyer DOF from q_from in q_rand.
-                # Objects not constrained by this edge (e.g. RS1 during a
-                # Phase 1 frame_gripper-only edge) have no constraint and
-                # their DOF pass through q_rand unchanged.  If we use a
-                # fully random q_rand, those objects end up at random
-                # positions in the generated config, corrupting q_init for
-                # the next phase.  Objects that ARE constrained (e.g. a held
-                # object via LockedJoint foliation) will have their DOF
-                # projected to the correct value by the solver regardless of
-                # what q_rand contains, so overriding them here is harmless.
-                # Skip when using a hint — the hint already contains the
-                # right joint values and mustn't be overwritten.
-                if not use_hint:
-                    try:
-                        rank_map = dict(self.robot.rankInConfiguration)
-                        q_rand_arr = np.array(q_rand, dtype=float)
-                        for joint_name, rank in rank_map.items():
-                            if joint_name.endswith("/root_joint"):
-                                if rank + 7 <= len(q_rand_arr) and rank + 7 <= len(
-                                    q_from_arr
-                                ):
-                                    q_rand_arr[rank : rank + 7] = q_from_arr[
-                                        rank : rank + 7
-                                    ]
-                        q_rand = q_rand_arr
-                    except Exception:
-                        pass  # rankInConfiguration not available — fall back to fully random
-
-                # PyHPP bindings often expect a Transition object, not a name.
-                transition = edge_name
-                if isinstance(edge_name, str):
-                    get_transition = getattr(self.graph, "getTransition", None)
-                    if callable(get_transition):
-                        try:
-                            transition = get_transition(edge_name)
-                        except Exception:
-                            transition = edge_name
-
-                try:
-                    res, q_target, err = self.graph.generateTargetConfig(
-                        transition, q_from_arr, q_rand
-                    )
-                except Exception:
-                    # Fallback for bindings that accept the edge name.
-                    res, q_target, err = self.graph.generateTargetConfig(
-                        edge_name, q_from_arr, q_rand
-                    )
-                success = res
-                config = q_target.tolist() if success else None
-                last_err = err
+            success, config, last_err = self._generate_candidate_config(
+                edge_name, q_from, q_hint, use_hint
+            )
 
             if not success:
                 n_solver_fail += 1
                 continue
 
-            if verbose:
-                # Debug: print config and check for invalid values
-                print(
-                    f"       [DEBUG] Generated config via edge '{edge_name}' (attempt {i+1}):"
-                )
-                print(f"         config = {config}")
-                if config is None:
-                    print("         [ERROR] Config is None!")
-                    continue
-                config_arr = np.array(config)
-                if not np.all(np.isfinite(config_arr)):
-                    print(
-                        f"         [ERROR] Config contains non-finite values: {config_arr}"
-                    )
-                    # Print offending indices and values
-                    for idx, val in enumerate(config_arr):
-                        if not np.isfinite(val):
-                            print(f"           [BAD] idx={idx}, value={val}")
-                    continue
+            if verbose and not self._check_config_finite(config, edge_name, i):
+                continue
 
             is_valid, valid_err = self.is_config_valid(config)
             if not is_valid:
@@ -460,6 +367,123 @@ class ConfigGenerator:
                 edge_name, q_from, q_hint, last_err, last_valid_err
             )
         return False, None
+
+    def _generate_candidate_config(
+        self,
+        edge_name: str,
+        q_from: List[float],
+        q_hint: Optional[List[float]],
+        use_hint: bool,
+    ) -> Tuple[bool, Optional[List[float]], Any]:
+        """Generate one candidate target config via `edge_name`'s
+        `generateTargetConfig`, backend-dispatched.
+
+        Returns (success, config, err). `config` is a plain list on
+        success, or None. `err` is the backend's solver residual/error
+        object (used for diagnostics on total failure), regardless of
+        `success`.
+        """
+        if self.backend == "corba":
+            q_rand = list(q_hint) if use_hint else self.planner.random_config()
+
+            # omniORB stubs expect plain Python sequences (list/tuple),
+            # not numpy arrays.
+            q_from_seq = (
+                q_from.tolist() if isinstance(q_from, np.ndarray) else list(q_from)
+            )
+            q_rand_seq = (
+                q_rand.tolist() if isinstance(q_rand, np.ndarray) else list(q_rand)
+            )
+
+            res, q_target, err = self.graph.generateTargetConfig(
+                edge_name, q_from_seq, q_rand_seq
+            )
+            return res, q_target, err
+
+        # pyhpp
+        q_rand = (
+            np.array(q_hint, dtype=float)
+            if use_hint
+            else self.planner.random_config()
+        )
+        q_from_arr = (
+            np.array(q_from) if not isinstance(q_from, np.ndarray) else q_from
+        )
+
+        # Keep all object freeflyer DOF from q_from in q_rand.
+        # Objects not constrained by this edge (e.g. RS1 during a
+        # Phase 1 frame_gripper-only edge) have no constraint and
+        # their DOF pass through q_rand unchanged.  If we use a
+        # fully random q_rand, those objects end up at random
+        # positions in the generated config, corrupting q_init for
+        # the next phase.  Objects that ARE constrained (e.g. a held
+        # object via LockedJoint foliation) will have their DOF
+        # projected to the correct value by the solver regardless of
+        # what q_rand contains, so overriding them here is harmless.
+        # Skip when using a hint — the hint already contains the
+        # right joint values and mustn't be overwritten.
+        if not use_hint:
+            try:
+                rank_map = dict(self.robot.rankInConfiguration)
+                q_rand_arr = np.array(q_rand, dtype=float)
+                for joint_name, rank in rank_map.items():
+                    if joint_name.endswith("/root_joint"):
+                        if rank + 7 <= len(q_rand_arr) and rank + 7 <= len(
+                            q_from_arr
+                        ):
+                            q_rand_arr[rank : rank + 7] = q_from_arr[rank : rank + 7]
+                q_rand = q_rand_arr
+            except Exception:
+                pass  # rankInConfiguration not available — fall back to fully random
+
+        # PyHPP bindings often expect a Transition object, not a name.
+        transition = edge_name
+        if isinstance(edge_name, str):
+            get_transition = getattr(self.graph, "getTransition", None)
+            if callable(get_transition):
+                try:
+                    transition = get_transition(edge_name)
+                except Exception:
+                    transition = edge_name
+
+        try:
+            res, q_target, err = self.graph.generateTargetConfig(
+                transition, q_from_arr, q_rand
+            )
+        except Exception:
+            # Fallback for bindings that accept the edge name.
+            res, q_target, err = self.graph.generateTargetConfig(
+                edge_name, q_from_arr, q_rand
+            )
+        config = q_target.tolist() if res else None
+        return res, config, err
+
+    def _check_config_finite(
+        self, config: Optional[List[float]], edge_name: str, attempt_idx: int
+    ) -> bool:
+        """Debug-print `config` and check it contains no NaN/inf values.
+
+        Only called when verbose=True (see generate_via_edge) -- matches
+        the original inline behavior exactly, including that the finite
+        check itself was only ever performed under verbose=True.
+        """
+        print(
+            f"       [DEBUG] Generated config via edge '{edge_name}' "
+            f"(attempt {attempt_idx + 1}):"
+        )
+        print(f"         config = {config}")
+        if config is None:
+            print("         [ERROR] Config is None!")
+            return False
+        config_arr = np.array(config)
+        if not np.all(np.isfinite(config_arr)):
+            print(f"         [ERROR] Config contains non-finite values: {config_arr}")
+            # Print offending indices and values
+            for idx, val in enumerate(config_arr):
+                if not np.isfinite(val):
+                    print(f"           [BAD] idx={idx}, value={val}")
+            return False
+        return True
 
     def _print_edge_failure_diagnostics(
         self,
