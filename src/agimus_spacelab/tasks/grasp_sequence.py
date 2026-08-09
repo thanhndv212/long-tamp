@@ -1410,12 +1410,16 @@ class GraspSequencePlanner:
                 ``self._q_scene_init`` set earlier in the same call;
                 ``resume_sequence`` may not, hence
                 ``getattr(self, "_q_scene_init", None)`` at that call site.
-            emit_logs: Whether to emit the ``phase_start`` RunLogger event
-                and the verbose confirmation prints around the graph/
-                ConfigGenerator updates. ``plan_sequence`` has always done
-                both; ``resume_sequence`` has never done either -- preserved
-                exactly as a pre-existing asymmetry, not unified here (see
-                the codebase refactor plan's logging-asymmetry section).
+            emit_logs: Whether to print the verbose confirmation lines
+                around the graph/ConfigGenerator updates (``"✓ Updated
+                planner graph reference"`` etc.) when ``verbose=True``.
+                ``plan_sequence`` has always printed these;
+                ``resume_sequence`` never has -- preserved as a
+                deliberate, purely-cosmetic asymmetry (not resume's
+                RunLogger visibility, which the ``phase_start`` event
+                below no longer depends on this flag for -- see the
+                codebase refactor plan's logging-asymmetry section,
+                fixed 2026-08-09).
 
         Raises:
             RuntimeError: if graph building fails, wrapping the original
@@ -1428,7 +1432,10 @@ class GraspSequencePlanner:
         }
         print(f"  Held grasps: {held_grasps}")
 
-        if emit_logs and self.run_logger is not None:
+        # Always emitted (regardless of `emit_logs`/resume status) so that
+        # RunLogger-based analysis/replay can see resumed phases too --
+        # this was the logging-asymmetry bug, fixed 2026-08-09.
+        if self.run_logger is not None:
             try:
                 self.run_logger.log(
                     "phase_start",
@@ -1749,9 +1756,6 @@ class GraspSequencePlanner:
                     verbose debug dump of ``q_target``, and attempts to
                     visualize it before planning; ``True`` does none of
                     that (plain ok/None check only).
-                  - RunLogger ``"edge_start"``/``"edge_end"`` events and
-                    the ``"run_end"`` event on user interrupt: emitted
-                    when ``False``, never emitted when ``True``.
                   - The per-attempt "Planning: q_start -> q_target" print
                     on the first collision-retry attempt: printed when
                     ``False``; skipped when ``True`` (that case's
@@ -1761,9 +1765,17 @@ class GraspSequencePlanner:
                     partial phase result: N edges completed" when
                     ``False``; "Failed after Xs (attempt #N)" when
                     ``True``.
-            loop_start_time: ``plan_sequence()``'s loop-start timestamp,
-                needed only for the ``run_end``-on-interrupt log emitted
-                when ``is_resume`` is ``False``.
+                RunLogger ``"edge_start"``/``"edge_end"`` events and the
+                ``"run_end"`` event on user interrupt are **not** gated by
+                ``is_resume`` -- both callers emit them (fixed 2026-08-09;
+                previously ``resume_sequence()``'s phases/edges were
+                invisible to RunLogger-based analysis/replay, see the
+                codebase refactor plan's logging-asymmetry section).
+            loop_start_time: The caller's loop-start timestamp, used for
+                the ``run_end``-on-interrupt log's ``total_time``. Both
+                ``plan_sequence()`` and ``resume_sequence()`` now pass
+                their own (resume's covers only the resumed portion, not
+                the original call before the failure).
 
         Returns:
             Dict with keys ``phase_paths``, ``phase_geometric_paths``,
@@ -1830,22 +1842,23 @@ class GraspSequencePlanner:
 
                 # Disable signal handler before raising
                 disable_graceful_stop()
-                if not is_resume:
-                    # Emit run_end on user interrupt (plan_sequence only).
-                    if self.run_logger is not None:
-                        try:
-                            self.run_logger.log(
-                                "run_end",
-                                success=False,
-                                total_time=time.time() - loop_start_time,
-                                total_planning_time=self.total_planning_time,
-                                phase_count=len(self.phase_results),
-                                final_config=None,
-                                error="user_interrupt",
-                            )
-                            self.run_logger.close()
-                        except Exception:
-                            pass
+                # Emit run_end on user interrupt, for both plan_sequence()
+                # and resume_sequence() (both now pass a valid
+                # loop_start_time) -- logging-asymmetry fix, 2026-08-09.
+                if self.run_logger is not None:
+                    try:
+                        self.run_logger.log(
+                            "run_end",
+                            success=False,
+                            total_time=time.time() - loop_start_time,
+                            total_planning_time=self.total_planning_time,
+                            phase_count=len(self.phase_results),
+                            final_config=None,
+                            error="user_interrupt",
+                        )
+                        self.run_logger.close()
+                    except Exception:
+                        pass
                 raise KeyboardInterrupt("Planning stopped by user request")
 
             edge_start_time = time.time()
@@ -1869,7 +1882,7 @@ class GraspSequencePlanner:
             if is_resume:
                 edge_stat["is_resume"] = True
 
-            if not is_resume and self.run_logger is not None:
+            if self.run_logger is not None:
                 try:
                     self.run_logger.log(
                         "edge_start",
@@ -1955,7 +1968,7 @@ class GraspSequencePlanner:
                 edge_stat["total_time"] = time.time() - edge_start_time
                 edge_stats_list.append(edge_stat)
 
-                if not is_resume and self.run_logger is not None:
+                if self.run_logger is not None:
                     try:
                         self.run_logger.log(
                             "edge_end",
@@ -2112,7 +2125,7 @@ class GraspSequencePlanner:
                 edge_stats_list.append(edge_stat)
                 self.total_planning_time += edge_stat["total_time"]
 
-                if not is_resume and self.run_logger is not None:
+                if self.run_logger is not None:
                     try:
                         self.run_logger.log(
                             "edge_end",
@@ -2193,7 +2206,7 @@ class GraspSequencePlanner:
             self.total_planning_time += edge_stat["total_time"]
             self.edge_stats[(phase_idx, edge_idx)] = edge_stat
 
-            if not is_resume and self.run_logger is not None:
+            if self.run_logger is not None:
                 try:
                     self.run_logger.log(
                         "edge_end",
@@ -2268,15 +2281,18 @@ class GraspSequencePlanner:
 
         Args:
             is_resume: Selects between the two call sites' pre-existing,
-                genuinely different (not just verbosity) behaviors:
+                genuinely different (not just verbosity) console-print
+                behaviors:
                   - ``plan_sequence()`` prints "Completed N-edge sequence"
                     plus phase timing before updating grasp state;
                     ``resume_sequence()`` has no such print at that point.
-                  - ``plan_sequence()`` emits a ``"phase_end"`` RunLogger
-                    event; ``resume_sequence()`` never has.
                   - ``plan_sequence()`` has no post-append print;
                     ``resume_sequence()`` prints "Completed phase N (Xs
                     total)" *after* appending the phase result.
+                The ``"phase_end"`` RunLogger event is **not** gated by
+                ``is_resume`` -- both callers emit it (fixed 2026-08-09;
+                see the codebase refactor plan's logging-asymmetry
+                section).
 
         Returns:
             The finalized ``q_current`` (== ``q_start``, the config at
@@ -2336,27 +2352,27 @@ class GraspSequencePlanner:
             "saved_files": saved_files,  # Track saved path files
         }
 
-        if not is_resume:
-            # Emit phase_end before appending so callers can react
-            # even if they iterate self.phase_results incrementally.
-            if self.run_logger is not None:
-                try:
-                    self.run_logger.log(
-                        "phase_end",
-                        phase=phase_idx + 1,
-                        gripper=gripper,
-                        handle=handle,
-                        success=True,
-                        phase_time=phase_total_time,
-                        phase_gen_time=phase_gen_time,
-                        phase_plan_time=phase_plan_time,
-                        final_config=list(q_current),
-                        state_after=self.grasp_tracker.get_current_state_name(),
-                        saved_files=saved_files,
-                        error=None,
-                    )
-                except Exception:
-                    pass
+        # Emit phase_end before appending so callers can react even if
+        # they iterate self.phase_results incrementally. Not gated by
+        # is_resume (logging-asymmetry fix, 2026-08-09).
+        if self.run_logger is not None:
+            try:
+                self.run_logger.log(
+                    "phase_end",
+                    phase=phase_idx + 1,
+                    gripper=gripper,
+                    handle=handle,
+                    success=True,
+                    phase_time=phase_total_time,
+                    phase_gen_time=phase_gen_time,
+                    phase_plan_time=phase_plan_time,
+                    final_config=list(q_current),
+                    state_after=self.grasp_tracker.get_current_state_name(),
+                    saved_files=saved_files,
+                    error=None,
+                )
+            except Exception:
+                pass
 
         self.phase_results.append(phase_result)
 
@@ -2829,7 +2845,11 @@ class GraspSequencePlanner:
             verbose: Print progress messages
 
         Returns:
-            Same as plan_sequence()
+            Same as plan_sequence(). On success, also emits a ``"run_end"``
+            RunLogger event and closes the logger, same as plan_sequence()
+            does on its own success -- this is the call that actually
+            brings a resumed run to completion (fixed 2026-08-09; see the
+            codebase refactor plan's logging-asymmetry section).
 
         Raises:
             RuntimeError: If no resumable state exists or if planning fails again
@@ -2929,6 +2949,7 @@ class GraspSequencePlanner:
             q_current = resume_state["q_current"]
 
         use_fm = frozen_arms_mode if frozen_arms_mode is not None else "global"
+        _resume_loop_start_time = time.time()
         q_current = self._run_phase_loop(
             phases=remaining_sequence,
             starting_phase_idx=incomplete_phase_idx,
@@ -2942,6 +2963,7 @@ class GraspSequencePlanner:
             verbose=verbose,
             retry_from_edge=retry_from_edge,
             completed_edges_in_phase_for_resume=resume_state["completed_edges_in_phase"],
+            loop_start_time=_resume_loop_start_time,
         )
 
         # Clear failure info on success
@@ -2956,6 +2978,28 @@ class GraspSequencePlanner:
 
         # Disable signal handler before returning
         disable_graceful_stop()
+
+        # Emit run_end and close the logger (success path) -- plan_sequence()
+        # does this on its own success; resume_sequence() never did, even
+        # though it's the call that actually brings a resumed run to
+        # completion, leaving the log dangling open forever on the resume
+        # path (logging-asymmetry fix, 2026-08-09). total_time here covers
+        # only this resume call, not the original (failed) plan_sequence()
+        # call before it -- that start time isn't retained across calls.
+        if self.run_logger is not None:
+            try:
+                self.run_logger.log(
+                    "run_end",
+                    success=True,
+                    total_time=time.time() - _resume_loop_start_time,
+                    total_planning_time=self.total_planning_time,
+                    phase_count=len(self.phase_results),
+                    final_config=list(q_current),
+                    error=None,
+                )
+                self.run_logger.close()
+            except Exception:
+                pass
 
         return {
             "success": True,
