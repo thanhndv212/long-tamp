@@ -22,6 +22,7 @@ Usage:
 
 from .video_recorder import (
     VideoRecorder,
+    default_video_output_dir,
     record_path_playback,
 )
 from .viz import (
@@ -43,6 +44,7 @@ from .viz import (
 
 __all__ = [
     "VideoRecorder",
+    "default_video_output_dir",
     "clear_all_visualizations",
     "clear_all_visualizations",
     "clear_gripper_visualizations",

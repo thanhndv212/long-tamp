@@ -3015,7 +3015,7 @@ class GraspSequencePlanner:
         clear_paths_first: bool = False,
         visualizer: Any | None = None,
         record: bool = False,
-        output_dir: str = "/home/dvtnguyen/devel/demos",
+        output_dir: str | None = None,
         video_prefix: str | None = None,
         framerate: int = 25,
         dt: float = 0.01,
@@ -3027,7 +3027,9 @@ class GraspSequencePlanner:
             clear_paths_first: If True, warn about accumulated paths before replay
             visualizer: Optional LiveConstraintGraphVisualizer for real-time graph updates
             record: If True, record video of the replay (default: True)
-            output_dir: Directory for video output (default: /home/dvtnguyen/devel/demos)
+            output_dir: Directory for video output. Defaults to
+                ``agimus_spacelab.visualization.default_video_output_dir()``
+                when not given.
             video_prefix: Optional prefix for video filenames
             framerate: Video framerate in fps (default: 25)
             dt: Time step for path sampling (default: 0.01)
@@ -3038,6 +3040,11 @@ class GraspSequencePlanner:
         if not self.phase_results:
             print("No phases to replay (run plan_sequence first)")
             return
+
+        if record:
+            from agimus_spacelab.visualization import default_video_output_dir
+
+            output_dir = output_dir or default_video_output_dir()
 
         print("\n" + "=" * 70)
         print("Replaying Grasp Sequence")

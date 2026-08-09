@@ -676,7 +676,7 @@ class ManipulationTask(ABC):
         path_index: int,
         record: bool,
         video_name: Optional[str],
-        output_dir: str,
+        output_dir: Optional[str],
         framerate: int,
     ) -> None:
         print("\n7. Playing solution path...")
@@ -825,7 +825,7 @@ class ManipulationTask(ABC):
         transition_waypoints: Optional[Sequence[Sequence[float]]] = None,
         generate_waypoints_via_edges: bool = False,
         record: bool = True,
-        output_dir: str = "/home/dvtnguyen/devel/demos",
+        output_dir: Optional[str] = None,
         video_name: Optional[str] = None,
         framerate: int = 25,
     ) -> Dict[str, Any]:
@@ -855,7 +855,9 @@ class ManipulationTask(ABC):
                 waypoints via self.config_gen.generate_via_edge() for each
                 edge but the last.
             record: If True, record video of path playback (default: True)
-            output_dir: Directory for video output (default: /home/dvtnguyen/devel/demos)
+            output_dir: Directory for video output. Defaults to
+                ``agimus_spacelab.visualization.default_video_output_dir()``
+                when not given.
             video_name: Optional custom name for video file
             framerate: Video framerate in fps (default: 25)
 

@@ -12,9 +12,27 @@ import glob
 import os
 import subprocess
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
+
+
+def default_video_output_dir() -> str:
+    """Default directory for video-recording output.
+
+    The single source of truth for every ``output_dir`` default in this
+    codebase (``VideoRecorder``, ``record_path_playback``, and the
+    backend/task methods that pass ``output_dir`` through to them).
+    Overridable via the ``AGIMUS_VIDEO_OUTPUT_DIR`` environment variable;
+    otherwise falls back to ``~/devel/demos`` for whichever user is
+    running -- previously this was a single developer's hardcoded home
+    directory (``/home/dvtnguyen/devel/demos``), copied verbatim into 8
+    method signatures across 4 files.
+    """
+    return os.environ.get(
+        "AGIMUS_VIDEO_OUTPUT_DIR", str(Path.home() / "devel" / "demos")
+    )
 
 
 def _is_viser_viewer(viewer) -> bool:
@@ -42,7 +60,7 @@ class VideoRecorder:
     def __init__(
         self,
         viewer,
-        output_dir: str = "/home/dvtnguyen/devel/demos",
+        output_dir: Optional[str] = None,
         framerate: int = 25,
         frame_extension: str = "png",
         video_extension: str = "mp4",
@@ -53,14 +71,16 @@ class VideoRecorder:
 
         Args:
             viewer: Gepetto or viser viewer instance.
-            output_dir: Directory for video output (default: /home/dvtnguyen/devel/demos)
+            output_dir: Directory for video output. Defaults to
+                :func:`default_video_output_dir` (``AGIMUS_VIDEO_OUTPUT_DIR``
+                env var, or ``~/devel/demos``) when not given.
             framerate: Video framerate in fps (default: 25)
             frame_extension: Frame format - 'png' or 'jpeg' (default: 'png')
             video_extension: Video format - 'mp4', 'avi', etc. (default: 'mp4')
             auto_cleanup: Auto-delete frames after encoding (default: True)
         """
         self.viewer = viewer
-        self.output_dir = output_dir
+        self.output_dir = output_dir or default_video_output_dir()
         self.framerate = framerate
         self.frame_extension = frame_extension
         self.video_extension = video_extension
@@ -314,7 +334,7 @@ def record_path_playback(
     path_player_or_path,
     path_id: int,
     video_name: Optional[str] = None,
-    output_dir: str = "/home/dvtnguyen/devel/demos",
+    output_dir: Optional[str] = None,
     framerate: int = 25,
     dt: float = 0.01,
     speed: float = 1.0,
@@ -336,7 +356,8 @@ def record_path_playback(
         path_player_or_path: For gepetto — a ``PathPlayer``; for viser — an HPP path object.
         path_id: Path identifier (used for naming only when viewer is viser).
         video_name: Custom name for the output video (without extension).
-        output_dir: Directory for video output.
+        output_dir: Directory for video output. Defaults to
+            :func:`default_video_output_dir` when not given.
         framerate: Video framerate in fps.
         dt: Time step for gepetto path sampling.
         speed: Playback speed multiplier.

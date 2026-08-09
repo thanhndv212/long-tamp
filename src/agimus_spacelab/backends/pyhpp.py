@@ -2395,7 +2395,7 @@ class PyHPPBackend(BackendBase):
         self,
         path_index: int = 0,
         video_name: Optional[str] = None,
-        output_dir: str = "/home/dvtnguyen/devel/demos",
+        output_dir: Optional[str] = None,
         framerate: int = 25,
         dt: float = 0.01,
         speed: float = 1.0,
@@ -2405,7 +2405,9 @@ class PyHPPBackend(BackendBase):
         Args:
             path_index: Index of the stored path to play.
             video_name: Output video filename without extension.
-            output_dir: Directory for output video and frames.
+            output_dir: Directory for output video and frames. Defaults to
+                ``agimus_spacelab.visualization.default_video_output_dir()``
+                when not given.
             framerate: Video framerate in fps.
             dt: Time step for path sampling.
             speed: Playback speed multiplier.
@@ -2442,7 +2444,7 @@ class PyHPPBackend(BackendBase):
         self,
         path_vector: Any,
         video_name: Optional[str] = None,
-        output_dir: str = "/home/dvtnguyen/devel/demos",
+        output_dir: Optional[str] = None,
         framerate: int = 25,
         dt: float = 0.01,
         speed: float = 1.0,
