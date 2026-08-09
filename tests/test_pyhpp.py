@@ -4,6 +4,8 @@ Tests for PyHPP backend.
 These tests require hpp-python to be installed.
 """
 
+import logging
+
 import pytest
 import numpy as np
 from unittest.mock import MagicMock
@@ -280,19 +282,19 @@ class TestValidateEdgeEndpoints:
     affects return value; verify it degrades gracefully when graph
     introspection isn't available."""
 
-    def test_no_graph_prints_warning_and_returns_none(self, capsys):
+    def test_no_graph_prints_warning_and_returns_none(self, caplog):
         planner = PyHPPManipulationPlanner()
         planner.graph = None
 
-        result = planner._validate_edge_endpoints(
-            object(), "edge01", np.array([0.0]), np.array([1.0])
-        )
+        with caplog.at_level(logging.DEBUG, logger="agimus_spacelab"):
+            result = planner._validate_edge_endpoints(
+                object(), "edge01", np.array([0.0]), np.array([1.0])
+            )
 
         assert result is None
-        captured = capsys.readouterr()
-        assert "Cannot validate configurations" in captured.out
+        assert "Cannot validate configurations" in caplog.text
 
-    def test_graph_without_get_nodes_method_returns_none(self, capsys):
+    def test_graph_without_get_nodes_method_returns_none(self, caplog):
         planner = PyHPPManipulationPlanner()
 
         class _FakeGraph:
@@ -300,15 +302,15 @@ class TestValidateEdgeEndpoints:
 
         planner.graph = _FakeGraph()
 
-        result = planner._validate_edge_endpoints(
-            object(), "edge01", np.array([0.0]), np.array([1.0])
-        )
+        with caplog.at_level(logging.DEBUG, logger="agimus_spacelab"):
+            result = planner._validate_edge_endpoints(
+                object(), "edge01", np.array([0.0]), np.array([1.0])
+            )
 
         assert result is None
-        captured = capsys.readouterr()
-        assert "Cannot validate configurations" in captured.out
+        assert "Cannot validate configurations" in caplog.text
 
-    def test_valid_states_prints_success_markers(self, capsys):
+    def test_valid_states_prints_success_markers(self, caplog):
         planner = PyHPPManipulationPlanner()
         graph = MagicMock()
         state_from = MagicMock()
@@ -321,14 +323,14 @@ class TestValidateEdgeEndpoints:
         graph.errorThreshold.return_value = 1e-3
         planner.graph = graph
 
-        planner._validate_edge_endpoints(
-            object(), "edge01", np.array([0.0]), np.array([1.0])
-        )
+        with caplog.at_level(logging.DEBUG, logger="agimus_spacelab"):
+            planner._validate_edge_endpoints(
+                object(), "edge01", np.array([0.0]), np.array([1.0])
+            )
 
-        captured = capsys.readouterr()
-        assert "Validate q1 in state 'state_from'" in captured.out
-        assert "Validate q2 in state 'state_to'" in captured.out
-        assert "✓" in captured.out
+        assert "Validate q1 in state 'state_from'" in caplog.text
+        assert "Validate q2 in state 'state_to'" in caplog.text
+        assert "✓" in caplog.text
 
 
 @pytest.mark.skipif(not HAS_PYHPP, reason="PyHPP backend not available")

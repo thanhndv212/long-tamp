@@ -9,7 +9,11 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 from pinocchio import SE3
 
+from agimus_spacelab.logging import get_logger
+
 from .base import BackendBase, ConstraintResult
+
+logger = get_logger("backends.pyhpp")
 
 try:
     from pyhpp.core import (
@@ -461,7 +465,7 @@ class PyHPPBackend(BackendBase):
 
             return success
         except Exception as e:
-            print(f"Planning failed: {e}")
+            logger.warning("Planning failed: %s", e)
             return False
 
     def get_path(self, index: int = 0) -> Optional[Any]:
@@ -501,7 +505,7 @@ class PyHPPBackend(BackendBase):
             self.viewer = _ViserViewer(self.device, problem)
             self.viewer.start(open=False)
             url = getattr(self.viewer, "url", None) or "http://localhost:8080"
-            print(f"Viser viewer started — open {url} in your browser")
+            logger.info("Viser viewer started — open %s in your browser", url)
         elif resolved == "gepetto":
             if not HAS_GEPETTO_VIEWER:
                 raise ImportError(
@@ -515,9 +519,9 @@ class PyHPPBackend(BackendBase):
                     self.viewer = _ViserViewer(self.device, problem)
                     self.viewer.start(open=False)
                     url = getattr(self.viewer, "url", None) or "http://localhost:8080"
-                    print(f"Viser viewer started — open {url} in your browser")
+                    logger.info("Viser viewer started — open %s in your browser", url)
                 except Exception as exc:
-                    print(f"⚠ Viser failed ({exc}), trying gepetto-viewer...")
+                    logger.warning("Viser failed (%s), trying gepetto-viewer...", exc)
                     self.viewer = None
                     if HAS_GEPETTO_VIEWER:
                         self.viewer = _GepettoViewer(self.device)
@@ -545,7 +549,7 @@ class PyHPPBackend(BackendBase):
             try:
                 self.setup_viewer()
             except Exception as exc:
-                print(f"⚠ Viewer unavailable: {exc}")
+                logger.warning("Viewer unavailable: %s", exc)
                 return
 
         if q is not None:
@@ -588,7 +592,7 @@ class PyHPPBackend(BackendBase):
             path = self.path
 
         if path is None:
-            print("No path to play")
+            logger.warning("No path to play")
             return
 
         if self.viewer is None:
@@ -751,9 +755,9 @@ class PyHPPBackend(BackendBase):
             try:
                 idx = self.load_path(filepath)
                 indices.append(idx)
-                print(f"  Loaded {os.path.basename(filepath)} -> index {idx}")
+                logger.info("Loaded %s -> index %d", os.path.basename(filepath), idx)
             except Exception as e:
-                print(f"  Failed to load {filepath}: {e}")
+                logger.warning("Failed to load %s: %s", filepath, e)
 
         return indices
 
@@ -799,7 +803,7 @@ class PyHPPBackend(BackendBase):
                         str(s.name() if hasattr(s, "name") else s) for s in states
                     ]
         except Exception as e:
-            print(f"Warning: Could not extract states: {e}")
+            logger.warning("Could not extract states: %s", e)
 
         # Extract edges from graph
         try:
@@ -826,7 +830,7 @@ class PyHPPBackend(BackendBase):
                             pass
                         metadata["edges"].append(edge_info)
         except Exception as e:
-            print(f"Warning: Could not extract edges: {e}")
+            logger.warning("Could not extract edges: %s", e)
 
         # Extract object names if available
         try:
@@ -836,7 +840,7 @@ class PyHPPBackend(BackendBase):
                 robot_name = metadata["robot_name"]
                 metadata["objects"] = [n for n in all_names if n != robot_name]
         except Exception as e:
-            print(f"Warning: Could not extract object names: {e}")
+            logger.warning("Could not extract object names: %s", e)
 
         return metadata
 
@@ -893,9 +897,10 @@ class PyHPPBackend(BackendBase):
                 if hasattr(self, "extract_graph_metadata"):
                     graph_metadata = self.extract_graph_metadata()
             except Exception as e:
-                print(f"Warning: Could not extract graph metadata: {e}")
-                print(
-                    "Path can still be saved but may require manual graph setup to load."
+                logger.warning(
+                    "Could not extract graph metadata: %s. Path can still be saved "
+                    "but may require manual graph setup to load.",
+                    e,
                 )
 
             # Create data structure
@@ -976,15 +981,17 @@ class PyHPPBackend(BackendBase):
 
                 # Validate current graph matches metadata
                 self._validate_graph_metadata(graph_metadata)
-                print("✓ Graph metadata validated successfully")
+                logger.info("✓ Graph metadata validated successfully")
             elif graph_metadata:
                 # Metadata present but not validating - provide helpful info
                 num_states = len(graph_metadata.get("states", []))
                 robot_name = graph_metadata.get("robot_name", "unknown")
                 if num_states > 0:
-                    print(
-                        f"Note: File contains graph metadata for robot '{robot_name}' "
-                        f"with {num_states} states. Make sure your graph setup matches."
+                    logger.info(
+                        "File contains graph metadata for robot '%s' with %d "
+                        "states. Make sure your graph setup matches.",
+                        robot_name,
+                        num_states,
                     )
 
             waypoints = data["waypoints"]
@@ -1010,7 +1017,7 @@ class PyHPPBackend(BackendBase):
                         path_segments.append(segment)
                 except Exception as e:
                     # If steering fails, skip this segment
-                    print(f"Warning: Failed to create segment {i} -> {i+1}: {e}")
+                    logger.warning("Failed to create segment %d -> %d: %s", i, i + 1, e)
                     continue
 
             if not path_segments:
@@ -1065,9 +1072,10 @@ class PyHPPBackend(BackendBase):
         saved_robot = saved_metadata.get("robot_name")
         current_robot = current_metadata.get("robot_name")
         if saved_robot and current_robot and saved_robot != current_robot:
-            print(
-                f"Warning: Robot name mismatch. Saved: '{saved_robot}', "
-                f"Current: '{current_robot}'"
+            logger.warning(
+                "Robot name mismatch. Saved: '%s', Current: '%s'",
+                saved_robot,
+                current_robot,
             )
 
         # Validate state count
@@ -1084,9 +1092,10 @@ class PyHPPBackend(BackendBase):
         saved_edges = saved_metadata.get("edges", [])
         current_edges = current_metadata.get("edges", [])
         if saved_edges and current_edges and len(saved_edges) != len(current_edges):
-            print(
-                f"Warning: Edge count mismatch. Saved: {len(saved_edges)}, "
-                f"Current: {len(current_edges)}"
+            logger.warning(
+                "Edge count mismatch. Saved: %d, Current: %d",
+                len(saved_edges),
+                len(current_edges),
             )
 
     def get_robot(self):
@@ -1144,7 +1153,7 @@ class PyHPPBackend(BackendBase):
         cts = ComparisonTypes()
         cts[:] = tuple([ComparisonType.EqualToZero] * sum(mask))
         constraint = Implicit(pc, cts, mask_vec)
-        print(f"    ✓ {name}: {gripper} -> {tool} (PyHPP)")
+        logger.info("✓ %s: %s -> %s (PyHPP)", name, gripper, tool)
         return constraint
 
     def create_placement_constraint(self, ps, name: str, tool: str, world_pose, mask):
@@ -1171,7 +1180,7 @@ class PyHPPBackend(BackendBase):
         cts[:] = tuple([ComparisonType.EqualToZero] * num_constrained)
         implicit_mask = [True] * num_constrained
         constraint = Implicit(pc, cts, implicit_mask)
-        print(f"    ✓ {name}: tool at {world_pose[:3]} (PyHPP)")
+        logger.info("✓ %s: tool at %s (PyHPP)", name, world_pose[:3])
         return constraint
 
     def create_complement_constraint(
@@ -1208,7 +1217,7 @@ class PyHPPBackend(BackendBase):
         cts[:] = tuple([ComparisonType.Equality] * num_constrained)
         implicit_mask = [True] * num_constrained
         constraint = Implicit(pc, cts, implicit_mask)
-        print(f"    ✓ {constraint_name}: free DOFs (PyHPP)")
+        logger.info("✓ %s: free DOFs (PyHPP)", constraint_name)
         return constraint
 
     def create_locked_joint_constraints(self, ps, robot, q_ref, patterns) -> tuple:
@@ -1259,7 +1268,7 @@ class PyHPPBackend(BackendBase):
         self, validation_step: float = 0.01, projector_step: float = 0.1
     ):
         """Configure path validation parameters."""
-        print("   Configuring path validation...")
+        logger.info("Configuring path validation...")
         if self.problem is None:
             raise RuntimeError("Must create problem first")
 
@@ -1298,7 +1307,7 @@ class PyHPPBackend(BackendBase):
         count = len(self._stored_paths)
         self._stored_paths.clear()
         if verbose:
-            print(f"   Cleared {count} stored path(s).")
+            logger.info("Cleared %d stored path(s).", count)
         return count
 
     def configure_path_optimization(
@@ -1340,11 +1349,11 @@ class PyHPPBackend(BackendBase):
         opt_instance = self._create_path_optimizer_instance(optimizer)
         if opt_instance is None:
             available = sorted(self._path_optimizer_factories().keys())
-            print(
-                f"      [warn] Unknown optimizer: {optimizer!r} "
-                f"(not available in pyhpp; requires CORBA plugin). "
-                f"Falling back to 'RandomShortcut'. "
-                f"Available: {available}"
+            logger.warning(
+                "Unknown optimizer: %r (not available in pyhpp; requires CORBA "
+                "plugin). Falling back to 'RandomShortcut'. Available: %s",
+                optimizer,
+                available,
             )
             opt_instance = self._create_path_optimizer_instance("RandomShortcut")
         self._path_optimizers.append(opt_instance)
@@ -1636,24 +1645,24 @@ class PyHPPBackend(BackendBase):
                 tp_toppra.gridpointMethod = self._toppra_gridpoint_method
                 if self._toppra_active_joints:
                     tp_toppra.selectJoints(self._toppra_active_joints)
-                    print(
-                        f"      [TP] TOPPRA active joints: "
-                        f"{len(self._toppra_active_joints)} joints"
+                    logger.debug(
+                        "TOPPRA active joints: %d joints",
+                        len(self._toppra_active_joints),
                     )
                 pv = tp_toppra.optimize(pv)
-                print("      [TP] TOPPRA applied (time-optimal)")
+                logger.info("TOPPRA applied (time-optimal)")
                 return pv
             except Exception as e:
-                print(f"      [TP] TOPPRA failed: {e}, falling back to trapezoidal")
+                logger.warning("TOPPRA failed: %s, falling back to trapezoidal", e)
 
         if method in ("toppra", "trapezoidal") and HAS_TRAPEZOIDAL:
             try:
                 tp_trap = TrapezoidalTimeParameterization(self.problem)
                 pv = tp_trap.optimize(pv)
-                print("      [TP] TrapezoidalTimeParameterization applied")
+                logger.info("TrapezoidalTimeParameterization applied")
                 return pv
             except Exception as e:
-                print(f"      [TP] TrapezoidalTP failed: {e}, falling back to STP")
+                logger.warning("TrapezoidalTP failed: %s, falling back to STP", e)
 
         # Default / fallback: SimpleTimeParameterization
         return self._apply_stp(pv)
@@ -1664,28 +1673,27 @@ class PyHPPBackend(BackendBase):
             "SplineGradientBased" in name for name in self._get_active_optimizer_names()
         )
         if has_spline_optimizer:
-            print(
-                "      [TP] Skipping tp.timeParameterization() — "
-                "SplineGradientBased already in optimizer chain"
+            logger.debug(
+                "Skipping tp.timeParameterization() — SplineGradientBased "
+                "already in optimizer chain"
             )
             try:
                 from pyhpp.core import SimpleTimeParameterization as STP
 
                 tp_stp = STP(self.problem)
                 pv = tp_stp.optimize(pv)
-                print(
-                    "      [TP] SimpleTimeParameterization applied "
-                    "(order from main problem)"
+                logger.info(
+                    "SimpleTimeParameterization applied (order from main problem)"
                 )
             except Exception as e:
-                print(f"      [TP] SimpleTimeParameterization failed: {e}")
+                logger.warning("SimpleTimeParameterization failed: %s", e)
         else:
             try:
                 tp = self.ensure_transition_planner()
                 pv = tp.timeParameterization(pv)
-                print("      [TP] Path time-parameterized")
+                logger.info("Path time-parameterized")
             except Exception as e:
-                print(f"      [TP] Time parameterization failed: {e}")
+                logger.warning("Time parameterization failed: %s", e)
         return pv
 
     def set_inner_problem_parameter(self, key: str, value: Any) -> None:
@@ -1712,19 +1720,19 @@ class PyHPPBackend(BackendBase):
                 if hasattr(self.problem, "setParameter"):
                     self.problem.setParameter(key, value)
         except Exception as e:
-            print(f"Warning: Could not set inner problem parameter " f"'{key}': {e}")
+            logger.warning("Could not set inner problem parameter '%s': %s", key, e)
 
     def _apply_transition_planner_defaults(self, tp: Any) -> None:
         try:
             tp.timeOut(self._transition_time_out)
-            print(f"      [TP] ✓ timeOut={self._transition_time_out:.1f}s")
+            logger.debug("✓ timeOut=%.1fs", self._transition_time_out)
         except Exception as e:
-            print(f"      [TP] ✗ timeOut failed: {e}")
+            logger.warning("timeOut failed: %s", e)
         try:
             tp.maxIterations(self._transition_max_iterations)
-            print(f"      [TP] ✓ maxIterations={self._transition_max_iterations}")
+            logger.debug("✓ maxIterations=%s", self._transition_max_iterations)
         except Exception as e:
-            print(f"      [TP] ✗ maxIterations failed: {e}")
+            logger.warning("maxIterations failed: %s", e)
 
         # Apply SimpleTimeParameterization parameters.
         # Must set on BOTH self.problem (for path optimizer chain) AND via
@@ -1744,14 +1752,14 @@ class PyHPPBackend(BackendBase):
                 try:
                     self.problem.setParameter(key, value)
                 except Exception as e:
-                    print(f"      [TP] ✗ {key} on problem failed: {e}")
+                    logger.warning("%s on problem failed: %s", key, e)
             # Set on innerProblem_ via tp.innerProblem().setParameter
             # (tp.setParameter does not exist in PyHPP bindings)
             try:
                 tp.innerProblem().setParameter(key, value)
-                print(f"      [TP] ✓ {key}={value} (problem + innerProblem)")
+                logger.debug("✓ %s=%s (problem + innerProblem)", key, value)
             except Exception as e:
-                print(f"      [TP] ✗ {key} on innerProblem failed: {e}")
+                logger.warning("%s on innerProblem failed: %s", key, e)
 
         # Apply HPP-level parameters on the Problem for path optimizers.
         # These are global to the problem and affect all optimizers in the TP.
@@ -1770,12 +1778,12 @@ class PyHPPBackend(BackendBase):
         try:
             self.problem.setParameter("PathOptimizer/timeOut", 30.0)
         except Exception as e:
-            print(f"      [TP] ✗ PathOptimizer/timeOut on problem failed: {e}")
+            logger.warning("PathOptimizer/timeOut on problem failed: %s", e)
         try:
             tp.innerProblem().setParameter("PathOptimizer/timeOut", 30.0)
-            print("      [TP] ✓ PathOptimizer/timeOut=30.0s (problem + innerProblem)")
+            logger.debug("✓ PathOptimizer/timeOut=30.0s (problem + innerProblem)")
         except Exception as e:
-            print(f"      [TP] ✗ PathOptimizer/timeOut on innerProblem failed: {e}")
+            logger.warning("PathOptimizer/timeOut on innerProblem failed: %s", e)
         try:
             self.problem.setParameter(
                 "SplineGradientBased/zeroDerivativesAtStateIntersection",
@@ -1789,9 +1797,9 @@ class PyHPPBackend(BackendBase):
         if self._transition_path_projector is None:
             try:
                 tp.pathProjector(self.problem.pathProjector())
-                print("      [TP] ✓ pathProjector=<inherited from problem>")
+                logger.debug("✓ pathProjector=<inherited from problem>")
             except Exception as e:
-                print(f"      [TP] ✗ pathProjector (fallback) failed: {e}")
+                logger.warning("pathProjector (fallback) failed: %s", e)
             return
 
         proj_type, step = self._transition_path_projector
@@ -1803,16 +1811,18 @@ class PyHPPBackend(BackendBase):
                     float(step),
                 )
                 tp.pathProjector(projector)
-                print(f"      [TP] ✓ pathProjector=Progressive(step={step})")
+                logger.debug("✓ pathProjector=Progressive(step=%s)", step)
             else:
                 # Unknown projector type: best-effort fallback
                 tp.pathProjector(self.problem.pathProjector())
-                print(
-                    "      [TP] ✓ pathProjector=<inherited from problem>"
-                    f" (unknown type '{proj_type}')"
+                logger.debug(
+                    "✓ pathProjector=<inherited from problem> (unknown type '%s')",
+                    proj_type,
                 )
         except Exception as e:
-            print(f"      [TP] ✗ pathProjector={proj_type}(step={step}) failed: {e}")
+            logger.warning(
+                "pathProjector=%s(step=%s) failed: %s", proj_type, step, e
+            )
 
     def ensure_transition_planner(self) -> Any:
         """Create (or return cached) TransitionPlanner object."""
@@ -1891,7 +1901,7 @@ class PyHPPBackend(BackendBase):
                 set_transition(tr)
             else:
                 tp.setEdge(tr)
-            print(f"      [TP] Set edge: {edge_name}")
+            logger.debug("Set edge: %s", edge_name)
         except Exception as exc:
             raise RuntimeError(
                 f"Failed to set TransitionPlanner edge {edge_name}: {exc}"
@@ -1906,23 +1916,23 @@ class PyHPPBackend(BackendBase):
         if edge_name in self._transition_optimizers_by_edge_name:
             # Use explicit per-edge override if set
             optimizer_names = self._transition_optimizers_by_edge_name[edge_name]
-            print("      [TP] Using edge-specific optimizers")
+            logger.debug("Using edge-specific optimizers")
         elif self._is_pregrasp_edge(edge_name):
             # Pregrasp edges: constrained motion
             optimizer_names = self._waypoint_pregrasp_optimizers
-            print("      [TP] Using pregrasp edge optimizers")
+            logger.debug("Using pregrasp edge optimizers")
         elif self._is_grasp_edge(edge_name):
             # Grasp edges: constrained motion
             optimizer_names = self._waypoint_grasp_optimizers
-            print("      [TP] Using grasp edge optimizers")
+            logger.debug("Using grasp edge optimizers")
         elif "Loop" in edge_name or "transit" in edge_name.lower():
             # Transit edges: free-space motion
             optimizer_names = self._transit_edge_optimizers
-            print("      [TP] Using transit edge optimizers")
+            logger.debug("Using transit edge optimizers")
         else:
             # Default fallback
             optimizer_names = self._transition_default_optimizers
-            print("      [TP] Using default optimizers")
+            logger.debug("Using default optimizers")
 
         for opt_name in optimizer_names:
             opt_instance = self._create_path_optimizer_instance(opt_name)
@@ -1932,7 +1942,7 @@ class PyHPPBackend(BackendBase):
                     f"Unknown optimizer: {opt_name}. Available: {available}"
                 )
             tp.addPathOptimizer(opt_instance)
-            print(f"      [TP] Added optimizer: {opt_name}")
+            logger.debug("Added optimizer: %s", opt_name)
 
         # Store the active optimizer names for later use (e.g., to decide
         # whether to skip tp.timeParameterization()).
@@ -1988,10 +1998,7 @@ class PyHPPBackend(BackendBase):
             tp.maxIterations(max_iter)
         except Exception:
             pass
-        print(
-            f"      [TP] Planning budget: "
-            f"timeout={timeout:.1f}s, max_iter={max_iter}"
-        )
+        logger.debug("Planning budget: timeout=%.1fs, max_iter=%s", timeout, max_iter)
 
         self._configure_transition_planner_for_edge(tp, tr)
 
@@ -2039,7 +2046,7 @@ class PyHPPBackend(BackendBase):
             )
         else:
             edge_type = "pregrasp" if is_waypoint_pregrasp else "forward grasp (_12)"
-            print(f"      [TP] Waypoint {edge_type} edge, " "skipping directPath")
+            logger.debug("Waypoint %s edge, skipping directPath", edge_type)
 
         # Fall back to computePath (preferred) if directPath didn't work or
         # was skipped -- see _compute_or_plan_path for why the fallback exists.
@@ -2057,13 +2064,13 @@ class PyHPPBackend(BackendBase):
         if time_parameterize:
             pv = self._apply_time_parameterization(pv)
         else:
-            print("      [TP] Skipping time parameterization")
+            logger.debug("Skipping time parameterization")
 
         if not store:
             return pv, pv_geometric
 
         path_id = self.store_path(pv)
-        print(f"      [TP] Path stored with ID: {path_id}")
+        logger.debug("Path stored with ID: %s", path_id)
         return path_id, pv_geometric
 
     def _validate_edge_endpoints(
@@ -2092,15 +2099,14 @@ class PyHPPBackend(BackendBase):
                     state_from = self.graph.getState(nodes[0])
                     state_to = self.graph.getState(nodes[1])
             except Exception as exc:
-                print(
-                    f"      [TP] Warning: getNodesConnectedByTransition"
-                    f"('{edge_name}') failed: {exc}"
+                logger.debug(
+                    "getNodesConnectedByTransition('%s') failed: %s", edge_name, exc
                 )
 
         has_states = state_from is not None and state_to is not None
         if not has_states:
-            print(
-                "      [TP] Warning: Cannot validate configurations "
+            logger.debug(
+                "Cannot validate configurations "
                 "(graph or transition states not available)"
             )
             return
@@ -2123,21 +2129,22 @@ class PyHPPBackend(BackendBase):
             error_q1_scalar = float(np.linalg.norm(np.asarray(err_q1, dtype=float)))
             threshold = float(self.graph.errorThreshold())
             success_q1 = error_q1_scalar < threshold
-            print(
-                f"      [TP] Validate q1 in state '{state_from_name}': "
-                f"{'✓' if success_q1 else '✗'} "
-                f"(error={error_q1_scalar:.6f}, "
-                f"threshold={threshold:.6f})"
+            logger.debug(
+                "Validate q1 in state '%s': %s (error=%.6f, threshold=%.6f)",
+                state_from_name,
+                "✓" if success_q1 else "✗",
+                error_q1_scalar,
+                threshold,
             )
             if not success_q1:
-                print(
-                    f"      [TP] Warning: q1 may not satisfy "
-                    f"'{state_from_name}' constraints "
-                    f"(error={error_q1_scalar:.6f}); "
-                    "proceeding — TransitionPlanner will validate."
+                logger.debug(
+                    "q1 may not satisfy '%s' constraints (error=%.6f); "
+                    "proceeding — TransitionPlanner will validate.",
+                    state_from_name,
+                    error_q1_scalar,
                 )
         except Exception as exc:
-            print(f"      [TP] Warning: Could not validate q1: {exc}")
+            logger.debug("Could not validate q1: %s", exc)
 
         # Validate q2 against destination state
         try:
@@ -2146,21 +2153,22 @@ class PyHPPBackend(BackendBase):
             error_q2_scalar = float(np.linalg.norm(np.asarray(err_q2, dtype=float)))
             threshold = float(self.graph.errorThreshold())
             success_q2 = error_q2_scalar < threshold
-            print(
-                f"      [TP] Validate q2 in state '{state_to_name}': "
-                f"{'✓' if success_q2 else '✗'} "
-                f"(error={error_q2_scalar:.6f}, "
-                f"threshold={threshold:.6f})"
+            logger.debug(
+                "Validate q2 in state '%s': %s (error=%.6f, threshold=%.6f)",
+                state_to_name,
+                "✓" if success_q2 else "✗",
+                error_q2_scalar,
+                threshold,
             )
             if not success_q2:
-                print(
-                    f"      [TP] Warning: q2 may not satisfy "
-                    f"'{state_to_name}' constraints "
-                    f"(error={error_q2_scalar:.6f}); "
-                    "proceeding — TransitionPlanner will validate."
+                logger.debug(
+                    "q2 may not satisfy '%s' constraints (error=%.6f); "
+                    "proceeding — TransitionPlanner will validate.",
+                    state_to_name,
+                    error_q2_scalar,
                 )
         except Exception as exc:
-            print(f"      [TP] Warning: Could not validate q2: {exc}")
+            logger.debug("Could not validate q2: %s", exc)
 
     def _try_direct_path(
         self,
@@ -2176,22 +2184,22 @@ class PyHPPBackend(BackendBase):
         or None if directPath failed/threw -- the caller falls back to
         _compute_or_plan_path in that case."""
         label = "release retract (_21)" if is_release_retract_edge else "transit"
-        print(f"      [TP] {label} edge, trying directPath first")
+        logger.debug("%s edge, trying directPath first", label)
         try:
             success, path, status = tp.directPath(q1_arr, q2_arr, bool(validate))
             if success:
-                print("      [TP] directPath succeeded")
+                logger.debug("directPath succeeded")
                 try:
                     pv = tp.optimizePath(path)
-                    print("      [TP] Path optimized")
+                    logger.debug("Path optimized")
                     return pv
                 except Exception:
-                    print("      [TP] Optimization failed, " "using unoptimized path")
+                    logger.debug("Optimization failed, using unoptimized path")
                     return path
-            print(f"      [TP] directPath failed: {status}")
+            logger.debug("directPath failed: %s", status)
         except Exception as exc:
             # directPath failed, will fall back to planPath
-            print(f"      [TP] directPath threw exception: {exc}")
+            logger.debug("directPath threw exception: %s", exc)
         return None
 
     def _compute_or_plan_path(
@@ -2215,24 +2223,25 @@ class PyHPPBackend(BackendBase):
         working regardless of which hpp-python build is installed.
         """
         try:
-            print("      [TP] Falling back to computePath")
+            logger.debug("Falling back to computePath")
             # computePath convention: goals as columns (configSize x numGoals).
             # The Python binding wrapper in hpp-python handles the eigenpy
             # Stride<0,0> ColMajor workaround for (N,1) arrays.
             q_goals_col = q2_arr.reshape(-1, 1)
             pv = tp.computePath(q1_arr, q_goals_col, bool(reset_roadmap))
-            print("      [TP] computePath succeeded")
+            logger.debug("computePath succeeded")
         except TypeError as exc:
-            print(
-                f"      [TP] computePath signature mismatch ({exc}), "
-                "falling back to planPath (older hpp-python build)"
+            logger.debug(
+                "computePath signature mismatch (%s), falling back to planPath "
+                "(older hpp-python build)",
+                exc,
             )
             try:
                 # planPath handles (1,N) numpy arrays via an internal
                 # RowMajor re-map that bypasses the eigenpy Stride<0,0> bug.
                 q_goals_2D = q2_arr.reshape(1, -1)
                 pv = tp.planPath(q1_arr, q_goals_2D, bool(reset_roadmap))
-                print("      [TP] planPath succeeded")
+                logger.debug("planPath succeeded")
             except Exception as exc2:
                 edge_type = "waypoint" if skip_direct_path else "transit"
                 raise RuntimeError(
@@ -2248,9 +2257,9 @@ class PyHPPBackend(BackendBase):
 
         try:
             pv = tp.optimizePath(pv)
-            print("      [TP] Path optimized")
+            logger.debug("Path optimized")
         except Exception:
-            print("      [TP] Optimization failed, " "using unoptimized path")
+            logger.debug("Optimization failed, using unoptimized path")
         return pv
 
     def plan_transition_sequence(
@@ -2298,7 +2307,7 @@ class PyHPPBackend(BackendBase):
                     projected_waypoints.append(q1)  # First waypoint (initial config)
                 projected_waypoints.append(q2_proj)
 
-                print(f"      [seq] Edge {i}: '{edge_name}' — waypoints projected")
+                logger.debug("Edge %d: '%s' — waypoints projected", i, edge_name)
 
             except RuntimeError as exc:
                 raise RuntimeError(
@@ -2382,9 +2391,10 @@ class PyHPPBackend(BackendBase):
                 live_player = LivePathPlayer(self, graph_builder, visualizer=visualizer)
                 live_player.play_with_visualization(path_index, edge_name)
             except Exception as exc:
-                print(
-                    f"   Live visualization failed ({exc}); "
-                    "falling back to simple playback."
+                logger.warning(
+                    "Live visualization failed (%s); falling back to simple "
+                    "playback.",
+                    exc,
                 )
                 self.play_path(path_index)
         else:
@@ -2428,9 +2438,10 @@ class PyHPPBackend(BackendBase):
                 video_name=video_name, path_id=path_index
             )
         except AttributeError as exc:
-            print(
-                f"   [PYHPP-GAP] Video capture unavailable: {exc}. "
-                "Playing path without recording."
+            logger.warning(
+                "[PYHPP-GAP] Video capture unavailable: %s. Playing path "
+                "without recording.",
+                exc,
             )
             self.play_path(path_index)
             return ""
