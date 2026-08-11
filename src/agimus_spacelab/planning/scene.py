@@ -162,10 +162,20 @@ class SceneBuilder:
         return self
 
     def set_joint_bounds(self) -> "SceneBuilder":
-        """Set joint bounds for all loaded freeflyer objects."""
-        logger.info("Setting joint bounds...")
-        bounds = self.joint_bounds.freeflyer_bounds()
+        """Set joint bounds for robot joints and loaded freeflyer objects.
 
+        Config-defined robot bounds (``joint_bounds.all_robot_bounds()``) are
+        the primary source and overwrite whatever limit pinocchio parsed
+        from the URDF. Joints the config doesn't mention are left untouched,
+        so they fall back to their URDF-parsed limit.
+        """
+        logger.info("Setting joint bounds...")
+
+        robot_bounds = self.joint_bounds.all_robot_bounds()
+        for joint_name, bounds in robot_bounds.items():
+            self.planner.set_joint_bounds(joint_name, bounds)
+
+        bounds = self.joint_bounds.freeflyer_bounds()
         for obj_name in self.loaded_objects:
             joint_name = f"{obj_name}/root_joint"
             self.planner.set_joint_bounds(joint_name, bounds)
