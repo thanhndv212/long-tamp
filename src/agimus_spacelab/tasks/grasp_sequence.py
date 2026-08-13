@@ -194,6 +194,9 @@ class GraspSequencePlanner:
         # Track last failure for resume capability
         self.last_failure_info = None
         self.original_sequence = None  # Store full sequence for resume
+        # Grasps held when the current plan_sequence() call began; replayed by
+        # resume_sequence() so grasps from earlier calls survive a resume.
+        self._initial_grasps: dict[str, str] = {}
 
         # Edge-level timing and resume attempt statistics
         self.edge_stats = {}  # (phase_idx, edge_idx) -> timing info
@@ -1117,9 +1120,14 @@ class GraspSequencePlanner:
             return
         try:
             os.makedirs(checkpoint_dir, exist_ok=True)
-            with open(
-                os.path.join(checkpoint_dir, f"phase_{phase_idx:02d}.json"), "w"
-            ) as f:
+            final_path = os.path.join(checkpoint_dir, f"phase_{phase_idx:02d}.json")
+            tmp_path = final_path + ".tmp"
+            # Write-then-rename: a direct open(path, "w") truncates before
+            # writing, so a process killed mid-write (e.g. an external
+            # supervisor bounding wall time per attempt) leaves a 0-byte
+            # file with the prior valid content unrecoverable. rename() is
+            # atomic on POSIX, so readers never see a half-written file.
+            with open(tmp_path, "w") as f:
                 json.dump(
                     {
                         "phase_idx": phase_idx,
@@ -1130,6 +1138,9 @@ class GraspSequencePlanner:
                     },
                     f,
                 )
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, final_path)
         except Exception as e:
             if verbose:
                 logger.warning("Checkpoint dump failed: %s", e)
@@ -1221,6 +1232,19 @@ class GraspSequencePlanner:
                     "paths": [],
                     "complete": False,
                     "error_message": f"Release failed: {e}",
+                    # get_resumable_state() reads THIS key (not "q_current")
+                    # to recover the resume point -- without it, resume
+                    # falls back to None, which get_resumable_state() then
+                    # hands to resume_sequence() as the entire remaining
+                    # sequence's starting config. For a single-phase
+                    # release block that "succeeds" as a same-state no-op
+                    # (nothing to actually replan), that None then becomes
+                    # the block's reported final_config, silently
+                    # corrupting every held grasp downstream instead of
+                    # failing loudly. Every other failure path in this file
+                    # that builds a phase_results entry sets this key;
+                    # this one didn't.
+                    "last_q_start": q_current,
                 }
             )
             self.last_failure_info = {
@@ -1366,6 +1390,10 @@ class GraspSequencePlanner:
                     "paths": [],
                     "complete": False,
                     "error_message": f"Auto-release failed: {e}",
+                    # See the identical fix in _plan_release_entry_phase's
+                    # except-block above: get_resumable_state() needs this
+                    # key to recover a valid resume point.
+                    "last_q_start": q_current,
                 }
             )
             self.last_failure_info = {
@@ -2726,6 +2754,29 @@ class GraspSequencePlanner:
 
         self.phase_results = []
         self.original_sequence = list(grasp_sequence)  # Store for resume
+        # Grasps already held when this sequence started, i.e. established by
+        # EARLIER plan_sequence() calls on this same planner. resume_sequence()
+        # rebuilds the tracker from scratch and can only replay
+        # self.phase_results, which is reset above and therefore only ever
+        # describes the current call -- so without this snapshot every grasp
+        # from a previous call is silently lost on the first resume.
+        #
+        # That is not hypothetical: in test_screwdriving_sequence.py, which
+        # drives the run as a series of separate plan_sequence() blocks, the
+        # two tool grasps (g_ur10_tool/h_FG_tool and g_vispa_tool/h_SD_tool)
+        # are established during bootstrap and every later block resumed into
+        # a state that had dropped them. The rebuilt phase graph then treats
+        # frame_gripper and screw_driver as free-floating objects, builds a
+        # structurally different edge for the same phase
+        # ('...CON0 | 0-1:1-0_01' instead of '...CON0 | 0-0:1-1:2-3:3-2_01'),
+        # and target generation becomes unsatisfiable rather than merely
+        # hard: 1095 consecutive random restarts each terminated at the
+        # identical residual 9.783801504932926 against a 1e-4 threshold.
+        # Net effect was that any block failing once could never recover,
+        # however long it retried.
+        self._initial_grasps = {
+            g: h for g, h in self.grasp_tracker.current_grasps.items() if h is not None
+        }
         q_current = list(q_init)
         # Original scene configuration — used to restore free-object positions
         # before each phase graph build so LockedJoint foliation locks them at
@@ -2848,6 +2899,57 @@ class GraspSequencePlanner:
             "error": incomplete_phase.get("error_message", "unknown"),
         }
 
+    def _restore_grasp_tracker_for_resume(self) -> None:
+        """Rebuild ``self.grasp_tracker`` to the state a resume must start in.
+
+        Seeds from ``self._initial_grasps`` -- whatever was already held when
+        the current ``plan_sequence()`` call began -- then replays this call's
+        completed phases on top.
+
+        Seeding matters because the replay can only see
+        ``self.phase_results``, which ``plan_sequence()`` resets and which
+        therefore only ever describes the current call. Starting from the
+        all-free state instead (the original behaviour) silently drops every
+        grasp established by an earlier ``plan_sequence()`` call on the same
+        planner, which is exactly how a multi-block driver like
+        test_screwdriving_sequence.py lost its two bootstrap tool grasps on
+        the first resume of any later block.
+        """
+        grippers = self.grasp_tracker.grippers
+        # Every gripper must appear as a key, free ones mapped to None:
+        # GraspStateTracker takes initial_grasps as the WHOLE map rather than
+        # as an overlay, so passing only the held pairs would leave every
+        # other gripper absent and make update_grasp() raise "Unknown
+        # gripper" as soon as the replay below touched one.
+        seeded = {g: None for g in grippers}
+        seeded.update(getattr(self, "_initial_grasps", {}) or {})
+        self.grasp_tracker = GraspStateTracker(
+            grippers=grippers,
+            handles=self.grasp_tracker.handles,
+            initial_grasps=seeded,
+        )
+
+        # Replay completed grasps to restore state.
+        # Each completed phase may involve an implicit auto-release
+        # (gripper switches from handle A to handle B without an explicit
+        # release entry).  Handle that gracefully:
+        for phase in self.phase_results:
+            if phase.get("complete", False):
+                g = phase["gripper"]
+                h = phase["handle"]
+                currently = self.grasp_tracker.current_grasps.get(g)
+                if h is None:
+                    # Explicit release
+                    if currently is not None:
+                        self.grasp_tracker.update_grasp(g, None)
+                    # else: already free, nothing to do
+                else:
+                    if currently is not None and currently != h:
+                        # Implicit auto-release happened in this phase
+                        self.grasp_tracker.update_grasp(g, None)
+                    if self.grasp_tracker.current_grasps.get(g) is None:
+                        self.grasp_tracker.update_grasp(g, h)
+
     def resume_sequence(
         self,
         retry_from_edge: int = 0,
@@ -2933,34 +3035,7 @@ class GraspSequencePlanner:
                 if verbose:
                     logger.info("Updated TransitionPlanner config: %s", kwargs)
 
-        # Restore grasp tracker state from completed phases
-        # Reset to free state first
-        self.grasp_tracker = GraspStateTracker(
-            grippers=self.grasp_tracker.grippers,
-            handles=self.grasp_tracker.handles,
-            initial_grasps=None,
-        )
-
-        # Replay completed grasps to restore state.
-        # Each completed phase may involve an implicit auto-release
-        # (gripper switches from handle A to handle B without an explicit
-        # release entry).  Handle that gracefully:
-        for phase in self.phase_results:
-            if phase.get("complete", False):
-                g = phase["gripper"]
-                h = phase["handle"]
-                currently = self.grasp_tracker.current_grasps.get(g)
-                if h is None:
-                    # Explicit release
-                    if currently is not None:
-                        self.grasp_tracker.update_grasp(g, None)
-                    # else: already free, nothing to do
-                else:
-                    if currently is not None and currently != h:
-                        # Implicit auto-release happened in this phase
-                        self.grasp_tracker.update_grasp(g, None)
-                    if self.grasp_tracker.current_grasps.get(g) is None:
-                        self.grasp_tracker.update_grasp(g, h)
+        self._restore_grasp_tracker_for_resume()
 
         if verbose:
             logger.info(
