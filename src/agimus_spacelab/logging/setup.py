@@ -23,6 +23,8 @@ def configure_logging(
     log_dir: Optional[str] = None,
     run_id: Optional[str] = None,
     console: bool = True,
+    console_level: Optional[int] = None,
+    file_level: Optional[int] = None,
 ) -> logging.Logger:
     """Configure the ``agimus_spacelab`` root logger.
 
@@ -33,19 +35,27 @@ def configure_logging(
     skipped.
 
     Args:
-        level: Log level for the root ``agimus_spacelab`` logger
-            (default: ``logging.INFO``).
+        level: Default log level, used for both handlers unless overridden
+            below (default: ``logging.INFO``).
         log_dir: If given, attach a ``FileHandler`` writing to
             ``<log_dir>/<run_id or "run">.log``.
         run_id: Run ID included in the log file name.
         console: Whether to attach a ``StreamHandler`` for stdout output
             (default: ``True``).
+        console_level: Level for the console handler. Defaults to ``level``.
+        file_level: Level for the file handler. Defaults to
+            ``logging.DEBUG`` -- the log file is meant for postmortem
+            debugging, so it stays fully detailed even when the console is
+            quieted down via ``console_level``/``level``.
 
     Returns:
         The configured ``logging.Logger`` instance for ``"agimus_spacelab"``.
     """
+    console_level = level if console_level is None else console_level
+    file_level = logging.DEBUG if file_level is None else file_level
+
     logger = logging.getLogger("agimus_spacelab")
-    logger.setLevel(level)
+    logger.setLevel(min(console_level, file_level) if log_dir else console_level)
 
     # Skip if handlers already attached (idempotent)
     if logger.handlers:
@@ -55,7 +65,7 @@ def configure_logging(
 
     if console:
         ch = logging.StreamHandler(sys.stdout)
-        ch.setLevel(level)
+        ch.setLevel(console_level)
         ch.setFormatter(formatter)
         logger.addHandler(ch)
 
@@ -63,7 +73,7 @@ def configure_logging(
         os.makedirs(log_dir, exist_ok=True)
         fname = f"{run_id or 'run'}.log"
         fh = logging.FileHandler(os.path.join(log_dir, fname), encoding="utf-8")
-        fh.setLevel(level)
+        fh.setLevel(file_level)
         fh.setFormatter(formatter)
         logger.addHandler(fh)
 

@@ -383,11 +383,14 @@ class GraphBuilder:
                 )
             else:  # pyhpp
                 self.graph.addNumericalConstraintsToGraph(constraint_names)
-            logger.info(
-                "✓ Added %d global constraints: %s",
-                len(constraint_names),
-                constraint_names,
-            )
+            if constraint_names and isinstance(constraint_names[0], str):
+                logger.debug(
+                    "✓ Added %d global constraints: %s",
+                    len(constraint_names),
+                    constraint_names,
+                )
+            else:
+                logger.debug("✓ Added %d global constraints", len(constraint_names))
             return True
         except Exception as e:
             logger.warning("Failed to add global constraints: %s", e)
@@ -486,7 +489,7 @@ class GraphBuilder:
         Returns:
             ConstraintGraph or Graph instance
         """
-        logger.info("Using ConstraintGraphFactory for automatic graph generation")
+        logger.debug("Using ConstraintGraphFactory for automatic graph generation")
 
         # Backend-specific setup
         if self.backend == "corba":
@@ -512,7 +515,7 @@ class GraphBuilder:
 
         # Set grippers
         self.factory.setGrippers(config.GRIPPERS)
-        logger.info("\u2713 Set grippers: %s", config.GRIPPERS)
+        logger.debug("\u2713 Set grippers: %s", config.GRIPPERS)
 
         # Set objects with handles and contact surfaces
         self.factory.setObjects(
@@ -520,12 +523,12 @@ class GraphBuilder:
             config.HANDLES_PER_OBJECT,
             config.CONTACT_SURFACES_PER_OBJECT,
         )
-        logger.info("\u2713 Set objects: %s", config.OBJECTS)
+        logger.debug("\u2713 Set objects: %s", config.OBJECTS)
 
         # Set environment contacts if provided
         if config.ENVIRONMENT_CONTACTS:
             self.factory.environmentContacts(config.ENVIRONMENT_CONTACTS)
-            logger.info(
+            logger.debug(
                 "\u2713 Set environment contacts: %s",
                 config.ENVIRONMENT_CONTACTS,
             )
@@ -533,23 +536,23 @@ class GraphBuilder:
         # Set grasp restrictions
         if config.RULES is not None:
             self.factory.setRules(config.RULES)
-            logger.info("✓ Set custom rules")
+            logger.debug("✓ Set custom rules")
         elif config.VALID_PAIRS is not None:
             self.factory.setPossibleGrasps(config.VALID_PAIRS)
-            logger.info("✓ Set possible grasps from valid_pairs")
+            logger.debug("✓ Set possible grasps from valid_pairs")
 
         # Apply sequential filter if provided (strict 2-state limit)
         if hasattr(config, "_SEQUENTIAL_FILTER"):
             seq_filter = config._SEQUENTIAL_FILTER
             self.factory.graspIsAllowed.append(seq_filter)
-            logger.info("✓ Applied SequentialGraspFilter")
-            logger.info("  Will limit graph to current→next state only")
+            logger.debug("✓ Applied SequentialGraspFilter")
+            logger.debug("  Will limit graph to current→next state only")
 
         # Generate graph
         if self.backend == "pyhpp" and q_init is not None:
             try:
                 self.robot.currentConfiguration(np.array(q_init, dtype=float))
-                logger.info(
+                logger.debug(
                     "✓ Set robot current configuration for factory graph "
                     "construction"
                 )
@@ -560,7 +563,7 @@ class GraphBuilder:
                     e,
                 )
         self.factory.generate()
-        logger.info("✓ Generated graph structure")
+        logger.debug("✓ Generated graph structure")
 
         # Add global constraints before initialization (e.g., locked joints)
         if graph_constraints:
@@ -578,16 +581,16 @@ class GraphBuilder:
         self.graph.initialize()
         if self.backend == "corba":
             self._attach_graph_to_problem_if_supported()
-        logger.info("\u2713 Graph initialized")
+        logger.debug("\u2713 Graph initialized")
 
         # Store states and edges for tracking
         self._extract_factory_graph_structure()
 
         # Log factory-generated nodes for reference
-        logger.info("\u2139 Factory created %d nodes:", len(self.states))
+        logger.debug("\u2139 Factory created %d nodes:", len(self.states))
         for node_name in list(self.states.keys()):
             logger.debug("  - %s", node_name)
-        logger.info("\u2139 Factory created %d edges:", len(self.edges))
+        logger.debug("\u2139 Factory created %d edges:", len(self.edges))
         for edge_name in list(self.edges.keys()):
             from_state, to_state = self.edge_topology.get(
                 edge_name, ("unknown", "unknown")
@@ -1095,7 +1098,7 @@ class GraphBuilder:
             ...     next_grasp=("gripper2", "handle2"),
             ... )
         """
-        logger.info("Building phase graph: held=%s, next=%s", held_grasps, next_grasp)
+        logger.debug("Building phase graph: held=%s, next=%s", held_grasps, next_grasp)
 
         if use_sequential_filter:
             logger.debug("Using SequentialGraspFilter (strict 2-state limit)")
@@ -1350,7 +1353,7 @@ class GraphBuilder:
                     graph_constraints = list(_np_cnames)
                 else:
                     graph_constraints = list(graph_constraints) + list(_np_cnames)
-                logger.info(
+                logger.debug(
                     "\u2713 Locked %d non-phase object joints: %s",
                     len(_np_jnames),
                     _nonphase_objects,

@@ -5,6 +5,7 @@ Base class for manipulation tasks.
 Provides ManipulationTask base class with common structure.
 """
 
+import logging
 import re
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -37,6 +38,7 @@ class ManipulationTask(ABC):
         backend: str = "pyhpp",
         viewer_type: str = "auto",
         log_dir: Optional[str] = "auto",
+        log_level: str = "INFO",
     ):
         """
         Initialize manipulation task.
@@ -50,6 +52,9 @@ class ManipulationTask(ABC):
             log_dir: Directory for run logs. "auto" (default) creates
                 /tmp/agimus_spacelab/<task_slug>_<YYYYMMDD_HHMMSS>/;
                 None disables logging entirely.
+            log_level: Console log verbosity ("DEBUG"/"INFO"/"WARNING"/
+                "ERROR", default "INFO"). The log file (when log_dir is
+                set) always captures full DEBUG detail regardless of this.
         """
         self.task_name = task_name
         self.backend = backend.lower()
@@ -88,7 +93,8 @@ class ManipulationTask(ABC):
         # separate structured JSONL event stream.
         from agimus_spacelab.logging import configure_logging
 
-        configure_logging(log_dir=log_dir)
+        _console_level = getattr(logging, str(log_level).upper(), logging.INFO)
+        configure_logging(log_dir=log_dir, console_level=_console_level)
 
         self.run_logger = None
         if log_dir is not None:

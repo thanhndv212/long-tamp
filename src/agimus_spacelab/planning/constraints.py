@@ -502,12 +502,16 @@ class ConstraintBuilder:
                     locked = LockedJoint(robot, jn, values, comp)
                     locked_constraints.append(locked)
                     frozen_names.append(jn)
-                    logger.info(
+                    logger.debug(
                         "✓ Locked joint (PyHPP): %s (nq=%d, nv=%d)", jn, size, nv
                     )
                 except Exception as e:
                     logger.warning("Failed to lock %s: %s", jn, e)
 
+            if frozen_names:
+                logger.debug(
+                    "Locked %d joint(s) (PyHPP): %s", len(frozen_names), frozen_names
+                )
             return locked_constraints, frozen_names
 
         else:
@@ -551,10 +555,12 @@ class ConstraintBuilder:
                         set_rhs(constraint_name, True)
                     constraint_names.append(constraint_name)
                     frozen_names.append(jn)
-                    logger.info("✓ Locked joint: %s (size=%d)", jn, size)
+                    logger.debug("✓ Locked joint: %s (size=%d)", jn, size)
                 except Exception as e:
                     logger.warning("Failed to lock %s: %s", jn, e)
 
+            if frozen_names:
+                logger.debug("Locked %d joint(s): %s", len(frozen_names), frozen_names)
             return constraint_names, frozen_names
 
 

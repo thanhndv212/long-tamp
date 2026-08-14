@@ -1650,7 +1650,7 @@ class PyHPPBackend(BackendBase):
                         len(self._toppra_active_joints),
                     )
                 pv = tp_toppra.optimize(pv)
-                logger.info("TOPPRA applied (time-optimal)")
+                logger.debug("TOPPRA applied (time-optimal)")
                 return pv
             except Exception as e:
                 logger.warning("TOPPRA failed: %s, falling back to trapezoidal", e)
@@ -1659,7 +1659,7 @@ class PyHPPBackend(BackendBase):
             try:
                 tp_trap = TrapezoidalTimeParameterization(self.problem)
                 pv = tp_trap.optimize(pv)
-                logger.info("TrapezoidalTimeParameterization applied")
+                logger.debug("TrapezoidalTimeParameterization applied")
                 return pv
             except Exception as e:
                 logger.warning("TrapezoidalTP failed: %s, falling back to STP", e)
@@ -1682,7 +1682,7 @@ class PyHPPBackend(BackendBase):
 
                 tp_stp = STP(self.problem)
                 pv = tp_stp.optimize(pv)
-                logger.info(
+                logger.debug(
                     "SimpleTimeParameterization applied (order from main problem)"
                 )
             except Exception as e:
@@ -1691,7 +1691,7 @@ class PyHPPBackend(BackendBase):
             try:
                 tp = self.ensure_transition_planner()
                 pv = tp.timeParameterization(pv)
-                logger.info("Path time-parameterized")
+                logger.debug("Path time-parameterized")
             except Exception as e:
                 logger.warning("Time parameterization failed: %s", e)
         return pv
