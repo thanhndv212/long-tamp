@@ -253,8 +253,6 @@ class GraspSequencePlanner:
                 paths, edges, edge_stats, state_after, final_config,
                 phase_time, phase_gen_time, phase_plan_time.
         """
-        import time
-
         released_handle = self.grasp_tracker.current_grasps[gripper]
 
         # Build the release phase graph and sync the grasp-state tracker.
