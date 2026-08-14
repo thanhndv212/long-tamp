@@ -160,6 +160,10 @@ class PathRecorder:
                 "max_samples": self.max_samples,
             },
             "seam_tolerance": self.seam_tolerance,
+            # Carried in the header so a replayer can check continuity
+            # correctly without loading the scene: without it, every
+            # quaternion sign flip reads as a discontinuity.
+            "quaternion_starts": list(self.quaternion_starts),
             "seam_violations": self.seam_violations,
             "num_segments": len(self.segments),
             "segments": self.segments,

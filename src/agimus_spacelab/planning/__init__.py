@@ -32,6 +32,7 @@ from .path_io import (
     replay_paths,
 )
 from .path_recorder import PathRecorder, SeamError
+from .path_replay import Manifest, Segment, ValidationReport, load_manifest, validate
 from .planner import check_backend, create_planner
 from .scene import SceneBuilder
 from .sequential_graph_factory import SequentialConstraintGraphFactory
@@ -49,13 +50,16 @@ __all__ = [
     "FactoryConstraintRegistry",
     "GraphBuilder",
     # Path I/O
+    "Manifest",
     "PathLoadError",
     "PathRecorder",
     "SceneBuilder",
     "SeamError",
+    "Segment",
     "SequentialConstraintGraphFactory",
     "SequentialGraspFilter",
     "SequentialTransitionFilter",
+    "ValidationReport",
     "bfs_edge_path",
     "check_backend",
     "create_planner",
@@ -64,7 +68,9 @@ __all__ = [
     "get_path_files",
     "grasps_dict_to_tuple",
     "grasps_tuple_to_dict",
+    "load_manifest",
     "load_paths_from_directory",
     "next_grasp_to_indices",
     "replay_paths",
+    "validate",
 ]
