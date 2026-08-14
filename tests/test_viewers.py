@@ -406,15 +406,27 @@ class TestVisualizeDispatch:
 
 @requires_pyhpp
 class TestPlayPathDispatch:
-    """play_path() calls viewer.loadPath() for viser (non-blocking)."""
+    """play_path() calls viewer.playPath() for viser (blocking playback)."""
 
-    def test_viser_calls_load_path(self, monkeypatch):
+    def test_viser_calls_play_path(self, monkeypatch):
+        """The viser branch must PLAY, not merely load.
+
+        loadPath() only registers the path in viser's GUI dropdown and
+        renders the t=0 frame -- nothing ever animates. play_path() is
+        documented as blocking until the animation finishes (the gepetto
+        branch does exactly that), so the viser branch calls playPath().
+        This test asserted loadPath() and so pinned the silent no-op.
+        """
         import agimus_spacelab.backends.pyhpp as _mod
         import numpy as np
 
+        play_calls = []
         load_calls = []
 
         class _FakeViser:
+            def playPath(self, path):
+                play_calls.append(path)
+
             def loadPath(self, path, name=None):
                 load_calls.append((path, name))
 
@@ -438,9 +450,9 @@ class TestPlayPathDispatch:
         b._stored_paths = [path]
 
         b.play_path(0)
-        assert len(load_calls) == 1
-        assert load_calls[0][0] is path
-        assert load_calls[0][1] == "path_0"
+        assert play_calls == [path]
+        # Falling back to a bare load would leave the viewer static.
+        assert load_calls == []
 
     def test_play_path_without_paths_no_raise(self):
         b = _make_backend()

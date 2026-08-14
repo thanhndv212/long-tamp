@@ -277,13 +277,19 @@ class TestConfigLoader:
         assert callable(get_default_config_dir)
 
     def test_get_default_config_dir(self):
-        """Test get_default_config_dir returns correct path."""
+        """config/ sits beside the script, i.e. in the script's OWN directory.
+
+        This mirrors the real layout every task script relies on --
+        script/spacelab/test_screwdriving_sequence.py loads
+        script/spacelab/config/ -- so the config dir is the script's parent
+        plus "config", not its grandparent.
+        """
         from agimus_spacelab.cli.config_loader import get_default_config_dir
         from pathlib import Path
 
         script_path = Path("/some/script/dir/script.py")
         result = get_default_config_dir(script_path)
-        assert result == Path("/some/script/config")
+        assert result == Path("/some/script/dir/config")
 
 
 # =============================================================================
