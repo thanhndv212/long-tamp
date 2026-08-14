@@ -50,20 +50,138 @@ Example:
     >>> factory.generate()  # Creates only 2 states + waypoints
 """
 
-from typing import Optional, Tuple
+from functools import lru_cache
+from typing import Iterable, Optional, Sequence, Tuple
 
 try:
     from hpp.corbaserver.manipulation import ConstraintGraphFactory
 except ImportError:
     from pyhpp.manipulation.constraint_graph_factory import ConstraintGraphFactory
 
+from agimus_spacelab.logging import get_logger
+
 from .sequential_grasp_filter import (
     SequentialGraspFilter,
     SequentialTransitionFilter,
 )
 
+logger = get_logger("planning.sequential_graph_factory")
 
-class SequentialConstraintGraphFactory(ConstraintGraphFactory):
+GraspsT = Tuple[Optional[int], ...]
+
+
+class PrunedRecursionMixin:
+    """Prune ``_recurse`` to assignments a target state can still be reached
+    from.
+
+    ``GraphFactoryAbstract._recurse`` walks *every* distinct partial
+    gripper-to-handle assignment, memoizing each one in ``_visitedGrasps``.
+    ``graspIsAllowed`` -- where ``setPossibleGrasps`` and
+    ``SequentialGraspFilter`` live -- only decides whether a *state* is
+    created; the walk descends into the subtree either way.  So the cost is
+    the size of the full injective-partial-map space, and it is the memo
+    itself that holds the memory.
+
+    Measured live 2026-08-14 on RS4 A: the 9-gripper phase graph took 2m24s,
+    and the 10-gripper one had not finished after 10 minutes at 13 GB RSS and
+    climbing.  One extra held grasp is the difference between minutes and an
+    OOM kill.
+
+    The prune is sound because ``_recurse`` only ever *adds* grasps: a
+    gripper assigned at some depth keeps that handle in every descendant.
+    So if a partial assignment already contradicts a target -- it gives some
+    gripper a handle the target does not -- no descendant of it can equal
+    that target.  With no targets registered the walk is untouched, and the
+    set of states and transitions created is identical either way; only
+    subtrees that could never produce one are skipped.
+    """
+
+    _target_grasps: Tuple[GraspsT, ...] = ()
+
+    def set_target_grasps(self, targets: Iterable[Sequence[Optional[int]]]) -> None:
+        """Register the only grasp tuples worth walking toward.
+
+        Args:
+            targets: Grasp tuples (handle index per gripper, ``None`` for a
+                free gripper), indexed like ``self.grippers``.  Typically the
+                current and next states of a `SequentialGraspFilter`.  Pass
+                an empty iterable to disable pruning.
+        """
+        self._target_grasps = tuple(tuple(t) for t in targets)
+        logger.debug(
+            "Pruning factory recursion toward %d target state(s): %s",
+            len(self._target_grasps),
+            self._target_grasps,
+        )
+
+    def _may_reach_target(self, grasps: GraspsT) -> bool:
+        """True if some target is still reachable by adding grasps only."""
+        if not self._target_grasps:
+            return True
+        for target in self._target_grasps:
+            if all(g is None or g == t for g, t in zip(grasps, target)):
+                return True
+        return False
+
+    def _recurse(self, grippers, handles, grasps, depth):
+        """``GraphFactoryAbstract._recurse`` plus the reachability guard.
+
+        Kept as a copy of the upstream body rather than a hook because the
+        base class offers no extension point inside the loop.  If pyhpp's
+        version changes, this needs to follow it -- the guard is the single
+        added ``continue``.
+        """
+        isAllowed = self.graspIsAllowed(grasps)
+        if isAllowed:
+            current = self._makeState(grasps, depth)
+
+        if len(grippers) == 0 or len(handles) == 0:
+            return
+        for ig, g in enumerate(grippers):
+            ngrippers = grippers[:ig] + grippers[ig + 1 :]
+            isg = self.grippers.index(g)
+            for ih, h in enumerate(handles):
+                nhandles = handles[:ih] + handles[ih + 1 :]
+                ish = self.handles.index(h)
+                # Suppression below keeps this line byte-identical to
+                # upstream, so the copy stays diffable against pyhpp's.
+                nGrasps = grasps[:isg] + (ish,) + grasps[isg + 1 :]  # noqa: RUF005
+
+                # The one addition to the upstream algorithm.
+                if not self._may_reach_target(nGrasps):
+                    continue
+
+                nextIsAllowed = self.graspIsAllowed(nGrasps)
+                isNewState = nGrasps not in self._visitedGrasps
+                if isNewState:
+                    self._visitedGrasps.add(nGrasps)
+                if nextIsAllowed:
+                    nnext = self._makeState(nGrasps, depth + 1)
+
+                if (
+                    isAllowed
+                    and nextIsAllowed
+                    and self.transitionIsAllowed(stateFrom=current, stateTo=nnext)
+                ):
+                    self.makeTransition(current, nnext, isg)
+
+                if isNewState:
+                    self._recurse(ngrippers, nhandles, nGrasps, depth + 2)
+
+
+@lru_cache(maxsize=None)
+def pruned_factory_class(base: type) -> type:
+    """Return ``base`` with `PrunedRecursionMixin` woven in.
+
+    The backend decides the base class (CORBA and pyhpp ship separate copies
+    of ``ConstraintGraphFactory``), so the mixin is applied at the call site
+    rather than baked into a fixed subclass.  Cached, so repeated builds
+    reuse one class object.
+    """
+    return type(f"Pruned{base.__name__}", (PrunedRecursionMixin, base), {})
+
+
+class SequentialConstraintGraphFactory(PrunedRecursionMixin, ConstraintGraphFactory):
     """Factory that generates minimal graphs for sequential grasp transitions.
 
     Extends ConstraintGraphFactory with strict filtering to only allow
@@ -182,6 +300,12 @@ class SequentialConstraintGraphFactory(ConstraintGraphFactory):
 
         # Append state filter to graspIsAllowed callback chain
         self.graspIsAllowed.append(self.state_filter)
+
+        # …and prune the walk to those same two states, so the factory does
+        # not enumerate the combinatorial space just to reject it.
+        self.set_target_grasps(
+            (self.state_filter.current_grasps, self.state_filter.next_grasps)
+        )
 
     def transitionIsAllowed(self, stateFrom, stateTo):
         """Override to only allow current→next transition.

@@ -16,6 +16,7 @@ from agimus_spacelab.logging import get_logger
 from agimus_spacelab.planning.constraints import (
     ConstraintBuilder,
 )
+from agimus_spacelab.planning.sequential_graph_factory import pruned_factory_class
 
 logger = get_logger("planning.graph")
 
@@ -498,7 +499,7 @@ class GraphBuilder:
 
             # Create CORBA constraint graph
             self.graph = ConstraintGraph(self.robot, "graph")
-            self.factory = ConstraintGraphFactory(self.graph)
+            self.factory = pruned_factory_class(ConstraintGraphFactory)(self.graph)
 
         else:  # pyhpp
             if not HAS_PYHPP_GRAPH:
@@ -506,7 +507,7 @@ class GraphBuilder:
 
             # Create PyHPP constraint graph
             self.graph = PyHPPGraph("graph", self.robot, self.ps)
-            self.factory = PyHPPConstraintGraphFactory(
+            self.factory = pruned_factory_class(PyHPPConstraintGraphFactory)(
                 self.graph, constraints=self._pyhpp_constraints
             )
 
@@ -547,6 +548,15 @@ class GraphBuilder:
             self.factory.graspIsAllowed.append(seq_filter)
             logger.debug("✓ Applied SequentialGraspFilter")
             logger.debug("  Will limit graph to current→next state only")
+
+            # The filter alone only rejects states; the factory still walks
+            # the whole gripper/handle combinatorial space to offer them.
+            # That walk is what killed RS4 A (10 grippers: >10 min, >13 GB
+            # and unfinished).  Give the factory the two target states so it
+            # can skip subtrees neither can be reached from.
+            set_targets = getattr(self.factory, "set_target_grasps", None)
+            if callable(set_targets):
+                set_targets((seq_filter.current_grasps, seq_filter.next_grasps))
 
         # Generate graph
         if self.backend == "pyhpp" and q_init is not None:
