@@ -1105,6 +1105,10 @@ class GraphBuilder:
         else:
             logger.debug("Using setPossibleGrasps (allows intermediate states)")
 
+        # Keep the outgoing factory (and through it the outgoing graph) alive
+        # until the replacement is built -- see _break_factory_cycle for why
+        # it is cut only at the end.
+        stale_factory = self.factory
         self._teardown_existing_graph()
 
         phase_valid_pairs = self._build_phase_valid_pairs(held_grasps, next_grasp)
@@ -1151,11 +1155,14 @@ class GraphBuilder:
         # Use the factory graph creation with restricted pairs
         # This will call factory.setPossibleGrasps(phase_valid_pairs)
         # and optionally factory.graspIsAllowed.append(seq_filter)
-        return self.create_factory_graph(
+        graph = self.create_factory_graph(
             phase_config,
             graph_constraints=graph_constraints,
             q_init=q_init,
         )
+
+        self._break_factory_cycle(stale_factory)
+        return graph
 
     def _teardown_existing_graph(self) -> None:
         """Delete/clear any existing graph so build_phase_graph can create
@@ -1202,6 +1209,41 @@ class GraphBuilder:
         except Exception as e:
             # Graph might not exist, that's ok
             logger.debug("Note: %s", e)
+
+    @staticmethod
+    def _break_factory_cycle(factory: Any) -> None:
+        """Cut a retired factory's back-reference so refcounting frees it.
+
+        ``ConstraintGraphFactory`` owns a ``ConstraintFactory`` that holds a
+        ``graphfactory`` back-reference to it.  That two-node cycle is only
+        ~200 Python objects, but they pin the whole C++ graph: clearing
+        ``self.factory`` frees nothing, and ~235 MB per build stays
+        unreachable until a generational collection happens to run.  The
+        lookahead does two builds per candidate and 100 candidates per round,
+        so gen-2 collections cannot keep up -- measured live as RS4 A growing
+        14.2 GB before the OOM kill.  Cutting the back-reference drops the
+        graph by plain refcounting instead; verified with the collector
+        disabled entirely (235 MB/build -> 16 MB/build).
+
+        Called at the END of build_phase_graph, not during teardown: the
+        outgoing graph then outlives the construction of its replacement,
+        which is the ordering the leak accidentally provided and the one the
+        pyhpp bindings have actually been exercised under.  The cost is one
+        extra resident graph, which is bounded; freeing it earlier is not
+        obviously safe, since a stale C++ pointer to a freed graph segfaults
+        (the same hazard ``_teardown_existing_graph`` resets the cached
+        TransitionPlanner for).
+        """
+        if factory is None:
+            return
+        try:
+            constraints = getattr(factory, "constraints", None)
+            if constraints is not None:
+                constraints.graphfactory = None
+                constraints.graph = None
+                factory.constraints = None
+        except Exception as e:  # pragma: no cover - defensive
+            logger.debug("Could not break factory reference cycle: %s", e)
 
     @staticmethod
     def _build_phase_valid_pairs(
