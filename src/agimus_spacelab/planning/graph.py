@@ -248,7 +248,9 @@ class GraphBuilder:
 
         self.edges[name] = edge_id
         self.edge_topology[name] = (from_state, to_state)
-        logger.info("✓ Edge '%s': %s → %s (ID: %s)", name, from_state, to_state, edge_id)
+        logger.info(
+            "✓ Edge '%s': %s → %s (ID: %s)", name, from_state, to_state, edge_id
+        )
         return edge_id
 
     def add_state_constraints(
@@ -1391,14 +1393,12 @@ class GraphBuilder:
         try:
             from agimus_spacelab.planning.constraints import ConstraintBuilder
 
-            _np_cnames, _np_jnames = (
-                ConstraintBuilder.create_locked_joint_constraints(
-                    self.ps,
-                    self.robot,
-                    q_init,
-                    _lock_patterns,
-                    backend=self.backend,
-                )
+            _np_cnames, _np_jnames = ConstraintBuilder.create_locked_joint_constraints(
+                self.ps,
+                self.robot,
+                q_init,
+                _lock_patterns,
+                backend=self.backend,
             )
             if _np_cnames:
                 if graph_constraints is None:

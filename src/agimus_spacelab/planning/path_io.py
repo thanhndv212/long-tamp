@@ -132,13 +132,9 @@ def load_paths_from_directory(
                     auto_setup_graph=auto_setup_graph,
                 )
                 indices.append(idx)
-                logger.info(
-                    "✓ Loaded %s -> index %d", os.path.basename(filepath), idx
-                )
+                logger.info("✓ Loaded %s -> index %d", os.path.basename(filepath), idx)
             except Exception as e:
-                logger.warning(
-                    "✗ Failed to load %s: %s", os.path.basename(filepath), e
-                )
+                logger.warning("✗ Failed to load %s: %s", os.path.basename(filepath), e)
         return indices
 
     # Try native paths

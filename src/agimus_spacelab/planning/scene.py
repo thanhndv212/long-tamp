@@ -114,9 +114,7 @@ class SceneBuilder:
         for id, env_name in enumerate(environment_names):
             if env_name in self.FILE_PATHS["environment"]:
                 logger.debug("Loading environment: %s", env_name)
-                logger.debug(
-                    "  from: %s", self.FILE_PATHS["environment"][env_name]
-                )
+                logger.debug("  from: %s", self.FILE_PATHS["environment"][env_name])
                 self.planner.load_environment(
                     name=env_name,
                     urdf_path=self.FILE_PATHS["environment"][env_name],
@@ -225,9 +223,7 @@ class SceneBuilder:
             try:
                 from pinocchio import CollisionPair
             except ImportError:
-                logger.warning(
-                    "pinocchio not available; cannot remove collision pairs"
-                )
+                logger.warning("pinocchio not available; cannot remove collision pairs")
                 return self
 
             # Find obstacle geometry object indices (exact name or _N suffix)

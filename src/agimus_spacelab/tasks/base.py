@@ -637,8 +637,7 @@ class ManipulationTask(ABC):
             waypoints = [list(w) for w in transition_waypoints]
             if len(waypoints) != len(edges) + 1:
                 raise ValueError(
-                    "Expected len(transition_waypoints) == "
-                    "len(transition_edges) + 1"
+                    "Expected len(transition_waypoints) == " "len(transition_edges) + 1"
                 )
             return edges, waypoints
 

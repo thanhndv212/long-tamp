@@ -1820,9 +1820,7 @@ class PyHPPBackend(BackendBase):
                     proj_type,
                 )
         except Exception as e:
-            logger.warning(
-                "pathProjector=%s(step=%s) failed: %s", proj_type, step, e
-            )
+            logger.warning("pathProjector=%s(step=%s) failed: %s", proj_type, step, e)
 
     def ensure_transition_planner(self) -> Any:
         """Create (or return cached) TransitionPlanner object."""

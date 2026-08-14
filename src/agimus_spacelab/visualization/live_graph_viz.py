@@ -227,7 +227,9 @@ class LiveConstraintGraphVisualizer:
 
     def compute_layout(self) -> gt.VertexPropertyMap:
         """Compute graph layout using SFDP algorithm."""
-        logger.info("Computing SFDP layout (this may take a moment for large graphs)...")
+        logger.info(
+            "Computing SFDP layout (this may take a moment for large graphs)..."
+        )
 
         # SFDP works well for hierarchical constraint graphs
         # Use higher K for more spacing between nodes
@@ -540,9 +542,7 @@ class LivePathPlayer:
             # ---- PyHPP path ----
             stored = self.path_player._stored_paths
             if path_id < 0 or path_id >= len(stored):
-                logger.warning(
-                    "Invalid path_id %d (stored: %d)", path_id, len(stored)
-                )
+                logger.warning("Invalid path_id %d (stored: %d)", path_id, len(stored))
                 return
 
             path = stored[path_id]

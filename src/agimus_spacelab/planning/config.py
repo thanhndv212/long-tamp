@@ -428,13 +428,9 @@ class ConfigGenerator:
 
         # pyhpp
         q_rand = (
-            np.array(q_hint, dtype=float)
-            if use_hint
-            else self.planner.random_config()
+            np.array(q_hint, dtype=float) if use_hint else self.planner.random_config()
         )
-        q_from_arr = (
-            np.array(q_from) if not isinstance(q_from, np.ndarray) else q_from
-        )
+        q_from_arr = np.array(q_from) if not isinstance(q_from, np.ndarray) else q_from
 
         # Keep all object freeflyer DOF from q_from in q_rand.
         # Objects not constrained by this edge (e.g. RS1 during a
@@ -454,9 +450,7 @@ class ConfigGenerator:
                 q_rand_arr = np.array(q_rand, dtype=float)
                 for joint_name, rank in rank_map.items():
                     if joint_name.endswith("/root_joint"):
-                        if rank + 7 <= len(q_rand_arr) and rank + 7 <= len(
-                            q_from_arr
-                        ):
+                        if rank + 7 <= len(q_rand_arr) and rank + 7 <= len(q_from_arr):
                             q_rand_arr[rank : rank + 7] = q_from_arr[rank : rank + 7]
                 q_rand = q_rand_arr
             except Exception:

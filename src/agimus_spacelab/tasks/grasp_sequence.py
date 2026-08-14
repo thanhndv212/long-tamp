@@ -494,7 +494,9 @@ class GraspSequencePlanner:
             if success:
                 q_current = list(q_projected)
                 if verbose:
-                    logger.debug("✓ Projected onto '%s' (error=%.2e)", source_state, error)
+                    logger.debug(
+                        "✓ Projected onto '%s' (error=%.2e)", source_state, error
+                    )
             elif verbose:
                 logger.warning(
                     "Projection onto '%s' failed (error=%.2e), using unprojected q",
@@ -685,11 +687,7 @@ class GraspSequencePlanner:
                 q_hint=q_hint,
             )
             t_gen += time.time() - _t0
-            if (
-                not ok
-                or q_candidate is None
-                or not np.all(np.isfinite(q_candidate))
-            ):
+            if not ok or q_candidate is None or not np.all(np.isfinite(q_candidate)):
                 plan_err = RuntimeError(
                     f"failed to generate {gen_fail_noun} via edge '{edge_name}'"
                 )
@@ -1014,7 +1012,9 @@ class GraspSequencePlanner:
         unfrozen_arms: set[str] = {active_arm} if active_arm is not None else set()
 
         if verbose:
-            logger.debug("Active gripper '%s' uses arm '%s'", active_gripper, active_arm)
+            logger.debug(
+                "Active gripper '%s' uses arm '%s'", active_gripper, active_arm
+            )
 
         # Walk the held-object chain: if the target is held (directly or
         # transitively) by another arm, that arm must stay free so the
@@ -1490,7 +1490,9 @@ class GraspSequencePlanner:
                 "completed_edges_in_phase": 0,
             }
             if verbose:
-                logger.warning("\u26a0 Auto-release failed, partial result stored for resume")
+                logger.warning(
+                    "\u26a0 Auto-release failed, partial result stored for resume"
+                )
             raise
         return q_current
 
@@ -1547,9 +1549,7 @@ class GraspSequencePlanner:
                 exception (same as both original inline blocks).
         """
         held_grasps = {
-            g: h
-            for g, h in self.grasp_tracker.current_grasps.items()
-            if h is not None
+            g: h for g, h in self.grasp_tracker.current_grasps.items() if h is not None
         }
         logger.debug("Held grasps: %s", held_grasps)
 
@@ -1650,9 +1650,7 @@ class GraspSequencePlanner:
 
             # Dynamically set TOPPRA active joints from unfrozen arms
             if hasattr(self.planner, "set_toppra_active_joints"):
-                active_joints = self._get_active_joints_for_unfrozen_arms(
-                    frozen_arms
-                )
+                active_joints = self._get_active_joints_for_unfrozen_arms(frozen_arms)
                 if active_joints:
                     self.planner.set_toppra_active_joints(active_joints)
                     if verbose:
@@ -1751,9 +1749,7 @@ class GraspSequencePlanner:
                 fails, same as both original inline blocks.
         """
         try:
-            edge_sequence = self.grasp_tracker.get_grasp_edge_sequence(
-                gripper, handle
-            )
+            edge_sequence = self.grasp_tracker.get_grasp_edge_sequence(gripper, handle)
         except Exception as e:
             raise RuntimeError(
                 f"Phase {phase_idx + 1}: " f"Failed to compute edge sequence: {e}"
@@ -1772,13 +1768,11 @@ class GraspSequencePlanner:
                 logger.debug("Projecting q_current onto state: %s", source_state)
                 logger.debug("q_current (first 5): %s", q_current[:5])
 
-            success, q_projected, error = (
-                self.graph_builder.apply_state_constraints(
-                    state_name=source_state,
-                    q=q_current,
-                    max_iterations=10000,
-                    error_threshold=1e-4,
-                )
+            success, q_projected, error = self.graph_builder.apply_state_constraints(
+                state_name=source_state,
+                q=q_current,
+                max_iterations=10000,
+                error_threshold=1e-4,
             )
 
             if not success:
@@ -2137,11 +2131,7 @@ class GraspSequencePlanner:
                     edge_stat["gen_time"] = time.time() - gen_start
 
                     # Check for NaN/inf or None
-                    if (
-                        not ok
-                        or q_target is None
-                        or not np.all(np.isfinite(q_target))
-                    ):
+                    if not ok or q_target is None or not np.all(np.isfinite(q_target)):
                         raise RuntimeError(
                             f"Failed to generate valid target via edge '{edge_name}': q_target={q_target}"
                         )
@@ -2299,9 +2289,7 @@ class GraspSequencePlanner:
                     )
 
                     if path is None:
-                        raise RuntimeError(
-                            f"Planning failed for edge '{edge_name}'"
-                        )
+                        raise RuntimeError(f"Planning failed for edge '{edge_name}'")
 
                     last_plan_exc = None
                     break  # success
@@ -2985,7 +2973,9 @@ class GraspSequencePlanner:
             chain: list[list[float]] = []
             for edge_name in tracker.get_grasp_edge_sequence(gripper, handle):
                 ok, q_next = self.config_gen.generate_via_edge(
-                    edge_name=edge_name, q_from=q, timeout=probe_timeout,
+                    edge_name=edge_name,
+                    q_from=q,
+                    timeout=probe_timeout,
                 )
                 if not ok or q_next is None:
                     return None
@@ -3013,7 +3003,9 @@ class GraspSequencePlanner:
                     logger.info(
                         "find_feasible_phase_target: found a %s candidate "
                         "after %d rejected draw(s) that leaves %s reachable",
-                        phase_n, candidate_idx, phase_n1,
+                        phase_n,
+                        candidate_idx,
+                        phase_n1,
                     )
                 return chain
 
@@ -3021,7 +3013,9 @@ class GraspSequencePlanner:
             logger.warning(
                 "find_feasible_phase_target: exhausted %d candidates for %s "
                 "without finding one that leaves %s reachable",
-                max_candidates, phase_n, phase_n1,
+                max_candidates,
+                phase_n,
+                phase_n1,
             )
         return None
 
@@ -3243,9 +3237,7 @@ class GraspSequencePlanner:
             print("\n" + "=" * 70)
             logger.info("Sequence Planning Complete")
             print("=" * 70)
-            logger.info(
-                "Final state: %s", self.grasp_tracker.get_current_state_name()
-            )
+            logger.info("Final state: %s", self.grasp_tracker.get_current_state_name())
             logger.info("Completed %d phases", len(self.phase_results))
             logger.info("Total planning time: %.2fs", self.total_planning_time)
 
@@ -3533,7 +3525,9 @@ class GraspSequencePlanner:
             is_resume=True,
             verbose=verbose,
             retry_from_edge=retry_from_edge,
-            completed_edges_in_phase_for_resume=resume_state["completed_edges_in_phase"],
+            completed_edges_in_phase_for_resume=resume_state[
+                "completed_edges_in_phase"
+            ],
             loop_start_time=_resume_loop_start_time,
             phase_q_hints=phase_q_hints,
         )
@@ -3680,9 +3674,7 @@ class GraspSequencePlanner:
                 for idx, path in valid_paths:
                     edge_name = edge_names[idx] if idx < len(edge_names) else None
 
-                    logger.info(
-                        "Path %d/%d:", idx + 1, len(phase["paths"])
-                    )
+                    logger.info("Path %d/%d:", idx + 1, len(phase["paths"]))
 
                     video_file = self._play_single_phase_path(
                         path=path,
@@ -3760,11 +3752,11 @@ class GraspSequencePlanner:
         video_name_for_path = None
         if record:
             if video_prefix:
-                video_name_for_path = f"{video_prefix}_phase_{phase['phase']:02d}_path_{idx + 1:02d}"
-            else:
                 video_name_for_path = (
-                    f"phase_{phase['phase']:02d}_path_{idx + 1:02d}"
+                    f"{video_prefix}_phase_{phase['phase']:02d}_path_{idx + 1:02d}"
                 )
+            else:
+                video_name_for_path = f"phase_{phase['phase']:02d}_path_{idx + 1:02d}"
             if edge_name:
                 video_name_for_path += f"_{sanitize_filename(edge_name)}"
 

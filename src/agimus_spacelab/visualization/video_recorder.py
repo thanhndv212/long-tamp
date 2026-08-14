@@ -272,9 +272,7 @@ class VideoRecorder:
                 check=True,
             )
         except (subprocess.CalledProcessError, FileNotFoundError):
-            logger.warning(
-                "ffmpeg not found. Frames saved but video not encoded."
-            )
+            logger.warning("ffmpeg not found. Frames saved but video not encoded.")
             logger.warning("Frame pattern: %s", frame_pattern)
             logger.warning(
                 "You can manually encode with: "
