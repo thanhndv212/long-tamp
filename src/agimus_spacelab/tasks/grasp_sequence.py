@@ -1152,6 +1152,68 @@ class GraspSequencePlanner:
             if verbose:
                 logger.warning("Checkpoint dump failed: %s", e)
 
+    def _release_frozen_arms(
+        self,
+        gripper: str,
+        released_handle: str,
+        frozen_arms_mode: str,
+        per_phase_frozen_arms: dict[int, list[str]] | None,
+        phase_idx: int,
+    ) -> list[str]:
+        """Which arms to freeze while ``gripper`` releases ``released_handle``.
+
+        Two rules, both learned the hard way on RS3's FG release (2026-08-14,
+        ~30k consecutive solver failures, 0 ever reaching collision checking):
+
+        1. NEVER freeze an arm that holds the object being released.  vispa2
+           holds ``RS3/h_RS3_WB`` while frame_gripper releases
+           ``RS3/h_RS3_FG``; freezing vispa2 pins the workbench carrying RS3,
+           so the ~0.25 m FG retreat has to come entirely from UR10 and no
+           solution exists.  Measured from the failing checkpoint:
+           0/200 target draws converge with vispa2 frozen, 107/200 without
+           (and the warm start then converges on the first attempt).
+           ``compute_phase_locked_joints`` already implements this via its
+           ``handle=`` chain walk -- ``_plan_auto_release_if_needed`` passed
+           it, ``_plan_release_entry_phase`` did not, which is the whole bug.
+        2. Honour an explicit per-phase override in "manual" mode.  Callers
+           escalate by dropping an arm from ``per_phase_frozen_arms`` after
+           repeated failures (see run_block_nonstop._maybe_loosen); both
+           release paths previously recomputed the set from scratch and
+           ignored the override, so those escalations silently did nothing.
+        """
+        # The chain walk's effect, isolated: arms the walk drops precisely
+        # because they carry the released object.  Derived as a diff rather
+        # than re-implemented so the transitive cases (RS3 inside
+        # frame_gripper inside UR10) stay in one tested place.
+        holders = set(
+            self.compute_phase_locked_joints(gripper, "auto", verbose=False)
+        ) - set(
+            self.compute_phase_locked_joints(
+                gripper, "auto", handle=released_handle, verbose=False
+            )
+        )
+
+        if frozen_arms_mode == "manual" and per_phase_frozen_arms is not None:
+            requested = per_phase_frozen_arms.get(phase_idx, [])
+        else:
+            requested = self.compute_phase_locked_joints(
+                gripper, "auto", handle=released_handle
+            )
+
+        # Rule 1 outranks the caller: a manual list naming an arm that holds
+        # the released object is asking for an unsatisfiable pregrasp, so
+        # drop it rather than honouring it.  This is what block B's
+        # {0: ["vispa_", "vispa2"]} does during RS3's FG release.
+        kept = [a for a in requested if a not in holders]
+        if len(kept) != len(requested):
+            logger.warning(
+                "Not freezing %s during release of '%s': holds the released "
+                "object, and freezing it makes the pregrasp unreachable",
+                ", ".join(sorted(set(requested) - set(kept))),
+                released_handle,
+            )
+        return kept
+
     def _plan_release_entry_phase(
         self,
         phase_idx: int,
@@ -1160,6 +1222,7 @@ class GraspSequencePlanner:
         q_current: list[float],
         frozen_arms_mode: str,
         verbose: bool,
+        per_phase_frozen_arms: dict[int, list[str]] | None = None,
     ) -> list[float]:
         """Handle an explicit release entry ``(gripper, None)`` in the sequence.
 
@@ -1206,7 +1269,13 @@ class GraspSequencePlanner:
         if frozen_arms_mode == "global":
             release_constraints = self.graph_constraints
         elif frozen_arms_mode != "none":
-            release_frozen = self.compute_phase_locked_joints(gripper, "auto")
+            release_frozen = self._release_frozen_arms(
+                gripper,
+                currently_held,
+                frozen_arms_mode,
+                per_phase_frozen_arms,
+                phase_idx,
+            )
             if release_frozen:
                 from agimus_spacelab.planning.constraints import (
                     ConstraintBuilder,
@@ -1290,6 +1359,7 @@ class GraspSequencePlanner:
         q_current: list[float],
         frozen_arms_mode: str,
         verbose: bool,
+        per_phase_frozen_arms: dict[int, list[str]] | None = None,
     ) -> list[float]:
         """Auto-release ``gripper``'s current object before grasping a new one.
 
@@ -1337,8 +1407,15 @@ class GraspSequencePlanner:
             # Generalised chain walk: any arm that currently
             # holds the released object (directly or transitively)
             # is kept unfrozen by compute_phase_locked_joints.
-            release_frozen = self.compute_phase_locked_joints(
-                gripper, "auto", handle=currently_held
+            # An explicit "manual" per-phase override wins over the walk,
+            # so a caller's escalation (dropping an arm after repeated
+            # failures) actually reaches the phase graph.
+            release_frozen = self._release_frozen_arms(
+                gripper,
+                currently_held,
+                frozen_arms_mode,
+                per_phase_frozen_arms,
+                phase_idx,
             )
             # Defensive fallback: if the chain walk did not
             # unfreeze the arm that directly holds
@@ -2644,6 +2721,7 @@ class GraspSequencePlanner:
                     q_current=q_current,
                     frozen_arms_mode=frozen_arms_mode,
                     verbose=verbose,
+                    per_phase_frozen_arms=per_phase_frozen_arms,
                 )
                 continue
 
@@ -2660,6 +2738,7 @@ class GraspSequencePlanner:
                 q_current=q_current,
                 frozen_arms_mode=frozen_arms_mode,
                 verbose=verbose,
+                per_phase_frozen_arms=per_phase_frozen_arms,
             )
 
             self._build_phase_graph_and_constraints(

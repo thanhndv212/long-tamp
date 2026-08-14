@@ -333,12 +333,25 @@ class ConfigGenerator:
                 if verbose:
                     logger.warning(
                         "⚠ Generation via edge TIMED OUT: %s after %d attempts "
-                        "/ %.0fs (%d solver-failed, %d invalid/in-collision)",
+                        "/ %.1fs (%d solver-failed, %d invalid/in-collision)",
                         edge_name,
                         i,
-                        timeout,
+                        time.time() - _t_start,
                         n_solver_fail,
                         n_collision_invalid,
+                    )
+                    # The timeout branch is the DOMINANT failure path once a
+                    # target is genuinely infeasible: max_attempts (1000) is
+                    # never reached because 30s expires first (~800
+                    # attempts), so the post-loop diagnostics below never
+                    # ran. Observed live on RS3's FG release -- 25 minutes,
+                    # ~30k failed solves, not one solver residual logged.
+                    # The residual is what distinguishes "unreachable"
+                    # (small, wandering) from "contradictory constraints"
+                    # (pinned near the clearance magnitude), so it has to
+                    # come out on this path too.
+                    self._log_edge_failure_diagnostics(
+                        edge_name, q_from, q_hint, last_err, last_valid_err
                     )
                 return False, None
             use_hint = i == 0 and q_hint is not None
@@ -508,9 +521,13 @@ class ConfigGenerator:
         last_valid_err,
     ):
         """Log diagnostic info when generate_via_edge exhausts all attempts."""
-        logger.debug("--- Edge failure diagnostics for '%s' ---", edge_name)
-        logger.debug("Last solver residual: %s", last_err)
-        logger.debug("Last validity error: %s", last_valid_err)
+        # Residual at WARNING, not DEBUG: it is the single number that says
+        # WHICH constraint is unsatisfied and by how much, it is emitted at
+        # most once per failed generation (~1/30s), and the runs that need
+        # it most are long unattended ones where DEBUG is off.
+        logger.warning("--- Edge failure diagnostics for '%s' ---", edge_name)
+        logger.warning("Last solver residual: %s", last_err)
+        logger.warning("Last validity error: %s", last_valid_err)
         if q_hint is not None:
             q_from_arr = np.array(q_from, dtype=float)
             q_hint_arr = np.array(q_hint, dtype=float)
