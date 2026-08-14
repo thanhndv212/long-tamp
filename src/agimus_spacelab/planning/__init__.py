@@ -31,6 +31,7 @@ from .path_io import (
     load_paths_from_directory,
     replay_paths,
 )
+from .path_recorder import PathRecorder, SeamError
 from .planner import check_backend, create_planner
 from .scene import SceneBuilder
 from .sequential_graph_factory import SequentialConstraintGraphFactory
@@ -49,7 +50,9 @@ __all__ = [
     "GraphBuilder",
     # Path I/O
     "PathLoadError",
+    "PathRecorder",
     "SceneBuilder",
+    "SeamError",
     "SequentialConstraintGraphFactory",
     "SequentialGraspFilter",
     "SequentialTransitionFilter",
