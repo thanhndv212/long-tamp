@@ -2026,25 +2026,46 @@ class PyHPPBackend(BackendBase):
         # Smart planning strategy based on edge type
         is_waypoint_pregrasp = self._is_pregrasp_edge(edge_name)
         is_waypoint_grasp = self._is_grasp_edge(edge_name)
-        # Allow directPath for _21 (grasped->pregrasp = release retraction).
-        # q_pregrasp is generated with q_start as hint, so non-active-arm DOFs
-        # are unchanged -- linear interpolation is a pure arm retraction.
-        # RRT for _12 (forward approach to contact) and _01/_10 stays unchanged.
-        is_release_retract_edge = "_21" in edge_name
-        skip_direct_path = is_waypoint_pregrasp or (
-            is_waypoint_grasp and not is_release_retract_edge
-        )
+        # Try directPath on both grasp edges: _21 (grasped->pregrasp, the
+        # release retraction) and _12 (pregrasp->grasp, the forward
+        # approach).  Both connect two configurations that differ only in
+        # the active arm -- q_pregrasp is generated from the other endpoint
+        # as hint, so the rest of the scene is unchanged and the edge's own
+        # steering method projects the connection onto the constraint leaf.
+        #
+        # _12 used to be excluded, and the cost was visible in replay: the
+        # RRT it fell through to produced a full out-and-back on a 60 mm
+        # approach.  Measured on the bootstrap tool grasps, the gripper
+        # closed to 4 mm of contact, retreated the entire 60 mm standoff,
+        # then approached again -- 2.8x the necessary travel, with the
+        # middle third a pure round trip that ManipulationRandomShortcut
+        # (the only optimizer on grasp edges) failed to remove.  The
+        # existing path's own first third was already that straight
+        # approach, collision-free and validated, so there was nothing for
+        # the RRT to find that directPath could not.
+        #
+        # Safe by construction: directPath validates, and returns None on
+        # failure, so a genuinely blocked approach still falls through to
+        # the planner below exactly as before.
+        # _01/_10 stay RRT-planned -- those are the long transits to the
+        # pregrasp standoff, which do have obstacles to route around.
+        skip_direct_path = is_waypoint_pregrasp
+        if not is_waypoint_grasp:
+            edge_label = "transit"
+        elif "_21" in edge_name:
+            edge_label = "release retract (_21)"
+        else:
+            edge_label = "forward grasp (_12)"
 
         pv: Any = None
 
-        # Try directPath first for transit and release-retraction edges
+        # Try directPath first for transit and waypoint grasp edges
         if not skip_direct_path:
             pv = self._try_direct_path(
-                tp, edge_name, q1_arr, q2_arr, validate, is_release_retract_edge
+                tp, edge_name, q1_arr, q2_arr, validate, edge_label
             )
         else:
-            edge_type = "pregrasp" if is_waypoint_pregrasp else "forward grasp (_12)"
-            logger.debug("Waypoint %s edge, skipping directPath", edge_type)
+            logger.debug("Waypoint pregrasp edge, skipping directPath")
 
         # Fall back to computePath (preferred) if directPath didn't work or
         # was skipped -- see _compute_or_plan_path for why the fallback exists.
@@ -2175,30 +2196,96 @@ class PyHPPBackend(BackendBase):
         q1_arr: np.ndarray,
         q2_arr: np.ndarray,
         validate: bool,
-        is_release_retract_edge: bool,
+        edge_label: str,
     ) -> Any:
-        """Attempt tp.directPath() for a transit or release-retraction
-        edge. Returns the (optimized, if possible) PathVector on success,
-        or None if directPath failed/threw -- the caller falls back to
-        _compute_or_plan_path in that case."""
-        label = "release retract (_21)" if is_release_retract_edge else "transit"
-        logger.debug("%s edge, trying directPath first", label)
+        """Attempt tp.directPath() for a transit or waypoint grasp edge.
+
+        Returns the (optimized, if possible) PathVector on success, or None
+        if directPath failed/threw -- the caller falls back to
+        _compute_or_plan_path in that case, so a blocked straight-line
+        connection costs one validation, not a failure."""
+        logger.debug("%s edge, trying directPath first", edge_label)
         try:
             success, path, status = tp.directPath(q1_arr, q2_arr, bool(validate))
             if success:
                 logger.debug("directPath succeeded")
-                try:
-                    pv = tp.optimizePath(path)
-                    logger.debug("Path optimized")
-                    return pv
-                except Exception:
-                    logger.debug("Optimization failed, using unoptimized path")
-                    return path
+                return self._optimize_path_if_better(tp, path, edge_label)
             logger.debug("directPath failed: %s", status)
         except Exception as exc:
             # directPath failed, will fall back to planPath
             logger.debug("directPath threw exception: %s", exc)
         return None
+
+    def _optimize_path_if_better(self, tp: Any, path: Any, label: str) -> Any:
+        """Run the edge's optimizer chain, keeping the result only if it helped.
+
+        A shortcut optimizer must never lengthen a path, but
+        ``ManipulationRandomShortcut`` -- the only optimizer configured for
+        waypoint grasp edges -- demonstrably does.  Measured on the
+        bootstrap tool grasp: ``directPath`` returned a single-segment,
+        strictly monotonic 60 mm approach of length 0.1585, and
+        ``optimizePath`` turned it into a 3-segment path of length 0.4021
+        that closes to 14 mm of contact, backs out 45 mm, and comes in
+        again.  2.5x longer, and plainly visible in replay as the gripper
+        lunging, retreating and lunging again.
+
+        Comparing the two lengths costs one call and makes the optimizer
+        strictly non-harmful: when it helps, its result is kept; when it
+        hurts, the input survives.  Applied to both routes into it, since
+        the RRT route optimizes the same way.
+
+        The rejected input is returned wrapped in a PathVector.  It has to
+        be: ``directPath`` hands back a bare ``StraightPath``, and both
+        time parameterizers take a ``PathVector`` only -- returning the
+        raw path silently dropped time parameterization off every edge
+        that took this branch.
+        """
+        try:
+            before = float(path.length())
+        except Exception:  # pragma: no cover - defensive
+            before = None
+        try:
+            optimized = tp.optimizePath(path)
+        except Exception:
+            logger.debug("Optimization failed, using unoptimized path")
+            return self._as_path_vector(path)
+        try:
+            after = float(optimized.length())
+        except Exception:  # pragma: no cover - defensive
+            return optimized
+        if before is not None and after > before:
+            logger.warning(
+                "%s: optimizer lengthened the path (%.4f -> %.4f); keeping "
+                "the unoptimized one",
+                label,
+                before,
+                after,
+            )
+            return self._as_path_vector(path)
+        logger.debug("Path optimized (%.4f -> %.4f)", before or -1.0, after)
+        return optimized
+
+    @staticmethod
+    def _as_path_vector(path: Any) -> Any:
+        """Wrap a bare Path in a PathVector, or pass a PathVector through.
+
+        ``TransitionPlanner.directPath`` returns a ``StraightPath``, but
+        ``TOPPRAOptimizer`` / ``TrapezoidalTimeParameterization`` are bound
+        for ``PathVector`` only and raise a Boost.Python signature error on
+        anything else.  Everything downstream of planning assumes a
+        PathVector too.
+        """
+        if hasattr(path, "numberPaths"):
+            return path
+        try:
+            from pyhpp.core.path import Vector as _PathVector
+
+            pv = _PathVector(path.outputSize(), path.outputDerivativeSize())
+            pv.appendPath(path)
+            return pv
+        except Exception as exc:  # pragma: no cover - binding-dependent
+            logger.debug("Could not wrap path in a PathVector: %s", exc)
+            return path
 
     def _compute_or_plan_path(
         self,
@@ -2253,12 +2340,7 @@ class PyHPPBackend(BackendBase):
                 f"{edge_name}: {exc}"
             )
 
-        try:
-            pv = tp.optimizePath(pv)
-            logger.debug("Path optimized")
-        except Exception:
-            logger.debug("Optimization failed, using unoptimized path")
-        return pv
+        return self._optimize_path_if_better(tp, pv, edge_name)
 
     def plan_transition_sequence(
         self,

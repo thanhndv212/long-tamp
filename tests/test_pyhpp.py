@@ -344,7 +344,7 @@ class TestTryDirectPath:
         tp.optimizePath.return_value = "optimized_path"
 
         result = planner._try_direct_path(
-            tp, "edge01", np.array([0.0]), np.array([1.0]), True, False
+            tp, "edge01", np.array([0.0]), np.array([1.0]), True, "transit"
         )
 
         assert result == "optimized_path"
@@ -356,7 +356,7 @@ class TestTryDirectPath:
         tp.optimizePath.side_effect = RuntimeError("boom")
 
         result = planner._try_direct_path(
-            tp, "edge01", np.array([0.0]), np.array([1.0]), True, False
+            tp, "edge01", np.array([0.0]), np.array([1.0]), True, "transit"
         )
 
         assert result == "raw_path"
@@ -367,7 +367,7 @@ class TestTryDirectPath:
         tp.directPath.return_value = (False, None, "no path")
 
         result = planner._try_direct_path(
-            tp, "edge01", np.array([0.0]), np.array([1.0]), True, False
+            tp, "edge01", np.array([0.0]), np.array([1.0]), True, "transit"
         )
 
         assert result is None
@@ -378,7 +378,7 @@ class TestTryDirectPath:
         tp.directPath.side_effect = RuntimeError("boom")
 
         result = planner._try_direct_path(
-            tp, "edge01", np.array([0.0]), np.array([1.0]), True, False
+            tp, "edge01", np.array([0.0]), np.array([1.0]), True, "transit"
         )
 
         assert result is None
@@ -452,3 +452,109 @@ class TestComputeOrPlanPath:
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
 
+
+
+@pytest.mark.skipif(not HAS_PYHPP, reason="PyHPP backend not available")
+class TestOptimizePathIfBetter:
+    """The guard against an optimizer that makes the path worse.
+
+    ``ManipulationRandomShortcut`` -- the only optimizer configured for
+    waypoint grasp edges -- was measured turning ``directPath``'s straight
+    60 mm tool approach (one segment, length 0.1585) into a three-segment
+    path of length 0.4021 that lunges to within 14 mm of contact, retreats
+    the full standoff, and comes in again. It is a *shortcut* optimizer,
+    so a longer result is always a defect, never a trade-off; keeping the
+    shorter of {input, output} makes it strictly non-harmful. The
+    behaviour is stochastic, which is why the outcome is checked rather
+    than the optimizer disabled.
+    """
+
+    class Path:
+        """Bare path: has length(), no numberPaths (i.e. not a PathVector)."""
+
+        def __init__(self, length):
+            self._length = length
+
+        def length(self):
+            return self._length
+
+    class Vector(Path):
+        """Shaped like a PathVector, so _as_path_vector passes it through."""
+
+        def numberPaths(self):  # HPP binding name, not snake_case
+            return 1
+
+    def _planner_and_tp(self, result):
+        planner = PyHPPManipulationPlanner()
+        tp = MagicMock()
+        if isinstance(result, Exception):
+            tp.optimizePath.side_effect = result
+        else:
+            tp.optimizePath.return_value = result
+        return planner, tp
+
+    def test_a_shorter_result_is_kept(self):
+        better = self.Vector(0.5)
+        planner, tp = self._planner_and_tp(better)
+        assert planner._optimize_path_if_better(tp, self.Vector(1.0), "e") is better
+
+    def test_a_longer_result_is_rejected(self):
+        worse = self.Vector(2.5)
+        original = self.Vector(1.0)
+        planner, tp = self._planner_and_tp(worse)
+        assert planner._optimize_path_if_better(tp, original, "e") is original
+
+    def test_the_real_measured_numbers(self):
+        """0.1585 -> 0.4021, the bootstrap tool grasp."""
+        original = self.Vector(0.1585)
+        planner, tp = self._planner_and_tp(self.Vector(0.4021))
+        assert planner._optimize_path_if_better(tp, original, "e") is original
+
+    def test_an_equal_length_result_is_kept(self):
+        """Same length may still be smoother; only worse is rejected."""
+        same = self.Vector(1.0)
+        planner, tp = self._planner_and_tp(same)
+        assert planner._optimize_path_if_better(tp, self.Vector(1.0), "e") is same
+
+    def test_an_optimizer_exception_falls_back_to_the_input(self):
+        original = self.Vector(1.0)
+        planner, tp = self._planner_and_tp(RuntimeError("boom"))
+        assert planner._optimize_path_if_better(tp, original, "e") is original
+
+    def test_an_unmeasurable_input_keeps_the_optimized_path(self):
+        """Nothing to compare against -- defer to the optimizer."""
+        class NoLength:
+            pass
+
+        optimized = self.Vector(9.0)
+        planner, tp = self._planner_and_tp(optimized)
+        assert planner._optimize_path_if_better(tp, NoLength(), "e") is optimized
+
+    def test_a_rejected_bare_path_is_wrapped_in_a_path_vector(self):
+        """directPath returns a StraightPath, and both time parameterizers
+        are bound for PathVector only -- returning the bare path silently
+        dropped time parameterization off every edge that took this
+        branch, which is how the first version of this guard regressed."""
+        wrapped = []
+
+        class Straight(TestOptimizePathIfBetter.Path):
+            def outputSize(self):  # HPP binding name, not snake_case
+                return 2
+
+            def outputDerivativeSize(self):  # HPP binding name
+                return 2
+
+        planner, tp = self._planner_and_tp(self.Vector(2.0))
+        original = Straight(1.0)
+
+        def fake_wrap(path):
+            wrapped.append(path)
+            return "wrapped"
+
+        planner._as_path_vector = fake_wrap
+        assert planner._optimize_path_if_better(tp, original, "e") == "wrapped"
+        assert wrapped == [original]
+
+    def test_a_path_vector_passes_through_unwrapped(self):
+        pv = self.Vector(1.0)
+        assert PyHPPManipulationPlanner._as_path_vector(pv) is pv
