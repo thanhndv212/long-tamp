@@ -195,7 +195,7 @@ class TestPlanPhaseEdgesLogging:
         planner.last_failure_info = None
 
         class _FakeConfigGen:
-            def generate_via_edge(self, edge_name, q_from, config_label):
+            def generate_via_edge(self, edge_name, q_from, config_label, q_hint=None):
                 return True, [0.1, 0.2]
 
         class _FakePlanner:

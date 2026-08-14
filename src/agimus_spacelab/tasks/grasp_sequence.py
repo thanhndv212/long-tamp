@@ -198,6 +198,13 @@ class GraspSequencePlanner:
         # resume_sequence() so grasps from earlier calls survive a resume.
         self._initial_grasps: dict[str, str] = {}
 
+        # Phase indices whose phase_q_hints chain was broken mid-phase by the
+        # collision-retry loop redrawing a hinted edge's target at random.
+        # Once that happens the hint's "leaves the next phase reachable"
+        # guarantee no longer holds, so callers should re-run
+        # find_feasible_phase_target() rather than resume into the next phase.
+        self.invalidated_phase_hints: set[int] = set()
+
         # Edge-level timing and resume attempt statistics
         self.edge_stats = {}  # (phase_idx, edge_idx) -> timing info
         self.total_planning_time = 0.0
@@ -1752,6 +1759,56 @@ class GraspSequencePlanner:
 
         return edge_sequence, q_current
 
+    @staticmethod
+    def _edge_hints_for_phase(
+        phase_hint: Any, n_edges: int
+    ) -> list[list[float] | None]:
+        """Expand one ``phase_q_hints`` entry into a per-edge hint list.
+
+        Accepts either shape:
+
+        - A **chain** -- one config per edge of the phase's edge sequence,
+          as returned by ``find_feasible_phase_target()``. Every edge gets
+          warm-started, so an uninterrupted run reproduces the probed
+          candidate *exactly*: edge 0 re-solves from the same ``q_from``
+          and the same seed, its planned path ends on that same config,
+          and edge 1 then solves from precisely the ``q_from`` the probe
+          used.
+        - A **single config** (legacy) -- applied to the phase's last edge
+          only, leaving earlier waypoint edges unhinted.
+
+        The legacy shape does not actually pin the phase's committed
+        config, which is why the chain exists.  ``generate_via_edge()``
+        takes an edge's constraint RHS from its predecessor's end config,
+        and the free DOFs it doesn't constrain pass straight through from
+        there.  With the pregrasp edge still drawn at random -- and redrawn
+        again by every collision-retry -- the last edge solves from a
+        ``q_from`` the probe never saw, so its result drifts off the
+        validated candidate even though the seed was right.  Live: RS5's
+        pregrasp edge was redrawn 6x (5 planning failures), moving the free
+        ur10 arm and with it RS5 itself, and the CON0 grasp the lookahead
+        had just verified as reachable then failed 878/878 target draws at
+        solver convergence.
+
+        A chain whose length doesn't match ``n_edges`` (e.g. carried across
+        a phase whose edge sequence changed shape) degrades to the legacy
+        single-config behavior rather than mis-aligning configs onto edges
+        they were never solved for.
+        """
+        # Length rather than truthiness: a hint may arrive as a numpy array,
+        # whose truth value is ambiguous for more than one element.
+        if phase_hint is None or len(phase_hint) == 0:
+            return [None] * n_edges
+
+        # A chain's entries are configs (sized); a single config's are scalars.
+        is_chain = hasattr(phase_hint[0], "__len__")
+
+        if is_chain and len(phase_hint) == n_edges:
+            return [list(q) for q in phase_hint]
+
+        terminal = list(phase_hint[-1]) if is_chain else list(phase_hint)
+        return [None] * (n_edges - 1) + [terminal]
+
     def _plan_phase_edges(
         self,
         phase_idx: int,
@@ -1764,6 +1821,7 @@ class GraspSequencePlanner:
         is_resume: bool,
         verbose: bool,
         loop_start_time: float | None = None,
+        phase_q_hints: dict[int, list[list[float]] | list[float]] | None = None,
     ) -> dict[str, Any]:
         """Plan every edge in the phase's edge sequence, with collision-retry.
 
@@ -1817,6 +1875,28 @@ class GraspSequencePlanner:
                 ``plan_sequence()`` and ``resume_sequence()`` now pass
                 their own (resume's covers only the resumed portion, not
                 the original call before the failure).
+            phase_q_hints: Optional ``{phase_idx: hint}`` warm-start map,
+                expanded per-edge by ``_edge_hints_for_phase()`` (see it
+                for the accepted shapes and why a whole chain, rather than
+                just the phase's committed config, is what actually pins
+                the outcome). Each edge's hint is passed as ``q_hint`` to
+                its ``generate_via_edge()`` call. Used by
+                ``find_feasible_phase_target()`` to steer target generation
+                toward a candidate already verified to leave the NEXT
+                phase reachable, instead of accepting whatever the
+                unguided random restart lands on -- see that method's
+                docstring for the RS6/CON0 case this exists to fix.
+
+                Never applied to the collision-retry regeneration call
+                below: its purpose is drawing a genuinely fresh sample when
+                RRT planning fails on an otherwise-valid target, and
+                re-feeding the same hint there would just reconverge to the
+                same unplannable point. That redraw does break the chain
+                though, so it records ``phase_idx`` in
+                ``self.invalidated_phase_hints`` -- the phase may still
+                complete, but the lookahead's guarantee about the next
+                phase is void, and the caller should re-run the lookahead
+                instead of resuming forward on it.
 
         Returns:
             Dict with keys ``phase_paths``, ``phase_geometric_paths``,
@@ -1833,6 +1913,10 @@ class GraspSequencePlanner:
         edge_stats_list = []  # Per-edge timing stats for this phase
         q_start = q_current
         q_pregrasp_for_cache = None  # end config of the _01 edge (pregrasp)
+        edge_hints = self._edge_hints_for_phase(
+            phase_q_hints.get(phase_idx) if phase_q_hints else None,
+            len(edge_sequence),
+        )
 
         for edge_idx in range(start_edge_idx, len(edge_sequence)):
             # Resolve the edge name first so the stop-request handler below
@@ -1957,10 +2041,12 @@ class GraspSequencePlanner:
                 config_label = f"q_phase{phase_idx}_edge{edge_idx}"
                 if is_resume:
                     config_label += "_resume"
+                q_hint = edge_hints[edge_idx]
                 ok, q_target = self.config_gen.generate_via_edge(
                     edge_name=edge_name,
                     q_from=q_start,
                     config_label=config_label,
+                    q_hint=q_hint,
                 )
 
                 if is_resume:
@@ -2167,6 +2253,24 @@ class GraspSequencePlanner:
                             q_target = _q_new
                             if verbose:
                                 logger.debug("Regenerated target config")
+                            # A random redraw replacing a hinted target
+                            # breaks the chain: everything downstream of
+                            # this edge now solves from a q_from the
+                            # lookahead never probed, so its "next phase
+                            # stays reachable" guarantee no longer holds.
+                            if edge_hints[edge_idx] is not None:
+                                self.invalidated_phase_hints.add(phase_idx)
+                                if verbose:
+                                    logger.warning(
+                                        "Phase %d's hint chain broken at edge "
+                                        "%d (%s): target redrawn at random "
+                                        "after a planning failure — the "
+                                        "lookahead guarantee for the next "
+                                        "phase no longer holds",
+                                        phase_idx + 1,
+                                        edge_idx + 1,
+                                        edge_name,
+                                    )
 
             if last_plan_exc is not None:
                 e = last_plan_exc
@@ -2454,6 +2558,7 @@ class GraspSequencePlanner:
         retry_from_edge: int = 0,
         completed_edges_in_phase_for_resume: int = 0,
         loop_start_time: float | None = None,
+        phase_q_hints: dict[int, list[list[float]] | list[float]] | None = None,
     ) -> list[float]:
         """Run the per-phase planning loop shared by ``plan_sequence()`` and
         ``resume_sequence()``.
@@ -2500,6 +2605,8 @@ class GraspSequencePlanner:
                 outside this step's scope.
             loop_start_time: Only meaningful when not ``is_resume``: see
                 ``_plan_phase_edges``'s docstring.
+            phase_q_hints: Forwarded verbatim to ``_plan_phase_edges()`` --
+                see its docstring.
 
         Returns:
             The final ``q_current`` after every phase in ``phases``
@@ -2596,6 +2703,7 @@ class GraspSequencePlanner:
                 is_resume=is_resume,
                 verbose=verbose,
                 loop_start_time=loop_start_time,
+                phase_q_hints=phase_q_hints,
             )
             phase_paths = _edge_result["phase_paths"]
             phase_geometric_paths = _edge_result["phase_geometric_paths"]
@@ -2620,6 +2728,226 @@ class GraspSequencePlanner:
 
         return q_current
 
+    def find_feasible_phase_target(
+        self,
+        phase_n: tuple[str, str],
+        phase_n1: tuple[str, str],
+        q_current: list[float],
+        q_scene_init: list[float] | None,
+        frozen_arms_n: list[str],
+        frozen_arms_n1: list[str],
+        probe_timeout: float = 5.0,
+        max_candidates: int = 100,
+        verbose: bool = True,
+    ) -> list[list[float]] | None:
+        """Search for a phase-N grasp target that leaves phase N+1 reachable.
+
+        Fixes a real failure class: a phase's target-generation call
+        (``ConfigGenerator.generate_via_edge()``) is randomized (random-
+        restart IK), and whichever valid solution it lands on can pin
+        constraints the NEXT phase depends on with no way back -- e.g. RS6's
+        WB grasp (phase N) is one of two simultaneous fixed-offset grasps on
+        the same rigid object, so once it and the object's other grasp are
+        both committed, the object's orientation is fully determined and
+        phase N+1 (CON0) cannot change it no matter how long IT retries.
+        Traced live: RS6's CON0 grasp failed ~2300+ consecutive target-
+        generation attempts (0 ever reached collision-checking, both with
+        the next arm frozen and after the existing 30-failure-unfreeze
+        escalation fired) purely because the WB grasp's random draw happened
+        to leave CON0 facing away from the tool -- confirmed visually in
+        viser. No amount of retrying phase N+1 alone can fix a bad phase-N
+        commitment; the fix has to re-roll phase N.
+
+        Cheap relative to a blind multi-hour retry stall, but NOT flat-rate
+        cheap -- ``build_phase_graph()``'s cost scales with how many
+        objects/grippers are already held, not a constant. Measured ~65ms
+        against RS6's checkpoint (only RS1 held at that point in the
+        sequence); measured ~6.2-6.4s against RS2's checkpoint (RS1+RS5+RS6
+        all held by then) -- roughly two orders of magnitude more, purely
+        from more locked joints/objects for ConstraintGraphFactory to set
+        up. Each candidate that reaches the phase-N+1 probe therefore costs
+        the phase-N+1 build (this ~6s-and-growing figure) plus up to
+        ``probe_timeout`` -- ~7-12s/candidate by RS2, not milliseconds.
+        Target generation itself stays fast throughout (~30ms/attempt
+        measured, confirmed still true at RS2). Still cheap next to a
+        single failed ``plan_transition_edge()`` attempt, let alone the
+        2300+ retries this replaces -- but ``max_candidates`` needs enough
+        headroom to survive several rejected draws at this heavier
+        per-candidate cost, not just the lighter early-sequence cost.
+
+        Draws a phase-N candidate, then immediately probes (short timeout,
+        discarding the resulting config) whether phase N+1 is reachable from
+        it. Two full ``build_phase_graph()`` calls per candidate, not one:
+        ``self.graph``/the CORBA server graph is a singleton, so building
+        phase N+1's graph tears down phase N's -- there is no way to keep
+        both alive at once to compare candidates. Never mutates
+        ``self.grasp_tracker`` (only a throwaway ``.copy()``) -- committing
+        a hypothetical grasp to the real tracker while merely probing is
+        the exact corruption class ``_restore_grasp_tracker_for_resume()``
+        exists to fix (see its docstring): it would silently corrupt state
+        the real, subsequent ``plan_sequence(phase_q_hints=...)`` call
+        depends on.
+
+        Only supports grasp phases (``handle is not None``) for both N and
+        N+1 -- release phases use a different edge-sequence method
+        (``get_release_edge_sequence``) not wired in here, since the one
+        real caller (RS6's WB-grasp -> CON0-grasp pair) never needs it.
+        Only manual frozen-arms resolution (an explicit list per phase, not
+        "auto"/"interactive"/"global") for the same reason -- the real
+        caller (``run_block_nonstop``) always uses
+        ``frozen_arms_mode="manual"`` with an explicit dict already in hand.
+
+        Args:
+            phase_n: ``(gripper, handle)`` for the phase whose target is
+                being searched for (e.g. VISPA2's WB grasp on RS6).
+            phase_n1: ``(gripper, handle)`` for the phase that must remain
+                reachable from phase N's candidate (e.g. CON0 grasp).
+            q_current: Configuration entering phase N (unchanged across the
+                whole search -- every candidate is drawn from the same
+                start).
+            q_scene_init: True scene-initial configuration, passed through
+                to ``build_phase_graph()`` exactly as
+                ``_build_phase_graph_and_constraints()`` does.
+            frozen_arms_n: Locked-arm keywords for phase N, matching
+                ``per_phase_frozen_arms[phase_n_idx]`` in the real call.
+            frozen_arms_n1: Locked-arm keywords for phase N+1.
+            probe_timeout: Wall-clock cap per probe ``generate_via_edge()``
+                call. Short by design -- this only needs to know a solution
+                exists, not find the one the real run will use.
+            max_candidates: How many phase-N candidates to try before giving
+                up. Per-candidate cost grows with how many objects are
+                already held by this point in the sequence (see cost note
+                above) -- ~7-12s/candidate by RS2, worse for RS3/RS4. 100
+                gives real headroom (up to ~15-20 min worst case) rather
+                than gambling on an early-sequence-cost budget that starves
+                the search later in the run, as 20 did for RS2 (exhausted
+                its whole budget in ~22s and never found a candidate that a
+                slightly luckier draw found on attempt #2).
+            verbose: Log progress/outcome.
+
+        Returns:
+            The full per-edge config **chain** the winning candidate was
+            built from -- one config per edge of phase N's edge sequence,
+            terminal config last -- if a candidate was found that also
+            leaves phase N+1 reachable. Pass it as
+            ``phase_q_hints={phase_n_idx: result}`` to the real
+            ``plan_sequence()``/``resume_sequence()`` call so it reproduces
+            this candidate instead of drawing a fresh (possibly bad) one.
+            ``None`` if the budget was exhausted without finding one --
+            callers should fall back to today's behavior (no hint).
+
+            The whole chain, not just ``result[-1]``: seeding only the
+            terminal edge leaves the pregrasp edges randomized, and since
+            each edge's constraint RHS comes from its predecessor's end
+            config, the committed config then drifts off this candidate and
+            takes the phase N+1 guarantee with it. See
+            ``_edge_hints_for_phase()`` for the mechanism and the live RS5
+            case. (``result[-1]`` is still exactly phase N's committed
+            target if a caller needs just that.)
+        """
+        from agimus_spacelab.planning.constraints import ConstraintBuilder
+
+        gripper_n, handle_n = phase_n
+        gripper_n1, handle_n1 = phase_n1
+
+        def _sync_graph_refs(new_graph) -> None:
+            if hasattr(self.planner, "graph"):
+                self.planner.graph = new_graph
+            if self.config_gen is None:
+                from agimus_spacelab.planning import ConfigGenerator
+
+                self.config_gen = ConfigGenerator(
+                    self.graph_builder.robot,
+                    new_graph,
+                    self.planner,
+                    self.graph_builder.ps,
+                    backend=self.backend,
+                )
+            elif hasattr(self.config_gen, "update_graph"):
+                self.config_gen.update_graph(new_graph)
+
+        def _build_and_sync(
+            tracker: GraspStateTracker,
+            next_grasp: tuple[str, str],
+            frozen_arms: list[str],
+            q_for_build: list[float],
+        ) -> None:
+            held = {g: h for g, h in tracker.current_grasps.items() if h is not None}
+            constraint_names = None
+            if frozen_arms:
+                constraint_names, _ = ConstraintBuilder.create_locked_joint_constraints(
+                    self.graph_builder.ps,
+                    self.graph_builder.robot,
+                    q_for_build,
+                    frozen_arms,
+                    backend=self.graph_builder.backend,
+                )
+            self.graph_builder.build_phase_graph(
+                config=self.task_config,
+                held_grasps=held,
+                next_grasp=next_grasp,
+                graph_constraints=constraint_names,
+                q_init=q_for_build,
+                q_init_original=q_scene_init,
+            )
+            _sync_graph_refs(self.graph_builder.get_graph())
+            if hasattr(self.graph_builder, "_phase_grippers"):
+                tracker.set_phase_indices(
+                    self.graph_builder._phase_grippers,
+                    self.graph_builder._phase_handles,
+                )
+
+        def _probe_chained(
+            tracker: GraspStateTracker, gripper: str, handle: str, q_from: list[float]
+        ) -> list[list[float]] | None:
+            """Chain the grasp's edges from ``q_from``, returning every
+            intermediate config rather than only the last one -- the
+            pregrasp configs are what let the real run reproduce this
+            chain edge for edge (see the Returns section above)."""
+            q = q_from
+            chain: list[list[float]] = []
+            for edge_name in tracker.get_grasp_edge_sequence(gripper, handle):
+                ok, q_next = self.config_gen.generate_via_edge(
+                    edge_name=edge_name, q_from=q, timeout=probe_timeout,
+                )
+                if not ok or q_next is None:
+                    return None
+                q = q_next
+                chain.append(list(q_next))
+            return chain
+
+        for candidate_idx in range(max_candidates):
+            probe_tracker = self.grasp_tracker.copy()
+            _build_and_sync(probe_tracker, phase_n, frozen_arms_n, q_current)
+
+            chain = _probe_chained(probe_tracker, gripper_n, handle_n, q_current)
+            if not chain:
+                continue
+            q_candidate = chain[-1]
+
+            probe_tracker.update_grasp(gripper_n, handle_n)
+            _build_and_sync(probe_tracker, phase_n1, frozen_arms_n1, q_candidate)
+
+            probe_chain_n1 = _probe_chained(
+                probe_tracker, gripper_n1, handle_n1, q_candidate
+            )
+            if probe_chain_n1 is not None:
+                if verbose:
+                    logger.info(
+                        "find_feasible_phase_target: found a %s candidate "
+                        "after %d rejected draw(s) that leaves %s reachable",
+                        phase_n, candidate_idx, phase_n1,
+                    )
+                return chain
+
+        if verbose:
+            logger.warning(
+                "find_feasible_phase_target: exhausted %d candidates for %s "
+                "without finding one that leaves %s reachable",
+                max_candidates, phase_n, phase_n1,
+            )
+        return None
+
     def plan_sequence(
         self,
         grasp_sequence: Sequence[tuple[str, str]],
@@ -2634,6 +2962,7 @@ class GraspSequencePlanner:
         per_phase_frozen_arms: dict[int, list[str]] | None = None,
         skip_phases: set[int] | None = None,
         verbose: bool = True,
+        phase_q_hints: dict[int, list[list[float]] | list[float]] | None = None,
     ) -> dict[str, Any]:
         """Plan a sequence of grasp transitions.
 
@@ -2662,6 +2991,16 @@ class GraspSequencePlanner:
                 planning for. Skipped phases will still generate target configs
                 and update grasp state, but will not call plan_transition_edge().
             verbose: Print progress messages
+            phase_q_hints: Optional ``{phase_idx: hint}`` map warm-starting
+                that phase's target generation, where ``hint`` is the
+                per-edge config chain returned by
+                ``find_feasible_phase_target()`` (a single config, applied
+                to the last edge only, is also accepted) -- see
+                ``_edge_hints_for_phase()``. Any phase whose chain gets
+                broken by a collision-retry redraw is recorded in
+                ``self.invalidated_phase_hints``; check it before resuming
+                forward, since the hint's guarantee about the next phase no
+                longer holds.
 
         Note:
             For interactive mode, set frozen_arms_mode="interactive" and
@@ -2754,6 +3093,10 @@ class GraspSequencePlanner:
 
         self.phase_results = []
         self.original_sequence = list(grasp_sequence)  # Store for resume
+        # Fresh call, fresh hints -- but NOT reset in resume_sequence(), which
+        # continues this same call's block and must keep a break that already
+        # happened visible to the caller across every resume attempt.
+        self.invalidated_phase_hints = set()
         # Grasps already held when this sequence started, i.e. established by
         # EARLIER plan_sequence() calls on this same planner. resume_sequence()
         # rebuilds the tracker from scratch and can only replay
@@ -2816,6 +3159,7 @@ class GraspSequencePlanner:
             is_resume=False,
             verbose=verbose,
             loop_start_time=_loop_start_time,
+            phase_q_hints=phase_q_hints,
         )
 
         if verbose:
@@ -2899,11 +3243,29 @@ class GraspSequencePlanner:
             "error": incomplete_phase.get("error_message", "unknown"),
         }
 
-    def _restore_grasp_tracker_for_resume(self) -> None:
+    def reset_grasp_tracker_to_call_start(self) -> None:
+        """Roll ``self.grasp_tracker`` back to where the current
+        ``plan_sequence()`` call began, discarding the grasps its completed
+        phases committed.
+
+        For callers that need to re-plan a block from its start rather than
+        resume forward into it -- e.g. ``run_block_nonstop()`` re-running
+        the lookahead after a phase's hint chain broke. Resuming keeps those
+        commitments (that's the point of a resume); replanning must not, or
+        the rebuilt phase graph would see the block's own grasps as already
+        held and plan a structurally different, unsatisfiable sequence.
+        """
+        self._restore_grasp_tracker_for_resume(replay_completed_phases=False)
+
+    def _restore_grasp_tracker_for_resume(
+        self, replay_completed_phases: bool = True
+    ) -> None:
         """Rebuild ``self.grasp_tracker`` to the state a resume must start in.
 
         Seeds from ``self._initial_grasps`` -- whatever was already held when
-        the current ``plan_sequence()`` call began -- then replays this call's
+        the current ``plan_sequence()`` call began -- then (unless
+        ``replay_completed_phases`` is False, see
+        ``reset_grasp_tracker_to_call_start()``) replays this call's
         completed phases on top.
 
         Seeding matters because the replay can only see
@@ -2928,6 +3290,9 @@ class GraspSequencePlanner:
             handles=self.grasp_tracker.handles,
             initial_grasps=seeded,
         )
+
+        if not replay_completed_phases:
+            return
 
         # Replay completed grasps to restore state.
         # Each completed phase may involve an implicit auto-release
@@ -2962,6 +3327,7 @@ class GraspSequencePlanner:
         reset_roadmap: bool = True,
         time_parameterize: bool = True,
         verbose: bool = True,
+        phase_q_hints: dict[int, list[list[float]] | list[float]] | None = None,
     ) -> dict[str, Any]:
         """Resume planning from last failure point.
 
@@ -2978,6 +3344,22 @@ class GraspSequencePlanner:
             reset_roadmap: Reset roadmap between phases
             time_parameterize: Apply time parameterization
             verbose: Print progress messages
+            phase_q_hints: Optional ``{phase_idx: hint}`` map, keyed by the
+                ABSOLUTE phase index within ``self.original_sequence`` (not
+                re-based to this call's ``remaining_sequence``) -- see
+                ``plan_sequence()``'s and ``_plan_phase_edges()``'s
+                docstrings. Resuming into a phase this dict has an entry for
+                keeps steering it toward the known-good candidate instead of
+                reverting to blind random restarts on every retry.
+
+                A hint for a phase this resume starts *after* is inert:
+                that phase is already committed, so resuming cannot undo a
+                bad commitment. When ``self.invalidated_phase_hints``
+                names such an earlier phase, retrying here is the blind
+                hammering the lookahead exists to prevent -- re-run
+                ``find_feasible_phase_target()`` and re-plan the block from
+                its start instead (``run_block_nonstop()`` in
+                test_screwdriving_sequence.py does exactly this).
 
         Returns:
             Same as plan_sequence(). On success, also emits a ``"run_end"``
@@ -3076,6 +3458,7 @@ class GraspSequencePlanner:
             retry_from_edge=retry_from_edge,
             completed_edges_in_phase_for_resume=resume_state["completed_edges_in_phase"],
             loop_start_time=_resume_loop_start_time,
+            phase_q_hints=phase_q_hints,
         )
 
         # Clear failure info on success
