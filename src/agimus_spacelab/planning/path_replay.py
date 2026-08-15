@@ -109,6 +109,17 @@ class Manifest:
         """
         return [int(i) for i in self.data.get("quaternion_starts", ())]
 
+    @property
+    def path_ids(self) -> list[int | None]:
+        """Backend stored-path ids, in trajectory order.
+
+        Only meaningful inside the session that planned them -- the ids
+        index the backend's in-memory store, which does not survive the
+        process.  ``None`` for a segment recorded before this field
+        existed, or one whose path arrived as an object rather than an id.
+        """
+        return [s.record.get("path_id") for s in self.segments]
+
     def by_step(self, step_index: int) -> list[Segment]:
         return [s for s in self.segments if s.record.get("step_index") == step_index]
 

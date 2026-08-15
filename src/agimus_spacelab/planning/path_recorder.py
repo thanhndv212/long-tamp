@@ -320,6 +320,12 @@ class PathRecorder:
             return None
 
         index = len(self.segments)
+        # Keep the backend's stored-path id before resolving it: it is what
+        # lets a same-session consumer fetch the real path object back --
+        # see PyHPPBackend.concatenate_paths -- and the manifest's ordering
+        # is the verified one, unlike the backend's raw store, which also
+        # holds attempts that were rolled back.
+        path_id = path if isinstance(path, int) and not isinstance(path, bool) else None
         path = self._resolve(path)
         if path is None:
             logger.warning(
@@ -350,6 +356,7 @@ class PathRecorder:
             "edge_name": edge_name,
             "waypoint_file": base + ".json",
             "path_file": None,
+            "path_id": path_id,
             "length": length,
             "num_waypoints": len(waypoints),
             "q_start": q_start,

@@ -2419,6 +2419,69 @@ class PyHPPBackend(BackendBase):
 
         return self.store_path(pv_total)
 
+    def concatenate_paths(self, path_ids: Sequence[int], *, store: bool = True) -> Any:
+        """Join stored paths into one PathVector, in the order given.
+
+        Turns a run's per-edge paths into a single path that
+        :meth:`play_path` can animate end to end, without rebuilding any
+        constraint graph: sub-paths from different phase graphs concatenate
+        and evaluate fine, since ``eval`` only interpolates inside a
+        sub-path.  Verified on a bootstrap grasp plus the transit that
+        follows it -- two different phase graphs, 11 sub-paths, every
+        sample valid across the joins.
+
+        **This does not check continuity, because ``concatenate`` does
+        not.**  Measured: joining a path whose start is a full radian away
+        from the previous end is accepted silently, and the resulting path
+        reproduces the jump.  Pass ids that are known to join -- the
+        capture manifest's ``path_id`` list is exactly that, already seam
+        checked -- rather than the backend's raw store, which also holds
+        attempts that were abandoned and rolled back.
+
+        The result is playable and evaluable but not re-optimizable or
+        serializable: its sub-paths carry constraints from graphs that no
+        longer exist, the same reason the native ``.path`` save fails.
+        Each sub-path was time-parameterized alone, so velocity is zero at
+        every junction.
+
+        Args:
+            path_ids: Stored-path ids, in trajectory order.
+            store: Store the result and return its id (default), or return
+                the PathVector itself.
+
+        Returns:
+            The stored id, or the PathVector when ``store`` is False.
+
+        Raises:
+            ValueError: If no usable path id was given.
+        """
+        total = None
+        used = 0
+        for pid in path_ids:
+            if pid is None:
+                continue
+            path = self.get_path(int(pid))
+            if path is None:
+                logger.warning("Path id %s is not in the store; skipped", pid)
+                continue
+            pv = self._as_path_vector(path)
+            if total is None:
+                total = self._as_path_vector(pv.copy() if hasattr(pv, "copy") else pv)
+            else:
+                total.concatenate(pv)
+            used += 1
+
+        if total is None:
+            raise ValueError("No usable path ids to concatenate")
+
+        logger.info(
+            "Concatenated %d path(s) into one PathVector: %d sub-paths, length %.3f",
+            used,
+            total.numberPaths() if hasattr(total, "numberPaths") else 1,
+            total.length(),
+        )
+        return self.store_path(total) if store else total
+
     def play_path_vector(self, path_vector: Any, speed: float = 1.0) -> int:
         """Store a PathVector locally and play it in the viewer.
 

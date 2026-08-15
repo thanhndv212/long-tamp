@@ -558,3 +558,89 @@ class TestOptimizePathIfBetter:
     def test_a_path_vector_passes_through_unwrapped(self):
         pv = self.Vector(1.0)
         assert PyHPPManipulationPlanner._as_path_vector(pv) is pv
+
+
+@pytest.mark.skipif(not HAS_PYHPP, reason="PyHPP backend not available")
+class TestConcatenatePaths:
+    """Joining a run's per-edge paths into one playable PathVector.
+
+    Verified against the real bindings before this was written: sub-paths
+    from *different* phase graphs concatenate and evaluate fine, because
+    eval only interpolates inside a sub-path. What the bindings do NOT do
+    is check continuity -- joining a path whose start is a full radian
+    from the previous end is accepted silently, and the result reproduces
+    the jump. That is why the caller passes the capture manifest's
+    seam-checked ordering rather than the backend's raw store.
+    """
+
+    class Vector:
+        def __init__(self, length=1.0):
+            self._length = length
+            self.joined = []
+
+        def numberPaths(self):  # HPP binding name, not snake_case
+            return 1 + len(self.joined)
+
+        def length(self):
+            return self._length + sum(v._length for v in self.joined)
+
+        def concatenate(self, other):
+            self.joined.append(other)
+
+        def copy(self):
+            c = type(self)(self._length)
+            c.joined = list(self.joined)
+            return c
+
+    def _planner(self, paths):
+        planner = PyHPPManipulationPlanner()
+        planner._stored_paths = list(paths)
+        return planner
+
+    def test_ids_are_joined_in_the_order_given(self):
+        a, b, c = self.Vector(1.0), self.Vector(2.0), self.Vector(4.0)
+        planner = self._planner([a, b, c])
+        pv = planner.concatenate_paths([0, 1, 2], store=False)
+        assert pv.length() == pytest.approx(7.0)
+        assert pv.numberPaths() == 3
+
+    def test_a_different_order_is_honoured(self):
+        """The manifest's order is the trajectory's order, not the store's."""
+        a, b, c = self.Vector(1.0), self.Vector(2.0), self.Vector(4.0)
+        planner = self._planner([a, b, c])
+        pv = planner.concatenate_paths([2, 0], store=False)
+        assert pv.length() == pytest.approx(5.0)
+
+    def test_the_first_path_is_not_mutated(self):
+        """concatenate() mutates its receiver, so the stored path would
+        otherwise grow every time this is called."""
+        a, b = self.Vector(1.0), self.Vector(2.0)
+        planner = self._planner([a, b])
+        planner.concatenate_paths([0, 1], store=False)
+        planner.concatenate_paths([0, 1], store=False)
+        assert a.length() == pytest.approx(1.0)
+        assert a.numberPaths() == 1
+
+    def test_none_ids_are_skipped(self):
+        """Segments recorded before path_id existed carry None."""
+        a, b = self.Vector(1.0), self.Vector(2.0)
+        planner = self._planner([a, b])
+        pv = planner.concatenate_paths([0, None, 1], store=False)
+        assert pv.length() == pytest.approx(3.0)
+
+    def test_an_id_missing_from_the_store_is_skipped(self):
+        a = self.Vector(1.0)
+        planner = self._planner([a])
+        pv = planner.concatenate_paths([0, 99], store=False)
+        assert pv.length() == pytest.approx(1.0)
+
+    def test_nothing_usable_raises(self):
+        planner = self._planner([])
+        with pytest.raises(ValueError):
+            planner.concatenate_paths([None, None], store=False)
+
+    def test_store_returns_an_id_into_the_store(self):
+        a, b = self.Vector(1.0), self.Vector(2.0)
+        planner = self._planner([a, b])
+        idx = planner.concatenate_paths([0, 1])
+        assert planner.get_path(idx).length() == pytest.approx(3.0)
