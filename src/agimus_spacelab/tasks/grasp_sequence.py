@@ -3192,6 +3192,10 @@ class GraspSequencePlanner:
             g: h for g, h in self.grasp_tracker.current_grasps.items() if h is not None
         }
         q_current = list(q_init)
+        # Where this call started. resume_sequence restarts a failed first
+        # phase from here rather than from wherever the failed attempt
+        # stopped — a search must not move the robot.
+        self._q_call_start = list(q_init)
         # Original scene configuration — used to restore free-object positions
         # before each phase graph build so LockedJoint foliation locks them at
         # their true scene positions, not at random IK-sampled positions.
@@ -3508,8 +3512,18 @@ class GraspSequencePlanner:
             # Continue from last completed phase
             q_current = self.phase_results[-1]["final_config"]
         else:
-            # No completed phases, use the stored q_current from failure
-            q_current = resume_state["q_current"]
+            # Nothing completed, so there is no phase boundary to continue
+            # from: restart from where this plan_sequence call began. The
+            # failed attempt's own progress (resume_state["q_current"], i.e.
+            # last_q_start) is not a boundary — resuming from it makes every
+            # retry fly the arm to wherever the last attempt gave up, so a
+            # failing grasp accumulates real motion it never needed. Every
+            # caller retries from edge 0 of the phase, so the call's start
+            # config is the correct input for that edge.
+            q_current = getattr(self, "_q_call_start", None)
+            if q_current is None:
+                # resume_sequence reached without a prior plan_sequence.
+                q_current = resume_state["q_current"]
 
         use_fm = frozen_arms_mode if frozen_arms_mode is not None else "global"
         _resume_loop_start_time = time.time()
