@@ -265,8 +265,9 @@ class PathRecorder:
         lookahead hint chain breaks is replanned from the block's entry
         configuration -- ``q_current`` is untouched -- so the abandoned
         attempt's paths lead nowhere and would read as a jump back to the
-        start.  That is the opposite of a resumed *phase*, which does
-        build on what came before and must be kept.
+        start.  A failed *phase* attempt is discarded the same way, since
+        resume_sequence restarts it from where the call began; the caller
+        decides, because only it knows what the retry will start from.
 
         Segment files are left on disk; the next segments reuse the same
         indices and overwrite them, exactly as :meth:`resume` does.

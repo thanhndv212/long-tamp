@@ -632,17 +632,20 @@ class TestNativeSidecar:
 
 
 class TestResumedPhases:
-    """The trajectory includes attempts that failed part-way.
+    """A phase that failed part-way is recorded, not silently skipped.
 
-    When a phase fails mid-way, resume_sequence restarts it from *where
-    the failure left the robot*, not from the block's entry
-    configuration -- so the edges the failed attempt did plan are what
-    carried the robot there. Dropping them puts a teleport in the
-    manifest.
+    The recorder records what it is given and never decides on its own that
+    a path did not happen: whether a failed attempt's edges are real motion
+    depends on where the retry starts from, which only the caller knows.
+    Found live on RS2's FG grasp, where the recorder's skip-the-incomplete
+    rule left a 5.08 rad jump in the manifest.
 
-    Found live on RS2's FG grasp: `_01` planned home -> pregrasp-A, `_12`
-    hit a collision, and the resume replanned `_01` from pregrasp-A to
-    pregrasp-B. Keeping only the surviving pair left a 5.08 rad jump.
+    The mission script is what discards an abandoned attempt (see
+    ``ScrewdrivingSequenceTask._drop_abandoned_phase``), now that
+    resume_sequence restarts a failed phase from where the call began. This
+    stays the recorder's contract because the two other callers differ:
+    test_full_sequence.py plans in one call, and a resume from disk re-enters
+    a directory whose earlier segments must be continued, not re-judged.
 
     resume_sequence also *deletes* incomplete phases from phase_results
     before replanning, so this only works if the caller drains after every
