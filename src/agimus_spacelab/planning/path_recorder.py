@@ -33,12 +33,23 @@ Two properties matter for replay and are why this is not just
   so the rebuild-the-graph replay route stays open; it is best-effort and
   never required.
 
+What gets recorded is *the trajectory the robot travelled*, not the
+trajectory anyone would have designed.  A phase that fails mid-way is
+resumed from where the failure left the robot, so the edges its failed
+attempt did plan are load-bearing and are kept.  A whole *block* that is
+replanned after a broken lookahead hint restarts from the block's entry
+configuration instead, so that motion never happened and the caller
+:meth:`~PathRecorder.rollback` s it.  The distinction is the difference
+between a manifest that can be executed and one that teleports.
+
 Seam validation (``seam_tolerance``) is done at write time: each segment's
 start configuration is compared against the previous segment's end.  A
 discontinuity is recorded in the manifest and logged, but does not raise —
 a run that has already spent hours planning should not die at a write, and
 the manifest is the honest record either way.  Pass
-``strict_seams=True`` to make it fatal instead.
+``strict_seams=True`` to make it fatal instead.  It earns its keep: the
+resumed-phase gap above was found by this check on a live run, not by
+inspection.
 
 Usage::
 
@@ -54,8 +65,8 @@ from __future__ import annotations
 import json
 import math
 import os
-from datetime import datetime, timezone
 from collections.abc import Sequence
+from datetime import datetime, timezone
 from typing import Any
 
 from agimus_spacelab.logging import get_logger
@@ -243,6 +254,40 @@ class PathRecorder:
         )
         return len(kept)
 
+    def mark(self) -> int:
+        """Current segment count, for :meth:`rollback`."""
+        return len(self.segments)
+
+    def rollback(self, mark: int) -> int:
+        """Drop every segment recorded since ``mark``.
+
+        For motion that turned out not to have happened.  A block whose
+        lookahead hint chain breaks is replanned from the block's entry
+        configuration -- ``q_current`` is untouched -- so the abandoned
+        attempt's paths lead nowhere and would read as a jump back to the
+        start.  That is the opposite of a resumed *phase*, which does
+        build on what came before and must be kept.
+
+        Segment files are left on disk; the next segments reuse the same
+        indices and overwrite them, exactly as :meth:`resume` does.
+
+        Returns:
+            Number of segments dropped.
+        """
+        if mark >= len(self.segments):
+            return 0
+        dropped = len(self.segments) - mark
+        self.segments = self.segments[:mark]
+        self.seam_violations = sum(
+            1
+            for s in self.segments
+            if (s.get("seam_error") or 0.0) > self.seam_tolerance
+        )
+        self._q_last = self.segments[-1]["q_end"] if self.segments else None
+        self._write_manifest()
+        logger.info("Rolled back %d segment(s) from an abandoned attempt", dropped)
+        return dropped
+
     # -- Recording ------------------------------------------------------
 
     def record_path(
@@ -348,21 +393,40 @@ class PathRecorder:
     def record_phase_results(
         self, phase_results: list[dict[str, Any]], *, block_label: str | None = None
     ) -> list[dict[str, Any]]:
-        """Record every path of a completed block, in phase then edge order.
+        """Record any not-yet-recorded path in ``phase_results``, in order.
 
-        Takes ``GraspSequencePlanner.phase_results`` *after* the block has
-        succeeded rather than as each phase completes, and deliberately so:
-        a block whose lookahead hint chain breaks is replanned from
-        scratch, and only the surviving attempt's paths belong in the
-        manifest.  ``plan_sequence()`` resets ``phase_results`` on entry, so
-        what is left at the end is exactly that attempt.
+        Call this after **every** ``plan_sequence`` / ``resume_sequence``
+        call, successful or not -- not once when the block settles.
 
-        Incomplete phases are skipped: a partial phase is retried by
-        ``resume_sequence()``, whose result replaces it in the list.
+        **Incomplete phases count.**  When a phase fails mid-way,
+        ``resume_sequence`` restarts it from where the failure left the
+        robot, not from the block's entry configuration, so the edges the
+        failed attempt did plan are the ones that got the robot there.
+        Dropping them leaves a manifest that teleports.  Measured on RS2's
+        FG grasp: ``_01`` planned home -> pregrasp-A, ``_12`` hit a
+        collision, and the resume replanned ``_01`` from pregrasp-A to
+        pregrasp-B.  Keeping only the surviving pair put a 5.08 rad jump
+        in the manifest, because the leg to pregrasp-A was the discarded
+        one.
+
+        And it has to happen per call, not at the end:
+        ``resume_sequence`` *deletes* incomplete phases from
+        ``phase_results`` before replanning, so by the time a block
+        settles those paths are unreachable.
+
+        Already-recorded edges are tracked on the phase dict itself, which
+        survives exactly as long as the entry does -- a phase dropped by
+        the resume filter takes its marker with it, and its paths were
+        recorded on an earlier call.
+
+        Abandoned *block* attempts are the caller's problem, not this
+        method's: a lookahead replan restarts from the block's entry
+        configuration, so that motion is not load-bearing and the caller
+        should :meth:`rollback` it.
         """
         written = []
         for phase in phase_results or []:
-            if not phase.get("complete", False) or phase.get("skipped"):
+            if phase.get("skipped"):
                 continue
             edges = list(phase.get("edges") or [])
             paths = list(phase.get("paths") or [])
@@ -370,7 +434,11 @@ class PathRecorder:
             # both names in "edges" (_build_release_phase_info), so the two
             # lists can differ in length; index defensively.
             kind = "release" if phase.get("handle") is None else "grasp"
+            done = phase.setdefault("_recorded_edge_indices", set())
             for edge_idx, path in enumerate(paths):
+                if edge_idx in done:
+                    continue
+                done.add(edge_idx)
                 rec = self.record_path(
                     path,
                     kind=kind,
@@ -378,6 +446,7 @@ class PathRecorder:
                     extra={
                         "block_label": block_label,
                         "phase": phase.get("phase"),
+                        "phase_complete": bool(phase.get("complete", False)),
                         "edge_index": edge_idx,
                         "gripper": phase.get("gripper"),
                         "handle": phase.get("handle"),

@@ -475,19 +475,11 @@ class TestPhaseResults:
         assert len(written) == 1
         assert written[0]["edge_name"] == "e_21"
 
-    def test_incomplete_and_skipped_phases_are_not_recorded(self, tmp_path):
+    def test_skipped_phases_are_not_recorded(self, tmp_path):
         r = _rec(tmp_path)
         r.begin_step(0, "s")
         written = r.record_phase_results(
             [
-                {
-                    "phase": 1,
-                    "gripper": "g",
-                    "handle": "h",
-                    "edges": ["e"],
-                    "paths": [FakePath([0.0], [1.0])],
-                    "complete": False,
-                },
                 {
                     "phase": 2,
                     "gripper": "g",
@@ -637,3 +629,158 @@ class TestNativeSidecar:
         geometric = FakePath([0.0], [1.0])
         r.record_path(timed, kind="grasp", geometric_path=geometric)
         assert saved["path"] is geometric
+
+
+class TestResumedPhases:
+    """The trajectory includes attempts that failed part-way.
+
+    When a phase fails mid-way, resume_sequence restarts it from *where
+    the failure left the robot*, not from the block's entry
+    configuration -- so the edges the failed attempt did plan are what
+    carried the robot there. Dropping them puts a teleport in the
+    manifest.
+
+    Found live on RS2's FG grasp: `_01` planned home -> pregrasp-A, `_12`
+    hit a collision, and the resume replanned `_01` from pregrasp-A to
+    pregrasp-B. Keeping only the surviving pair left a 5.08 rad jump.
+
+    resume_sequence also *deletes* incomplete phases from phase_results
+    before replanning, so this only works if the caller drains after every
+    planner call -- hence the repeated record_phase_results() calls below.
+    """
+
+    def _rs2(self, tmp_path):
+        """The RS2 sequence, in the shape the planner produces it."""
+        r = _rec(tmp_path)
+        r.begin_step(0, "RS2 A0")
+        home, pre_a, pre_b, grasp = [0.0], [1.0], [1.4], [2.0]
+
+        # plan_sequence: _01 lands, _12 fails -> partial entry
+        partial = {
+            "phase": 1, "gripper": "g_fg", "handle": "RS2/h_RS2_FG",
+            "edges": ["e_01", "e_12"], "complete": False,
+            "paths": [FakePath(home, pre_a)],
+        }
+        r.record_phase_results([partial], block_label="RS2 A0")
+
+        # resume_sequence drops the partial and replans from pre_a
+        complete = {
+            "phase": 1, "gripper": "g_fg", "handle": "RS2/h_RS2_FG",
+            "edges": ["e_01", "e_12"], "complete": True,
+            "paths": [FakePath(pre_a, pre_b), FakePath(pre_b, grasp)],
+        }
+        r.record_phase_results([complete], block_label="RS2 A0")
+        return r
+
+    def test_the_abandoned_leg_is_kept_and_the_manifest_is_continuous(
+        self, tmp_path
+    ):
+        r = self._rs2(tmp_path)
+        segs = _manifest(r)["segments"]
+        assert len(segs) == 3, "the failed attempt's _01 must survive"
+        assert [s["q_start"] for s in segs] == [[0.0], [1.0], [1.4]]
+        assert r.seam_violations == 0
+
+    def test_dropping_it_is_what_produced_the_jump(self, tmp_path):
+        """The old behaviour, reconstructed: skip the partial and the
+        manifest reports exactly the discontinuity seen live."""
+        r = _rec(tmp_path)
+        r.begin_step(0, "RS2 A0")
+        r.record_path(FakePath([0.0], [0.0]), kind="transit")  # arrives home
+        r.record_phase_results([
+            {"phase": 1, "gripper": "g", "handle": "h",
+             "edges": ["e_01", "e_12"], "complete": True,
+             "paths": [FakePath([1.0], [1.4]), FakePath([1.4], [2.0])]},
+        ])
+        assert r.seam_violations == 1
+        assert _manifest(r)["segments"][1]["seam_error"] == pytest.approx(1.0)
+
+    def test_the_phase_records_whether_it_was_complete(self, tmp_path):
+        r = self._rs2(tmp_path)
+        segs = _manifest(r)["segments"]
+        assert [s["phase_complete"] for s in segs] == [False, True, True]
+
+    def test_draining_repeatedly_does_not_duplicate(self, tmp_path):
+        r = _rec(tmp_path)
+        r.begin_step(0, "s")
+        phase = {
+            "phase": 1, "gripper": "g", "handle": "h", "complete": True,
+            "edges": ["e_01"], "paths": [FakePath([0.0], [1.0])],
+        }
+        for _ in range(4):
+            r.record_phase_results([phase])
+        assert len(_manifest(r)["segments"]) == 1
+
+    def test_a_phase_that_grows_between_drains_records_only_the_new_edge(
+        self, tmp_path
+    ):
+        r = _rec(tmp_path)
+        r.begin_step(0, "s")
+        phase = {
+            "phase": 1, "gripper": "g", "handle": "h", "complete": False,
+            "edges": ["e_01", "e_12"], "paths": [FakePath([0.0], [1.0])],
+        }
+        assert len(r.record_phase_results([phase])) == 1
+        phase["paths"].append(FakePath([1.0], [2.0]))
+        phase["complete"] = True
+        assert len(r.record_phase_results([phase])) == 1
+        assert len(_manifest(r)["segments"]) == 2
+
+
+class TestRollback:
+    """A replanned *block* restarts from its entry config, so the attempt
+    it abandoned never happened -- the opposite of a resumed phase."""
+
+    def test_segments_after_the_mark_are_dropped(self, tmp_path):
+        r = _rec(tmp_path)
+        r.begin_step(0, "s")
+        r.record_path(FakePath([0.0], [1.0]), kind="transit")
+        mark = r.mark()
+        r.record_path(FakePath([1.0], [2.0]), kind="grasp")
+        r.record_path(FakePath([2.0], [3.0]), kind="grasp")
+
+        assert r.rollback(mark) == 2
+        assert len(_manifest(r)["segments"]) == 1
+
+    def test_the_seam_reference_goes_back_with_it(self, tmp_path):
+        """The replanned block starts from the entry config again, so the
+        next segment must be checked against that, not against where the
+        abandoned attempt ended."""
+        r = _rec(tmp_path)
+        r.begin_step(0, "s")
+        r.record_path(FakePath([0.0], [1.0]), kind="transit")
+        mark = r.mark()
+        r.record_path(FakePath([1.0], [9.0]), kind="grasp")
+        r.rollback(mark)
+
+        rec = r.record_path(FakePath([1.0], [2.0]), kind="grasp")
+        assert rec["seam_error"] == pytest.approx(0.0)
+        assert r.seam_violations == 0
+
+    def test_numbering_is_reused(self, tmp_path):
+        r = _rec(tmp_path)
+        r.begin_step(0, "s")
+        mark = r.mark()
+        r.record_path(FakePath([0.0], [9.0]), kind="grasp")
+        r.rollback(mark)
+        rec = r.record_path(FakePath([0.0], [1.0]), kind="grasp")
+        assert rec["index"] == 0
+        assert len(_manifest(r)["segments"]) == 1
+
+    def test_rolling_back_to_the_current_mark_is_a_no_op(self, tmp_path):
+        r = _rec(tmp_path)
+        r.begin_step(0, "s")
+        r.record_path(FakePath([0.0], [1.0]), kind="grasp")
+        assert r.rollback(r.mark()) == 0
+        assert len(_manifest(r)["segments"]) == 1
+
+    def test_a_rolled_back_violation_stops_being_counted(self, tmp_path):
+        r = _rec(tmp_path)
+        r.begin_step(0, "s")
+        r.record_path(FakePath([0.0], [1.0]), kind="grasp")
+        mark = r.mark()
+        r.record_path(FakePath([5.0], [6.0]), kind="grasp")
+        assert r.seam_violations == 1
+        r.rollback(mark)
+        assert r.seam_violations == 0
+        assert _manifest(r)["seam_violations"] == 0
