@@ -1,0 +1,13 @@
+# Usage guides
+
+Step-by-step docs for using `agimus_spacelab`, in the two ways it's actually used in this
+workspace. Companion to [`../features/`](../features/) (why specific mechanisms exist) and
+[`../bugs/`](../bugs/) (upstream HPP defects worked around here).
+
+| Doc | For |
+| --- | --- |
+| [standalone-usage.md](standalone-usage.md) | Using `agimus_spacelab` as a plain Python library: writing a task, multi-phase grasp sequences, resume/replay/checkpoints, backends, example scripts. No ROS required. |
+| [dbt-integration.md](dbt-integration.md) | Running assembly missions through the ROS 2 / Dynamic Behavior Tree stack (`ros2_ws_agimusxads`): services/actions, the DBT executive, launch files, and which library features are (and aren't) reachable from ROS. |
+
+Start with `standalone-usage.md` even if your end goal is the DBT — the DBT layer is a thin
+ROS wrapper around exactly that API.

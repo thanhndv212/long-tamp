@@ -23,6 +23,9 @@ cd script/spacelab
 ./interactive_planning.py -i
 ```
 
+For a full step-by-step guide (writing a task, multi-phase sequences, resume/replay, and using
+this library from the ROS 2 / DBT stack), see [`docs/usage/`](docs/usage/).
+
 ## Installation
 
 `agimus_spacelab` has two distinct dependency tiers, and this drives how you install it:

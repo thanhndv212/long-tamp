@@ -2,7 +2,8 @@
 
 Per-feature notes for changes that need more context than a commit message carries: what
 failure motivated them, what was measured, and what the deliberate limitations are.
-Companion to `docs/bugs/` (upstream HPP defect reports) and `docs/plans/` (refactor plans).
+Companion to `docs/bugs/` (upstream HPP defect reports), `docs/plans/` (refactor plans), and
+`docs/usage/` (step-by-step how-to-use guides).
 
 ## 2026-08-13/14 — SpaceLab screwdriving sequence
 
