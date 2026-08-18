@@ -13,7 +13,6 @@
 # 5. Use _loader.task_config.with_grasp_goals([...]) to restrict the active pairs.
 # 6. Use _loader.build_initial_config(objects=task_config.OBJECTS) for q_init.
 #
-# See script/config/graspball_config.yaml for a minimal real-world example.
 # See script/config/spacelab_config.yaml for a complex multi-robot example.
 # ============================================================
 

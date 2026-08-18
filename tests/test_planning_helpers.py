@@ -41,10 +41,8 @@ def _make_config_generator(backend):
 class TestDisableCollisionsDispatch:
     """disable_collisions_between_subtrees() dispatches on self.backend to
     _disable_collisions_pyhpp / _disable_collisions_corba (Phase 3 Step 3.1
-    extraction) -- verify the dispatch wiring itself, since no real script
-    in this environment reaches this method end-to-end (the only caller,
-    script/graspball/task_graspball_inbox.py, is blocked at setup() on a
-    missing hpp_practicals package)."""
+    extraction) -- verify the dispatch wiring itself, since no example
+    script in this environment currently reaches this method end-to-end."""
 
     def test_pyhpp_backend_dispatches_to_pyhpp_helper(self):
         sb = _make_scene_builder("pyhpp")

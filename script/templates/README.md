@@ -76,7 +76,6 @@ python script/my_robot/task_my_task.py --backend corba
 
 | Config | Task script | Description |
 |---|---|---|
-| `script/config/graspball_config.yaml` | `script/graspball/` | UR5 picks a pokeball — minimal single-arm example |
 | `script/config/spacelab_config.yaml` | `script/spacelab/task_grasp_FG_yaml.py` | SpaceLab multi-arm — complex reference |
 
 ---

@@ -111,10 +111,9 @@ python script/<robot>/task_<name>.py --backend pyhpp
 
 ### 5b. Minimal working reference
 
-`script/graspball/test_graspball_yaml.py` is the smallest real example (single UR5 arm, one
-object) — read it before touching the SpaceLab scripts. `script/spacelab/task_grasp_FG_yaml.py`
-is the equivalent for the multi-arm SpaceLab scene (UR10 grasps `frame_gripper`, VISPA/VISPA2
-frozen).
+`script/spacelab/task_grasp_FG_yaml.py` is a real, runnable example for the multi-arm
+SpaceLab scene (UR10 grasps `frame_gripper`, VISPA/VISPA2 frozen) — read it before writing
+a new task from the template.
 
 ### 5c. What a task looks like, conceptually
 
@@ -276,8 +275,6 @@ should never need backend-specific branches. `create_planner(backend=...)` /
 
 | Script | Use it to learn |
 |---|---|
-| `script/graspball/test_graspball_yaml.py` | smallest end-to-end YAML task, single arm |
-| `script/graspball/graspball_pyhpp_example.py` | raw `PyHPPBackend` calls with no Task/config layer — see the primitives underneath |
 | `script/spacelab/task_grasp_FG_yaml.py` | one grasp, multi-arm scene, YAML config |
 | `script/spacelab/interactive_planning.py -i` | menu-driven exploration: enumerate feasible goals from `VALID_PAIRS`, solve interactively |
 | `script/spacelab/test_full_sequence.py` | full 13-phase assembly, non-stop auto-resume-on-failure mode |
@@ -311,9 +308,8 @@ drives grasp legality), `arm_groups`, `freeze_joints`, `environment_contacts`, `
 (URDF/SRDF locations), `planning` (validation/projector steps, iteration limits),
 `optimization` (shortcut loops, TOPPRA params), `freeflyer_bounds`. Loaded via
 `config.yaml_loader.YamlTaskLoader(yaml_path)`, exposing `.file_paths`, `.joint_bounds_class`,
-`.task_config` (dynamic config object), `.build_initial_config()`. Real examples:
-`script/spacelab/config/spacelab_config.yaml` (complex, multi-arm) and
-`script/graspball/config/graspball_config.yaml` (minimal). Template:
+`.task_config` (dynamic config object), `.build_initial_config()`. Real example:
+`script/spacelab/config/spacelab_config.yaml` (complex, multi-arm). Template:
 `script/templates/task_config_template.yaml`.
 
 The older dataclass style (`config/base_config.py` → `BaseTaskConfig`) still works but isn't

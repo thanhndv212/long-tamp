@@ -146,8 +146,7 @@ def _yaml_with_grasp_goals(cls, goal_states):
 class YamlTaskLoader:
     """Load a YAML task config file and expose ManipulationTask-compatible objects.
 
-    The YAML schema is documented in ``script/graspball/config/graspball_config.yaml``
-    and ``script/spacelab/config/spacelab_config.yaml``.
+    The YAML schema is documented in ``script/spacelab/config/spacelab_config.yaml``.
 
     Attributes are lazily built on first access.
     """
