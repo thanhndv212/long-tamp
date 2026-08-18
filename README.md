@@ -4,27 +4,18 @@ Multi-arm collaborative manipulation planning for SpaceLab assembly tasks using 
 
 `agimus_spacelab` plans **long, multi-step assembly sequences** for **several robot arms working together** on **many movable objects** in a single shared scene. It builds on HPP's constraint-graph manipulation planning and adds a task/orchestration layer that turns a high-level assembly goal (grip this, move that, hand it over, place it) into a single concatenated, collision-free motion for the whole multi-robot system.
 
+![The SpaceLab assembly cell — UR10 and VISPA arms, RS reflector panels, and grasp/handle frames — in the browser-based viser viewer](docs/full_scene.png)
+
 ## Capabilities
 
 - **Long-horizon sequence planning.** The `GraspSequencePlanner` chains an arbitrary number of grasp/place/hand-over phases into one continuous plan. Each phase gets a *minimal, phase-local* constraint graph and the paths are concatenated across phases, so planning cost grows **linearly O(N)** with the number of grasps instead of combinatorially **O(N!)** — long assembly missions stay tractable.
 - **Multiple robots (multi-arm & collaborative).** The scene composes several arms into one planning model (e.g. UR10 + VISPA + VISPA2, a ~70-DOF composite) that plan in a shared, mutually-collision-aware world. Arms can act independently, cooperate on the same object, or hand objects off between each other.
 - **Multiple objects.** Any number of free-flying objects and tools (reflector panels, frame gripper, screw driver, …) coexist in the scene. Grasp legality is data-driven via `VALID_PAIRS` (which gripper may grasp which handle), so adding objects/tools is a config change, not a code change.
 - **Constraint-graph manipulation planning.** Grasp, placement, and transition constraints are generated from a declarative `ManipulationConfig`; the constraint graph and its edges are built automatically per phase.
-- **Reproducibility & introspection.** Structured, crash-safe JSONL run logging captures every phase/edge attempt for replay, debugging, and auditing (see *Run Logging*).
+- **Reproducibility, introspection & crash recovery.** Structured, crash-safe JSONL run logging captures every phase/edge attempt for replay, debugging, and auditing (see *Run Logging*); a separate path-capture mechanism (`PathRecorder`) samples every planned/executed path to disk as it happens, so a run can be continuity-checked or replayed in a fresh process after a crash, and long missions can checkpoint and resume rather than replan from the start (see [`docs/usage/standalone-usage.md`](docs/usage/standalone-usage.md) §§8–10).
 - **Modular architecture.** Reusable building blocks — `SceneBuilder`, `ConstraintBuilder`, `ConfigGenerator`, `ManipulationTask`, `create_planner()` — compose into custom tasks.
 - **Scene visualization.** Interactive 3D viewers: browser-based **viser** (default, no X11) or **gepetto-viewer** (Qt/CORBA).
 - **PyHPP backend** (default): in-process bindings via `hpp-python`. The CORBA backend (`hpp-manipulation-corba`) is still available but **deprecated**.
-
-
-## Quick Start
-
-```bash
-cd script/spacelab
-./interactive_planning.py -i
-```
-
-For a full step-by-step guide (writing a task, multi-phase sequences, resume/replay, and using
-this library from the ROS 2 / DBT stack), see [`docs/usage/`](docs/usage/).
 
 ## Installation
 
@@ -47,89 +38,64 @@ These C++ extension modules provide the planning backends and **cannot be instal
 
 #### 1a. Binary install via robotpkg
 
-The official HPP binaries are distributed as `robotpkg-*` Debian packages, installed under the `/opt/openrobots` prefix. See the [HPP download page](https://humanoid-path-planner.github.io/hpp-doc/download.html) and the [robotpkg APT repository instructions](http://robotpkg.openrobots.org/debian.html) for the authoritative version.
+Follow the **[official HPP installation guide](https://humanoid-path-planner.github.io/hpp-doc/installation/installation.html)** to add the robotpkg APT repository and set up your environment (`PATH`, `LD_LIBRARY_PATH`, `PYTHONPATH`, `CMAKE_PREFIX_PATH` under `/opt/openrobots`) — that page is the authoritative source for repository setup and exact package availability per Ubuntu release, so it isn't duplicated here.
 
-> **⚠️ The current robotpkg binary (`hpp-python` 6.1.0) is NOT sufficient for
-> the PyHPP backend.** `agimus_spacelab` targets a customized/source HPP that
-> exposes extra `pyhpp` bindings the upstream stable binary does not yet ship —
-> notably `RSTimeParameterization`, `SimpleTimeParameterization`,
+> **⚠️ Prefer the source-built/devel environment over the stable robotpkg
+> release for the PyHPP backend.** `agimus_spacelab` relies on a handful of
+> `pyhpp` bindings — `RSTimeParameterization`, `SimpleTimeParameterization`,
 > `EnforceTransitionSemantic`, `GraphRandomShortcut` / `GraphPartialShortcut`,
-> `SplineGradientBased_bezier{1,3,5}`, and `ProgressiveProjector`. With the
-> binary, `import pyhpp` succeeds but the backend reports **"PyHPP backend
-> unavailable"** because those symbols are missing.
+> `SplineGradientBased_bezier{1,3,5}`, and `ProgressiveProjector` — that the
+> current stable release (`hpp-python` 6.1.0) does not yet ship. The
+> source-built HPP (the `hpp-agimus` container / `DEVEL_HPP_DIR` flow — see
+> *Source build* below) always has them; the robotpkg binary is still fine
+> for the C++ toolchain and the deprecated CORBA backend regardless.
 >
-> Until a release fills the gap
-> ([humanoid-path-planner/hpp-python](https://github.com/humanoid-path-planner/hpp-python)),
-> the PyHPP backend requires the **source-built HPP** (the `hpp-agimus`
-> container / `DEVEL_HPP_DIR` flow — see *Source build* below). The robotpkg
-> binary is still fine for the C++ toolchain and the deprecated CORBA backend.
+> **If you do use the robotpkg binary, check it actually provides those
+> symbols before relying on it** — `import pyhpp` succeeding doesn't confirm
+> that:
+> ```bash
+> python -c "from agimus_spacelab import get_available_backends; print(get_available_backends())"
+> ```
+> If `pyhpp` is missing from the result, or constructing it raises **"PyHPP
+> backend unavailable,"** one of the symbols above is absent from your
+> binary — switch to the source build. Track
+> [humanoid-path-planner/hpp-python](https://github.com/humanoid-path-planner/hpp-python)
+> for when a stable release picks these up.
 
-1. Add the robotpkg APT repository (the stable `pub` repo is sufficient — all
-   HPP packages below, including `hpp-python`, are published there):
+Once the repository is configured, install just the two packages this project needs (package names are `robotpkg-py<pyver>-<name>`, where `<pyver>` matches your Python — Ubuntu 24.04 → `312`, 22.04 → `310`, 20.04 → `38`):
 
-   ```bash
-   sudo mkdir -p /etc/apt/keyrings
-   curl http://robotpkg.openrobots.org/packages/debian/robotpkg.asc \
-     | sudo tee /etc/apt/keyrings/robotpkg.asc
-   sudo tee /etc/apt/sources.list.d/robotpkg.list <<EOF
-   deb [arch=amd64 signed-by=/etc/apt/keyrings/robotpkg.asc] http://robotpkg.openrobots.org/packages/debian/pub $(lsb_release -cs) robotpkg
-   EOF
-   sudo apt-get update
-   ```
+```bash
+pyver=312   # adjust to your Python version
 
-2. Install the packages. Package names are `robotpkg-py<pyver>-<name>`, where `<pyver>` matches your Python (Ubuntu 24.04 → `312`, 22.04 → `310`, 20.04 → `38`). The current HPP release line is **6.1.0**.
+sudo apt-get install \
+  robotpkg-py${pyver}-hpp-python \
+  robotpkg-py${pyver}-qt5-hpp-gepetto-viewer
+```
 
-   **Required — just two packages.** `hpp-python` transitively pulls the whole
-   HPP core stack via apt (pinocchio, eigenpy, coal, hpp-util, hpp-pinocchio,
-   hpp-core, hpp-constraints, hpp-manipulation, hpp-manipulation-urdf,
-   hpp-corbaserver, omniorbpy), so you do **not** list those individually:
+| Package | Provides | Pulls in (transitively) |
+|---------|----------|-------------------------|
+| `robotpkg-py${pyver}-hpp-python` | PyHPP backend (`pyhpp.*`) | pinocchio, eigenpy, coal, hpp-util, hpp-pinocchio, hpp-core, hpp-constraints, hpp-manipulation, hpp-manipulation-urdf, hpp-corbaserver, omniorbpy |
+| `robotpkg-py${pyver}-qt5-hpp-gepetto-viewer` | Gepetto + `pyhpp_viser` viewers | gepetto-viewer-corba, qgv, qtbase5 |
 
-   ```bash
-   pyver=312   # adjust to your Python version
+Both are required, not just `hpp-python` — despite the name, the second package is where
+**all** viewer bindings live, including `pyhpp_viser` (the browser-based viser viewer this
+project defaults to), not just the legacy Qt/CORBA Gepetto viewer. `hpp-python` alone plans
+headlessly with no viewer at all; without the second package, `./interactive_planning.py -i`
+from Quick Start has nothing to display into.
 
-   sudo apt-get install \
-     robotpkg-py${pyver}-hpp-python \
-     robotpkg-py${pyver}-qt5-hpp-gepetto-viewer
-   ```
+**Optional — deprecated CORBA backend.** Only needed if you set
+`backend:=corba`. This is the single extra package; its own dependencies
+(`hpp-corbaserver`, `omniorbpy`, core libs) are already present from the
+required step above:
 
-   | Package | Provides | Pulls in (transitively) |
-   |---------|----------|-------------------------|
-   | `robotpkg-py${pyver}-hpp-python` | PyHPP backend (`pyhpp.*`) | pinocchio, eigenpy, coal, hpp-util, hpp-pinocchio, hpp-core, hpp-constraints, hpp-manipulation, hpp-manipulation-urdf, hpp-corbaserver, omniorbpy |
-   | `robotpkg-py${pyver}-qt5-hpp-gepetto-viewer` | Gepetto + `pyhpp_viser` viewers | gepetto-viewer-corba, qgv, qtbase5 |
+```bash
+sudo apt-get install robotpkg-py${pyver}-hpp-manipulation-corba
+```
 
-   **Optional — deprecated CORBA backend.** Only needed if you set
-   `backend:=corba`. This is the single extra package; its own dependencies
-   (`hpp-corbaserver`, `omniorbpy`, core libs) are already present from the
-   required step above:
-
-   ```bash
-   sudo apt-get install robotpkg-py${pyver}-hpp-manipulation-corba
-   ```
-
-   **Not available as a binary — TOPPRA.** `hpp-toppra` and its `toppra` C++
-   dependency are not published in robotpkg (checked: absent from both `pub`
-   and `wip`, all distros). To use the TOPPRA optimizer, build `toppra` and
-   `hpp-toppra` from source — this is what the `hpp-agimus` container does.
-
-3. Put `/opt/openrobots` on your environment (add to `~/.bashrc`; fix the Python version in `PYTHONPATH`):
-
-   ```bash
-   export PATH=/opt/openrobots/bin:$PATH
-   export LD_LIBRARY_PATH=/opt/openrobots/lib:$LD_LIBRARY_PATH
-   export PYTHONPATH=/opt/openrobots/lib/python3.12/site-packages:$PYTHONPATH
-   export CMAKE_PREFIX_PATH=/opt/openrobots:$CMAKE_PREFIX_PATH
-   export PKG_CONFIG_PATH=/opt/openrobots/lib/pkgconfig:$PKG_CONFIG_PATH
-   export ROS_PACKAGE_PATH=/opt/openrobots/share:$ROS_PACKAGE_PATH
-   ```
-
-> **Availability (verified against robotpkg, release line 6.1.0):**
-> `hpp-python` (6.0.0+), `qt5-hpp-gepetto-viewer`, the full CORBA stack
-> (`hpp-manipulation-corba`, `hpp-corbaserver`, `hpp-template-corba`) and the
-> C++ core (`hpp-core`, `hpp-constraints`, `hpp-manipulation`,
-> `hpp-manipulation-urdf`, `hpp-pinocchio`, `hpp-util`, `hpp-fcl`) are all in
-> the stable `pub` repo for `py312` (Ubuntu 24.04) and `py310` (22.04).
-> **`hpp-toppra` is the only piece this project uses that is not packaged** —
-> build it from source (see *1b. Source build* below).
+**Not available as a binary — TOPPRA.** `hpp-toppra` and its `toppra` C++
+dependency are not published in robotpkg (checked: absent from both `pub`
+and `wip`, all distros). To use the TOPPRA optimizer, build `toppra` and
+`hpp-toppra` from source — this is what the `hpp-agimus` container does.
 
 #### 1b. Source build / container — required for the PyHPP backend today
 
@@ -222,154 +188,96 @@ The viser browser viewer ships by default. The other optimizers/viewers are dete
 
 ## Usage
 
-### Create a Manipulation Task
+Writing a task means implementing `ManipulationTask`'s lifecycle contract (`get_objects()`,
+`create_constraints()`, `create_graph()`, `build_initial_config()`,
+`generate_configurations()`, then `setup()` / `run()`) — either by hand, or, for new tasks,
+via a declarative YAML config (recommended). Full, runnable examples live in
+[`docs/usage/standalone-usage.md`](docs/usage/standalone-usage.md) §§4–6 rather than
+duplicated here, alongside multi-phase sequences, resume/replay/checkpoints, and backend
+selection.
 
-```python
-from agimus_spacelab.tasks import ManipulationTask
-from agimus_spacelab.planning import SceneBuilder
+- **Start from a template**: `script/templates/task_config_template.yaml` +
+  `task_my_task.py` — copy, fill in the `<PLACEHOLDER>`s, run.
+- **Read a real, minimal example**: `script/spacelab/task_grasp_FG_yaml.py` (multi-arm scene).
+- **Explore interactively, no script-writing required**:
+  `script/spacelab/interactive_planning.py -i` — enumerate feasible grasp goals and solve
+  them from a menu.
 
-class MyTask(ManipulationTask):
-    def get_objects(self):
-        return ["frame_gripper"]
-        
-    def create_constraints(self):
-        # Define grasp/placement constraints
-        pass
-        
-    def create_graph(self):
-        # Build constraint graph
-        pass
-        
-    def generate_configurations(self, q_init):
-        # Generate waypoint configs
-        pass
+## Package structure & architecture
 
-# Run task
-task = MyTask()
-task.setup()
-task.run(visualize=True, solve=False)
+`tasks/` orchestrates `planning/`, which is backend-agnostic and depends only on `backends/`
+(the one place HPP-specific bindings are imported); `config/`, `logging/`, `visualization/`,
+`utils/`, and `cli/` are horizontal support layers used from `tasks/` and `script/`.
+
+```mermaid
+flowchart TB
+    script["script/<br/>end-user task scripts<br/>(one per robot/mission)"]
+    tasks["tasks/<br/>ManipulationTask, GraspSequencePlanner,<br/>InteractiveGraspSequenceBuilder"]
+    planning["planning/<br/>SceneBuilder, ConstraintBuilder, GraphBuilder,<br/>ConfigGenerator, GraspStateTracker,<br/>SequentialConstraintGraphFactory,<br/>SequentialGraspFilter, path_io,<br/>path_recorder, path_replay"]
+    backends["backends/<br/>BackendBase (ABC) → PyHPPBackend, CorbaBackend<br/>only layer importing pyhpp.* / hpp.corbaserver.*"]
+
+    config["config/<br/>BaseTaskConfig, YamlTaskLoader, RuleGenerator"]
+    logging_["logging/<br/>RunLogger, JSONL event schema"]
+    viz["visualization/<br/>graph diagrams, frame display, video"]
+    utils["utils/<br/>transforms, interactive menus"]
+    cli["cli/<br/>argparse helpers, interactive pickers"]
+
+    script --> tasks
+    tasks --> planning
+    planning --> backends
+
+    tasks -.uses.-> config
+    tasks -.uses.-> logging_
+    tasks -.uses.-> viz
+    script -.uses.-> cli
+    cli -.uses.-> utils
+    config -.uses.-> utils
+
+    style backends fill:#4c566a,stroke:#2e3440,color:#fff
+    style planning fill:#5e81ac,stroke:#2e3440,color:#fff
+    style tasks fill:#81a1c1,stroke:#2e3440,color:#fff
+    style script fill:#88c0d0,stroke:#2e3440,color:#000
 ```
 
+Per-phase planning data flow, the loop every mission ultimately runs through:
 
+```mermaid
+flowchart TD
+    yaml["YAML config"] -->|YamlTaskLoader| loaded["file_paths, joint_bounds_class, task_config"]
+    loaded --> setup["ManipulationTask.setup"]
 
-## Package Structure
+    setup --> scene["SceneBuilder<br/>load robots, env, objects"]
+    setup --> constraints["ConstraintBuilder /<br/>FactoryConstraintRegistry"]
+    setup --> gbuild["GraphBuilder<br/>factory or manual"]
 
-The package is organized into logical modules:
+    scene --> plan["GraspSequencePlanner.plan_sequence"]
+    constraints --> plan
+    gbuild --> plan
 
-```
-src/agimus_spacelab/
-├── __init__.py                  # Main exports
-├── backends/                    # Backend implementations
-│   ├── __init__.py
-│   ├── base.py                  # Backend base class
-│   ├── corba.py                 # CORBA backend (hpp-manipulation-corba)
-│   └── pyhpp.py                 # PyHPP backend (hpp-python)
-├── planning/                    # Planning tools
-│   ├── __init__.py
-│   ├── planner.py               # create_planner() factory function
-│   ├── scene.py                 # SceneBuilder
-│   ├── constraints.py           # ConstraintBuilder
-│   ├── graph.py                 # GraphBuilder
-│   └── config_generator.py      # ConfigGenerator
-├── tasks/                       # Task management
-│   ├── __init__.py
-│   ├── base.py                  # ManipulationTask base class
-│   └── grasp_sequence.py       # GraspSequencePlanner
-├── visualization/               # Visualization tools
-│   ├── __init__.py
-│   └── viz.py                   # Graph visualization, frame display
-├── config/                      # Configuration classes
-│   ├── __init__.py
-│   └── rules.py                 # RuleGenerator, SpaceLabScenario
-└── utils/                       # Utilities
-    ├── __init__.py
-    └── transforms.py            # Transform helpers (xyzrpy_to_se3, etc.)
+    plan --> p1["1. build_phase_graph<br/>GraphBuilder plus SequentialConstraintGraphFactory"]
+    p1 --> p2["2. GraspStateTracker picks the edge name"]
+    p2 --> p3["3. ConfigGenerator.generate_via_edge builds target config"]
+    p3 --> p4["4. backend.solve builds the path, then optimize and time-parameterize"]
+    p4 --> p5["5. RunLogger.log phase_end, optional auto-save of path"]
+    p5 -->|next phase| p1
+    p5 --> result["concatenated multi-phase path, O of N planning cost"]
 ```
 
-## Architecture
-
-Multi-layer design for scalable manipulation planning:
-
-```
-Assembly Mission
-      ↓
-Behavior Tree Layer (planned by external BT planner)
-      ↓
-Task Orchestration Layer (planned by external BT planner)
-      ↓
-Atomic Task Layer (implemented)
-      ↓
-Motion Planning Layer (HPP)
-```
-
-**Key Components:**
-- `SceneBuilder`: Fluent API for scene setup
-- `ConstraintBuilder`: Helper for constraint creation
-- `ConfigGenerator`: Waypoint generation
-- `ManipulationTask`: Base class for tasks
-- `GraspSequencePlanner`: Multi-phase grasp sequence planning
-- `create_planner()`: Factory for backend-specific planners
+Both diagrams are copied from **[`ARCHITECTURE.md`](ARCHITECTURE.md)**, which is the
+maintained source — it's dated at the top and covers dependency direction and what each
+class does in more depth than fits here. If the two ever disagree, trust `ARCHITECTURE.md`
+and update this copy to match.
 
 ## Run Logging
 
-`agimus_spacelab` includes a structured run logger that writes a crash-safe JSONL event stream for every planning run. Use it to replay configurations, debug failures, and audit results.
+`agimus_spacelab` includes a structured run logger that writes a crash-safe JSONL event
+stream for every planning run — one event per phase/edge attempt, plus a JSON snapshot and a
+replay-ready YAML on close. Use it to replay configurations, debug failures, and audit
+results.
 
-### Enable via `ManipulationTask`
-
-Logging is **on by default**. `log_dir` defaults to `"auto"`, which creates a directory under `/tmp/agimus_spacelab/<task_slug>_<YYYYMMDD_HHMMSS>/`. Pass an explicit path to override, or `None` to disable.
-
-```python
-# Default: auto-creates /tmp/agimus_spacelab/my_task_20260415_143022/
-task = MyTask(backend="pyhpp")
-
-# Custom directory
-task = MyTask(backend="pyhpp", log_dir="/data/runs/experiment_01")
-
-# Disable logging
-task = MyTask(backend="pyhpp", log_dir=None)
-
-task.setup()
-task.run()
-# Writes: <log_dir>/run_20260415_143022_<id>.jsonl
-#         <log_dir>/run_20260415_143022_<id>.json     (snapshot on close)
-#         <log_dir>/run_20260415_143022_<id>_replay.yaml
-```
-
-### Enable standalone
-
-```python
-from agimus_spacelab.logging import RunLogger
-
-logger = RunLogger("/tmp/runs")
-planner = GraspSequencePlanner(..., run_logger=logger)
-planner.plan_sequence(q_init, ...)
-```
-
-### Inspect logs after a run
-
-```python
-from agimus_spacelab.logging import print_run_summary, load_run_log, get_replay_config
-
-# Human-readable summary to stdout
-print_run_summary("/tmp/runs/run_20260415_143022_abc12345.jsonl")
-
-# Structured dict: run_id, events, phase_results, one key per event type
-data = load_run_log("/tmp/runs/run_20260415_143022_abc12345.jsonl")
-
-# Reproduce the run: returns backend, task_name, task_config, setup_params, sequence
-cfg = get_replay_config("/tmp/runs/run_20260415_143022_abc12345.jsonl")
-```
-
-### Configure Python logging
-
-```python
-from agimus_spacelab.logging import configure_logging
-
-# Console + file handler under the "agimus_spacelab" logger hierarchy
-configure_logging(level="DEBUG", log_dir="/tmp/runs", console=True)
-```
-
-### Event types
+Logging is **on by default** for every `ManipulationTask` (`log_dir="auto"` creates
+`/tmp/agimus_spacelab/<task_slug>_<timestamp>/`; pass an explicit path to redirect it, or
+`None` to disable). `RunLogger` also works standalone, independent of `ManipulationTask`.
 
 | Event | When emitted |
 |-------|-------------|
@@ -382,24 +290,20 @@ configure_logging(level="DEBUG", log_dir="/tmp/runs", console=True)
 | `phase_end` | After each phase — timing, `state_after`, saved files |
 | `run_end` | On normal return or `KeyboardInterrupt` |
 
-### Package location
-
-```
-src/agimus_spacelab/
-└── logging/
-    ├── __init__.py       # Public API: RunLogger, configure_logging, get_logger,
-    │                     #   load_run_log, iter_events, get_replay_config,
-    │                     #   print_run_summary
-    ├── run_logger.py     # RunLogger — crash-safe JSONL writer
-    ├── schema.py         # TypedDict definitions for all event shapes
-    ├── setup.py          # Python logging module integration
-    └── log_loader.py     # Log inspection utilities
-```
+For runnable examples — standalone use, inspecting a log afterward
+(`print_run_summary`/`load_run_log`/`get_replay_config`), and configuring the underlying
+Python `logging` hierarchy — see [`docs/usage/standalone-usage.md`](docs/usage/standalone-usage.md) §10.
 
 ## Documentation
 
-- **Usage Guide**: `script/spacelab/README.md`
-- **API Reference**: See docstrings in source files
+- **Architecture**: [`ARCHITECTURE.md`](ARCHITECTURE.md) — module layering, dependency direction, data flow. Dated at the top; check it before trusting a claim about what exists.
+- **Usage guide (living reference)**: [`docs/usage/standalone-usage.md`](docs/usage/standalone-usage.md) — writing a task, multi-phase sequences, resume/replay/checkpoints, backends, example scripts. [`docs/usage/dbt-integration.md`](docs/usage/dbt-integration.md) covers the ROS 2 / Dynamic Behavior Tree stack on top of this same library.
+- **Development report**: [`docs/report/development-report.md`](docs/report/development-report.md) — *why* the framework is built this way: architecture decisions vs. bare HPP, measured before/after numbers, project timeline, and a bugs-found appendix. A point-in-time report, not a living reference.
+- **Design rationale for specific mechanisms**: [`docs/features/`](docs/features/); **upstream HPP defects worked around here**: [`docs/bugs/`](docs/bugs/).
+- **API Reference**: See docstrings in source files.
+
+> `script/spacelab/README.md` predates the current API (still describes CORBA as the default
+> backend and references files that no longer exist) — use the docs above instead.
 
 ## License
 
@@ -408,4 +312,4 @@ LGPL-3.0 - See [LICENSE](LICENSE) file
 
 ---
 
-**Last Updated**: 07/04/2026
+**Last Updated**: 2026-08-18
