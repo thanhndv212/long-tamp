@@ -11,3 +11,7 @@ workspace. Companion to [`../features/`](../features/) (why specific mechanisms 
 
 Start with `standalone-usage.md` even if your end goal is the DBT — the DBT layer is a thin
 ROS wrapper around exactly that API.
+
+For *why* the framework is built this way — architecture decisions, measured before/after
+numbers, project timeline, bugs-found appendix — see [`../report/`](../report/) instead. It's
+a separate, point-in-time report, not a living reference like the docs above.
