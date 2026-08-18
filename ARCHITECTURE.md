@@ -1,5 +1,10 @@
 # agimus_spacelab — Architecture
 
+**Last reviewed against source:** 2026-08-18, commit `bc4898d`. This doc lags actual
+code by design (it documents layer boundaries, not every module) — if a newer module or
+feature isn't listed below, check `git log --since=<this date> -- src/agimus_spacelab`
+before assuming it's missing rather than just undocumented.
+
 `agimus_spacelab` is a **standalone Python library** for multi-arm, multi-object
 manipulation planning on top of HPP (Humanoid Path Planner). This document
 describes the architecture of the package *by itself* — its module layering,
@@ -54,6 +59,7 @@ code is put together*, not how to deploy it.
 │                     ConfigGenerator, GraspStateTracker,            │
 │                     SequentialConstraintGraphFactory,              │
 │                     SequentialGraspFilter, path_io                 │
+│                     path_recorder, path_replay                     │
 │  Backend-agnostic planning primitives, each independently usable.  │
 └───────────────────────────┬──────────────────────────────────────┘
                             │ uses
@@ -76,7 +82,7 @@ code is put together*, not how to deploy it.
 flowchart TB
     script["script/<br/>end-user task scripts<br/>(one per robot/mission)"]
     tasks["tasks/<br/>ManipulationTask, GraspSequencePlanner,<br/>InteractiveGraspSequenceBuilder"]
-    planning["planning/<br/>SceneBuilder, ConstraintBuilder, GraphBuilder,<br/>ConfigGenerator, GraspStateTracker,<br/>SequentialConstraintGraphFactory,<br/>SequentialGraspFilter, path_io"]
+    planning["planning/<br/>SceneBuilder, ConstraintBuilder, GraphBuilder,<br/>ConfigGenerator, GraspStateTracker,<br/>SequentialConstraintGraphFactory,<br/>SequentialGraspFilter, path_io,<br/>path_recorder, path_replay"]
     backends["backends/<br/>BackendBase (ABC) → PyHPPBackend, CorbaBackend<br/>only layer importing pyhpp.* / hpp.corbaserver.*"]
 
     config["config/<br/>BaseTaskConfig, YamlTaskLoader, RuleGenerator"]
@@ -195,6 +201,16 @@ Each class here does one job and is usable on its own, independent of the
   (`bfs_edge_path`) when a direct edge isn't known.
 - **`path_io.py`** — save/load/replay planned paths to/from files, so a
   solved path can be replayed without re-solving.
+- **`PathRecorder`** (`path_recorder.py`) / **`path_replay.py`** — a
+  newer, more durable capture mechanism than `path_io.py`: samples every
+  planned/executed path to disk as it happens (`manifest.json`,
+  atomically rewritten after each segment, plus one waypoint file per
+  segment), so a run's motion can be continuity-checked or replayed in a
+  *separate process* — after the original crashed, was killed, or simply
+  exited — without rebuilding any constraint graph.
+  `script/spacelab/replay_captured_paths.py` is the CLI entry point;
+  `path_replay.py`'s `load_manifest()`/`validate()` re-derive segment
+  continuity independently of the recorder that wrote them.
 
 ## Task orchestration (`tasks/`)
 
@@ -216,6 +232,15 @@ Each class here does one job and is usable on its own, independent of the
   and resuming (`resume_sequence`) a partially-completed sequence,
   graceful interrupt handling (`enable_graceful_stop`/SIGINT), and full
   replay (`replay_sequence`) from previously saved paths.
+  `find_feasible_phase_target()` adds an optional one-phase lookahead:
+  before committing phase N's randomized grasp target, it probes — on a
+  throwaway copy of `GraspStateTracker`, never mutating the real one —
+  whether phase N+1 stays reachable from it, so a target that would
+  orient-lock an object out of its next grasp is rejected before
+  commitment rather than retried forever afterward. A passing candidate
+  is replayed into the real `plan_sequence()`/`resume_sequence()` call as
+  a per-edge warm-start hint chain (`phase_q_hints`). See
+  `docs/features/phase-target-lookahead.md`.
 - **`InteractiveGraspSequenceBuilder`** — terminal menu-driven wrapper
   around `GraspSequencePlanner` for exploratory/interactive planning
   sessions (used by `script/*/interactive_planning.py`).
