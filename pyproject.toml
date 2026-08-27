@@ -82,8 +82,16 @@ dev = [
     "sphinx",
     "sphinx-rtd-theme",
 ]
+
+# MkDocs site over docs/ — `mkdocs serve` / `mkdocs build` (see mkdocs.yml).
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocs-include-markdown-plugin>=7.0",
+]
+
 all = [
-    "agimus-spacelab[dev]",
+    "agimus-spacelab[dev,docs]",
 ]
 
 [project.urls]

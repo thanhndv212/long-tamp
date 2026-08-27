@@ -33,6 +33,10 @@ venv/
 ENV/
 env/
 .venv
+.venv-docs
+
+# MkDocs
+site/
 
 # IDEs
 .github/

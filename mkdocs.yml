@@ -1,0 +1,84 @@
+site_name: agimus_spacelab
+site_description: Multi-arm collaborative manipulation planning for SpaceLab assembly tasks using HPP.
+repo_url: https://gitlab.laas.fr/dvtnguyen/agimus_spacelab
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - content.code.copy
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+
+plugins:
+  - search
+  - include-markdown
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - Usage:
+      - Overview: usage/README.md
+      - Standalone usage: usage/standalone-usage.md
+      - DBT / ROS 2 integration: usage/dbt-integration.md
+  - Features:
+      - Overview: features/README.md
+      - Phase-target lookahead: features/phase-target-lookahead.md
+      - Screwdriving sequence assembly order: features/screwdriving-sequence-assembly-order.md
+      - Transit edge robustness: features/transit-edge-robustness.md
+      - Logging verbosity: features/logging-verbosity.md
+  - Bugs (upstream HPP):
+      - Constraint-graph factory combinatorial blowup: bugs/constraint-graph-factory-combinatorial-blowup.md
+      - hpp-core unbounded planning loops: bugs/hpp-core-unbounded-planning-loops.md
+      - hpp-manipulation leaf projection bug: bugs/hpp-manipulation-leaf-projection-bug.md
+      - Motion quality / time parameterization: bugs/motion-quality-time-parameterization.md
+      - pyhpp factory locked-joint bugs: bugs/pyhpp-factory-locked-joint-bugs.md
+  - HPP Python interface:
+      - pyhpp API documentation: hpp_python_interface/pyhpp_api_documentation.md
+      - CORBA API documentation: hpp_python_interface/corba_api_documentation.md
+      - CORBA vs pyhpp comparison: hpp_python_interface/comparison_corba_vs_pyhpp.md
+      - Path planners comparison: hpp_python_interface/path-planners-comparison.md
+      - hpp-manipulation complete motion plan: hpp_python_interface/hpp_manipulation_complete_motion_plan.md
+  - Plans:
+      - Refactor codebase: plans/refactor-codebase.md
+      - Model/asset source diff: plans/model-asset-source-diff.md
+  - Development report:
+      - Overview: report/README.md
+      - Full report: report/development-report.md
