@@ -1284,12 +1284,28 @@ class GraphBuilder:
         else:
             # Release: the factory needs the currently-held handle to generate
             # the release (<) edge.  Include it from held_grasps.
+            #
+            # Always register next_gripper itself, even when it holds
+            # nothing to release (released_handle is None): a caller asking
+            # to move this gripper's arm within the current state (no
+            # grasp/release at all, e.g. GraspSequencePlanner.plan_loop())
+            # still needs it present in the phase-scoped grippers list --
+            # otherwise _apply_sequential_filter's next_grasp_to_indices()
+            # can't find it ("Gripper '...' not found in grippers list.
+            # Available grippers: []") and the phase graph has no reference
+            # to that gripper's arm at all. An empty valid-handles list for
+            # a gripper doesn't allow any grasp for it (PossibleGrasps
+            # rejects every pair with an empty list), so this doesn't
+            # change what grasps are reachable -- only ensures the gripper
+            # (and its arm) is part of the graph.
             released_handle = held_grasps.get(next_gripper)
-            if released_handle is not None:
-                if next_gripper not in phase_valid_pairs:
-                    phase_valid_pairs[next_gripper] = []
-                if released_handle not in phase_valid_pairs[next_gripper]:
-                    phase_valid_pairs[next_gripper].append(released_handle)
+            if next_gripper not in phase_valid_pairs:
+                phase_valid_pairs[next_gripper] = []
+            if (
+                released_handle is not None
+                and released_handle not in phase_valid_pairs[next_gripper]
+            ):
+                phase_valid_pairs[next_gripper].append(released_handle)
 
         return phase_valid_pairs
 
@@ -1352,6 +1368,22 @@ class GraphBuilder:
                 # even after setPossibleGrasps restricts the valid pairs.
                 phase_handles_per_obj.append(filtered_handles)
                 phase_contacts_per_obj.append(contacts)
+
+        if not phase_objects and _orig_objects:
+            # No gripper in this phase has any VALID_PAIRS entry at all
+            # (e.g. GraspSequencePlanner.plan_loop() with nothing held and
+            # nothing being grasped/released) -- narrowing to zero objects
+            # leaves the factory with none at all, and setObjects([], ...)
+            # is rejected ("At least one object required"). Since no
+            # gripper can validly grasp anything here regardless (VALID_
+            # PAIRS grants none), keeping the object set unrestricted adds
+            # no reachable grasp states -- graspIsAllowed still rejects
+            # every pair -- so this doesn't reopen the combinatorial-
+            # explosion case the narrowing above exists to avoid.
+            phase_objects = list(_orig_objects)
+            phase_handles_per_obj = list(_orig_handles_per_obj)
+            phase_contacts_per_obj = list(_orig_contacts_per_obj)
+
         phase_config.OBJECTS = phase_objects
         phase_config.HANDLES_PER_OBJECT = phase_handles_per_obj
         phase_config.CONTACT_SURFACES_PER_OBJECT = phase_contacts_per_obj

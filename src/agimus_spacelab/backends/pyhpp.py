@@ -241,12 +241,65 @@ class PyHPPBackend(BackendBase):
             raise RuntimeError("Robot not loaded yet")
         return np.array(self.device.neutralConfiguration())
 
-    def random_config(self) -> np.ndarray:
-        """Generate a random configuration."""
+    def random_config(self, max_attempts: int = 1000) -> np.ndarray:
+        """Generate a random configuration.
+
+        The abstract interface documents this as returning a *valid*
+        configuration, but the shooter itself only respects joint bounds --
+        it has no collision awareness, so a raw draw can (and for a 6-DOF
+        arm regularly does) self-collide. Retries via
+        ``Problem.isConfigValid()`` until a valid draw is found or
+        `max_attempts` is exhausted, matching `ConfigGenerator`'s own
+        bounded-attempts convention
+        (`agimus_spacelab.planning.config.ConfigGenerator.max_attempts`).
+
+        ``problem.configValidations()`` starts empty by default -- unlike
+        *path* validation (wired up separately during scene setup, see
+        ``scene.py``'s "Configuring path validation..." step), nothing
+        registers a collision checker for standalone *config* validation.
+        Confirmed live: ``isConfigValid()`` on a config
+        ``TransitionPlanner.computePath`` had already proven self-colliding
+        still returned ``valid=True``. So this lazily (idempotently) adds
+        one via ``Problem.addConfigValidation("CollisionValidation")``
+        before the retry loop -- once per ``Problem`` instance, not once
+        per call.
+
+        Falls back to the last (possibly invalid) draw with a warning
+        rather than raising if no valid config turns up in budget --
+        preserves today's "always returns something" behavior for the
+        existing caller (`ConfigGenerator._generate_candidate_config`'s
+        IK seed), which doesn't handle an exception from this method.
+        """
         if self.problem is None:
             raise RuntimeError("Problem not created yet")
+        config_validations = self.problem.configValidation()
+        if (
+            hasattr(config_validations, "numberConfigValidations")
+            and config_validations.numberConfigValidations() == 0
+        ):
+            self.problem.addConfigValidation("CollisionValidation")
+            self.problem.addConfigValidation("JointBoundValidation")
         self._shooter = self.problem.configurationShooter()
-        return np.array(self._shooter.shoot())
+        q = np.array(self._shooter.shoot())
+        for attempt in range(max_attempts):
+            try:
+                valid, _report = self.problem.isConfigValid(q)
+            except Exception as e:
+                logger.warning(
+                    "random_config: isConfigValid check failed (%s); "
+                    "returning draw unchecked",
+                    e,
+                )
+                return q
+            if valid:
+                return q
+            q = np.array(self._shooter.shoot())
+        logger.warning(
+            "random_config: no valid configuration found in %d attempts; "
+            "returning the last (invalid) draw",
+            max_attempts,
+        )
+        return q
 
     def load_robot(
         self,

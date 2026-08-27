@@ -3019,6 +3019,379 @@ class GraspSequencePlanner:
             )
         return None
 
+    def plan_pregrasp(
+        self,
+        gripper: str,
+        handle: str,
+        q_current: list[float],
+        frozen_arms_mode: str = "auto",
+        per_phase_frozen_arms: dict[int, list[str]] | None = None,
+        q_scene_init: list[float] | None = None,
+        timeout_per_edge: float = 60.0,
+        max_iterations_per_edge: int = 10000,
+        verbose: bool = True,
+    ) -> dict[str, Any]:
+        """Plan only the approach/pregrasp edge for (gripper, handle); stop there.
+
+        Unlike a normal grasp phase (``get_grasp_edge_sequence()``'s
+        ``[pregrasp_edge, grasp_edge]``, both planned by ``plan_sequence()``),
+        this plans only the first (``_01``) edge and never attempts the
+        second. ``grasp_tracker`` is deliberately left unchanged (the
+        gripper still shows as free afterward) -- for callers where the
+        actual grasp/release is completed by something outside HPP entirely
+        (e.g. visual servoing + a raw Cartesian approach + a PLC catch
+        signal), so HPP must not believe the object is attached once this
+        returns.
+
+        Reuses ``_build_phase_graph_and_constraints`` (the same phase-graph
+        setup ``plan_sequence()`` uses for phase 0) for graph/constraint/
+        index correctness, then plans the single edge with the same
+        generate-target/collision-retry pattern as ``_plan_phase_edges``,
+        condensed to one edge with no resume/skip/hint machinery.
+
+        Returns a dict shaped like ``plan_sequence()``'s (``success``,
+        ``message``, ``phase_results``, ``final_config``) so existing
+        phase_results-consuming code (``run_plan_sequence`` in
+        ``planning_engine.py``) needs no changes to handle it.
+        """
+        if hasattr(self.planner, "configure_transition_planner"):
+            self.planner.configure_transition_planner(
+                time_out=timeout_per_edge,
+                max_iterations=max_iterations_per_edge,
+            )
+
+        q_scene_init = q_scene_init if q_scene_init is not None else q_current
+
+        try:
+            self._build_phase_graph_and_constraints(
+                phase_idx=0,
+                gripper=gripper,
+                handle=handle,
+                q_current=q_current,
+                frozen_arms_mode=frozen_arms_mode,
+                per_phase_frozen_arms=per_phase_frozen_arms,
+                q_scene_init=q_scene_init,
+                verbose=verbose,
+                emit_logs=verbose,
+            )
+        except Exception as e:
+            return {
+                "success": False,
+                "message": (
+                    f"plan_pregrasp('{gripper}', '{handle}'): failed to build "
+                    f"phase graph: {e}"
+                ),
+                "phase_results": [],
+                "final_config": q_current,
+            }
+
+        pregrasp_edge = self.grasp_tracker.get_grasp_edge_sequence(gripper, handle)[0]
+
+        edge_start_time = time.time()
+        q_target = None
+        last_err: Exception | None = None
+        path = None
+
+        try:
+            ok, q_target = self.config_gen.generate_via_edge(
+                edge_name=pregrasp_edge,
+                q_from=q_current,
+                config_label=f"q_pregrasp_{gripper}",
+            )
+            if not ok or q_target is None:
+                raise RuntimeError(
+                    f"Failed to generate pregrasp target via '{pregrasp_edge}'"
+                )
+        except Exception as e:
+            return {
+                "success": False,
+                "message": (
+                    f"plan_pregrasp('{gripper}', '{handle}'): target "
+                    f"generation failed: {e}"
+                ),
+                "phase_results": [],
+                "final_config": q_current,
+            }
+
+        for attempt in range(self._MAX_COLLISION_RETRIES):
+            try:
+                path, _geometric_path = self.planner.plan_transition_edge(
+                    edge=pregrasp_edge,
+                    q1=q_current,
+                    q2=q_target,
+                )
+                if path is None:
+                    raise RuntimeError(f"Planning failed for edge '{pregrasp_edge}'")
+                last_err = None
+                break
+            except Exception as e:
+                last_err = e
+                if verbose:
+                    logger.warning(
+                        "plan_pregrasp: attempt %d/%d failed (%s)%s",
+                        attempt + 1,
+                        self._MAX_COLLISION_RETRIES,
+                        e,
+                        ", regenerating target"
+                        if attempt < self._MAX_COLLISION_RETRIES - 1
+                        else "",
+                    )
+                if attempt < self._MAX_COLLISION_RETRIES - 1:
+                    try:
+                        ok2, q_new = self.config_gen.generate_via_edge(
+                            edge_name=pregrasp_edge,
+                            q_from=q_current,
+                            config_label=f"q_pregrasp_{gripper}",
+                        )
+                        if ok2 and q_new is not None:
+                            q_target = q_new
+                    except Exception:
+                        pass  # keep the previous q_target and retry planning with it
+
+        edge_total_time = time.time() - edge_start_time
+
+        if last_err is not None or path is None:
+            return {
+                "success": False,
+                "message": (
+                    f"plan_pregrasp('{gripper}', '{handle}') failed after "
+                    f"{self._MAX_COLLISION_RETRIES} attempts: {last_err}"
+                ),
+                "phase_results": [],
+                "final_config": q_current,
+            }
+
+        phase_result = {
+            "phase": 1,
+            "gripper": gripper,
+            "handle": handle,
+            "edges": [pregrasp_edge],
+            "paths": [path],
+            "edge_stats": [{"edge": pregrasp_edge, "total_time": edge_total_time}],
+            "phase_time": edge_total_time,
+            "complete": True,
+            "skipped": False,
+            "final_config": q_target,
+            "state_after": self.grasp_tracker.get_current_state_name(),
+            "saved_files": [],
+            "pregrasp_only": True,  # marker: grasp_tracker intentionally NOT updated
+        }
+        self.phase_results.append(phase_result)
+
+        if verbose:
+            logger.info(
+                "✓ plan_pregrasp('%s', '%s') succeeded (%.2fs); grasp_tracker "
+                "left unchanged (still free)",
+                gripper,
+                handle,
+                edge_total_time,
+            )
+
+        return {
+            "success": True,
+            "message": (
+                f"Pregrasp reached for {gripper} -> {handle} "
+                "(grasp not completed by design)"
+            ),
+            "phase_results": [phase_result],
+            "final_config": q_target,
+        }
+
+    def plan_transition(
+        self,
+        edge_name: str,
+        q1: list[float],
+        q2: list[float],
+        timeout_per_edge: float = 60.0,
+        max_iterations_per_edge: int = 10000,
+        verbose: bool = True,
+    ) -> dict[str, Any]:
+        """Plan a single named transition edge directly; no graph setup.
+
+        Thin passthrough over ``plan_transition_edge`` for callers that
+        already know exactly which edge they want and have already ensured
+        (e.g. via a prior ``plan_pregrasp()``/``build_phase_graph()`` call
+        in this same instance) that the edge exists in whatever graph is
+        currently loaded on ``self.planner``/``self.graph_builder`` -- this
+        method does no graph-setup of its own, unlike ``plan_pregrasp``.
+        """
+        if hasattr(self.planner, "configure_transition_planner"):
+            self.planner.configure_transition_planner(
+                time_out=timeout_per_edge,
+                max_iterations=max_iterations_per_edge,
+            )
+
+        try:
+            path, _geometric_path = self.planner.plan_transition_edge(
+                edge=edge_name,
+                q1=q1,
+                q2=q2,
+            )
+            if path is None:
+                raise RuntimeError(f"Planning failed for edge '{edge_name}'")
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"plan_transition('{edge_name}') failed: {e}",
+                "phase_results": [],
+                "final_config": q1,
+            }
+
+        phase_result = {
+            "phase": 1,
+            "gripper": None,
+            "handle": None,
+            "edges": [edge_name],
+            "paths": [path],
+            "edge_stats": [],
+            "complete": True,
+            "skipped": False,
+            "final_config": q2,
+            "state_after": self.grasp_tracker.get_current_state_name(),
+            "saved_files": [],
+        }
+        self.phase_results.append(phase_result)
+
+        if verbose:
+            logger.info("✓ plan_transition('%s') succeeded", edge_name)
+
+        return {
+            "success": True,
+            "message": f"Transition '{edge_name}' planned",
+            "phase_results": [phase_result],
+            "final_config": q2,
+        }
+
+    def plan_loop(
+        self,
+        gripper: str,
+        q_current: list[float],
+        q_target: list[float],
+        frozen_arms_mode: str = "auto",
+        per_phase_frozen_arms: dict[int, list[str]] | None = None,
+        q_scene_init: list[float] | None = None,
+        timeout_per_edge: float = 60.0,
+        max_iterations_per_edge: int = 10000,
+        verbose: bool = True,
+    ) -> dict[str, Any]:
+        """Plan free motion for ``gripper``'s arm to an explicit ``q_target``,
+        within the current held-grasps state — no grasp/release involved.
+
+        Resolves the graph-lifecycle correctness question noted in an
+        earlier version of this method (raising ``NotImplementedError``):
+        reuses the exact ``next_grasp=(gripper, None)`` graph-building path
+        ``_setup_release_phase_graph``/``build_phase_graph`` already use for
+        releases ([graph.py:1276-1292] handles ``next_handle is None``
+        explicitly), via the same ``_build_phase_graph_and_constraints``
+        helper ``plan_pregrasp`` uses. That builds a *fresh*, correctly
+        scoped-to-``held_grasps`` phase graph on every call — this doesn't
+        depend on whatever graph a prior, unrelated request happened to
+        leave loaded. ``grasp_tracker`` is left unchanged (no grasp/release
+        happened).
+
+        Note: unlike ``plan_pregrasp``, ``q_target`` is caller-supplied and
+        fixed — there is nothing to regenerate on a failed attempt, so
+        retries replan the same ``q1``/``q2`` (useful only insofar as the
+        underlying sampling-based planner is itself stochastic between
+        calls), rather than drawing a fresh candidate target each time.
+        """
+        if hasattr(self.planner, "configure_transition_planner"):
+            self.planner.configure_transition_planner(
+                time_out=timeout_per_edge,
+                max_iterations=max_iterations_per_edge,
+            )
+
+        q_scene_init = q_scene_init if q_scene_init is not None else q_current
+
+        try:
+            self._build_phase_graph_and_constraints(
+                phase_idx=0,
+                gripper=gripper,
+                handle=None,
+                q_current=q_current,
+                frozen_arms_mode=frozen_arms_mode,
+                per_phase_frozen_arms=per_phase_frozen_arms,
+                q_scene_init=q_scene_init,
+                verbose=verbose,
+                emit_logs=verbose,
+            )
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"plan_loop('{gripper}'): failed to build phase graph: {e}",
+                "phase_results": [],
+                "final_config": q_current,
+            }
+
+        loop_edge = self.grasp_tracker.get_loop_edge()
+
+        edge_start_time = time.time()
+        last_err: Exception | None = None
+        path = None
+
+        for attempt in range(self._MAX_COLLISION_RETRIES):
+            try:
+                path, _geometric_path = self.planner.plan_transition_edge(
+                    edge=loop_edge,
+                    q1=q_current,
+                    q2=q_target,
+                )
+                if path is None:
+                    raise RuntimeError(f"Planning failed for edge '{loop_edge}'")
+                last_err = None
+                break
+            except Exception as e:
+                last_err = e
+                if verbose:
+                    logger.warning(
+                        "plan_loop: attempt %d/%d failed: %s",
+                        attempt + 1,
+                        self._MAX_COLLISION_RETRIES,
+                        e,
+                    )
+
+        edge_total_time = time.time() - edge_start_time
+
+        if last_err is not None or path is None:
+            return {
+                "success": False,
+                "message": (
+                    f"plan_loop('{gripper}') failed after "
+                    f"{self._MAX_COLLISION_RETRIES} attempts: {last_err}"
+                ),
+                "phase_results": [],
+                "final_config": q_current,
+            }
+
+        phase_result = {
+            "phase": 1,
+            "gripper": gripper,
+            "handle": None,
+            "edges": [loop_edge],
+            "paths": [path],
+            "edge_stats": [{"edge": loop_edge, "total_time": edge_total_time}],
+            "phase_time": edge_total_time,
+            "complete": True,
+            "skipped": False,
+            "final_config": q_target,
+            "state_after": self.grasp_tracker.get_current_state_name(),
+            "saved_files": [],
+            "loop_only": True,  # marker: no grasp/release, grasp_tracker unchanged
+        }
+        self.phase_results.append(phase_result)
+
+        if verbose:
+            logger.info(
+                "✓ plan_loop('%s') succeeded (%.2fs)", gripper, edge_total_time
+            )
+
+        return {
+            "success": True,
+            "message": f"Loop motion planned for '{gripper}' to explicit target",
+            "phase_results": [phase_result],
+            "final_config": q_target,
+        }
+
     def plan_sequence(
         self,
         grasp_sequence: Sequence[tuple[str, str]],
