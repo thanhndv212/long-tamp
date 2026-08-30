@@ -42,6 +42,7 @@ option(WITH_PYHPP "Build with PyHPP support (default backend)" ON)
 option(WITH_CORBA "Build with CORBA support (DEPRECATED)" OFF)
 option(WITH_TOPPRA "Build with TOPPRA time-parameterization support" OFF)
 option(BUILD_TESTING "Build tests" ON)
+option(BUILD_BEHAVIORTREE_EXAMPLES "Build ROS-free BehaviorTree.CPP examples" OFF)
 
 # Find required dependencies
 find_package(pinocchio REQUIRED)
@@ -141,6 +142,10 @@ if(BUILD_TESTING)
   if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
     add_subdirectory(tests)
   endif()
+endif()
+
+if(BUILD_BEHAVIORTREE_EXAMPLES)
+  add_subdirectory(examples/behaviortree)
 endif()
 
 add_library(${PROJECT_NAME} INTERFACE)

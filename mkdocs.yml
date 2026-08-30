@@ -58,6 +58,7 @@ nav:
       - Overview: usage/README.md
       - Standalone usage: usage/standalone-usage.md
       - DBT / ROS 2 integration: usage/dbt-integration.md
+      - BehaviorTree.CPP integration: usage/behaviortree-integration.md
   - Features:
       - Overview: features/README.md
       - Phase-target lookahead: features/phase-target-lookahead.md
@@ -79,6 +80,8 @@ nav:
   - Plans:
       - Refactor codebase: plans/refactor-codebase.md
       - Model/asset source diff: plans/model-asset-source-diff.md
+      - BehaviorTree screwdriving task-planning: plans/behaviortree-screwdriving-taskplan.md
   - Development report:
       - Overview: report/README.md
       - Full report: report/development-report.md
+      - BehaviorTree screwdriving report: report/behaviortree-screwdriving-report.md
