@@ -36,7 +36,7 @@ Embedded CPython bridge (PythonSession)
 Python TaskPlanningSession / HostSession (session.py, host.py)
     │
     ▼
-SpaceLab screwdriving adapter (examples/spacelab_screwdriving*.py) ──► agimus_spacelab / PyHPP
+SpaceLab screwdriving adapter (script/spacelab/screwdriving_plan.py, screwdriving_session.py) ──► agimus_spacelab / PyHPP
 ```
 
 The same IR, validator, compiler, C++ nodes, and bridge run two adapters: a deterministic
@@ -54,7 +54,8 @@ knows nothing about screws, robots, or grippers.
 | `src/agimus_spacelab/tasks/task_planning/compiler.py` | `compile_behavior_tree()` — deterministic, allowlisted-element IR→XML compiler; output carries its own `artifact_fingerprint` |
 | `src/agimus_spacelab/tasks/task_planning/session.py` | `TaskPlanningSession` — dispatches transactions/conditions through the frozen registry; freezes the registry on construction |
 | `src/agimus_spacelab/tasks/task_planning/host.py` | Allowlisted session factories the C++ host is permitted to call: `create_fake_session`, `create_screwdriving_session` |
-| `src/agimus_spacelab/tasks/task_planning/examples/spacelab_screwdriving*.py` | The SpaceLab adapter: `ScrewdrivingPlanningSession`, checkpointing, `PathRecorder` capture |
+| `script/spacelab/screwdriving_plan.py` | The mission IR: transactions, capability descriptors (`create_screwdriving_registry`, `build_screwdriving_plan`) — kept out of `src/` so the generic layer stays SpaceLab-agnostic |
+| `script/spacelab/screwdriving_session.py` | The SpaceLab adapter: `ScrewdrivingPlanningSession`, checkpointing, `PathRecorder` capture — loaded dynamically by `host.py` |
 | `examples/behaviortree/` | C++ host: `main.cpp` (CLI + allowlist), `python_session.{hpp,cpp}` (CPython bridge), `task_nodes.{hpp,cpp}` (generic BT node types) |
 | `script/spacelab/run_taskplan_bt_supervised.py` | Process supervisor: attempt/total timeouts, process-group kill, bounded restart backoff |
 | `script/spacelab/replay_captured_paths.py` | Validates a `PathRecorder` capture (continuity, seam checks) without re-planning |
@@ -200,7 +201,7 @@ without touching HPP at all.
    this before constructing any `TaskPlanningSession`/`HostSession`; the registry freezes
    (`RuntimeError` on further `register`/`bind`) the moment a session is constructed.
 3. Author the mission as a `TaskPlan` document (see
-   `examples/spacelab_screwdriving.py` for the reference SpaceLab example) and validate it
+   `script/spacelab/screwdriving_plan.py` for the reference SpaceLab example) and validate it
    with `TaskPlan.from_dict(document, registry)`.
 4. Expose it through a new factory function in `host.py`, then add that factory's name to the
    `allowed_factories` set in `examples/behaviortree/src/main.cpp` — a factory not on both

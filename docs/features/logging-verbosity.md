@@ -2,7 +2,7 @@
 
 **Components**: `agimus_spacelab.logging.setup.configure_logging`,
 `agimus_spacelab.tasks.base.ManipulationTask`,
-`script/spacelab/test_screwdriving_sequence.py`
+`script/spacelab/screwdriving_sequence.py`
 **Status**: Implemented 2026-08-14. The `--log-level` CLI flag and the retry-loop throttle
 land with the screwdriving-sequence changes; everything else is in this commit.
 
@@ -48,7 +48,7 @@ and passed through as `console_level`. The log file under
 
 ## `--log-level` flag
 
-`script/spacelab/test_screwdriving_sequence.py` exposes it on the CLI:
+`script/spacelab/screwdriving_sequence.py` exposes it on the CLI:
 
 ```
 --log-level {DEBUG,INFO,WARNING,ERROR}   Console log verbosity (default: INFO).
@@ -80,7 +80,7 @@ Two related tightenings in `planning/constraints.py` and `planning/graph.py`:
 ## Retry-loop log throttling
 
 `run_block_nonstop`'s resume loop was the least-throttled retry path in
-`test_screwdriving_sequence.py` — it logged every single attempt, and it ran to attempt
+`screwdriving_sequence.py` — it logged every single attempt, and it ran to attempt
 #1878 for RS5's `CON0` and #1927 for RS6's WB grasp before the FG-grasp split. It now uses
 the same `should_log = attempt == 1 or attempt % 25 == 0` throttle as
 `move_arm_to_target_nonstop`, and passes `verbose=should_log` down into

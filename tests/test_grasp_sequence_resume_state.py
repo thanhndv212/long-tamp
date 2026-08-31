@@ -4,7 +4,7 @@ Unit tests for GraspSequencePlanner._restore_grasp_tracker_for_resume().
 Regression cover for the resume path dropping grasps that were established
 by an EARLIER plan_sequence() call on the same planner.
 
-test_screwdriving_sequence.py drives its run as a series of separate
+screwdriving_sequence.py drives its run as a series of separate
 plan_sequence() blocks against one planner: bootstrap grabs both tools, then
 each RS part is its own block. resume_sequence() rebuilt the tracker from the
 all-free state and replayed only self.phase_results -- which plan_sequence()

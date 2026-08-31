@@ -2,7 +2,7 @@
 """
 Incremental capture of planned paths for later replay.
 
-A long sequence run (see ``script/spacelab/test_screwdriving_sequence.py``)
+A long sequence run (see ``script/spacelab/screwdriving_sequence.py``)
 produces a valid multi-hour assembly and then throws the motion away: the
 grasp blocks' paths live in ``GraspSequencePlanner.phase_results``, which
 ``plan_sequence()`` resets on entry, and the joint-space arm moves between

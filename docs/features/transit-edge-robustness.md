@@ -1,6 +1,6 @@
 # Arm-transit robustness: spline-optimizer fallback and phase-index sync
 
-**Script**: `script/spacelab/test_screwdriving_sequence.py` —
+**Script**: `script/spacelab/screwdriving_sequence.py` —
 `ScrewdrivingSequenceTask._attempt_move_to_target()`, the single attempt behind
 `move_arm_to_target_nonstop()` and `_search_via_point()`
 **Status**: Implemented 2026-08-14

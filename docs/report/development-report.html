@@ -853,7 +853,7 @@ flowchart TD
         <p><code class="inline">RunLogger</code> is on by default for every <code class="inline">ManipulationTask</code>. <code class="inline">resume_sequence()</code> is the cheap, same-session recovery path — it restarts the failed phase from where the call <em>began</em>, never from wherever the failed attempt physically stopped, because a search must never resume mid-motion. <code class="inline">PathRecorder</code> is the durable one: it samples every planned/executed path to disk as it happens (<code class="inline">manifest.json</code>, atomically rewritten after each segment), so <code class="inline">script/spacelab/replay_captured_paths.py</code> can replay or continuity-check a run in a fresh process with no HPP session at all. The screwdriving mission's <code class="inline">--checkpoint-dir</code>/<code class="inline">--resume</code> flags sit on top of this: a multi-hour, ~30-phase run interrupted by a crash, a container restart, or Ctrl+C resumes from the last completed phase instead of replanning from the start.</p>
         <p>The most recent commits in the repository (2026-08-16/17) are entirely about making that resume <em>correct</em>, not just present: a phase that failed mid-attempt now restarts from where the phase began; a phase attempt's partial paths are dropped if it never completed, so a resume can't silently splice a broken segment into the concatenated result; and a block that keeps failing to make progress under resume now replans itself from its entry rather than continuing to retry forward on a guarantee resume can no longer improve.</p>
         <div class="metric-row"><span class="metric">crash = replan from scratch</span><span class="arrow">→</span><span class="metric">crash = resume from last checkpoint</span></div>
-        <p class="src">Source: <code>README.md</code> "Run Logging"; <code>docs/usage/standalone-usage.md</code> §§8–10; <code>script/spacelab/test_screwdriving_sequence.py</code> CLI; recent commits <code>e1844c9</code>, <code>1e48314</code>, <code>794d988</code>, <code>f8d7651</code>, <code>7cfde13</code>.</p>
+        <p class="src">Source: <code>README.md</code> "Run Logging"; <code>docs/usage/standalone-usage.md</code> §§8–10; <code>script/spacelab/screwdriving_sequence.py</code> CLI; recent commits <code>e1844c9</code>, <code>1e48314</code>, <code>794d988</code>, <code>f8d7651</code>, <code>7cfde13</code>.</p>
       </div>
 
       <!-- D10 -->
@@ -1061,10 +1061,10 @@ cfg = get_replay_config("/tmp/agimus_spacelab/my_pick_.../run_....jsonl")  <span
 
         <div class="step">
           <h4>For long missions: checkpoint and resume</h4>
-          <p>The production reference for this is <code class="inline">test_screwdriving_sequence.py</code>'s CLI — a ~30-phase mission that needs to survive a crash mid-run.</p>
-          <pre class="code">python script/spacelab/test_screwdriving_sequence.py --checkpoint-dir auto
+          <p>The production reference for this is <code class="inline">screwdriving_sequence.py</code>'s CLI — a ~30-phase mission that needs to survive a crash mid-run.</p>
+          <pre class="code">python script/spacelab/screwdriving_sequence.py --checkpoint-dir auto
 <span class="c"># ... interrupted or crashed ...</span>
-python script/spacelab/test_screwdriving_sequence.py --checkpoint-dir auto --resume</pre>
+python script/spacelab/screwdriving_sequence.py --checkpoint-dir auto --resume</pre>
           <p><code class="inline">--checkpoint-dir auto</code> creates a gitignored, timestamped directory; <code class="inline">--resume</code> picks up the most recent one and continues from the last completed phase, not the start.</p>
         </div>
 
@@ -1086,7 +1086,7 @@ python script/spacelab/test_screwdriving_sequence.py --checkpoint-dir auto --res
       <h3 id="guide-ops"><span class="sub-no">06.4</span>Command reference</h3>
       <div class="tablewrap">
         <table>
-          <caption>script/spacelab/test_screwdriving_sequence.py — the most heavily instrumented mission script, useful as a reference for flags worth copying into your own</caption>
+          <caption>script/spacelab/screwdriving_sequence.py — the most heavily instrumented mission script, useful as a reference for flags worth copying into your own</caption>
           <thead><tr><th>Flag</th><th>Effect</th></tr></thead>
           <tbody>
             <tr><td><code class="inline">--backend {pyhpp,corba}</code></td><td>Planning backend (default <code class="inline">pyhpp</code>).</td></tr>

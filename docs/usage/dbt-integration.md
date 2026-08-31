@@ -215,7 +215,7 @@ This matters because several `agimus_spacelab` features described in
 | In-memory resume (`resume_sequence()`) | Yes — `~/resume_sequence` and `~/non_stop_plan_sequence` services, operating on the planner node's last in-memory `GraspSequencePlanner` (process-lifetime only, not persisted) |
 | Phase graph / `set_phase_indices()` invariant | No — purely internal to the library; the ROS layer only ever calls `plan_sequence()`, which enforces it internally |
 | Phase-target lookahead (`phase_q_hints`) | No — internal to `GraspSequencePlanner`; not a service field |
-| Screwdriving sequence pattern | No — only exists as the standalone script `script/spacelab/test_screwdriving_sequence.py`. The assembly mission YAML has latent 2-robot-mode fields for a screw-driver tool hand-off, but they're empty/unused by default — not currently exercised end-to-end via DBT |
+| Screwdriving sequence pattern | No — only exists as the standalone script `script/spacelab/screwdriving_sequence.py`. The assembly mission YAML has latent 2-robot-mode fields for a screw-driver tool hand-off, but they're empty/unused by default — not currently exercised end-to-end via DBT |
 | `PathRecorder` / manifest capture / replay | No — driven purely by the `AGIMUS_CHECKPOINT_DIR` env var and direct Python API calls; zero references anywhere under `ros2_ws_agimusxads/src` |
 | `RunLogger` structured JSONL | No — internal to library calls made by the planner node's own process; not surfaced to ROS callers |
 

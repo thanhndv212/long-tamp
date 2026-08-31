@@ -71,5 +71,5 @@ CATKIN_IGNORE
 COLCON_IGNORE
 
 # Run artifacts: step/phase checkpoints and captured paths
-# (script/spacelab/test_screwdriving_sequence.py --checkpoint-dir defaults here)
+# (script/spacelab/screwdriving_sequence.py --checkpoint-dir defaults here)
 checkpoints/

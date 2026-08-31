@@ -280,7 +280,7 @@ class TestConfigLoader:
         """config/ sits beside the script, i.e. in the script's OWN directory.
 
         This mirrors the real layout every task script relies on --
-        script/spacelab/test_screwdriving_sequence.py loads
+        script/spacelab/screwdriving_sequence.py loads
         script/spacelab/config/ -- so the config dir is the script's parent
         plus "config", not its grandparent.
         """

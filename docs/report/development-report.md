@@ -419,7 +419,7 @@ continuing to retry forward on a guarantee resume can no longer improve.
 
 **crash = replan from scratch → crash = resume from last checkpoint**
 
-*Source: `README.md` "Run Logging"; `docs/usage/standalone-usage.md` §§8–10; `script/spacelab/test_screwdriving_sequence.py` CLI; recent commits `e1844c9`, `1e48314`, `794d988`, `f8d7651`, `7cfde13`.*
+*Source: `README.md` "Run Logging"; `docs/usage/standalone-usage.md` §§8–10; `script/spacelab/screwdriving_sequence.py` CLI; recent commits `e1844c9`, `1e48314`, `794d988`, `f8d7651`, `7cfde13`.*
 
 ### 04.10 — Extract-verify-commit: refactoring the production planner without behavior regression
 *axis: process*
@@ -658,13 +658,13 @@ cfg = get_replay_config("/tmp/agimus_spacelab/my_pick_.../run_....jsonl")  # rep
 
 **Step 8 — For long missions: checkpoint and resume**
 
-The production reference for this is `test_screwdriving_sequence.py`'s CLI — a ~30-phase
+The production reference for this is `screwdriving_sequence.py`'s CLI — a ~30-phase
 mission that needs to survive a crash mid-run.
 
 ```bash
-python script/spacelab/test_screwdriving_sequence.py --checkpoint-dir auto
+python script/spacelab/screwdriving_sequence.py --checkpoint-dir auto
 # ... interrupted or crashed ...
-python script/spacelab/test_screwdriving_sequence.py --checkpoint-dir auto --resume
+python script/spacelab/screwdriving_sequence.py --checkpoint-dir auto --resume
 ```
 
 `--checkpoint-dir auto` creates a gitignored, timestamped directory; `--resume` picks up the
@@ -693,7 +693,7 @@ python -m pytest tests/ -q
 
 ### 06.4 — Command reference
 
-*`script/spacelab/test_screwdriving_sequence.py` — the most heavily instrumented mission
+*`script/spacelab/screwdriving_sequence.py` — the most heavily instrumented mission
 script, useful as a reference for flags worth copying into your own*
 
 | Flag | Effect |

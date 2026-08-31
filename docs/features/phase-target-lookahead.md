@@ -3,7 +3,7 @@
 **Package**: agimus_spacelab
 **Component**: `agimus_spacelab.tasks.grasp_sequence.GraspSequencePlanner`
 **Status**: Implemented 2026-08-14. The planner-side API and its tests are in this commit;
-the caller wiring in `script/spacelab/test_screwdriving_sequence.py` (see below) lands with
+the caller wiring in `script/spacelab/screwdriving_sequence.py` (see below) lands with
 the screwdriving-sequence changes.
 **Motivating failure**: RS6's `CON0` grasp failing ~2300+ consecutive target-generation
 attempts, and RS5's failing 878/878 draws per attempt, in the SpaceLab screwdriving
@@ -149,7 +149,7 @@ grasps as already held and plan a structurally different, unsatisfiable sequence
 
 ---
 
-## Caller wiring (`script/spacelab/test_screwdriving_sequence.py`)
+## Caller wiring (`script/spacelab/screwdriving_sequence.py`)
 
 - `LOOKAHEAD_PHASE_PAIR = (0, 1)` — 0-based within an RS part's A-REST block: WB grasp
   protects the following `CON0` grasp. One pair covers every RS index; the block shape is

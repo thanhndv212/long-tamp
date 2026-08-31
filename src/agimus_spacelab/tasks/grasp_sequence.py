@@ -3548,7 +3548,7 @@ class GraspSequencePlanner:
         # describes the current call -- so without this snapshot every grasp
         # from a previous call is silently lost on the first resume.
         #
-        # That is not hypothetical: in test_screwdriving_sequence.py, which
+        # That is not hypothetical: in screwdriving_sequence.py, which
         # drives the run as a series of separate plan_sequence() blocks, the
         # two tool grasps (g_ur10_tool/h_FG_tool and g_vispa_tool/h_SD_tool)
         # are established during bootstrap and every later block resumed into
@@ -3720,7 +3720,7 @@ class GraspSequencePlanner:
         all-free state instead (the original behaviour) silently drops every
         grasp established by an earlier ``plan_sequence()`` call on the same
         planner, which is exactly how a multi-block driver like
-        test_screwdriving_sequence.py lost its two bootstrap tool grasps on
+        screwdriving_sequence.py lost its two bootstrap tool grasps on
         the first resume of any later block.
         """
         grippers = self.grasp_tracker.grippers
@@ -3805,7 +3805,7 @@ class GraspSequencePlanner:
                 hammering the lookahead exists to prevent -- re-run
                 ``find_feasible_phase_target()`` and re-plan the block from
                 its start instead (``run_block_nonstop()`` in
-                test_screwdriving_sequence.py does exactly this).
+                screwdriving_sequence.py does exactly this).
 
         Returns:
             Same as plan_sequence(). On success, also emits a ``"run_end"``

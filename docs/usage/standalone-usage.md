@@ -199,7 +199,7 @@ This mechanism only survives within one `GraspSequencePlanner` instance / one pr
 
 ### 8b. Cross-process checkpoints (diagnostic re-runs)
 
-Long scripts (e.g. `test_screwdriving_sequence.py`) dump `(q_current, held_grasps)` to
+Long scripts (e.g. `screwdriving_sequence.py`) dump `(q_current, held_grasps)` to
 `$AGIMUS_CHECKPOINT_DIR/phase_{NN:02d}.json`. `script/spacelab/repro_phase_range.py` loads one
 and calls `plan_sequence()` directly on a phase sub-range — turns a 20+ minute re-run into
 seconds when debugging one failing phase:
@@ -278,7 +278,7 @@ should never need backend-specific branches. `create_planner(backend=...)` /
 | `script/spacelab/task_grasp_FG_yaml.py` | one grasp, multi-arm scene, YAML config |
 | `script/spacelab/interactive_planning.py -i` | menu-driven exploration: enumerate feasible goals from `VALID_PAIRS`, solve interactively |
 | `script/spacelab/test_full_sequence.py` | full 13-phase assembly, non-stop auto-resume-on-failure mode |
-| `script/spacelab/test_screwdriving_sequence.py` | everything together: multi-phase sequence + lookahead hints + path capture + end-of-run replay menu (2300+ lines — the flagship reference) |
+| `script/spacelab/screwdriving_sequence.py` | everything together: multi-phase sequence + lookahead hints + path capture + end-of-run replay menu (2300+ lines — the flagship reference) |
 | `script/spacelab/repro_phase_range.py` | fast checkpoint-based re-run of one phase range |
 | `script/spacelab/replay_captured_paths.py` | CLI replay of a `PathRecorder` manifest |
 | `script/spacelab/benchmark_optimizer_phases.py` | compare path-quality across optimizer settings |
@@ -286,7 +286,7 @@ should never need backend-specific branches. `create_planner(backend=...)` /
 ## 13. The screwdriving pattern (SpaceLab-specific, not a framework feature)
 
 Nothing in `src/agimus_spacelab/` knows about "screws" or "holes" — this is entirely a
-**script-level pattern** in `test_screwdriving_sequence.py`, riding on `GraspSequencePlanner`
+**script-level pattern** in `screwdriving_sequence.py`, riding on `GraspSequencePlanner`
 + lookahead + `PathRecorder`. Vocabulary if you're reading that script:
 - **Interfaces**: adjacent RS-part pairs screwed together once both are placed
   (RS1–RS6, RS6–RS5, RS2–RS1, RS2–RS3, RS3–RS4).

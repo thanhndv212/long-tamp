@@ -83,7 +83,7 @@ class TaskPlanningSession:
 
         ``ScrewdrivingPlanningSession`` upholds this via
         ``run_block_nonstop``/``move_arm_to_target_nonstop`` in
-        ``test_screwdriving_sequence.py``: their return value (not a
+        ``screwdriving_sequence.py``: their return value (not a
         side-effecting mutation) is the only thing that updates
         ``self.q_current``, so a call that raises or is retried by
         ``RetryUntilSuccessful`` never leaves the session in a partially
