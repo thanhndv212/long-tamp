@@ -9,12 +9,12 @@ guide to building a mission with it.
 > usage reference is [`standalone-usage.md`](../usage/standalone-usage.md) (plus
 > [`dbt-integration.md`](../usage/dbt-integration.md) for the ROS 2 / Dynamic-Behavior-Tree consumer
 > built on top of this same library) — when the two disagree, trust that doc, not this one.
-> It's also explicit about two files elsewhere in the repo it supersedes:
-> `script/spacelab/README.md` (still describes CORBA as the default backend and references
-> files that no longer exist) and `src/agimus_spacelab/__init__.py`'s docstring (mentions
-> `TaskOrchestrator`/`TaskBuilder`/`PlanningBridge`, none of which exist). This report cites
-> `script/spacelab/README.md` once, in §04.8, and only for a historical lines-of-code
-> comparison — not for anything the newer doc contradicts.
+> It's also explicit about a stale reference elsewhere in the repo:
+> `src/agimus_spacelab/__init__.py`'s docstring mentions
+> `TaskOrchestrator`/`TaskBuilder`/`PlanningBridge`, none of which exist.
+> (`script/spacelab/README.md` was rewritten and is now current, scoped to the SpaceLab setup
+> specifically.) This report cites `script/spacelab/README.md` once, in §04.8, and only for a
+> historical lines-of-code comparison predating that rewrite.
 
 **At a glance**
 

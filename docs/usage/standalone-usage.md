@@ -10,10 +10,10 @@ contradict this doc, trust this doc and the root [`README.md`](../../README.md) 
 [`ARCHITECTURE.md`](../../ARCHITECTURE.md).
 
 > **Stale references to ignore.** `src/agimus_spacelab/__init__.py`'s docstring mentions
-> `TaskOrchestrator`, `TaskBuilder`, `PlanningBridge` — these classes don't exist.
-> `script/spacelab/README.md` still describes CORBA as the default backend and lists files
-> that no longer exist. Use *this* doc, the root README, and `script/templates/README.md`
-> instead.
+> `TaskOrchestrator`, `TaskBuilder`, `PlanningBridge` — these classes don't exist. Use *this*
+> doc, the root README, and `script/templates/README.md` instead.
+> (`script/spacelab/README.md` is current and scoped to the SpaceLab setup specifically — it
+> defers to this doc and the root README for the generic package.)
 
 ---
 

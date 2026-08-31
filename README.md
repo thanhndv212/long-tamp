@@ -301,9 +301,7 @@ Python `logging` hierarchy — see [`docs/usage/standalone-usage.md`](docs/usage
 - **Development report**: [`docs/report/development-report.md`](docs/report/development-report.md) — *why* the framework is built this way: architecture decisions vs. bare HPP, measured before/after numbers, project timeline, and a bugs-found appendix. A point-in-time report, not a living reference.
 - **Design rationale for specific mechanisms**: [`docs/features/`](docs/features/); **upstream HPP defects worked around here**: [`docs/bugs/`](docs/bugs/).
 - **API Reference**: See docstrings in source files.
-
-> `script/spacelab/README.md` predates the current API (still describes CORBA as the default
-> backend and references files that no longer exist) — use the docs above instead.
+- **SpaceLab setup specifics**: [`script/spacelab/README.md`](script/spacelab/README.md) — the SpaceLab scene, its scripts, and the screwdriving TaskPlan + BehaviorTree.CPP mission; defers to the docs above for the generic package.
 
 ## License
 
