@@ -36,14 +36,19 @@ Embedded CPython bridge (PythonSession)
 Python TaskPlanningSession / HostSession (session.py, host.py)
     │
     ▼
-SpaceLab screwdriving adapter (script/spacelab/screwdriving_plan.py, screwdriving_session.py) ──► agimus_spacelab / PyHPP
+Your mission-specific adapter (own module, own factory in host.py) ──► agimus_spacelab / PyHPP
 ```
 
-The same IR, validator, compiler, C++ nodes, and bridge run two adapters: a deterministic
-non-SpaceLab `create_fake_session` (used for CTest conformance/fault-path coverage, no PyHPP)
-and the real `create_screwdriving_session`. All SpaceLab-specific geometry, phase lists,
-frozen-arm policy, and lookahead stay isolated in the example adapter — the generic layer
-knows nothing about screws, robots, or grippers.
+The generic layer ships one adapter, `create_fake_session` (used for CTest
+conformance/fault-path coverage, no PyHPP) — a template for the shape a real adapter takes.
+A real mission adapter (its own capability registry, `TaskPlan` document, session
+subclass) is meant to live in your own module and register its own factory in `host.py`
+(see §9); the generic layer itself knows nothing about any specific robot, mission, or
+gripper. This repo previously shipped a SpaceLab screwdriving adapter under
+`script/spacelab/` as the reference example; it has been removed as SpaceLab-mission-
+specific content (not part of the open-source release) — see
+[`../plans/behaviortree-screwdriving-taskplan.md`](../plans/behaviortree-screwdriving-taskplan.md)
+for the historical design record.
 
 ## 2. Component map
 
@@ -53,12 +58,9 @@ knows nothing about screws, robots, or grippers.
 | `src/agimus_spacelab/tasks/task_planning/capabilities.py` | `CapabilityDescriptor` (policy: required params, `max_attempts`, `max_timeout`, `restartable`) and `CapabilityRegistry` (binds descriptors to trusted callables; `freeze()`s before execution) |
 | `src/agimus_spacelab/tasks/task_planning/compiler.py` | `compile_behavior_tree()` — deterministic, allowlisted-element IR→XML compiler; output carries its own `artifact_fingerprint` |
 | `src/agimus_spacelab/tasks/task_planning/session.py` | `TaskPlanningSession` — dispatches transactions/conditions through the frozen registry; freezes the registry on construction |
-| `src/agimus_spacelab/tasks/task_planning/host.py` | Allowlisted session factories the C++ host is permitted to call: `create_fake_session`, `create_screwdriving_session` |
-| `script/spacelab/screwdriving_plan.py` | The mission IR: transactions, capability descriptors (`create_screwdriving_registry`, `build_screwdriving_plan`) — kept out of `src/` so the generic layer stays SpaceLab-agnostic |
-| `script/spacelab/screwdriving_session.py` | The SpaceLab adapter: `ScrewdrivingPlanningSession`, checkpointing, `PathRecorder` capture — loaded dynamically by `host.py` |
+| `src/agimus_spacelab/tasks/task_planning/host.py` | Allowlisted session factories the C++ host is permitted to call: `create_fake_session`, plus one per mission you add (§9) |
 | `examples/behaviortree/` | C++ host: `main.cpp` (CLI + allowlist), `python_session.{hpp,cpp}` (CPython bridge), `task_nodes.{hpp,cpp}` (generic BT node types) |
-| `script/spacelab/run_taskplan_bt_supervised.py` | Process supervisor: attempt/total timeouts, process-group kill, bounded restart backoff |
-| `script/spacelab/replay_captured_paths.py` | Validates a `PathRecorder` capture (continuity, seam checks) without re-planning |
+| `src/agimus_spacelab/planning/path_recorder.py`, `path_io.py` | `PathRecorder` capture and `replay`/validation helpers a mission-specific session can reuse for checkpointing |
 
 ## 3. Task Plan IR contract
 
@@ -104,8 +106,9 @@ they're looking at the exact plan+compiler combination that produced a given run
 ## 5. C++ host and the CPython bridge
 
 `examples/behaviortree/src/main.cpp` takes `--factory <name>` (checked against a hardcoded
-allowlist: `create_fake_session`, `create_screwdriving_session` — an unlisted name is a
-non-retryable exit code `2`, never dispatched to Python) and `--options <json>`, constructs a
+allowlist — currently just `create_fake_session` until you add your own mission factory,
+§9; an unlisted name is a non-retryable exit code `2`, never dispatched to Python) and
+`--options <json>`, constructs a
 `PythonSession`, registers the five generic node types
 (`RegisterTaskPlanningNodes`, `task_nodes.cpp`), builds the tree from
 `session->call("get_behavior_tree_xml")`, and ticks it to completion with a `BT::TreeObserver`
@@ -146,41 +149,23 @@ checkout), and always builds it with its own examples/tools/Groot/SQLite logging
 Bounded conformance tests (no real PyHPP; safe anywhere, including CI):
 
 ```bash
-ctest --test-dir build-bt --output-on-failure \
-  -R 'taskplan_bt_(fake|screwdriving_mock)'
+ctest --test-dir build-bt --output-on-failure -R 'taskplan_bt_fake'
 ```
 
-Real PyHPP mission, supervised (resumes from whatever checkpoint already exists in
-`--checkpoint-dir`):
-
-```bash
-python script/spacelab/run_taskplan_bt_supervised.py \
-  --executable "$PWD/build-bt/examples/behaviortree/agimus_taskplan_bt" \
-  --checkpoint-dir /tmp/agimus_bt_full_checkpoint \
-  --capture-dir /tmp/agimus_bt_full_paths \
-  --attempt-timeout 600 \
-  --total-timeout 3600
-```
-
-Validate a capture without re-planning:
-
-```bash
-python script/spacelab/replay_captured_paths.py /tmp/agimus_bt_full_paths --check
-```
-
-Run the host directly (bypasses the supervisor — useful for a single attempt or debugging a
-specific `--options` payload):
+Run the host directly against your own mission factory (bypasses any supervisor you write —
+useful for a single attempt or debugging a specific `--options` payload):
 
 ```bash
 ./build-bt/examples/behaviortree/agimus_taskplan_bt \
-  --factory create_screwdriving_session \
-  --options '{"backend":"pyhpp","no_viz":true,"checkpoint_dir":"/tmp/agimus_bt_full_checkpoint"}'
+  --factory <your_factory_name> \
+  --options '{"backend":"pyhpp","no_viz":true}'
 ```
 
-`create_screwdriving_session` options: `backend` (default `pyhpp`), `no_viz` (default
-`true`), `log_level` (default `INFO`), `mock_motion` (skip real PyHPP planning — what the
-`taskplan_bt_screwdriving_mock` CTest uses), `checkpoint_dir`, `capture_dir`,
-`migrate_legacy_checkpoint`.
+For a real, long-running PyHPP mission you'll typically also want a process supervisor
+(attempt/total timeouts, checkpoint-resume, bounded restart backoff on crash/timeout) and a
+`PathRecorder`-capture validator, built on the checkpoint/capture primitives in §8 — this
+repo's own SpaceLab-specific versions of both (`run_taskplan_bt_supervised.py`,
+`replay_captured_paths.py`) are not part of the open-source release.
 
 ## 8. Checkpointing and path capture
 
@@ -200,8 +185,7 @@ without touching HPP at all.
 2. `registry.register(descriptor, implementation)` into a fresh `CapabilityRegistry` — do
    this before constructing any `TaskPlanningSession`/`HostSession`; the registry freezes
    (`RuntimeError` on further `register`/`bind`) the moment a session is constructed.
-3. Author the mission as a `TaskPlan` document (see
-   `script/spacelab/screwdriving_plan.py` for the reference SpaceLab example) and validate it
+3. Author the mission as a `TaskPlan` document (see §3 for the schema) and validate it
    with `TaskPlan.from_dict(document, registry)`.
 4. Expose it through a new factory function in `host.py`, then add that factory's name to the
    `allowed_factories` set in `examples/behaviortree/src/main.cpp` — a factory not on both

@@ -84,30 +84,3 @@ def create_fake_session(options_json: str = "{}") -> HostSession:
     elif fault == "missing_method":
         session.get_report = None  # type: ignore[method-assign]
     return session
-
-
-def create_screwdriving_session(options_json: str = "{}") -> HostSession:
-    """Create the allowlisted SpaceLab screwdriving planning session.
-
-    The implementation lives outside this generic package, under
-    ``script/spacelab/``, and is loaded dynamically so this module carries
-    no SpaceLab-specific imports (mirrors the legacy-script loading in
-    ``screwdriving_session._load_legacy_module``).
-    """
-
-    import importlib.util
-    import os
-    from pathlib import Path
-
-    root = Path(os.environ.get("AGIMUS_SPACELAB_SOURCE_DIR", Path.cwd()))
-    script = root / "script" / "spacelab" / "screwdriving_session.py"
-    if not script.exists():
-        raise RuntimeError(f"SpaceLab screwdriving runtime not found: {script}")
-    spec = importlib.util.spec_from_file_location(
-        "agimus_screwdriving_runtime", script
-    )
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Cannot load SpaceLab screwdriving runtime: {script}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.create_session(options_json)

@@ -40,10 +40,6 @@ target_compile_features(agimus_taskplan_bt PRIVATE cxx_std_17)
 
 if(BUILD_TESTING)
   add_test(NAME taskplan_bt_fake COMMAND agimus_taskplan_bt --factory create_fake_session)
-  add_test(
-    NAME taskplan_bt_screwdriving_mock
-    COMMAND agimus_taskplan_bt --factory create_screwdriving_session
-            --options {"mock_motion":true})
 
   # Failure-path coverage: each case exercises a distinct error boundary in
   # the CPython bridge / BT node layer (see host.py's create_fake_session
@@ -74,7 +70,6 @@ if(BUILD_TESTING)
 
   set_tests_properties(
     taskplan_bt_fake
-    taskplan_bt_screwdriving_mock
     taskplan_bt_fault_capability_raises
     taskplan_bt_fault_malformed_json
     taskplan_bt_fault_missing_method
