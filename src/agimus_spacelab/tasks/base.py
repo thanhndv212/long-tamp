@@ -45,10 +45,10 @@ class ManipulationTask(ABC):
 
         Args:
             task_name: Descriptive name for the task
-            backend: "corba" or "pyhpp" - which backend to use
+            backend: "pyhpp" - which backend to use
             viewer_type: Viewer to use — "viser", "gepetto", or "auto" (default).
-                ``"auto"`` prefers viser for PyHPP and gepetto for CORBA,
-                falling back gracefully when unavailable.
+                ``"auto"`` prefers viser, falling back gracefully when
+                unavailable.
             log_dir: Directory for run logs. "auto" (default) creates
                 /tmp/agimus_spacelab/<task_slug>_<YYYYMMDD_HHMMSS>/;
                 None disables logging entirely.
@@ -144,8 +144,7 @@ class ManipulationTask(ABC):
         - Placement: "place_{object}"
         - Complement: "{base}/complement"
 
-        For CORBA, they're stored in the problem solver.
-        For PyHPP, they're stored in self.pyhpp_constraints and pushed to
+        They're stored in self.pyhpp_constraints and pushed to
         graph_builder via set_pyhpp_constraints().
         """
         robot = self.robot
@@ -244,8 +243,7 @@ class ManipulationTask(ABC):
         self.graph_builder.set_pyhpp_constraints(self.pyhpp_constraints)
 
         if self.use_factory:
-            # Pass pre-registered constraints to factory (PyHPP uses them
-            # directly; CORBA already has them in the problem solver)
+            # Pass pre-registered constraints to factory
             return self.graph_builder.create_factory_graph(
                 self.task_config,
                 graph_constraints=graph_constraints,
@@ -788,9 +786,9 @@ class ManipulationTask(ABC):
     ) -> Tuple[List[int], bool]:
         """Solve by iterating seq pairwise via the manipulation-planner.
 
-        Returns (path_ids, success): path_ids is the per-segment CORBA
-        path id list (always empty for backends without numberPaths, e.g.
-        pyhpp), success is the last-attempted segment's solve() result.
+        Returns (path_ids, success): path_ids is the per-segment path id
+        list (empty when the backend doesn't expose numberPaths), success
+        is the last-attempted segment's solve() result.
         Callers need both to decide whether/what to play back -- see
         docs/plans/refactor-manipulation-task-run.md Step 6a for why a
         single `success` bool isn't sufficient on its own (the len(seq)==2
@@ -813,7 +811,7 @@ class ManipulationTask(ABC):
             else:
                 logger.warning("Planning failed")
                 break
-            # Record the latest path id when available (CORBA).
+            # Record the latest path id when available.
             if self.ps is not None:
                 num_paths = getattr(self.ps, "numberPaths", None)
                 if callable(num_paths):
@@ -822,7 +820,7 @@ class ManipulationTask(ABC):
                     except Exception:
                         pass
 
-        # Concatenate path segments when available (CORBA).
+        # Concatenate path segments when available.
         if len(path_ids) > 1 and self.ps is not None:
             concat = getattr(self.ps, "concatenatePath", None)
             if callable(concat):

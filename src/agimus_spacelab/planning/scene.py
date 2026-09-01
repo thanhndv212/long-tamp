@@ -15,12 +15,6 @@ logger = get_logger("planning.scene")
 
 # Import unified backend interfaces
 try:
-    from agimus_spacelab.backends import HAS_CORBA, CorbaBackend
-except ImportError:
-    HAS_CORBA = False
-    CorbaBackend = None
-
-try:
     from agimus_spacelab.backends import HAS_PYHPP, PyHPPBackend
 except ImportError:
     HAS_PYHPP = False
@@ -39,7 +33,7 @@ class SceneBuilder:
         joint_bounds=None,
         FILE_PATHS: Optional[Dict[str, Any]] = None,
         planner: Optional[Any] = None,
-        backend: str = "corba",
+        backend: str = "pyhpp",
         viewer_type: str = "auto",
     ):
         """
@@ -47,7 +41,7 @@ class SceneBuilder:
 
         Args:
             planner: Existing planner instance, or None to create new one
-            backend: "corba" or "pyhpp" - which backend to use
+            backend: "pyhpp" - which backend to use
             viewer_type: Viewer to use — "viser", "gepetto", or "auto" (default).
         """
         self.backend = backend.lower()
@@ -67,13 +61,7 @@ class SceneBuilder:
             )
         self.joint_bounds = joint_bounds
 
-        if self.backend == "corba":
-            if not HAS_CORBA:
-                raise ImportError("CORBA backend not available")
-            self.planner = planner or create_planner(
-                backend=self.backend, viewer_type=viewer_type
-            )
-        elif self.backend == "pyhpp":
+        if self.backend == "pyhpp":
             if not HAS_PYHPP:
                 # Instantiating the backend raises with the specific missing
                 # symbol / install guidance instead of a blank message.
@@ -87,7 +75,7 @@ class SceneBuilder:
                 backend=self.backend, viewer_type=viewer_type
             )
         else:
-            raise ValueError(f"Unknown backend: {backend}. Use 'corba' or 'pyhpp'")
+            raise ValueError(f"Unknown backend: {backend}. Use 'pyhpp'")
 
     def load_robot(
         self, composite_names: List[str], robot_names: List[str]
@@ -221,72 +209,64 @@ class SceneBuilder:
             remove_distance: Remove from distance checking
         """
         logger.info("Disabling collision: %s <-> %s", obstacle_name, joint_name)
-        if self.backend == "corba":
-            ps = self.planner.get_problem()
-            ps.removeObstacleFromJoint(
-                obstacle_name, joint_name, remove_collision, remove_distance
+        # Remove pairs from the pinocchio GeometryModel directly.
+        # ground_demo and objects are loaded INTO the device geomModel so
+        # addAllCollisionPairs() creates robot-vs-environment pairs; we
+        # remove them here.
+        device = self.planner.device
+        m = device.model()
+        gm = device.geomModel()
+        try:
+            from pinocchio import CollisionPair
+        except ImportError:
+            logger.warning("pinocchio not available; cannot remove collision pairs")
+            return self
+
+        # Find obstacle geometry object indices (exact name or _N suffix)
+        obs_ids = [
+            i
+            for i, go in enumerate(gm.geometryObjects)
+            if go.name == obstacle_name
+            or (
+                go.name.startswith(obstacle_name + "_")
+                and go.name[len(obstacle_name) + 1 :].isdigit()
             )
-        else:
-            # pyhpp: remove pairs from the pinocchio GeometryModel directly.
-            # ground_demo and objects are loaded INTO the device geomModel so
-            # addAllCollisionPairs() creates robot-vs-environment pairs; we
-            # mirror CORBA's removeObstacleFromJoint by removing them here.
-            device = self.planner.device
-            m = device.model()
-            gm = device.geomModel()
-            try:
-                from pinocchio import CollisionPair
-            except ImportError:
-                logger.warning("pinocchio not available; cannot remove collision pairs")
-                return self
+        ]
+        if not obs_ids:
+            logger.warning("No geometry found matching %r", obstacle_name)
 
-            # Find obstacle geometry object indices (exact name or _N suffix)
-            obs_ids = [
-                i
-                for i, go in enumerate(gm.geometryObjects)
-                if go.name == obstacle_name
-                or (
-                    go.name.startswith(obstacle_name + "_")
-                    and go.name[len(obstacle_name) + 1 :].isdigit()
-                )
-            ]
-            if not obs_ids:
-                logger.warning("No geometry found matching %r", obstacle_name)
+        # Resolve joint_name → pinocchio joint index
+        joint_id = None
+        if m.existJointName(joint_name):
+            joint_id = m.getJointId(joint_name)
+        elif m.existFrame(joint_name):
+            fid = m.getFrameId(joint_name)
+            joint_id = int(m.frames[fid].parentJoint)
+        if joint_id is None:
+            logger.warning("%r not found in device model", joint_name)
+            return self
 
-            # Resolve joint_name → pinocchio joint index
-            joint_id = None
-            if m.existJointName(joint_name):
-                joint_id = m.getJointId(joint_name)
-            elif m.existFrame(joint_name):
-                fid = m.getFrameId(joint_name)
-                joint_id = int(m.frames[fid].parentJoint)
-            if joint_id is None:
-                logger.warning("%r not found in device model", joint_name)
-                return self
+        # Find geometry objects directly attached to this joint
+        robot_ids = [
+            i for i, go in enumerate(gm.geometryObjects) if go.parentJoint == joint_id
+        ]
 
-            # Find geometry objects directly attached to this joint
-            robot_ids = [
-                i
-                for i, go in enumerate(gm.geometryObjects)
-                if go.parentJoint == joint_id
-            ]
-
-            # Remove cross-pairs from the geometry model
-            removed = 0
-            for oid in obs_ids:
-                for rid in robot_ids:
-                    if oid == rid:
-                        continue  # CollisionPair requires distinct indices
-                    cp = CollisionPair(oid, rid)
-                    if gm.existCollisionPair(cp):
-                        gm.removeCollisionPair(cp)
-                        removed += 1
-            logger.info(
-                "[pyhpp] removed %d collision pair(s) (%r <-> %r)",
-                removed,
-                obstacle_name,
-                joint_name,
-            )
+        # Remove cross-pairs from the geometry model
+        removed = 0
+        for oid in obs_ids:
+            for rid in robot_ids:
+                if oid == rid:
+                    continue  # CollisionPair requires distinct indices
+                cp = CollisionPair(oid, rid)
+                if gm.existCollisionPair(cp):
+                    gm.removeCollisionPair(cp)
+                    removed += 1
+        logger.info(
+            "removed %d collision pair(s) (%r <-> %r)",
+            removed,
+            obstacle_name,
+            joint_name,
+        )
         return self
 
     def disable_collisions_between_subtrees(
@@ -305,9 +285,6 @@ class SceneBuilder:
         geometries attached to those links, and a simple single-pair exclusion is
         insufficient.
 
-        For CORBA, this expands to repeated calls to
-        `ProblemSolver.removeObstacleFromJoint(obstacle, joint, ...)`.
-
         Args:
             robot_frame_or_joint: A joint name or a frame/link name on the robot.
                 If a frame/link is provided, it is converted to its parent joint.
@@ -320,18 +297,8 @@ class SceneBuilder:
             obstacle_root_joint,
         )
 
-        if self.backend == "pyhpp":
-            return self._disable_collisions_pyhpp(
-                robot_frame_or_joint, obstacle_root_joint, verbose, max_pairs
-            )
-
-        return self._disable_collisions_corba(
-            robot_frame_or_joint,
-            obstacle_root_joint,
-            remove_collision,
-            remove_distance,
-            verbose,
-            max_pairs,
+        return self._disable_collisions_pyhpp(
+            robot_frame_or_joint, obstacle_root_joint, verbose, max_pairs
         )
 
     def _disable_collisions_pyhpp(
@@ -444,99 +411,6 @@ class SceneBuilder:
         )
         return self
 
-    def _disable_collisions_corba(
-        self,
-        robot_frame_or_joint: str,
-        obstacle_root_joint: str,
-        remove_collision: bool,
-        remove_distance: bool,
-        verbose: bool,
-        max_pairs: int,
-    ) -> "SceneBuilder":
-        """CORBA backend: repeated
-        `ProblemSolver.removeObstacleFromJoint(obstacle, joint, ...)` calls
-        over the robot/obstacle subtree joints."""
-        robot = self.planner.get_robot()
-        ps = self.planner.get_problem()
-
-        # Resolve robot joint
-        robot_joint = robot_frame_or_joint
-        try:
-            all_joints = set(robot.getAllJointNames())
-        except Exception:
-            all_joints = set()
-
-        if robot_joint not in all_joints:
-            try:
-                robot_joint = robot.getParentJoint(robot_frame_or_joint)
-            except Exception:
-                # Keep original; better to attempt than to silently ignore.
-                robot_joint = robot_frame_or_joint
-
-        # Robot subtree joints (including fixed/fake-link joints)
-        robot_joints = [robot_joint]
-        try:
-            robot_joints += list(robot.getChildJoints(robot_joint, True))
-        except Exception:
-            pass
-
-        # Obstacle subtree joints
-        obstacle_joints = [obstacle_root_joint]
-        try:
-            obstacle_joints += list(robot.getChildJoints(obstacle_root_joint, True))
-        except Exception:
-            pass
-
-        # Prefer filtering based on current outer-objects lists to avoid relying
-        # on exact naming conventions of inner collision objects (which may be
-        # indexed like `..._0`).
-        obstacle_prefix = obstacle_root_joint.split("/", 1)[0] + "/"
-
-        def _pairs_between_by_prefix() -> List[tuple[str, str]]:
-            pairs: List[tuple[str, str]] = []
-            for rj in robot_joints:
-                try:
-                    outer = robot.getJointOuterObjects(rj)
-                except Exception:
-                    outer = []
-                for obj in outer:
-                    if isinstance(obj, str) and obj.startswith(obstacle_prefix):
-                        pairs.append((rj, obj))
-            return pairs
-
-        before_pairs: List[tuple[str, str]] = _pairs_between_by_prefix()
-        if verbose:
-            logger.debug("Robot joints: %s", robot_joints)
-            logger.debug("Target obstacle prefix: %s", obstacle_prefix)
-            logger.debug(
-                "Found %d existing collision pairs to filter", len(before_pairs)
-            )
-            for rj, obj in before_pairs[:max_pairs]:
-                logger.debug("  - %s <-> %s", rj, obj)
-            if len(before_pairs) > max_pairs:
-                logger.debug("  ... (%d more)", len(before_pairs) - max_pairs)
-
-        removed = 0
-        for rj, obj in before_pairs:
-            try:
-                ps.removeObstacleFromJoint(obj, rj, remove_collision, remove_distance)
-                removed += 1
-            except Exception:
-                continue
-
-        if verbose:
-            logger.debug("removeObstacleFromJoint calls attempted: %d", removed)
-            after_pairs = _pairs_between_by_prefix()
-            logger.debug(
-                "Remaining collision pairs after filtering: %d", len(after_pairs)
-            )
-            for rj, obj in after_pairs[:max_pairs]:
-                logger.debug("  - %s <-> %s", rj, obj)
-            if len(after_pairs) > max_pairs:
-                logger.debug("  ... (%d more)", len(after_pairs) - max_pairs)
-
-        return self
-
     def move_obstacle(
         self, obstacle_name: str, position: List[float], orientation: List[float]
     ) -> "SceneBuilder":
@@ -547,17 +421,13 @@ class SceneBuilder:
             position: [x, y, z] position
             orientation: [qx, qy, qz, qw] quaternion orientation
         """
-        if self.backend == "corba":
-            ps = self.planner.get_problem()
-            ps.moveObstacle(obstacle_name, position + orientation)
-        else:
-            # PYHPP-GAP: pyhpp Problem has no moveObstacle binding.
-            # Obstacle placement must be set before building the problem
-            # via the pinocchio model's placement map.
-            logger.warning(
-                "[PYHPP-GAP] move_obstacle(%r) is not yet implemented for PyHPP.",
-                obstacle_name,
-            )
+        # PYHPP-GAP: pyhpp Problem has no moveObstacle binding.
+        # Obstacle placement must be set before building the problem
+        # via the pinocchio model's placement map.
+        logger.warning(
+            "[PYHPP-GAP] move_obstacle(%r) is not yet implemented for PyHPP.",
+            obstacle_name,
+        )
         return self
 
     def get_instances(self) -> Tuple[Any, Any, Any]:

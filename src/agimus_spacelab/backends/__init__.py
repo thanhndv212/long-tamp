@@ -1,25 +1,17 @@
 """
 Backend implementations for agimus_spacelab manipulation planning.
 
-This module provides unified access to different backend implementations:
-- CORBA: Uses hpp-manipulation-corba for communication with HPP
+This module provides unified access to backend implementations:
 - PyHPP: Uses hpp-python for direct Python bindings
 
 Usage:
-    from agimus_spacelab.backends import CorbaBackend, PyHPPBackend
+    from agimus_spacelab.backends import PyHPPBackend
     from agimus_spacelab.backends import get_available_backends, BackendBase
 """
 
 from .base import BackendBase, ConstraintResult
 
-# Import backend implementations
-HAS_CORBA = False
 HAS_PYHPP = False
-
-try:
-    from .corba import HAS_CORBA, CorbaBackend
-except ImportError:
-    pass
 
 try:
     from .pyhpp import HAS_PYHPP, PyHPPBackend
@@ -31,11 +23,9 @@ def get_available_backends():
     """Get list of available backend names.
 
     Returns:
-        List of available backend names ('corba', 'pyhpp')
+        List of available backend names ('pyhpp',)
     """
     backends = []
-    if HAS_CORBA:
-        backends.append("corba")
     if HAS_PYHPP:
         backends.append("pyhpp")
     return backends
@@ -45,7 +35,7 @@ def get_backend(name: str = "auto"):
     """Get a backend by name.
 
     Args:
-        name: Backend name ('corba', 'pyhpp', or 'auto')
+        name: Backend name ('pyhpp' or 'auto')
               'auto' will return the first available backend
 
     Returns:
@@ -54,26 +44,10 @@ def get_backend(name: str = "auto"):
     Raises:
         ImportError: If requested backend is not available
     """
-    if name == "auto":
-        if HAS_CORBA:
-            return CorbaBackend
-        elif HAS_PYHPP:
-            return PyHPPBackend
-        else:
-            raise ImportError(
-                "No backends available. Install hpp-manipulation-corba "
-                "or hpp-python."
-            )
-    elif name == "corba":
-        if not HAS_CORBA:
-            raise ImportError(
-                "CORBA backend not available. " "Please install hpp-manipulation-corba."
-            )
-        return CorbaBackend
-    elif name == "pyhpp":
+    if name in ("auto", "pyhpp"):
         if not HAS_PYHPP:
             raise ImportError(
-                "PyHPP backend not available. " "Please install hpp-python."
+                "PyHPP backend not available. Please install hpp-python."
             )
         return PyHPPBackend
     else:
@@ -82,13 +56,11 @@ def get_backend(name: str = "auto"):
 
 __all__ = [
     # Availability flags
-    "HAS_CORBA",
     "HAS_PYHPP",
     # Base class
     "BackendBase",
     "ConstraintResult",
     # Backend implementations
-    "CorbaBackend",
     "PyHPPBackend",
     # Utility functions
     "get_available_backends",

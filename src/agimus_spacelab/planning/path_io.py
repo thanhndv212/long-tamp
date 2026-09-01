@@ -219,7 +219,7 @@ def get_num_paths(planner: Any) -> int:
     if isinstance(stored, list):
         return len(stored)
 
-    # CORBA backend exposes ProblemSolver via planner.ps
+    # Some planners expose a problem solver with numberPaths() via planner.ps
     ps = getattr(planner, "ps", None)
     if ps is not None and hasattr(ps, "numberPaths"):
         try:

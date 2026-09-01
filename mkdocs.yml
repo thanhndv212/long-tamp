@@ -73,10 +73,11 @@ nav:
       - pyhpp factory locked-joint bugs: bugs/pyhpp-factory-locked-joint-bugs.md
   - HPP Python interface:
       - pyhpp API documentation: hpp_python_interface/pyhpp_api_documentation.md
-      - CORBA API documentation: hpp_python_interface/corba_api_documentation.md
-      - CORBA vs pyhpp comparison: hpp_python_interface/comparison_corba_vs_pyhpp.md
       - Path planners comparison: hpp_python_interface/path-planners-comparison.md
       - hpp-manipulation complete motion plan: hpp_python_interface/hpp_manipulation_complete_motion_plan.md
+  - Legacy (CORBA backend, removed):
+      - CORBA API documentation: legacy/hpp_python_interface/corba_api_documentation.md
+      - CORBA vs pyhpp comparison: legacy/hpp_python_interface/comparison_corba_vs_pyhpp.md
   - Plans:
       - Refactor codebase: plans/refactor-codebase.md
       - Model/asset source diff: plans/model-asset-source-diff.md

@@ -18,9 +18,8 @@ def test_get_available_backends():
 def test_check_backend():
     """Test backend availability checking."""
     # Should not raise for valid backend names
-    check_backend("corba")
     check_backend("pyhpp")
-    
+
     # Should raise for invalid backend
     with pytest.raises(ValueError):
         check_backend("invalid")

@@ -19,7 +19,7 @@ spacelab_bt_ros  (C++ DBT executive)
                                                               │  in-process Python call
                                                               ▼
                                                           agimus_spacelab  (this repo)
-                                                              │  PyHPP (in-process) | CORBA (hppcorbaserver :13331)
+                                                              │  PyHPP (in-process)
                                                               ▼
                                                           spacelab_mock_hardware (Gazebo + ros2_control)
 ```
@@ -81,10 +81,11 @@ timeout_per_edge=...)` — this is exactly the standalone API from
 Result `Path` objects are converted to `JointTrajectory` via
 `trajectory_utils.hpp_path_to_joint_trajectories()`.
 
-**Backend selection** is a single ROS parameter, `backend:=pyhpp|corba`, read once at startup
-and passed straight through to `ManipulationTask`. With `pyhpp` HPP runs **inside the planner
-node's own process**; with `corba` an external `hppcorbaserver` must already be running
-(launch files start it with an extra startup delay).
+**Backend selection** is a single ROS parameter, `backend:=pyhpp`, read once at startup
+and passed straight through to `ManipulationTask`. HPP runs **inside the planner
+node's own process**. (A `corba` option previously existed here; the CORBA backend has
+since been removed from `agimus_spacelab` — any launch file still passing `backend:=corba`
+needs updating.)
 
 **`q_init` assembly**: joint positions from `/joint_states` + object poses from TF, unless
 `use_current_state=False`, in which case HPP's own default `q_init` is used (no live robot
@@ -163,9 +164,9 @@ dependency order with startup delays):
 ```bash
 ros2 launch spacelab_bt_ros spacelab_full_assembly.launch.py backend:=pyhpp
 ```
-Order: Gazebo scene → (CORBA server, only if `backend:=corba`) → planner node (5 s pyhpp / 20 s
-corba delay, waits for Gazebo + `/joint_states`) → `attach_service_node` (+2 s) → DBT mission
-node (+5 s, polls `waitForPlannerReady()`).
+Order: Gazebo scene → planner node (5 s startup delay, waits for Gazebo +
+`/joint_states`) → `attach_service_node` (+2 s) → DBT mission node (+5 s,
+polls `waitForPlannerReady()`).
 
 **Planner + GUI only, no DBT** (manual/interactive use):
 ```bash

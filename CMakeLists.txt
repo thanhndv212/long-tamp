@@ -35,11 +35,9 @@ project(${PROJECT_NAME} ${PROJECT_ARGS})
 findpython()
 
 # Backend / feature options.
-#   PyHPP is the default backend (ON).
-#   CORBA is DEPRECATED and OFF by default; enable explicitly if still needed.
+#   PyHPP is the only backend (ON by default).
 #   TOPPRA is an optional time-parameterization optimizer (OFF by default).
 option(WITH_PYHPP "Build with PyHPP support (default backend)" ON)
-option(WITH_CORBA "Build with CORBA support (DEPRECATED)" OFF)
 option(WITH_TOPPRA "Build with TOPPRA time-parameterization support" OFF)
 option(BUILD_TESTING "Build tests" ON)
 option(BUILD_BEHAVIORTREE_EXAMPLES "Build ROS-free BehaviorTree.CPP examples" OFF)
@@ -48,10 +46,9 @@ option(BUILD_BEHAVIORTREE_EXAMPLES "Build ROS-free BehaviorTree.CPP examples" OF
 find_package(pinocchio REQUIRED)
 find_package(hpp-pinocchio REQUIRED)
 
-# hpp-gepetto-viewer provides the viewer bindings for BOTH backends:
-# `hpp.gepetto` (CORBA/Qt) and `pyhpp_viser` (browser). Look it up whenever
-# either PyHPP or CORBA is enabled.
-if(WITH_PYHPP OR WITH_CORBA)
+# hpp-gepetto-viewer provides the viewer bindings: `hpp.gepetto` (Qt) and
+# `pyhpp_viser` (browser). Look it up whenever PyHPP is enabled.
+if(WITH_PYHPP)
   find_package(hpp-gepetto-viewer)
   if(hpp-gepetto-viewer_FOUND)
     add_compile_definitions(HAS_GEPETTO_VIEWER_SUPPORT)
@@ -81,19 +78,6 @@ if(WITH_TOPPRA)
   else()
     message(WARNING "hpp-toppra not found. TOPPRA optimizer will be disabled.")
     set(HAS_TOPPRA FALSE)
-  endif()
-endif()
-
-# Optional CORBA dependencies (DEPRECATED backend)
-if(WITH_CORBA)
-  message(WARNING "WITH_CORBA is deprecated and will be removed; prefer the PyHPP backend.")
-  find_package(hpp-manipulation-corba)
-  if(hpp-manipulation-corba_FOUND AND hpp-gepetto-viewer_FOUND)
-    set(HAS_CORBA TRUE)
-    add_compile_definitions(HAS_CORBA_SUPPORT)
-  else()
-    message(WARNING "CORBA dependencies not found. CORBA backend will be disabled.")
-    set(HAS_CORBA FALSE)
   endif()
 endif()
 

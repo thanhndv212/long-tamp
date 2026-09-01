@@ -80,54 +80,19 @@ def freeze_joints_by_substrings(
     q_ref: List[float],
     joint_substrings: List[str],
     *,
-    backend: str = "corba",
+    backend: str = "pyhpp",
 ) -> List[float]:
     """Keep joint values constant for joints whose names match substrings.
 
     Intended use: tasks that do not use some robot groups (e.g. VISPA arms)
     can keep them fixed during projection/shooting to avoid drift.
 
-    Notes:
-    - For PyHPP, pinocchio model joint iteration would be needed to look up
-      joint configuration ranks (model.names, joints[i].idx_q, joints[i].nq).
-      This is not yet implemented; the function returns ``q`` unchanged.
-      PYHPP-GAP: implement via device.model() when needed.
-    - The CORBA robot API is expected to provide `getJointNames()`,
-      `rankInConfiguration[...]`, `getJointConfigSize(name)`.
+    Note: pinocchio model joint iteration would be needed to look up joint
+    configuration ranks (model.names, joints[i].idx_q, joints[i].nq). This is
+    not yet implemented; the function returns ``q`` unchanged.
+    PYHPP-GAP: implement via device.model() when needed.
     """
-
-    if backend.lower() != "corba":
-        # PYHPP-GAP: pyhpp Device exposes pinocchio model via device.model().
-        # Joint ranks are available as model.joints[i].idx_q and .nq.
-        # Implementation pending; returning q unchanged.
-        return q
-    if robot is None:
-        return q
-    if not joint_substrings:
-        return list(q)
-
-    q_out = list(q)
-
-    try:
-        joint_names = robot.getJointNames()
-    except Exception:
-        return q_out
-
-    for joint in joint_names:
-        if not any(s in joint for s in joint_substrings):
-            continue
-        try:
-            rank = robot.rankInConfiguration[joint]
-            size = robot.getJointConfigSize(joint)
-        except Exception:
-            continue
-        if size <= 0:
-            continue
-        if rank + size > len(q_out) or rank + size > len(q_ref):
-            continue
-        q_out[rank : rank + size] = q_ref[rank : rank + size]
-
-    return q_out
+    return q
 
 
 class ConfigGenerator:
@@ -143,7 +108,7 @@ class ConfigGenerator:
         graph,
         planner,
         ps,
-        backend: str = "corba",
+        backend: str = "pyhpp",
         max_attempts: int = 1000,
     ):
         """
@@ -151,10 +116,10 @@ class ConfigGenerator:
 
         Args:
             robot: Robot instance
-            graph: ConstraintGraph or Graph instance
+            graph: Graph instance
             planner: Unified Planner instance
-            ps: ProblemSolver or Problem instance
-            backend: "corba" or "pyhpp"
+            ps: Problem instance
+            backend: "pyhpp"
             max_attempts: Maximum random sampling attempts
         """
         self.robot = robot
@@ -195,11 +160,8 @@ class ConfigGenerator:
             - is_valid: True if configuration is valid
             - error_message: Empty string if valid, otherwise describes the issue
         """
-        if self.backend == "corba":
-            is_valid, error_msg = self.robot.isConfigValid(list(q))
-        else:  # pyhpp
-            q_arr = np.array(q) if not isinstance(q, np.ndarray) else q
-            is_valid, error_msg = self.ps.isConfigValid(q_arr)
+        q_arr = np.array(q) if not isinstance(q, np.ndarray) else q
+        is_valid, error_msg = self.ps.isConfigValid(q_arr)
 
         if verbose:
             if is_valid:
@@ -231,41 +193,35 @@ class ConfigGenerator:
         last_err = None
         last_valid_err = None
         for attempt in range(self.max_attempts):
-            if self.backend == "corba":
-                res, q_proj, err = self.graph.applyNodeConstraints(node_name, list(q))
-                success = res
-                config = q_proj
-                last_err = err
-            else:  # pyhpp
-                # PyHPP bindings expect a State object (not a state name).
-                q_arr = np.array(q) if not isinstance(q, np.ndarray) else q
+            # PyHPP bindings expect a State object (not a state name).
+            q_arr = np.array(q) if not isinstance(q, np.ndarray) else q
 
-                state_obj = node_name
-                if isinstance(node_name, str):
-                    # Try common APIs to fetch state object by name.
-                    get_state = getattr(self.graph, "getState", None)
-                    if callable(get_state):
-                        try:
-                            state_obj = get_state(node_name)
-                        except Exception:
-                            # getState may be overloaded for (config)->State
-                            # and reject string; fall through to other names.
-                            pass
+            state_obj = node_name
+            if isinstance(node_name, str):
+                # Try common APIs to fetch state object by name.
+                get_state = getattr(self.graph, "getState", None)
+                if callable(get_state):
+                    try:
+                        state_obj = get_state(node_name)
+                    except Exception:
+                        # getState may be overloaded for (config)->State
+                        # and reject string; fall through to other names.
+                        pass
 
-                    if isinstance(state_obj, str):
-                        for attr in ("getStateByName", "state", "getNode"):
-                            fn = getattr(self.graph, attr, None)
-                            if callable(fn):
-                                try:
-                                    state_obj = fn(node_name)
-                                    break
-                                except Exception:
-                                    continue
+                if isinstance(state_obj, str):
+                    for attr in ("getStateByName", "state", "getNode"):
+                        fn = getattr(self.graph, attr, None)
+                        if callable(fn):
+                            try:
+                                state_obj = fn(node_name)
+                                break
+                            except Exception:
+                                continue
 
-                res, q_proj, err = self.graph.applyStateConstraints(state_obj, q_arr)
-                success = res
-                config = q_proj.tolist() if success else None
-                last_err = err
+            res, q_proj, err = self.graph.applyStateConstraints(state_obj, q_arr)
+            success = res
+            config = q_proj.tolist() if success else None
+            last_err = err
             if success:
                 is_valid, valid_err = self.is_config_valid(config)
                 if is_valid:
@@ -409,24 +365,6 @@ class ConfigGenerator:
         object (used for diagnostics on total failure), regardless of
         `success`.
         """
-        if self.backend == "corba":
-            q_rand = list(q_hint) if use_hint else self.planner.random_config()
-
-            # omniORB stubs expect plain Python sequences (list/tuple),
-            # not numpy arrays.
-            q_from_seq = (
-                q_from.tolist() if isinstance(q_from, np.ndarray) else list(q_from)
-            )
-            q_rand_seq = (
-                q_rand.tolist() if isinstance(q_rand, np.ndarray) else list(q_rand)
-            )
-
-            res, q_target, err = self.graph.generateTargetConfig(
-                edge_name, q_from_seq, q_rand_seq
-            )
-            return res, q_target, err
-
-        # pyhpp
         q_rand = (
             np.array(q_hint, dtype=float) if use_hint else self.planner.random_config()
         )
@@ -546,57 +484,56 @@ class ConfigGenerator:
         # pathConstraint (fold), since generateTargetConfig projects to
         # the target state.
         try:
-            if self.backend != "corba":
-                transition = edge_name
-                if isinstance(edge_name, str):
-                    get_t = getattr(self.graph, "getTransition", None)
-                    if callable(get_t):
-                        transition = get_t(edge_name)
-                # targetConstraint() is the end-state constraint set
-                get_tc = getattr(transition, "targetConstraint", None)
-                if callable(get_tc):
-                    tc = get_tc()
-                    get_proj = getattr(tc, "configProjector", None)
-                    if callable(get_proj):
-                        proj = get_proj()
-                        if proj is not None:
-                            q_from_arr = np.array(q_from, dtype=float)
-                            # Test 1: apply to q_from (grasped)
-                            try:
-                                q_test_from = q_from_arr.copy()
-                                proj.rightHandSideFromConfig(q_from_arr)
-                                ok_from = proj.apply(q_test_from)
-                                res_from = proj.residualError()
-                                logger.debug(
-                                    "targetConstraint.apply(q_from):  "
-                                    "residual=%.6e, success=%s",
-                                    res_from,
-                                    ok_from,
-                                )
-                            except Exception as de:
-                                logger.debug(
-                                    "targetConstraint.apply(q_from) failed: %s", de
-                                )
-                            # Test 2: apply to q_hint if different from q_from
-                            if q_hint is not None:
-                                q_hint_arr = np.array(q_hint, dtype=float)
-                                if np.any(np.abs(q_hint_arr - q_from_arr) > 1e-6):
-                                    try:
-                                        q_test_hint = q_hint_arr.copy()
-                                        proj.rightHandSideFromConfig(q_from_arr)
-                                        ok_hint = proj.apply(q_test_hint)
-                                        res_hint = proj.residualError()
-                                        logger.debug(
-                                            "targetConstraint.apply(q_hint): "
-                                            "residual=%.6e, success=%s",
-                                            res_hint,
-                                            ok_hint,
-                                        )
-                                    except Exception as de2:
-                                        logger.debug(
-                                            "targetConstraint.apply(q_hint) failed: %s",
-                                            de2,
-                                        )
+            transition = edge_name
+            if isinstance(edge_name, str):
+                get_t = getattr(self.graph, "getTransition", None)
+                if callable(get_t):
+                    transition = get_t(edge_name)
+            # targetConstraint() is the end-state constraint set
+            get_tc = getattr(transition, "targetConstraint", None)
+            if callable(get_tc):
+                tc = get_tc()
+                get_proj = getattr(tc, "configProjector", None)
+                if callable(get_proj):
+                    proj = get_proj()
+                    if proj is not None:
+                        q_from_arr = np.array(q_from, dtype=float)
+                        # Test 1: apply to q_from (grasped)
+                        try:
+                            q_test_from = q_from_arr.copy()
+                            proj.rightHandSideFromConfig(q_from_arr)
+                            ok_from = proj.apply(q_test_from)
+                            res_from = proj.residualError()
+                            logger.debug(
+                                "targetConstraint.apply(q_from):  "
+                                "residual=%.6e, success=%s",
+                                res_from,
+                                ok_from,
+                            )
+                        except Exception as de:
+                            logger.debug(
+                                "targetConstraint.apply(q_from) failed: %s", de
+                            )
+                        # Test 2: apply to q_hint if different from q_from
+                        if q_hint is not None:
+                            q_hint_arr = np.array(q_hint, dtype=float)
+                            if np.any(np.abs(q_hint_arr - q_from_arr) > 1e-6):
+                                try:
+                                    q_test_hint = q_hint_arr.copy()
+                                    proj.rightHandSideFromConfig(q_from_arr)
+                                    ok_hint = proj.apply(q_test_hint)
+                                    res_hint = proj.residualError()
+                                    logger.debug(
+                                        "targetConstraint.apply(q_hint): "
+                                        "residual=%.6e, success=%s",
+                                        res_hint,
+                                        ok_hint,
+                                    )
+                                except Exception as de2:
+                                    logger.debug(
+                                        "targetConstraint.apply(q_hint) failed: %s",
+                                        de2,
+                                    )
         except Exception as e:
             logger.debug("Could not retrieve edge constraints: %s", e)
         logger.debug("--- End diagnostics ---")

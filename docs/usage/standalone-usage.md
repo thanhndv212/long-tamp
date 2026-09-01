@@ -39,11 +39,11 @@ tasks/             ManipulationTask, GraspSequencePlanner, InteractiveGraspSeque
 planning/          SceneBuilder, ConstraintBuilder, GraphBuilder, ConfigGenerator,
    │                GraspStateTracker, SequentialConstraintGraphFactory/GraspFilter, path_io
    │
-backends/          BackendBase (ABC) → PyHPPBackend (default) | CorbaBackend (deprecated)
+backends/          BackendBase (ABC) → PyHPPBackend
 ```
 Horizontal, used from any layer: `config/` (YAML + dataclass config), `logging/` (RunLogger),
-`visualization/` (viser/gepetto), `utils/`. Only `backends/` imports `pyhpp.*` /
-`hpp.corbaserver.*` — everything above it is backend-agnostic.
+`visualization/` (viser/gepetto), `utils/`. Only `backends/` imports `pyhpp.*` —
+everything above it is backend-agnostic.
 
 ## 3. Install (summary)
 
@@ -260,16 +260,18 @@ motion data — pair it with §9's path capture for full auditability.
 
 ## 11. Backends
 
-| | `PyHPPBackend` (default) | `CorbaBackend` (deprecated) |
-|---|---|---|
-| Process | in-process bindings, no server | external `hppcorbaserver` (port 13331) |
-| Select | `backend="pyhpp"` | `backend="corba"` |
-| Status | actively developed, default everywhere | frozen; kept for compatibility only |
+| | `PyHPPBackend` (only backend) |
+|---|---|
+| Process | in-process bindings, no server |
+| Select | `backend="pyhpp"` |
 
-Both implement the same `BackendBase` contract (`load_robot/environment/object`,
-`create_state/edge`, `solve()`, `get_path()`, `play_path()`, constraint factories) — task code
-should never need backend-specific branches. `create_planner(backend=...)` /
-`check_backend(backend)` in `planning/planner.py` are the usual entry points.
+A CORBA backend previously existed here and has been removed — see
+`docs/legacy/hpp_python_interface/` for historical reference. `BackendBase`
+(`load_robot/environment/object`, `create_state/edge`, `solve()`,
+`get_path()`, `play_path()`, constraint factories) is kept as an ABC so
+task code never needs backend-specific branches, even with a single
+implementation. `create_planner(backend=...)` / `check_backend(backend)`
+in `planning/planner.py` are the usual entry points.
 
 ## 12. Example scripts (read these before writing your own)
 
@@ -337,5 +339,3 @@ Most illustrative for learning the API by example:
   you bypass it.
 - **`concatenate_paths()` doesn't validate continuity** — pass only ids known to join (e.g. a
   seam-checked manifest's path ids), not arbitrary ones.
-- **CORBA backend deprecation warning** is expected and intentional — don't "fix" it by
-  suppressing it; migrate to `pyhpp` instead.

@@ -34,7 +34,7 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
     Add common arguments used by all task scripts.
 
     Adds the following arguments:
-        --backend: Backend to use (corba or pyhpp)
+        --backend: Backend to use (pyhpp)
         --no-viz: Disable visualization
         --solve: Attempt to solve planning problem
 
@@ -45,7 +45,7 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
         "--backend",
         type=str,
         default="pyhpp",
-        choices=["corba", "pyhpp"],
+        choices=["pyhpp"],
         help="Backend to use (default: pyhpp)",
     )
     parser.add_argument(

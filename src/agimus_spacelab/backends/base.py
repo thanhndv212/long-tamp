@@ -1,8 +1,8 @@
 """
 Abstract base class for manipulation planning backends.
 
-This module defines the interface that all backends (CORBA, PyHPP) must implement
-to ensure interchangeability.
+This module defines the interface that all backends (currently PyHPP) must
+implement to ensure interchangeability.
 """
 
 from abc import ABC, abstractmethod
@@ -351,12 +351,11 @@ class BackendBase(ABC):
             viewer_type: Which viewer to create:
 
                 * ``"viser"``   — browser-based 3-D viewer via WebSockets
-                  (`pip install viser`).  No X11 or CORBA server required.
+                  (`pip install viser`).  No X11 server required.
                   Opens at http://localhost:8000 by default.
-                * ``"gepetto"`` — Qt-based gepetto-viewer via CORBA/omniORB.
+                * ``"gepetto"`` — Qt-based gepetto-viewer via omniORB.
                   Requires gepetto-viewer-corba running.
-                * ``"auto"``    — pick automatically (viser preferred for
-                  PyHPP; gepetto preferred for CORBA).
+                * ``"auto"``    — pick automatically (viser preferred).
         """
         raise NotImplementedError("setup_viewer not implemented for this backend")
 
@@ -457,7 +456,7 @@ class BackendBase(ABC):
         """Create a grasp (relative transformation) constraint.
 
         Args:
-            ps: Problem solver (CORBA) or Problem (PyHPP)
+            ps: Problem (PyHPP)
             name: Constraint name
             gripper: Gripper joint/frame name
             tool: Tool joint/frame name
@@ -465,8 +464,7 @@ class BackendBase(ABC):
             mask: Boolean mask for constrained DOFs (6 entries)
 
         Returns:
-            PyHPP: Implicit constraint object.
-            CORBA: None (constraint stored in problem solver).
+            Implicit constraint object.
         """
         pass
 
@@ -477,15 +475,14 @@ class BackendBase(ABC):
         """Create a placement (absolute transformation) constraint.
 
         Args:
-            ps: Problem solver (CORBA) or Problem (PyHPP)
+            ps: Problem (PyHPP)
             name: Constraint name
             tool: Tool joint/frame name
             world_pose: World pose [x, y, z, qx, qy, qz, qw]
             mask: Boolean mask for constrained DOFs
 
         Returns:
-            PyHPP: Implicit constraint object.
-            CORBA: None (constraint stored in problem solver).
+            Implicit constraint object.
         """
         pass
 
@@ -503,15 +500,14 @@ class BackendBase(ABC):
         The constraint name is automatically set to ``base_name + '/complement'``.
 
         Args:
-            ps: Problem solver (CORBA) or Problem (PyHPP)
+            ps: Problem (PyHPP)
             base_name: Base constraint name (complement suffix appended)
             tool: Tool joint/frame name
             world_pose: World pose [x, y, z, qx, qy, qz, qw]
             complement_mask: Boolean mask for the free DOFs
 
         Returns:
-            PyHPP: Implicit constraint object.
-            CORBA: None (constraint stored in problem solver).
+            Implicit constraint object.
         """
         pass
 
@@ -522,15 +518,13 @@ class BackendBase(ABC):
         """Create locked joint constraints for joints matching name patterns.
 
         Args:
-            ps: Problem solver (CORBA) or Problem (PyHPP)
+            ps: Problem (PyHPP)
             robot: Robot/Device instance
             q_ref: Reference configuration
             patterns: Substrings to match against joint names (case-insensitive)
 
         Returns:
-            Tuple ``(locked, joint_names)`` where:
-            - CORBA: ``(List[str] constraint names, List[str] joint names)``
-            - PyHPP:  ``(List[LockedJoint] objects,  List[str] joint names)``
+            Tuple ``(List[LockedJoint] objects, List[str] joint names)``
         """
         pass
 
@@ -541,7 +535,6 @@ class BackendBase(ABC):
 
         PyHPP: True — the factory's no-contact path uses LockedJoint foliations;
                pre-registering a Transformation placement constraint breaks projection.
-        CORBA: False — the factory handles no-contact placement correctly regardless.
         """
         pass
 

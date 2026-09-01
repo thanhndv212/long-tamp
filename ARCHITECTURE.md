@@ -64,9 +64,9 @@ code is put together*, not how to deploy it.
 └───────────────────────────┬──────────────────────────────────────┘
                             │ uses
 ┌───────────────────────────▼──────────────────────────────────────┐
-│  backends/          BackendBase (ABC) → PyHPPBackend, CorbaBackend │
-│  The only layer that imports HPP-specific bindings (pyhpp.* /      │
-│  hpp.corbaserver.*). Everything above this line is backend-blind.  │
+│  backends/          BackendBase (ABC) → PyHPPBackend               │
+│  The only layer that imports HPP-specific bindings (pyhpp.*).      │
+│  Everything above this line is backend-blind.                      │
 └────────────────────────────────────────────────────────────────┘
 
   config/  — declarative task configuration (BaseTaskConfig, YamlTaskLoader,
@@ -83,7 +83,7 @@ flowchart TB
     script["script/<br/>end-user task scripts<br/>(one per robot/mission)"]
     tasks["tasks/<br/>ManipulationTask, GraspSequencePlanner,<br/>InteractiveGraspSequenceBuilder"]
     planning["planning/<br/>SceneBuilder, ConstraintBuilder, GraphBuilder,<br/>ConfigGenerator, GraspStateTracker,<br/>SequentialConstraintGraphFactory,<br/>SequentialGraspFilter, path_io,<br/>path_recorder, path_replay"]
-    backends["backends/<br/>BackendBase (ABC) → PyHPPBackend, CorbaBackend<br/>only layer importing pyhpp.* / hpp.corbaserver.*"]
+    backends["backends/<br/>BackendBase (ABC) → PyHPPBackend<br/>only layer importing pyhpp.*"]
 
     config["config/<br/>BaseTaskConfig, YamlTaskLoader, RuleGenerator"]
     logging_["logging/<br/>RunLogger, JSONL event schema"]
@@ -125,21 +125,21 @@ creation, path planning and validation, path I/O, and visualization.
 `ConstraintResult` is the uniform return type for constraint-projection
 calls (`success`, `configuration`, `error`).
 
-Two concrete implementations satisfy that interface:
+One concrete implementation satisfies that interface:
 
-- **`PyHPPBackend`** (`pyhpp.py`, default) — in-process bindings via
-  `hpp-python`. No RPC/server process; direct calls into the HPP C++
+- **`PyHPPBackend`** (`pyhpp.py`, the only backend) — in-process bindings
+  via `hpp-python`. No RPC/server process; direct calls into the HPP C++
   core through pybind11 bindings. Requires a source-built/customized HPP
   for several symbols this project relies on (see README for the exact
   list); a plain robotpkg install of `hpp-python` imports but reports
   itself unavailable.
-- **`CorbaBackend`** (`corba.py`, **deprecated**) — talks to a
-  `hppcorbaserver` process over CORBA via `hpp-manipulation-corba`.
-  Kept for backward compatibility; emits a deprecation warning when
-  selected.
 
-Both imports are wrapped in `try/except ImportError` in
-`backends/__init__.py`, which exposes `HAS_PYHPP` / `HAS_CORBA` flags and
+  A CORBA backend (`hppcorbaserver` over `hpp-manipulation-corba`)
+  previously existed here and has been removed — see
+  `docs/legacy/hpp_python_interface/` for historical reference.
+
+The import is wrapped in `try/except ImportError` in
+`backends/__init__.py`, which exposes a `HAS_PYHPP` flag and
 `get_available_backends()` / `get_backend(name)`. A backend that fails to
 import is not a hard error at package-import time — it only raises when
 something actually tries to construct it, with a message naming the
@@ -161,9 +161,9 @@ Each class here does one job and is usable on its own, independent of the
   static environment, and movable objects into a backend instance and
   wires up collision-pair exclusions.
 - **`ConstraintBuilder`** — creates grasp, placement, complement, and
-  locked-joint constraints against either backend through a uniform
-  signature (`backend="pyhpp"|"corba"` selects the underlying call).
-  `FactoryConstraintRegistry` is the companion piece for the
+  locked-joint constraints against the backend through a uniform
+  signature (`backend="pyhpp"`). `FactoryConstraintRegistry` is the
+  companion piece for the
   constraint-graph-*factory* path: it names and registers the
   grasp/pregrasp/placement/complement/hold constraints the factory
   expects (`{gripper} > {handle}`-style naming) so the constraint graph
@@ -370,7 +370,6 @@ package (e.g. the wider `ros2_ws_agimusxads` workspace) is integration
 detail that lives outside `agimus_spacelab` and outside the scope of
 this document. The `CMakeLists.txt` / `package.xml` in this repo only
 exist so the package can optionally be installed via `colcon`/`ament`
-alongside an HPP source build (`WITH_PYHPP` / `WITH_CORBA` /
-`WITH_TOPPRA` options select which native bindings to link against at
-install time) — they do not add a ROS 2 runtime dependency to the
-Python code itself.
+alongside an HPP source build (`WITH_PYHPP` / `WITH_TOPPRA` options
+select which native bindings to link against at install time) — they do
+not add a ROS 2 runtime dependency to the Python code itself.

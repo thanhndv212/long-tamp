@@ -1,3 +1,8 @@
+> **Legacy.** The CORBA backend (`agimus_spacelab.backends.corba`) has been
+> removed from this package as part of the open-source release prep — the
+> PyHPP backend is now the only supported backend. Kept here for historical
+> reference only.
+
 # CORBA Server vs PyHPP Python Bindings: Complete Comparison
 
 **Version:** 2.0  

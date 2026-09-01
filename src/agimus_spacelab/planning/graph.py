@@ -2,7 +2,7 @@
 """
 Constraint graph builder for manipulation tasks.
 
-Provides GraphBuilder for creating constraint graphs with dual backend support.
+Provides GraphBuilder for creating constraint graphs on the PyHPP backend.
 """
 
 from __future__ import annotations
@@ -19,23 +19,6 @@ from agimus_spacelab.planning.constraints import (
 from agimus_spacelab.planning.sequential_graph_factory import pruned_factory_class
 
 logger = get_logger("planning.graph")
-
-# Import for CORBA backend
-try:
-    from hpp.corbaserver.manipulation import (
-        ConstraintGraph,
-        ConstraintGraphFactory,
-        Constraints,
-        Rule,
-    )
-
-    HAS_CORBA_GRAPH = True
-except ImportError:
-    HAS_CORBA_GRAPH = False
-    ConstraintGraph = None
-    ConstraintGraphFactory = None
-    Rule = None
-    Constraints = None
 
 # Import for PyHPP backend
 try:
@@ -57,21 +40,21 @@ except ImportError:
 
 class GraphBuilder:
     """
-    Builder class for creating constraint graphs with dual backend support.
+    Builder class for creating constraint graphs on the PyHPP backend.
 
     Supports both manual graph construction (node by node, edge by edge) and
     factory-based automatic graph generation.
     """
 
-    def __init__(self, planner, robot, ps, backend: str = "corba"):
+    def __init__(self, planner, robot, ps, backend: str = "pyhpp"):
         """
         Initialize graph builder.
 
         Args:
             planner: Planner instance
             robot: Robot/Device instance
-            ps: ProblemSolver or Problem instance
-            backend: "corba" or "pyhpp"
+            ps: Problem instance
+            backend: "pyhpp"
         """
         self.planner = planner
         self.robot = robot
@@ -82,7 +65,6 @@ class GraphBuilder:
 
         # PyHPP constraint objects owned by the graph builder.
         # Set once after constraint creation via set_pyhpp_constraints().
-        # CORBA backend: always empty (constraints stored server-side by name).
         self._pyhpp_constraints: dict[str, Any] = {}
 
         # Track manually created states and edges
@@ -98,8 +80,6 @@ class GraphBuilder:
         with: "No graph in the problem.".
         """
 
-        if self.backend != "pyhpp":
-            return
         if self.graph is None or self.ps is None:
             return
 
@@ -112,7 +92,6 @@ class GraphBuilder:
 
         Must be called once after constraints are created (before any
         ``create_factory_graph`` / ``build_phase_graph`` calls).
-        CORBA backend: no-op (pass an empty dict or skip the call).
         """
         self._pyhpp_constraints = dict(constraints)
 
@@ -128,23 +107,13 @@ class GraphBuilder:
         """
         logger.info("Creating manual constraint graph: %s", name)
 
-        if self.backend == "corba":
-            if not HAS_CORBA_GRAPH:
-                raise ImportError("CORBA backend not available")
+        if not HAS_PYHPP_GRAPH:
+            raise ImportError("PyHPP backend not available")
 
-            self.graph = ConstraintGraph(self.robot, "graph")
-            self.ps.setMaxIterProjection(100)
-            self.ps.setErrorThreshold(1e-4)
-            logger.info("✓ CORBA graph initialized (manual mode)")
-
-        else:  # pyhpp
-            if not HAS_PYHPP_GRAPH:
-                raise ImportError("PyHPP backend not available")
-
-            self.graph = PyHPPGraph(name, self.robot, self.ps)
-            self.graph.maxIterations(100)
-            self.graph.errorThreshold(1e-4)
-            logger.info("✓ PyHPP graph initialized (manual mode)")
+        self.graph = PyHPPGraph(name, self.robot, self.ps)
+        self.graph.maxIterations(100)
+        self.graph.errorThreshold(1e-4)
+        logger.info("✓ PyHPP graph initialized (manual mode)")
 
         return self.graph
 
@@ -163,12 +132,7 @@ class GraphBuilder:
         if self.graph is None:
             raise RuntimeError("Graph not initialized. Call initiate_graph() first")
 
-        if self.backend == "corba":
-            # CORBA uses createNode
-            state_id = self.graph.createNode([name], is_waypoint)
-        else:  # pyhpp
-            # PyHPP uses createState
-            state_id = self.graph.createState(name, is_waypoint, priority)
+        state_id = self.graph.createState(name, is_waypoint, priority)
 
         self.states[name] = state_id
         logger.info("✓ State '%s' created (ID: %s)", name, state_id)
@@ -178,29 +142,18 @@ class GraphBuilder:
         """
         Add multiple states to the graph at once.
 
-        For CORBA backend, this is more efficient than calling add_state
-        multiple times as it creates all nodes in a single call.
-
         Args:
             names: List of state names
             is_waypoint: Whether these are waypoint states
 
         Note:
-            For PyHPP backend, this calls add_state for each name.
+            Calls add_state for each name.
         """
         if self.graph is None:
             raise RuntimeError("Graph not initialized. Call initiate_graph() first")
 
-        if self.backend == "corba":
-            # CORBA can create multiple nodes at once
-            self.graph.createNode(names, is_waypoint)
-            for name in names:
-                self.states[name] = name  # CORBA uses name as ID
-            logger.info("✓ Created %d states: %s", len(names), names)
-        else:  # pyhpp
-            # PyHPP creates states one at a time
-            for name in names:
-                self.add_state(name, is_waypoint)
+        for name in names:
+            self.add_state(name, is_waypoint)
 
     def add_edge(
         self,
@@ -232,19 +185,12 @@ class GraphBuilder:
         if to_state not in self.states:
             raise ValueError(f"Target state '{to_state}' not found")
 
-        if self.backend == "corba":
-            # CORBA uses createEdge with state names
-            edge_id = self.graph.createEdge(
-                from_state, to_state, name, weight, containing_state or from_state
-            )
-        else:  # pyhpp
-            # PyHPP uses createTransition with state objects
-            from_id = self.states[from_state]
-            to_id = self.states[to_state]
-            containing_id = self.states[containing_state or from_state]
-            edge_id = self.graph.createTransition(
-                from_id, to_id, name, weight, containing_id
-            )
+        from_id = self.states[from_state]
+        to_id = self.states[to_state]
+        containing_id = self.states[containing_state or from_state]
+        edge_id = self.graph.createTransition(
+            from_id, to_id, name, weight, containing_id
+        )
 
         self.edges[name] = edge_id
         self.edge_topology[name] = (from_state, to_state)
@@ -264,13 +210,8 @@ class GraphBuilder:
 
         Args:
             state_name: Name of the state to add constraints to
-            constraints: List of constraint objects (PyHPP) or ignored (CORBA)
-            constraint_names: List of constraint names (CORBA) or ignored
-                (PyHPP)
-
-        Note:
-            - CORBA: Uses constraint_names to reference constraints by name
-            - PyHPP: Uses constraint objects directly
+            constraints: List of constraint objects
+            constraint_names: Unused (kept for signature compatibility)
         """
         if self.graph is None:
             raise RuntimeError("Graph not initialized")
@@ -278,28 +219,15 @@ class GraphBuilder:
         if state_name not in self.states:
             raise ValueError(f"State '{state_name}' not found")
 
-        if self.backend == "corba":
-            if constraint_names is None:
-                raise ValueError("constraint_names required for CORBA backend")
-            # CORBA uses addConstraints with Constraints object
-            self.graph.addConstraints(
-                node=state_name,
-                constraints=Constraints(numConstraints=constraint_names),
-            )
-            logger.info(
-                "✓ Added constraints %s to state '%s'", constraint_names, state_name
-            )
-
-        else:  # pyhpp
-            if constraints is None or len(constraints) == 0:
-                raise ValueError("constraints list required for PyHPP backend")
-            # PyHPP uses addNumericalConstraint for each constraint
-            state_id = self.states[state_name]
-            for constraint in constraints:
-                self.graph.addNumericalConstraint(state_id, constraint)
-            logger.info(
-                "✓ Added %d constraint(s) to state '%s'", len(constraints), state_name
-            )
+        if constraints is None or len(constraints) == 0:
+            raise ValueError("constraints list required for PyHPP backend")
+        # PyHPP uses addNumericalConstraint for each constraint
+        state_id = self.states[state_name]
+        for constraint in constraints:
+            self.graph.addNumericalConstraint(state_id, constraint)
+        logger.info(
+            "✓ Added %d constraint(s) to state '%s'", len(constraints), state_name
+        )
 
     def add_edge_constraints(
         self,
@@ -312,13 +240,8 @@ class GraphBuilder:
 
         Args:
             edge_name: Name of the edge to add constraints to
-            constraints: List of constraint objects (PyHPP) or ignored (CORBA)
-            constraint_names: List of constraint names (CORBA) or ignored
-                (PyHPP)
-
-        Note:
-            - CORBA: Uses constraint_names to reference constraints by name
-            - PyHPP: Uses constraint objects directly
+            constraints: List of constraint objects
+            constraint_names: Unused (kept for signature compatibility)
         """
         if self.graph is None:
             raise RuntimeError("Graph not initialized")
@@ -326,33 +249,20 @@ class GraphBuilder:
         if edge_name not in self.edges:
             raise ValueError(f"Edge '{edge_name}' not found")
 
-        if self.backend == "corba":
-            # CORBA uses addConstraints with Constraints object
-            # Empty constraint_names is valid (no path constraints)
-            names = constraint_names or []
-            self.graph.addConstraints(
-                edge=edge_name, constraints=Constraints(numConstraints=names)
+        # PyHPP uses addNumericalConstraintsToTransition
+        edge_id = self.edges[edge_name]
+        if constraints and len(constraints) > 0:
+            self.graph.addNumericalConstraintsToTransition(edge_id, constraints)
+            logger.info(
+                "✓ Added %d constraint(s) to edge '%s'",
+                len(constraints),
+                edge_name,
             )
-            if names:
-                logger.info("✓ Added constraints %s to edge '%s'", names, edge_name)
-            else:
-                logger.info("✓ Added empty constraints to edge '%s'", edge_name)
-
-        else:  # pyhpp
-            # PyHPP uses addNumericalConstraintsToTransition
-            edge_id = self.edges[edge_name]
-            if constraints and len(constraints) > 0:
-                self.graph.addNumericalConstraintsToTransition(edge_id, constraints)
-                logger.info(
-                    "✓ Added %d constraint(s) to edge '%s'",
-                    len(constraints),
-                    edge_name,
-                )
-            else:
-                # No constraints to add (free motion edge)
-                logger.info(
-                    "✓ No constraints added to edge '%s' (free motion)", edge_name
-                )
+        else:
+            # No constraints to add (free motion edge)
+            logger.info(
+                "✓ No constraints added to edge '%s' (free motion)", edge_name
+            )
 
     def add_global_constraints(
         self,
@@ -369,8 +279,7 @@ class GraphBuilder:
         Note: Must be called BEFORE the graph is initialized.
 
         Args:
-            constraint_names: CORBA: list of constraint name strings.
-                PyHPP: list of Implicit/LockedJoint constraint objects.
+            constraint_names: List of Implicit/LockedJoint constraint objects.
 
         Returns:
             True if constraints were added successfully
@@ -379,13 +288,7 @@ class GraphBuilder:
             return False
 
         try:
-            if self.backend == "corba":
-                self.graph.addConstraints(
-                    graph=True,
-                    constraints=Constraints(numConstraints=constraint_names),
-                )
-            else:  # pyhpp
-                self.graph.addNumericalConstraintsToGraph(constraint_names)
+            self.graph.addNumericalConstraintsToGraph(constraint_names)
             if constraint_names and isinstance(constraint_names[0], str):
                 logger.debug(
                     "✓ Added %d global constraints: %s",
@@ -409,23 +312,18 @@ class GraphBuilder:
         if self.graph is None:
             raise RuntimeError("Graph not initialized")
 
-        if self.backend == "corba":
-            # CORBA graph initialization
-            self.graph.initialize()
-            logger.info("✓ CORBA graph initialized")
-        else:  # pyhpp
-            # PyHPP graph initialization.
-            # IMPORTANT: attach to problem BEFORE initialize().
-            # Problem::constraintGraph(graph) calls graph.problem(problem)
-            # which calls Graph::invalidate(), resetting isInit_=false for
-            # all components. So we must attach first, then initialize.
-            # Similarly, maxIterations/errorThreshold setters call
-            # invalidate() — set them now before initialize().
-            self._attach_graph_to_problem_if_supported()
-            self.graph.maxIterations(10000)
-            self.graph.errorThreshold(1e-4)
-            self.graph.initialize()
-            logger.info("✓ PyHPP graph initialized")
+        # PyHPP graph initialization.
+        # IMPORTANT: attach to problem BEFORE initialize().
+        # Problem::constraintGraph(graph) calls graph.problem(problem)
+        # which calls Graph::invalidate(), resetting isInit_=false for
+        # all components. So we must attach first, then initialize.
+        # Similarly, maxIterations/errorThreshold setters call
+        # invalidate() — set them now before initialize().
+        self._attach_graph_to_problem_if_supported()
+        self.graph.maxIterations(10000)
+        self.graph.errorThreshold(1e-4)
+        self.graph.initialize()
+        logger.info("✓ PyHPP graph initialized")
 
         return self.graph
 
@@ -494,24 +392,14 @@ class GraphBuilder:
         """
         logger.debug("Using ConstraintGraphFactory for automatic graph generation")
 
-        # Backend-specific setup
-        if self.backend == "corba":
-            if not HAS_CORBA_GRAPH:
-                raise ImportError("CORBA backend not available")
+        if not HAS_PYHPP_GRAPH:
+            raise ImportError("PyHPP backend not available")
 
-            # Create CORBA constraint graph
-            self.graph = ConstraintGraph(self.robot, "graph")
-            self.factory = pruned_factory_class(ConstraintGraphFactory)(self.graph)
-
-        else:  # pyhpp
-            if not HAS_PYHPP_GRAPH:
-                raise ImportError("PyHPP backend not available")
-
-            # Create PyHPP constraint graph
-            self.graph = PyHPPGraph("graph", self.robot, self.ps)
-            self.factory = pruned_factory_class(PyHPPConstraintGraphFactory)(
-                self.graph, constraints=self._pyhpp_constraints
-            )
+        # Create PyHPP constraint graph
+        self.graph = PyHPPGraph("graph", self.robot, self.ps)
+        self.factory = pruned_factory_class(PyHPPConstraintGraphFactory)(
+            self.graph, constraints=self._pyhpp_constraints
+        )
 
         # Prepare valid factory inputs
         config = self._prepapre_factory_inputs(config)
@@ -561,7 +449,7 @@ class GraphBuilder:
                 set_targets((seq_filter.current_grasps, seq_filter.next_grasps))
 
         # Generate graph
-        if self.backend == "pyhpp" and q_init is not None:
+        if q_init is not None:
             try:
                 self.robot.currentConfiguration(np.array(q_init, dtype=float))
                 logger.debug(
@@ -582,17 +470,14 @@ class GraphBuilder:
             self.add_global_constraints(graph_constraints)
 
         # Initialize graph.
-        # IMPORTANT for pyhpp: Problem::constraintGraph(graph) calls
+        # IMPORTANT: Problem::constraintGraph(graph) calls
         # graph.problem(problem) -> Graph::invalidate() -> isInit_=false.
         # And maxIterations/errorThreshold setters also call invalidate().
-        # All three must happen BEFORE graph.initialize() for pyhpp.
-        if self.backend == "pyhpp":
-            self._attach_graph_to_problem_if_supported()
-            self.graph.maxIterations(10000)
-            self.graph.errorThreshold(1e-4)
+        # All three must happen BEFORE graph.initialize().
+        self._attach_graph_to_problem_if_supported()
+        self.graph.maxIterations(10000)
+        self.graph.errorThreshold(1e-4)
         self.graph.initialize()
-        if self.backend == "corba":
-            self._attach_graph_to_problem_if_supported()
         logger.debug("\u2713 Graph initialized")
 
         # Store states and edges for tracking
@@ -629,22 +514,17 @@ class GraphBuilder:
         if not isinstance(graph_def, dict):
             raise RuntimeError("Missing 'GRASP_FG_GRAPH' graph config")
 
-        # PyHPP constraint objects (CORBA uses names)
-        constraints = self._pyhpp_constraints if self.backend == "pyhpp" else None
+        constraints = self._pyhpp_constraints
 
         # Create empty graph
-        graph_name = "manipulation_graph" if self.backend == "pyhpp" else "graph"
-        self.initiate_graph(name=graph_name)
+        self.initiate_graph(name="manipulation_graph")
 
         # Create states (order matters for solver performance)
         state_names = getattr(cfg, "GRAPH_NODES", None) or list(
             graph_def.get("states", {}).keys()
         )
-        if self.backend == "corba":
-            self.add_states(state_names)
-        else:
-            for state_name in state_names:
-                self.add_state(state_name)
+        for state_name in state_names:
+            self.add_state(state_name)
         logger.info("✓ Created %d states", len(state_names))
 
         # Create edges from declarative definition
@@ -663,54 +543,20 @@ class GraphBuilder:
         for state_name, state_info in states_def.items():
             constraint_names = state_info.get("constraints", [])
             if constraint_names:
-                if self.backend == "corba":
-                    self.add_state_constraints(
-                        state_name, [], constraint_names=constraint_names
-                    )
-                else:
-                    constraint_objs = [constraints[n] for n in constraint_names]
-                    self.add_state_constraints(state_name, constraint_objs)
+                constraint_objs = [constraints[n] for n in constraint_names]
+                self.add_state_constraints(state_name, constraint_objs)
         logger.info("✓ Added constraints to nodes")
 
         # Add constraints to edges from declarative definition
         edge_constraints_def = graph_def.get("edge_constraints", {})
         for constraint_name, edge_list in edge_constraints_def.items():
             for edge_name in edge_list:
-                if self.backend == "corba":
-                    self.add_edge_constraints(
-                        edge_name, [], constraint_names=[constraint_name]
-                    )
-                else:
-                    self.add_edge_constraints(edge_name, [constraints[constraint_name]])
+                self.add_edge_constraints(edge_name, [constraints[constraint_name]])
 
         # Free motion edges (no path constraints)
         for edge_name in graph_def.get("free_motion_edges", []):
-            if self.backend == "corba":
-                self.add_edge_constraints(edge_name, [], constraint_names=[])
-            else:
-                self.add_edge_constraints(edge_name, [])
+            self.add_edge_constraints(edge_name, [])
         logger.info("✓ Added constraints to edges")
-
-        # Set constant RHS (CORBA only)
-        if self.backend == "corba":
-            for constraint_name, is_constant in graph_def.get(
-                "constant_rhs", {}
-            ).items():
-                self.ps.setConstantRightHandSide(constraint_name, is_constant)
-            logger.info("✓ Set constant right-hand side")
-
-            # # Set security margins BEFORE initialize (CORBA only)
-            # for edge_name in cfg.PLACEMENT_EDGES:
-            #     self.graph.setSecurityMarginForEdge(
-            #         edge_name,
-            #         cfg.TOOL_CONTACT_JOINT,
-            #         cfg.DISPENSER_CONTACT_JOINT,
-            #         cfg.CONTACT_MARGIN,
-            #     )
-            # print(
-            #     f"    ✓ Set security margin ({cfg.CONTACT_MARGIN}m) "
-            #     "for placement edges"
-            # )
 
         # Add global constraints before initialization (e.g., locked joints)
         if graph_constraints:
@@ -872,44 +718,26 @@ class GraphBuilder:
         # 4) Attach constraints to states and edges.
         for state in task_cls.STATES.values():
             if state.constraints:
-                if self.backend == "corba":
-                    self.add_state_constraints(
-                        state.name,
-                        constraints=[],
-                        constraint_names=state.constraints,
-                    )
-                else:
-                    missing = [
-                        n
-                        for n in state.constraints
-                        if n not in pyhpp_constraint_objects
-                    ]
-                    if missing:
-                        raise KeyError(
-                            f"State '{state.name}' references unknown constraints: {missing}"
-                        )
-                    objs = [pyhpp_constraint_objects[n] for n in state.constraints]
-                    self.add_state_constraints(state.name, constraints=objs)
-
-        for edge in task_cls.EDGES.values():
-            if self.backend == "corba":
-                self.add_edge_constraints(
-                    edge.name,
-                    constraints=[],
-                    constraint_names=edge.path_constraints,
-                )
-            else:
                 missing = [
-                    n
-                    for n in edge.path_constraints
-                    if n not in pyhpp_constraint_objects
+                    n for n in state.constraints if n not in pyhpp_constraint_objects
                 ]
                 if missing:
                     raise KeyError(
-                        f"Edge '{edge.name}' references unknown constraints: {missing}"
+                        f"State '{state.name}' references unknown constraints: {missing}"
                     )
-                objs = [pyhpp_constraint_objects[n] for n in edge.path_constraints]
-                self.add_edge_constraints(edge.name, constraints=objs)
+                objs = [pyhpp_constraint_objects[n] for n in state.constraints]
+                self.add_state_constraints(state.name, constraints=objs)
+
+        for edge in task_cls.EDGES.values():
+            missing = [
+                n for n in edge.path_constraints if n not in pyhpp_constraint_objects
+            ]
+            if missing:
+                raise KeyError(
+                    f"Edge '{edge.name}' references unknown constraints: {missing}"
+                )
+            objs = [pyhpp_constraint_objects[n] for n in edge.path_constraints]
+            self.add_edge_constraints(edge.name, constraints=objs)
 
         return self.finalize_manual_graph()
 
@@ -920,78 +748,64 @@ class GraphBuilder:
         Populates self.states, self.edges, and self.edge_topology.
         """
         try:
-            if self.backend == "corba":
-                # CORBA graph has nodes and edges dictionaries
-                for node_name in self.graph.nodes.keys():
-                    self.states[node_name] = node_name
+            # PyHPP graph - extract all states from the graph
+            if hasattr(self.graph, "getStateNames"):
+                for state_name in self.graph.getStateNames():
+                    self.states[state_name] = state_name
 
-                for edge_name in self.graph.edges.keys():
+            if hasattr(self.graph, "getTransitionNames"):
+                for edge_name in self.graph.getTransitionNames():
                     self.edges[edge_name] = edge_name
                     try:
-                        result = self.graph.getNodesConnectedByEdge(edge_name)
-                        from_node, to_node = result[:2]
-                        self.edge_topology[edge_name] = (from_node, to_node)
-                    except Exception:
-                        pass
-            else:  # pyhpp
-                # PyHPP graph - extract all states from the graph
-                if hasattr(self.graph, "getStateNames"):
-                    for state_name in self.graph.getStateNames():
-                        self.states[state_name] = state_name
+                        edge_obj = None
+                        get_transition = getattr(self.graph, "getTransition", None)
+                        if callable(get_transition):
+                            edge_obj = get_transition(edge_name)
 
-                if hasattr(self.graph, "getTransitionNames"):
-                    for edge_name in self.graph.getTransitionNames():
-                        self.edges[edge_name] = edge_name
-                        try:
-                            edge_obj = None
-                            get_transition = getattr(self.graph, "getTransition", None)
-                            if callable(get_transition):
-                                edge_obj = get_transition(edge_name)
-
-                            get_nodes = getattr(
-                                self.graph,
-                                "getNodesConnectedByTransition",
-                                None,
-                            )
-                            if not callable(get_nodes):
-                                continue
-
-                            # Depending on bindings, this may accept either a
-                            # Transition object or a transition name.
-                            try:
-                                query = edge_obj if edge_obj is not None else edge_name
-                                result = get_nodes(query)
-                            except Exception:
-                                result = get_nodes(edge_name)
-
-                            is_pair = isinstance(result, tuple)
-                            is_pair = is_pair and len(result) >= 2
-                            if not is_pair:
-                                continue
-
-                            def _state_name(s: Any) -> str | None:
-                                if isinstance(s, str):
-                                    return s
-                                name_attr = getattr(s, "name", None)
-                                if callable(name_attr):
-                                    try:
-                                        return name_attr()
-                                    except Exception:
-                                        return None
-                                if isinstance(name_attr, str):
-                                    return name_attr
-                                return None
-
-                            from_name = _state_name(result[0])
-                            to_name = _state_name(result[1])
-                            if from_name and to_name:
-                                self.edge_topology[edge_name] = (
-                                    from_name,
-                                    to_name,
-                                )
-                        except Exception:
-                            # Skip if bindings don't expose topology helpers.
+                        get_nodes = getattr(
+                            self.graph,
+                            "getNodesConnectedByTransition",
+                            None,
+                        )
+                        if not callable(get_nodes):
                             continue
+
+                        # Depending on bindings, this may accept either a
+                        # Transition object or a transition name.
+                        try:
+                            query = edge_obj if edge_obj is not None else edge_name
+                            result = get_nodes(query)
+                        except Exception:
+                            result = get_nodes(edge_name)
+
+                        is_pair = isinstance(result, tuple)
+                        is_pair = is_pair and len(result) >= 2
+                        if not is_pair:
+                            continue
+
+                        def _state_name(s: Any) -> str | None:
+                            if isinstance(s, str):
+                                return s
+                            name_attr = getattr(s, "name", None)
+                            if callable(name_attr):
+                                try:
+                                    return name_attr()
+                                except Exception:
+                                    return None
+                            if isinstance(name_attr, str):
+                                return name_attr
+                            return None
+
+                        from_name = _state_name(result[0])
+                        to_name = _state_name(result[1])
+                        if from_name and to_name:
+                            self.edge_topology[edge_name] = (
+                                from_name,
+                                to_name,
+                            )
+                    except Exception:
+                        # Skip if bindings don't expose topology helpers.
+                        continue
         except Exception as e:
             logger.warning("\u26a0 Could not extract graph structure: %s", e)
 
@@ -1017,24 +831,18 @@ class GraphBuilder:
         if self.graph is None:
             raise RuntimeError("Graph not initialized")
 
-        if self.backend == "corba":
-            # CORBA uses applyNodeConstraints
-            success, q_proj, error = self.graph.applyNodeConstraints(
-                state_name, list(q)
-            )
-        else:  # pyhpp
-            # PyHPP uses applyStateConstraints with a State object.
-            # NOTE: Do NOT call self.graph.maxIterations() or
-            # self.graph.errorThreshold() setters here — they call
-            # Graph::invalidate() which resets isInit_=false for all
-            # components, breaking the initialized state.
-            # Projection parameters are set during graph creation (before
-            # graph.initialize() is called).
-            # Look up state object and apply constraints
-            state_obj = self.graph.getState(state_name)
-            success, q_proj, error = self.graph.applyStateConstraints(
-                state_obj, np.array(q)
-            )
+        # PyHPP uses applyStateConstraints with a State object.
+        # NOTE: Do NOT call self.graph.maxIterations() or
+        # self.graph.errorThreshold() setters here — they call
+        # Graph::invalidate() which resets isInit_=false for all
+        # components, breaking the initialized state.
+        # Projection parameters are set during graph creation (before
+        # graph.initialize() is called).
+        # Look up state object and apply constraints
+        state_obj = self.graph.getState(state_name)
+        success, q_proj, error = self.graph.applyStateConstraints(
+            state_obj, np.array(q)
+        )
 
         return success, q_proj, error
 
@@ -1155,11 +963,7 @@ class GraphBuilder:
         # (unreachable for the arm).  By restoring free objects to their
         # original positions we ensure the LockedJoint locks them where they
         # actually are in the scene.
-        if (
-            q_init is not None
-            and q_init_original is not None
-            and self.backend == "pyhpp"
-        ):
+        if q_init is not None and q_init_original is not None:
             q_init = self._reset_free_objects_in_q_init(
                 q_init, q_init_original, phase_objects, held_grasps
             )
@@ -1180,37 +984,23 @@ class GraphBuilder:
         """Delete/clear any existing graph so build_phase_graph can create
         a fresh one.
 
-        CORBA stores graphs by name on the server, so deletion is an
-        explicit RPC. pyhpp holds a local graph object plus a cached
-        TransitionPlanner wrapping a C++ graph::GraphPtr_t to it -- if that
-        cache isn't reset, the first C++ call on the stale planner object
-        (tp.setEdge, tp.timeOut, ...) dereferences a freed pointer and
-        segfaults.
+        pyhpp holds a local graph object plus a cached TransitionPlanner
+        wrapping a C++ graph::GraphPtr_t to it -- if that cache isn't reset,
+        the first C++ call on the stale planner object (tp.setEdge,
+        tp.timeOut, ...) dereferences a freed pointer and segfaults.
         """
         if self.graph is None:
             return
         try:
-            if self.backend == "corba":
-                # CORBA: delete graph by name on server
-                graph_name = "graph"
-                self.ps.client.manipulation.graph.deleteGraph(graph_name)
-                logger.debug("✓ Deleted existing graph '%s'", graph_name)
-
-                # CORBA: also reset cached TransitionPlanner
-                # It holds a reference to the old graph
-                if hasattr(self.planner, "reset_transition_planner"):
-                    self.planner.reset_transition_planner()
-                    logger.debug("✓ Reset TransitionPlanner")
-            else:
-                # PyHPP: graph is local object, just clear reference.
-                # Also reset cached TransitionPlanner — it holds a C++
-                # graph::GraphPtr_t to the old graph.  If not reset, the
-                # first C++ call on the stale planner object (tp.setEdge,
-                # tp.timeOut, …) will dereference a freed pointer → SIGSEGV.
-                if hasattr(self.planner, "reset_transition_planner"):
-                    self.planner.reset_transition_planner()
-                    logger.debug("✓ Reset TransitionPlanner (PyHPP graph rebuild)")
-                logger.debug("✓ Clearing existing graph reference")
+            # Graph is a local object, just clear the reference.
+            # Also reset cached TransitionPlanner — it holds a C++
+            # graph::GraphPtr_t to the old graph.  If not reset, the
+            # first C++ call on the stale planner object (tp.setEdge,
+            # tp.timeOut, …) will dereference a freed pointer → SIGSEGV.
+            if hasattr(self.planner, "reset_transition_planner"):
+                self.planner.reset_transition_planner()
+                logger.debug("✓ Reset TransitionPlanner (graph rebuild)")
+            logger.debug("✓ Clearing existing graph reference")
 
             # Clear internal state
             self.graph = None
@@ -1340,7 +1130,7 @@ class GraphBuilder:
         # Restrict GRIPPERS and OBJECTS to only phase-relevant items.
         # The full DisplayAllStates config has 5+ grippers and 50+ handles,
         # giving (n_handles+1)^n_grippers candidate states for the
-        # graspIsAllowed CORBA callback — that makes factory.generate() take
+        # graspIsAllowed callback — that makes factory.generate() take
         # hours.  Keep only the grippers and objects that participate in this
         # specific phase transition.
         # ------------------------------------------------------------------

@@ -39,15 +39,14 @@ def _make_config_generator(backend):
 
 
 class TestDisableCollisionsDispatch:
-    """disable_collisions_between_subtrees() dispatches on self.backend to
-    _disable_collisions_pyhpp / _disable_collisions_corba (Phase 3 Step 3.1
-    extraction) -- verify the dispatch wiring itself, since no example
-    script in this environment currently reaches this method end-to-end."""
+    """disable_collisions_between_subtrees() dispatches to
+    _disable_collisions_pyhpp (Phase 3 Step 3.1 extraction) -- verify the
+    dispatch wiring itself, since no example script in this environment
+    currently reaches this method end-to-end."""
 
-    def test_pyhpp_backend_dispatches_to_pyhpp_helper(self):
+    def test_dispatches_to_pyhpp_helper(self):
         sb = _make_scene_builder("pyhpp")
         sb._disable_collisions_pyhpp = MagicMock(return_value=sb)
-        sb._disable_collisions_corba = MagicMock(return_value=sb)
 
         result = sb.disable_collisions_between_subtrees(
             "robot_joint", "obstacle/root_joint", verbose=True, max_pairs=10
@@ -56,27 +55,6 @@ class TestDisableCollisionsDispatch:
         sb._disable_collisions_pyhpp.assert_called_once_with(
             "robot_joint", "obstacle/root_joint", True, 10
         )
-        sb._disable_collisions_corba.assert_not_called()
-        assert result is sb
-
-    def test_corba_backend_dispatches_to_corba_helper(self):
-        sb = _make_scene_builder("corba")
-        sb._disable_collisions_pyhpp = MagicMock(return_value=sb)
-        sb._disable_collisions_corba = MagicMock(return_value=sb)
-
-        result = sb.disable_collisions_between_subtrees(
-            "robot_joint",
-            "obstacle/root_joint",
-            remove_collision=False,
-            remove_distance=True,
-            verbose=False,
-            max_pairs=5,
-        )
-
-        sb._disable_collisions_corba.assert_called_once_with(
-            "robot_joint", "obstacle/root_joint", False, True, False, 5
-        )
-        sb._disable_collisions_pyhpp.assert_not_called()
         assert result is sb
 
     def test_pyhpp_helper_no_pinocchio_geometry_returns_self_with_warning(self):
@@ -125,34 +103,7 @@ class TestCheckConfigFinite:
 
 class TestGenerateCandidateConfig:
     """_generate_candidate_config() (Phase 3 Step 3.2 extraction) --
-    backend dispatch, verified against mocked graph/planner."""
-
-    def test_corba_backend_uses_plain_sequences(self):
-        cg = _make_config_generator("corba")
-        cg.planner.random_config.return_value = [0.1, 0.2]
-        cg.graph.generateTargetConfig.return_value = (True, [0.3, 0.4], "ok")
-
-        success, config, err = cg._generate_candidate_config(
-            "edge01", [0.0, 0.0], None, False
-        )
-
-        assert success is True
-        assert config == [0.3, 0.4]
-        assert err == "ok"
-        call_args = cg.graph.generateTargetConfig.call_args[0]
-        assert call_args[0] == "edge01"
-        assert call_args[1] == [0.0, 0.0]
-        assert call_args[2] == [0.1, 0.2]
-
-    def test_corba_backend_uses_hint_on_first_attempt(self):
-        cg = _make_config_generator("corba")
-        cg.graph.generateTargetConfig.return_value = (True, [9.0], "ok")
-
-        cg._generate_candidate_config("edge01", [0.0], [9.0], True)
-
-        cg.planner.random_config.assert_not_called()
-        call_args = cg.graph.generateTargetConfig.call_args[0]
-        assert call_args[2] == [9.0]
+    verified against mocked graph/planner."""
 
     def test_pyhpp_backend_returns_list_config_on_success(self):
         cg = _make_config_generator("pyhpp")

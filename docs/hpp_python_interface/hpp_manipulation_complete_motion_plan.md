@@ -573,7 +573,7 @@ The factory uses fixed constraint names:
 ### A.6 How `agimus_spacelab` uses the factory
 
 In this repo, `agimus_spacelab.planning.graph.GraphBuilder` supports factory mode
-for both CORBA and PyHPP:
+on the PyHPP backend:
 
 ```python
 graph = GraphBuilder(planner, robot, ps, backend="pyhpp")

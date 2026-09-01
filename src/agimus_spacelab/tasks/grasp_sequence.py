@@ -134,7 +134,7 @@ class GraspSequencePlanner:
         config_gen: ConfigGenerator,
         planner: Any,
         task_config: Any,
-        backend: str = "corba",
+        backend: str = "pyhpp",
         graph_constraints: list[str] | None = None,
         auto_save_dir: str | None = None,
         run_logger: Any | None = None,
@@ -146,7 +146,7 @@ class GraspSequencePlanner:
             config_gen: ConfigGenerator for waypoint generation
             planner: Backend planner (ManipulationPlanner instance)
             task_config: Task configuration with GRIPPERS, OBJECTS, etc.
-            backend: "corba" or "pyhpp"
+            backend: "pyhpp"
             graph_constraints: Optional list of global constraints
             auto_save_dir: If set, automatically save paths to this directory
                           after each successful phase. Files are named
@@ -2843,8 +2843,8 @@ class GraspSequencePlanner:
         Draws a phase-N candidate, then immediately probes (short timeout,
         discarding the resulting config) whether phase N+1 is reachable from
         it. Two full ``build_phase_graph()`` calls per candidate, not one:
-        ``self.graph``/the CORBA server graph is a singleton, so building
-        phase N+1's graph tears down phase N's -- there is no way to keep
+        ``self.graph`` is a singleton, so building phase N+1's graph tears
+        down phase N's -- there is no way to keep
         both alive at once to compare candidates. Never mutates
         ``self.grasp_tracker`` (only a throwaway ``.copy()``) -- committing
         a hypothetical grasp to the real tracker while merely probing is

@@ -85,9 +85,7 @@ def get_joint_id_for_name(robot, name: str) -> tuple:
 
 class ConstraintBuilder:
     """
-    Helper class for creating transformation constraints.
-
-    Supports dual backend (CORBA and PyHPP).
+    Helper class for creating transformation constraints on the PyHPP backend.
     """
 
     @staticmethod
@@ -99,25 +97,25 @@ class ConstraintBuilder:
         transform: List[float],
         mask: List[bool] = None,
         robot=None,
-        backend: str = "corba",
+        backend: str = "pyhpp",
         backend_obj=None,
     ) -> Any:
         """
         Create a grasp constraint (rigid attachment).
 
         Args:
-            ps: Problem solver instance (CORBA) or Problem (PyHPP)
+            ps: Problem instance
             name: Constraint name
             gripper: Gripper joint/frame name
             tool: Tool joint/frame name
             transform: [x, y, z, qx, qy, qz, qw]
             mask: Boolean mask for DOF constraints (default: all True)
-            robot: Robot/Device instance (required for PyHPP)
-            backend: "corba" or "pyhpp"
+            robot: Robot/Device instance (required)
+            backend: "pyhpp"
             backend_obj: BackendBase instance (preferred; overrides string dispatch)
 
         Returns:
-            Implicit constraint for PyHPP, None for CORBA
+            Implicit constraint
         """
         if mask is None:
             mask = [True] * 6
@@ -137,53 +135,47 @@ class ConstraintBuilder:
             backend,
         )
 
-        if backend == "pyhpp":
-            if robot is None:
-                raise ValueError("robot parameter required for PyHPP backend")
-            if not HAS_PYHPP_CONSTRAINTS:
-                raise ImportError("PyHPP constraints not available")
+        if robot is None:
+            raise ValueError("robot parameter required for PyHPP backend")
+        if not HAS_PYHPP_CONSTRAINTS:
+            raise ImportError("PyHPP constraints not available")
 
-            # Get joint IDs and frame placements (handles both joint and frame names)
-            joint_gripper, frame1_placement = get_joint_id_for_name(robot, gripper)
-            joint_tool, frame2_placement = get_joint_id_for_name(robot, tool)
+        # Get joint IDs and frame placements (handles both joint and frame names)
+        joint_gripper, frame1_placement = get_joint_id_for_name(robot, gripper)
+        joint_tool, frame2_placement = get_joint_id_for_name(robot, tool)
 
-            # Convert user transform to SE3
-            grasp_tf = xyzquat_to_se3(transform)
+        # Convert user transform to SE3
+        grasp_tf = xyzquat_to_se3(transform)
 
-            # Compose transforms: frame1_placement * grasp_tf for joint1 frame
-            # and frame2_placement for joint2 frame
-            # RelativeTransformation expects transforms from joint to constraint frame
-            frame1_tf = frame1_placement * grasp_tf
-            frame2_tf = frame2_placement
+        # Compose transforms: frame1_placement * grasp_tf for joint1 frame
+        # and frame2_placement for joint2 frame
+        # RelativeTransformation expects transforms from joint to constraint frame
+        frame1_tf = frame1_placement * grasp_tf
+        frame2_tf = frame2_placement
 
-            # Create mask
-            mask_vec = Mask()
-            mask_vec[:] = tuple(mask)
+        # Create mask
+        mask_vec = Mask()
+        mask_vec[:] = tuple(mask)
 
-            # Create relative transformation constraint
-            pc = RelativeTransformation(
-                name,
-                robot,
-                joint_gripper,
-                joint_tool,
-                frame1_tf,
-                frame2_tf,
-                mask_vec,
-            )
+        # Create relative transformation constraint
+        pc = RelativeTransformation(
+            name,
+            robot,
+            joint_gripper,
+            joint_tool,
+            frame1_tf,
+            frame2_tf,
+            mask_vec,
+        )
 
-            # Create comparison types (all EqualToZero for grasp)
-            cts = ComparisonTypes()
-            cts[:] = tuple([ComparisonType.EqualToZero] * sum(mask))
+        # Create comparison types (all EqualToZero for grasp)
+        cts = ComparisonTypes()
+        cts[:] = tuple([ComparisonType.EqualToZero] * sum(mask))
 
-            # Create implicit constraint
-            constraint = Implicit(pc, cts, mask_vec)
-            logger.info("✓ %s: %s -> %s (PyHPP)", name, gripper, tool)
-            return constraint
-        else:
-            # CORBA backend
-            ps.createTransformationConstraint(name, gripper, tool, transform, mask)
-            logger.info("✓ %s: %s -> %s", name, gripper, tool)
-            return None
+        # Create implicit constraint
+        constraint = Implicit(pc, cts, mask_vec)
+        logger.info("✓ %s: %s -> %s (PyHPP)", name, gripper, tool)
+        return constraint
 
     @staticmethod
     def create_placement_constraint(
@@ -193,24 +185,24 @@ class ConstraintBuilder:
         world_pose: List[float],
         mask: List[bool],
         robot=None,
-        backend: str = "corba",
+        backend: str = "pyhpp",
         backend_obj=None,
     ) -> Any:
         """
         Create a placement constraint (object on surface).
 
         Args:
-            ps: Problem solver instance (CORBA) or Problem (PyHPP)
+            ps: Problem instance
             name: Constraint name
             tool: Tool joint name
             world_pose: World pose [x, y, z, qx, qy, qz, qw]
             mask: Boolean mask for DOF constraints
-            robot: Robot/Device instance (required for PyHPP)
-            backend: "corba" or "pyhpp"
+            robot: Robot/Device instance (required)
+            backend: "pyhpp"
             backend_obj: BackendBase instance (preferred; overrides string dispatch)
 
         Returns:
-            Implicit constraint for PyHPP, None for CORBA
+            Implicit constraint
         """
         if backend_obj is not None:
             logger.debug(
@@ -228,48 +220,42 @@ class ConstraintBuilder:
             backend,
         )
 
-        if backend == "pyhpp":
-            if robot is None:
-                raise ValueError("robot parameter required for PyHPP backend")
-            if not HAS_PYHPP_CONSTRAINTS:
-                raise ImportError("PyHPP constraints not available")
+        if robot is None:
+            raise ValueError("robot parameter required for PyHPP backend")
+        if not HAS_PYHPP_CONSTRAINTS:
+            raise ImportError("PyHPP constraints not available")
 
-            # Get joint ID and frame placement (handles both joint and frame names)
-            joint_tool, frame_placement = get_joint_id_for_name(robot, tool)
+        # Get joint ID and frame placement (handles both joint and frame names)
+        joint_tool, frame_placement = get_joint_id_for_name(robot, tool)
 
-            # Convert world pose to SE3
-            world_tf = xyzquat_to_se3(world_pose)
+        # Convert world pose to SE3
+        world_tf = xyzquat_to_se3(world_pose)
 
-            # Transformation constraint: joint frame should be at world_tf
-            # If tool is a frame, we need frame_placement as the local transform
-            # The constraint is: world_tf = joint_tf * frame_placement
-            # So joint_tf should satisfy this relationship
+        # Transformation constraint: joint frame should be at world_tf
+        # If tool is a frame, we need frame_placement as the local transform
+        # The constraint is: world_tf = joint_tf * frame_placement
+        # So joint_tf should satisfy this relationship
 
-            # Create transformation constraint
-            pc = Transformation(
-                name,
-                robot,
-                joint_tool,
-                frame_placement,
-                world_tf,
-                mask,
-            )
+        # Create transformation constraint
+        pc = Transformation(
+            name,
+            robot,
+            joint_tool,
+            frame_placement,
+            world_tf,
+            mask,
+        )
 
-            # Create comparison types (EqualToZero for placement)
-            num_constrained = sum(mask)
-            cts = ComparisonTypes()
-            cts[:] = tuple([ComparisonType.EqualToZero] * num_constrained)
-            implicit_mask = [True] * num_constrained
+        # Create comparison types (EqualToZero for placement)
+        num_constrained = sum(mask)
+        cts = ComparisonTypes()
+        cts[:] = tuple([ComparisonType.EqualToZero] * num_constrained)
+        implicit_mask = [True] * num_constrained
 
-            # Create implicit constraint
-            constraint = Implicit(pc, cts, implicit_mask)
-            logger.info("✓ %s: tool at %s (PyHPP)", name, world_pose[:3])
-            return constraint
-        else:
-            # CORBA backend
-            ps.createTransformationConstraint(name, "", tool, world_pose, mask)
-            logger.info("✓ %s: tool at %s", name, world_pose[:3])
-            return None
+        # Create implicit constraint
+        constraint = Implicit(pc, cts, implicit_mask)
+        logger.info("✓ %s: tool at %s (PyHPP)", name, world_pose[:3])
+        return constraint
 
     @staticmethod
     def create_complement_constraint(
@@ -279,24 +265,24 @@ class ConstraintBuilder:
         world_pose: List[float],
         complement_mask: List[bool],
         robot=None,
-        backend: str = "corba",
+        backend: str = "pyhpp",
         backend_obj=None,
     ) -> Any:
         """
         Create complement constraint (free DOFs).
 
         Args:
-            ps: Problem solver instance (CORBA) or Problem (PyHPP)
+            ps: Problem instance
             base_name: Base constraint name
             tool: Tool joint name
             world_pose: World pose [x, y, z, qx, qy, qz, qw]
             complement_mask: Boolean mask for complement DOFs
-            robot: Robot/Device instance (required for PyHPP)
-            backend: "corba" or "pyhpp"
+            robot: Robot/Device instance (required)
+            backend: "pyhpp"
             backend_obj: BackendBase instance (preferred; overrides string dispatch)
 
         Returns:
-            Implicit constraint for PyHPP, None for CORBA
+            Implicit constraint
         """
         if backend_obj is not None:
             logger.debug(
@@ -316,57 +302,49 @@ class ConstraintBuilder:
 
         constraint_name = f"{base_name}/complement"
 
-        if backend == "pyhpp":
-            if robot is None:
-                raise ValueError("robot parameter required for PyHPP backend")
-            if not HAS_PYHPP_CONSTRAINTS:
-                raise ImportError("PyHPP constraints not available")
+        if robot is None:
+            raise ValueError("robot parameter required for PyHPP backend")
+        if not HAS_PYHPP_CONSTRAINTS:
+            raise ImportError("PyHPP constraints not available")
 
-            # Get joint ID and frame placement (handles both joint and frame names)
-            joint_tool, frame_placement = get_joint_id_for_name(robot, tool)
+        # Get joint ID and frame placement (handles both joint and frame names)
+        joint_tool, frame_placement = get_joint_id_for_name(robot, tool)
 
-            # Convert world pose to SE3
-            world_tf = xyzquat_to_se3(world_pose)
+        # Convert world pose to SE3
+        world_tf = xyzquat_to_se3(world_pose)
 
-            # Create transformation constraint
-            pc = Transformation(
-                constraint_name,
-                robot,
-                joint_tool,
-                frame_placement,
-                world_tf,
-                complement_mask,
-            )
+        # Create transformation constraint
+        pc = Transformation(
+            constraint_name,
+            robot,
+            joint_tool,
+            frame_placement,
+            world_tf,
+            complement_mask,
+        )
 
-            # Complement uses Equality comparison type
-            num_constrained = sum(complement_mask)
-            cts = ComparisonTypes()
-            cts[:] = tuple([ComparisonType.Equality] * num_constrained)
-            implicit_mask = [True] * num_constrained
+        # Complement uses Equality comparison type
+        num_constrained = sum(complement_mask)
+        cts = ComparisonTypes()
+        cts[:] = tuple([ComparisonType.Equality] * num_constrained)
+        implicit_mask = [True] * num_constrained
 
-            # Create implicit constraint
-            constraint = Implicit(pc, cts, implicit_mask)
-            logger.info("✓ %s: free DOFs (PyHPP)", constraint_name)
-            return constraint
-        else:
-            # CORBA backend
-            ps.createTransformationConstraint(
-                constraint_name, "", tool, world_pose, complement_mask
-            )
-            logger.info("✓ %s: free DOFs", constraint_name)
-            return None
+        # Create implicit constraint
+        constraint = Implicit(pc, cts, implicit_mask)
+        logger.info("✓ %s: free DOFs (PyHPP)", constraint_name)
+        return constraint
 
     @staticmethod
     def create_constraints_from_defs(
         ps,
         constraint_defs: Iterable[tuple],
         robot=None,
-        backend: str = "corba",
+        backend: str = "pyhpp",
     ) -> Dict[str, Any]:
         """Create constraints from a list of (type, name, args) definitions.
 
         Args:
-            ps: Problem solver instance (CORBA) or Problem (PyHPP)
+            ps: Problem instance
             constraint_defs: Iterable of (ctype, name, args) tuples where:
                 - ctype: "grasp", "placement", or "complement"
                 - name: Constraint name
@@ -374,12 +352,11 @@ class ConstraintBuilder:
                     - grasp: gripper, obj, transform, mask
                     - placement: obj, transform, mask
                     - complement: obj, transform, mask
-            robot: Robot/Device instance (required for PyHPP)
-            backend: "corba" or "pyhpp"
+            robot: Robot/Device instance (required)
+            backend: "pyhpp"
 
         Returns:
-            Dict mapping constraint names to constraint objects (PyHPP) or
-            empty dict (CORBA, constraints stored in problem solver).
+            Dict mapping constraint names to constraint objects.
         """
         constraints: Dict[str, Any] = {}
 
@@ -418,8 +395,8 @@ class ConstraintBuilder:
             else:
                 continue
 
-            # Store constraint for PyHPP
-            if backend == "pyhpp" and result is not None:
+            # Store constraint
+            if result is not None:
                 key = f"{name}/complement" if ctype == "complement" else name
                 constraints[key] = result
 
@@ -431,24 +408,22 @@ class ConstraintBuilder:
         robot,
         q_ref: List[float],
         patterns: List[str],
-        backend: str = "corba",
+        backend: str = "pyhpp",
     ) -> tuple:
         """Create locked joint constraints for freezing joints.
 
         Locks joints whose names contain any of the given pattern substrings.
 
         Args:
-            ps: Problem solver instance (CORBA) or Problem (PyHPP)
+            ps: Problem instance
             robot: Robot/Device instance
             q_ref: Reference configuration to extract joint values from
             patterns: List of substrings to match against joint names
                 (case-insensitive)
-            backend: "corba" or "pyhpp"
+            backend: "pyhpp"
 
         Returns:
-            Tuple of (locked, joint_names):
-            - CORBA: (List[str] constraint names, List[str] joint names)
-            - PyHPP:  (List[LockedJoint] objects,  List[str] joint names)
+            Tuple of (List[LockedJoint] objects, List[str] joint names)
 
         Example:
             # Lock all gripper joints
@@ -461,113 +436,63 @@ class ConstraintBuilder:
 
         patterns_l = [p.lower() for p in patterns]
 
-        if backend == "pyhpp":
-            if not HAS_PYHPP_CONSTRAINTS:
-                raise ImportError("pyhpp.constraints not available")
+        if not HAS_PYHPP_CONSTRAINTS:
+            raise ImportError("pyhpp.constraints not available")
 
-            model = robot.model()
-            locked_constraints = []
-            frozen_names: List[str] = []
+        model = robot.model()
+        locked_constraints = []
+        frozen_names: List[str] = []
 
-            for jn in robot.getJointNames():
-                if not any(p in jn.lower() for p in patterns_l):
-                    continue
-                if not model.existJointName(jn):
-                    continue
-                try:
-                    jid = model.getJointId(jn)
-                    rank = model.joints[jid].idx_q
-                    size = model.joints[jid].nq
-                except Exception:
-                    continue
-                if size <= 0 or rank < 0 or rank + size > len(q_ref):
-                    continue
+        for jn in robot.getJointNames():
+            if not any(p in jn.lower() for p in patterns_l):
+                continue
+            if not model.existJointName(jn):
+                continue
+            try:
+                jid = model.getJointId(jn)
+                rank = model.joints[jid].idx_q
+                size = model.joints[jid].nq
+            except Exception:
+                continue
+            if size <= 0 or rank < 0 or rank + size > len(q_ref):
+                continue
 
-                import numpy as np
+            import numpy as np
 
-                # Boost.Python requires an Eigen vector (numpy array), not list
-                values = np.array(q_ref[rank : rank + size], dtype=float)
+            # Boost.Python requires an Eigen vector (numpy array), not list
+            values = np.array(q_ref[rank : rank + size], dtype=float)
 
-                # Use EqualToZero: the locked value is baked into the
-                # ConstantFunction at creation time.  Equality would make
-                # this a foliation constraint whose RHS is updated from the
-                # start config on every generateTargetConfig call, triggering
-                # the use-after-free in ExplicitConstraintSet::rightHandSideFromInput.
-                # comparisonType must have size nv (velocity DOF), not nq.
-                nv = model.joints[jid].nv
-                comp = ComparisonTypes()
-                comp[:] = tuple([ComparisonType.EqualToZero] * nv)
+            # Use EqualToZero: the locked value is baked into the
+            # ConstantFunction at creation time.  Equality would make
+            # this a foliation constraint whose RHS is updated from the
+            # start config on every generateTargetConfig call, triggering
+            # the use-after-free in ExplicitConstraintSet::rightHandSideFromInput.
+            # comparisonType must have size nv (velocity DOF), not nq.
+            nv = model.joints[jid].nv
+            comp = ComparisonTypes()
+            comp[:] = tuple([ComparisonType.EqualToZero] * nv)
 
-                try:
-                    locked = LockedJoint(robot, jn, values, comp)
-                    locked_constraints.append(locked)
-                    frozen_names.append(jn)
-                    logger.debug(
-                        "✓ Locked joint (PyHPP): %s (nq=%d, nv=%d)", jn, size, nv
-                    )
-                except Exception as e:
-                    logger.warning("Failed to lock %s: %s", jn, e)
-
-            if frozen_names:
+            try:
+                locked = LockedJoint(robot, jn, values, comp)
+                locked_constraints.append(locked)
+                frozen_names.append(jn)
                 logger.debug(
-                    "Locked %d joint(s) (PyHPP): %s", len(frozen_names), frozen_names
+                    "✓ Locked joint (PyHPP): %s (nq=%d, nv=%d)", jn, size, nv
                 )
-            return locked_constraints, frozen_names
+            except Exception as e:
+                logger.warning("Failed to lock %s: %s", jn, e)
 
-        else:
-            # CORBA backend
-            get_joint_names = getattr(robot, "getJointNames", None)
-            get_size = getattr(robot, "getJointConfigSize", None)
-            rank_map = getattr(robot, "rankInConfiguration", None)
-            create_locked = getattr(ps, "createLockedJoint", None)
-            set_rhs = getattr(ps, "setConstantRightHandSide", None)
-
-            all_required = [get_joint_names, get_size, create_locked]
-            if not all(callable(f) for f in all_required):
-                return [], []
-            if rank_map is None:
-                return [], []
-
-            constraint_names: List[str] = []
-            frozen_names = []
-
-            for jn in get_joint_names():
-                if not any(p in jn.lower() for p in patterns_l):
-                    continue
-                try:
-                    size = int(get_size(jn))
-                    rank = int(rank_map[jn])
-                except Exception:
-                    continue
-                if size <= 0 or rank < 0 or rank + size > len(q_ref):
-                    continue
-
-                values = [float(q_ref[rank + k]) for k in range(size)]
-                constraint_name = f"locked_{jn}"
-                try:
-                    create_locked(constraint_name, jn, values)
-                    # Make RHS constant (True = EqualToZero semantics).
-                    # False would call comparisonType(name, Equality) inside
-                    # the CORBA server, making the joint a foliation constraint
-                    # whose RHS is updated per leaf — triggering the
-                    # use-after-free in ExplicitConstraintSet::rightHandSideFromInput.
-                    if callable(set_rhs):
-                        set_rhs(constraint_name, True)
-                    constraint_names.append(constraint_name)
-                    frozen_names.append(jn)
-                    logger.debug("✓ Locked joint: %s (size=%d)", jn, size)
-                except Exception as e:
-                    logger.warning("Failed to lock %s: %s", jn, e)
-
-            if frozen_names:
-                logger.debug("Locked %d joint(s): %s", len(frozen_names), frozen_names)
-            return constraint_names, frozen_names
+        if frozen_names:
+            logger.debug(
+                "Locked %d joint(s) (PyHPP): %s", len(frozen_names), frozen_names
+            )
+        return locked_constraints, frozen_names
 
 
 class FactoryConstraintRegistry:
     """Register constraints for use with ConstraintGraphFactory.
 
-    The ConstraintGraphFactory (both CORBA and PyHPP) uses fixed naming:
+    The ConstraintGraphFactory uses fixed naming:
     - Grasp:         "{gripper} grasps {handle}"
     - Pregrasp:      "{gripper} pregrasps {handle}"
     - Placement:     "place_{object}"
@@ -578,13 +503,6 @@ class FactoryConstraintRegistry:
     This class creates constraints with factory-compatible names and stores
     them for passing to the factory:
 
-    **CORBA backend:**
-    - Constraints are created via `ps.createTransformationConstraint(name, ...)`
-    - The factory checks `problem.getAvailable("numericalconstraint")` to see
-      if a constraint exists; if so, it skips creation in `buildGrasp`/`buildPlacement`
-    - Pass nothing extra to factory; constraints are already registered
-
-    **PyHPP backend:**
     - Constraints are Implicit objects stored in `self.constraints` dict
     - Pass `self.constraints` to `ConstraintGraphFactory(graph, constraints=...)`
     - The factory's `ConstraintFactory.registerConstraints()` makes them available
@@ -599,11 +517,8 @@ class FactoryConstraintRegistry:
         registry.register_placement(obj, pose, mask)
         registry.register_placement_complement(obj, pose, complement_mask)
 
-        # For PyHPP: pass constraints to factory
-        if backend == "pyhpp":
-            factory = ConstraintGraphFactory(graph, constraints=registry.constraints)
-        else:
-            factory = ConstraintGraphFactory(graph)
+        # Pass constraints to factory
+        factory = ConstraintGraphFactory(graph, constraints=registry.constraints)
 
         # Factory will skip creating constraints that already exist
         factory.generate()
@@ -613,31 +528,31 @@ class FactoryConstraintRegistry:
         self,
         ps,
         robot=None,
-        backend: str = "corba",
+        backend: str = "pyhpp",
         backend_obj=None,
     ):
         """
         Initialize the registry.
 
         Args:
-            ps: Problem solver (CORBA) or Problem (PyHPP)
-            robot: Robot/Device instance (required for PyHPP)
-            backend: "corba" or "pyhpp"
+            ps: Problem instance
+            robot: Robot/Device instance (required)
+            backend: "pyhpp"
             backend_obj: BackendBase instance for polymorphic dispatch (optional)
         """
         self.ps = ps
         self.robot = robot
         self.backend = backend.lower()
         self._backend_obj = backend_obj
-        # Store constraint objects (PyHPP) or just names (CORBA)
-        # For PyHPP: pass this dict to ConstraintGraphFactory(graph, constraints=...)
+        # Store constraint objects.
+        # Pass this dict to ConstraintGraphFactory(graph, constraints=...)
         self.constraints: Dict[str, Any] = {}
 
     # --- Internal helpers ----------------------------------------------
 
     def _store(self, name: str, result: Any) -> None:
-        """Store constraint object (PyHPP only)."""
-        if self.backend == "pyhpp" and result is not None:
+        """Store constraint object."""
+        if result is not None:
             self.constraints[name] = result
 
     # --- Factory naming conventions ------------------------------------
@@ -924,8 +839,7 @@ class FactoryConstraintRegistry:
     def get_all_constraints(self) -> Dict[str, Any]:
         """Get all registered constraint objects.
 
-        For PyHPP: pass this to ConstraintGraphFactory(graph, constraints=...).
-        For CORBA: this dict is empty (constraints registered in problem solver).
+        Pass this to ConstraintGraphFactory(graph, constraints=...).
         """
         return dict(self.constraints)
 
@@ -933,16 +847,11 @@ class FactoryConstraintRegistry:
         """Get the constraints argument for ConstraintGraphFactory.
 
         Usage:
-            factory = ConstraintGraphFactory(graph, **registry.get_factory_kwargs())
-        or:
-            if backend == "pyhpp":
-                factory = ConstraintGraphFactory(
-                    graph, constraints=registry.get_factory_constraints_arg()
-                )
+            factory = ConstraintGraphFactory(
+                graph, constraints=registry.get_factory_constraints_arg()
+            )
         """
-        if self.backend == "pyhpp":
-            return dict(self.constraints)
-        return {}
+        return dict(self.constraints)
 
     # --- Bulk registration from constraint defs ------------------------
 

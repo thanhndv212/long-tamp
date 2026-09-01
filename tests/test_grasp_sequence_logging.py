@@ -66,9 +66,9 @@ class TestBuildPhaseGraphAndConstraintsLogging:
         planner.planner = object()  # no .graph attr -> update branch skipped
         planner.config_gen = None
         planner.task_config = object()
-        # "corba" so ConfigGenerator.__init__ doesn't call
+        # Any non-"pyhpp" value so ConfigGenerator.__init__ doesn't call
         # ps.configurationShooter() (only done for "pyhpp").
-        planner.backend = "corba"
+        planner.backend = "none"
         return planner
 
     def test_phase_start_fires_even_when_emit_logs_false(self):

@@ -776,7 +776,7 @@ def visualize_constraint_graph(
     with optional PNG generation and display.
 
     Args:
-        graph: ConstraintGraph instance (CORBA) or Graph instance (PyHPP)
+        graph: Graph instance (PyHPP)
         output_path: Base path for output files (without extension)
         include_subgraph: Include subgraph details if available
         show_png: If True, attempt to open the PNG after generation

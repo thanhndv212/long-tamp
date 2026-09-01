@@ -14,8 +14,8 @@ Multi-arm collaborative manipulation planning for SpaceLab assembly tasks using 
 - **Constraint-graph manipulation planning.** Grasp, placement, and transition constraints are generated from a declarative `ManipulationConfig`; the constraint graph and its edges are built automatically per phase.
 - **Reproducibility, introspection & crash recovery.** Structured, crash-safe JSONL run logging captures every phase/edge attempt for replay, debugging, and auditing (see *Run Logging*); a separate path-capture mechanism (`PathRecorder`) samples every planned/executed path to disk as it happens, so a run can be continuity-checked or replayed in a fresh process after a crash, and long missions can checkpoint and resume rather than replan from the start (see [`docs/usage/standalone-usage.md`](docs/usage/standalone-usage.md) §§8–10).
 - **Modular architecture.** Reusable building blocks — `SceneBuilder`, `ConstraintBuilder`, `ConfigGenerator`, `ManipulationTask`, `create_planner()` — compose into custom tasks.
-- **Scene visualization.** Interactive 3D viewers: browser-based **viser** (default, no X11) or **gepetto-viewer** (Qt/CORBA).
-- **PyHPP backend** (default): in-process bindings via `hpp-python`. The CORBA backend (`hpp-manipulation-corba`) is still available but **deprecated**.
+- **Scene visualization.** Interactive 3D viewers: browser-based **viser** (default, no X11) or **gepetto-viewer** (Qt).
+- **PyHPP backend**: in-process bindings via `hpp-python`.
 
 ## Installation
 
@@ -24,7 +24,7 @@ Multi-arm collaborative manipulation planning for SpaceLab assembly tasks using 
 | Tier | Packages | Source |
 |------|----------|--------|
 | **Python (PyPI)** | `numpy`, `pyyaml`, `pinocchio` (`pin`), and the viser viewer stack (`viser`, `trimesh`, `pycollada`) | `pip` |
-| **HPP native bindings** | `hpp-python` (pyhpp), `hpp-toppra`, `hpp-gepetto-viewer`, `hpp-manipulation-corba`, `omniORBpy`, … | **robotpkg / conda-forge / source only — NOT on PyPI** |
+| **HPP native bindings** | `hpp-python` (pyhpp), `hpp-toppra`, `hpp-gepetto-viewer`, … | **robotpkg / conda-forge / source only — NOT on PyPI** |
 
 The HPP native bindings are C++ extension modules and **cannot be installed with pip**. `pip install agimus-spacelab` therefore gives you a working *pure-Python* package (config parsing, planning-graph construction, transforms, run logging, viser viewer), but the planning **backends** must be provided by your environment (the `hpp-agimus` container, robotpkg, or conda-forge). Instantiating a backend without its bindings raises an `ImportError` explaining exactly what is missing.
 
@@ -48,7 +48,7 @@ Follow the **[official HPP installation guide](https://humanoid-path-planner.git
 > current stable release (`hpp-python` 6.1.0) does not yet ship. The
 > source-built HPP (the `hpp-agimus` container / `DEVEL_HPP_DIR` flow — see
 > *Source build* below) always has them; the robotpkg binary is still fine
-> for the C++ toolchain and the deprecated CORBA backend regardless.
+> for the C++ toolchain regardless.
 >
 > **If you do use the robotpkg binary, check it actually provides those
 > symbols before relying on it** — `import pyhpp` succeeding doesn't confirm
@@ -82,15 +82,6 @@ Both are required, not just `hpp-python` — despite the name, the second packag
 project defaults to), not just the legacy Qt/CORBA Gepetto viewer. `hpp-python` alone plans
 headlessly with no viewer at all; without the second package, `./interactive_planning.py -i`
 from Quick Start has nothing to display into.
-
-**Optional — deprecated CORBA backend.** Only needed if you set
-`backend:=corba`. This is the single extra package; its own dependencies
-(`hpp-corbaserver`, `omniorbpy`, core libs) are already present from the
-required step above:
-
-```bash
-sudo apt-get install robotpkg-py${pyver}-hpp-manipulation-corba
-```
 
 **Not available as a binary — TOPPRA.** `hpp-toppra` and its `toppra` C++
 dependency are not published in robotpkg (checked: absent from both `pub`
@@ -161,16 +152,12 @@ Build options (see `CMakeLists.txt`):
 |--------|:-------:|----------|----------------------|
 | `WITH_PYHPP`  | **ON**  | PyHPP backend (default) | `hpp-python` |
 | `WITH_TOPPRA` | OFF     | TOPPRA time-parameterization optimizer | `hpp-toppra` (which requires the `toppra` C++ lib ≥0.6.2) |
-| `WITH_CORBA`  | **OFF** *(deprecated)* | CORBA backend | `hpp-manipulation-corba`, `hpp-corbaserver`, `omniORBpy` |
 
-`hpp-gepetto-viewer` is picked up whenever `WITH_PYHPP` **or** `WITH_CORBA` is enabled — it provides both the Gepetto (CORBA/Qt) viewer and the `pyhpp_viser` browser viewer.
+`hpp-gepetto-viewer` is picked up whenever `WITH_PYHPP` is enabled — it provides both the Gepetto (Qt) viewer and the `pyhpp_viser` browser viewer.
 
 ```bash
 # Enable the optional TOPPRA optimizer:
 cmake .. -DCMAKE_INSTALL_PREFIX=$INSTALL_HPP_DIR -DWITH_TOPPRA=ON
-
-# Re-enable the deprecated CORBA backend (emits a deprecation warning):
-cmake .. -DCMAKE_INSTALL_PREFIX=$INSTALL_HPP_DIR -DWITH_CORBA=ON
 ```
 
 ### Optional feature extras
@@ -180,7 +167,6 @@ The pip extras below carry **no PyPI packages** — they are documented install 
 | Extra | Command | Native packages to install separately |
 |-------|---------|---------------------------------------|
 | `toppra` | `pip install "agimus-spacelab[toppra]"` | `hpp-toppra`, `toppra` — **source build only** (not in robotpkg) |
-| `corba` *(deprecated)* | `pip install "agimus-spacelab[corba]"` | `hpp-manipulation-corba`, `hpp-corbaserver`, `hpp-gepetto-viewer`, `omniORBpy` |
 
 ### Backend availability at runtime
 
@@ -214,7 +200,7 @@ flowchart TB
     script["script/<br/>end-user task scripts<br/>(one per robot/mission)"]
     tasks["tasks/<br/>ManipulationTask, GraspSequencePlanner,<br/>InteractiveGraspSequenceBuilder"]
     planning["planning/<br/>SceneBuilder, ConstraintBuilder, GraphBuilder,<br/>ConfigGenerator, GraspStateTracker,<br/>SequentialConstraintGraphFactory,<br/>SequentialGraspFilter, path_io,<br/>path_recorder, path_replay"]
-    backends["backends/<br/>BackendBase (ABC) → PyHPPBackend, CorbaBackend<br/>only layer importing pyhpp.* / hpp.corbaserver.*"]
+    backends["backends/<br/>BackendBase (ABC) → PyHPPBackend<br/>only layer importing pyhpp.*"]
 
     config["config/<br/>BaseTaskConfig, YamlTaskLoader, RuleGenerator"]
     logging_["logging/<br/>RunLogger, JSONL event schema"]

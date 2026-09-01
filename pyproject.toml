@@ -67,13 +67,6 @@ toppra = [
     # System packages only: hpp-toppra, toppra.
 ]
 
-# CORBA backend — DEPRECATED, scheduled for removal. Prefer the default pyhpp
-# backend. Native-only prerequisites: hpp-manipulation-corba, hpp-corbaserver,
-# hpp-gepetto-viewer, omniORBpy. Install via robotpkg / conda-forge.
-corba = [
-    # System packages only.
-]
-
 dev = [
     "pytest>=6.0",
     "pytest-cov",

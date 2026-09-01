@@ -5,7 +5,7 @@
   <version>0.1.0</version>
   <description>
     Agimus Spacelab - A generalized manipulation planning framework
-    supporting both CORBA and PyHPP backends for HPP-based manipulation tasks.
+    using the PyHPP backend for HPP-based manipulation tasks.
   </description>
   
   <author email="dvtnguyen@laas.fr">Thanh Nguyen</author>
@@ -26,10 +26,9 @@
   <depend>python3-numpy</depend>
   <depend>python3-yaml</depend>
 
-  <!-- Viewer bindings: hpp-gepetto-viewer provides both the Gepetto (CORBA/Qt)
-       viewer AND the pyhpp_viser browser viewer, so it is needed by either
-       backend. -->
-  <depend condition="$WITH_PYHPP or $WITH_CORBA">hpp-gepetto-viewer</depend>
+  <!-- Viewer bindings: hpp-gepetto-viewer provides both the Gepetto (Qt)
+       viewer AND the pyhpp_viser browser viewer. -->
+  <depend condition="$WITH_PYHPP">hpp-gepetto-viewer</depend>
 
   <!-- PyHPP backend (default) -->
   <depend condition="$WITH_PYHPP">hpp-python</depend>
@@ -38,9 +37,6 @@
        (which itself requires the toppra C++ package). -->
   <depend condition="$WITH_TOPPRA">hpp-toppra</depend>
 
-  <!-- CORBA backend (DEPRECATED, off by default) -->
-  <depend condition="$WITH_CORBA">hpp-manipulation-corba</depend>
-  
   <!-- Test dependencies -->
   <test_depend>python3-pytest</test_depend>
   

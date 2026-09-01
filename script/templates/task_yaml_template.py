@@ -16,7 +16,7 @@ HOW TO USE
     known false-positive collisions (optional, can be []).
 6.  Run:
         python script/<your_robot>/task_<name>.py --backend pyhpp
-        python script/<your_robot>/task_<name>.py --backend corba
+        python script/<your_robot>/task_<name>.py --backend pyhpp
 
 ARCHITECTURE
 ------------
@@ -361,7 +361,7 @@ def main() -> int:
     parser.add_argument(
         "--backend",
         default="pyhpp",
-        choices=["pyhpp", "corba"],
+        choices=["pyhpp"],
         help="HPP backend to use (default: pyhpp)",
     )
     parser.add_argument(

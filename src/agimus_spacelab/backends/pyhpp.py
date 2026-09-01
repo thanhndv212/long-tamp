@@ -129,14 +129,14 @@ class PyHPPBackend(BackendBase):
         self.path = None
         self._path_optimizers = []  # List of path optimizer instances
 
-        # Stored paths (local equivalent to CORBA ProblemSolver path ids)
+        # Stored paths (local path ids, indices into self._stored_paths)
         self._stored_paths: List[Any] = []
 
         # TransitionPlanner (edge-scoped planning)
         self._transition_planner = None
-        # Base timeout for planning (aligned with CORBA)
+        # Base timeout for planning
         self._transition_time_out = 60.0
-        # Base iterations for RRT* (aligned with CORBA)
+        # Base iterations for RRT*
         self._transition_max_iterations = 10000
         # (projector_type, step). If None, fall back to problem.pathProjector()
         self._transition_path_projector: Optional[Tuple[str, float]] = (
@@ -1418,8 +1418,8 @@ class PyHPPBackend(BackendBase):
         if opt_instance is None:
             available = sorted(self._path_optimizer_factories().keys())
             logger.warning(
-                "Unknown optimizer: %r (not available in pyhpp; requires CORBA "
-                "plugin). Falling back to 'RandomShortcut'. Available: %s",
+                "Unknown optimizer: %r (not available in pyhpp). "
+                "Falling back to 'RandomShortcut'. Available: %s",
                 optimizer,
                 available,
             )
@@ -1532,7 +1532,7 @@ class PyHPPBackend(BackendBase):
                 f"PYHPP-GAP: Cannot project q_goal onto leaf for edge '{edge_name}'. "
                 "applyLeafConstraints not available in this pyhpp build. "
                 "This is required for TransitionPlanner. "
-                "Workaround: use backend='corba' or rebuild hpp-python with full bindings."
+                "Workaround: rebuild hpp-python with full bindings."
             )
 
         try:
@@ -1772,7 +1772,6 @@ class PyHPPBackend(BackendBase):
             value: Parameter value
 
         Note:
-            In PyHPP, parameters are typically set differently than in CORBA.
             This method attempts to set parameters on the problem if the
             TransitionPlanner exposes it, otherwise stores for later use.
         """
@@ -2031,12 +2030,12 @@ class PyHPPBackend(BackendBase):
     ) -> Tuple[Union[int, Any], Any]:
         """Plan a transition along a specific graph edge.
 
-        PYHPP-GAP: Requires graph.applyLeafConstraints() binding.
-        - CORBA backend: Leaf projection happens internally in C++
-        - PyHPP backend: Must explicitly call applyLeafConstraints() in Python
+        PYHPP-GAP: Requires graph.applyLeafConstraints() binding — the
+        PyHPP backend must explicitly call applyLeafConstraints() in
+        Python for leaf projection.
 
         If applyLeafConstraints is not available, this method will raise
-        RuntimeError. Workaround: use backend='corba' or rebuild hpp-python.
+        RuntimeError. Workaround: rebuild hpp-python with full bindings.
 
         Implements smart planning strategy:
         - Applies distance-based timeout/iteration scaling
@@ -2078,7 +2077,8 @@ class PyHPPBackend(BackendBase):
             self._validate_edge_endpoints(tr, edge_name, q1_arr, q2_arr)
 
         # MANDATORY: Project q2 onto the constraint leaf defined by q1.
-        # TransitionPlanner strictly requires this (CORBA does it internally, pyhpp doesn't).
+        # TransitionPlanner strictly requires this; pyhpp doesn't do it
+        # internally, so it must happen explicitly here.
         try:
             q2_arr = self._project_onto_leaf(tr, q1_arr, q2_arr, edge_name)
         except RuntimeError as exc:
@@ -2086,9 +2086,8 @@ class PyHPPBackend(BackendBase):
             raise RuntimeError(
                 f"Cannot plan edge '{edge_name}' from q1 to q2: {exc}\n"
                 "Possible solutions:\n"
-                "  1. Use backend='corba' instead of 'pyhpp'\n"
-                "  2. Rebuild hpp-python with full manipulation bindings\n"
-                "  3. Ensure q2 was generated on the correct constraint manifold"
+                "  1. Rebuild hpp-python with full manipulation bindings\n"
+                "  2. Ensure q2 was generated on the correct constraint manifold"
             ) from exc
 
         # Smart planning strategy based on edge type

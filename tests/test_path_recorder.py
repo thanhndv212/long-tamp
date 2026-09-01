@@ -37,11 +37,12 @@ class FakePath:
 
     ``pyhpp.core.path.Vector`` exposes ``length()``, ``eval(t)``,
     ``__call__(t)``, ``initial()`` and ``end()`` -- and notably *not*
-    ``call(t)`` or ``getEndConfig()``, the CORBA-shaped names this
-    codebase's older call sites reach for. Getting that wrong is not
-    hypothetical: the first live run of the recorder captured zero
-    segments, failing every one with ``'Vector' object has no attribute
-    'call'``. ``FakeCorbaPath`` below covers the other shape.
+    ``call(t)`` or ``getEndConfig()``, the alternate accessor names this
+    codebase's older call sites guard for as a fallback. Getting that
+    wrong is not hypothetical: the first live run of the recorder
+    captured zero segments, failing every one with ``'Vector' object has
+    no attribute 'call'``. ``FakeAltShapePath`` below covers the other
+    shape.
     """
 
     def __init__(self, q0, q1, length=1.0, failing_samples=()):
@@ -67,7 +68,7 @@ class FakePath:
         return list(self.q1)
 
 
-class FakeCorbaPath(FakePath):
+class FakeAltShapePath(FakePath):
     """The other accessor spelling, plus a bare-q evaluator."""
 
     eval = None  # not offered by this shape
@@ -504,10 +505,10 @@ class TestAccessorShapes:
         rec = r.record_path(FakePath([0.0], [1.0]), kind="grasp")
         assert (rec["q_start"], rec["q_end"]) == ([0.0], [1.0])
 
-    def test_corba_shape_call_and_getconfig(self, tmp_path):
+    def test_alt_shape_call_and_getconfig(self, tmp_path):
         r = _rec(tmp_path)
         r.begin_step(0, "s")
-        rec = r.record_path(FakeCorbaPath([0.0], [1.0]), kind="grasp")
+        rec = r.record_path(FakeAltShapePath([0.0], [1.0]), kind="grasp")
         assert (rec["q_start"], rec["q_end"]) == ([0.0], [1.0])
 
     def test_callable_path(self, tmp_path):

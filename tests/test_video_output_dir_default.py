@@ -15,7 +15,6 @@ hpp-arm64 container.
 import inspect
 from pathlib import Path
 
-from agimus_spacelab.backends.corba import CorbaBackend
 from agimus_spacelab.backends.pyhpp import PyHPPBackend
 from agimus_spacelab.tasks.base import ManipulationTask
 from agimus_spacelab.tasks.grasp_sequence import GraspSequencePlanner
@@ -63,7 +62,7 @@ class TestVideoRecorderResolvesDefault:
 
 
 class TestNoHardcodedPersonalPathRemains:
-    """Regression guard: none of the 8 signatures that used to hardcode
+    """Regression guard: none of the 6 signatures that used to hardcode
     ``/home/dvtnguyen/devel/demos`` should default to any literal path
     string again -- all must default to None (resolved later via
     default_video_output_dir())."""
@@ -90,14 +89,6 @@ class TestNoHardcodedPersonalPathRemains:
     def test_pyhpp_play_and_record_path_vector(self):
         self._assert_output_dir_defaults_to_none(
             PyHPPBackend.play_and_record_path_vector
-        )
-
-    def test_corba_play_and_record_path(self):
-        self._assert_output_dir_defaults_to_none(CorbaBackend.play_and_record_path)
-
-    def test_corba_play_and_record_path_vector(self):
-        self._assert_output_dir_defaults_to_none(
-            CorbaBackend.play_and_record_path_vector
         )
 
     def test_video_recorder_init(self):

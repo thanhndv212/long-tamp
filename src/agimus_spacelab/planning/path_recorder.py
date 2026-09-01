@@ -503,12 +503,11 @@ class PathRecorder:
     def _evaluator(path: Any) -> Any:
         """Pick the path's configuration-at-parameter accessor.
 
-        The two backends disagree, and so does this codebase's own code.
         pyhpp's ``PathVector`` (``pyhpp.core.path.Vector``) exposes
         ``eval(t)`` and ``__call__(t)`` but no ``call`` -- which is why
         ``PyHPPBackend.save_path_as_waypoints``, written against
         ``call(t)``, never actually sampled anything on this backend.
-        ``call`` stays last in the chain for CORBA-shaped paths.
+        ``call`` stays last in the chain as a fallback.
         """
         for name in ("eval", "call"):
             fn = getattr(path, name, None)
@@ -550,10 +549,10 @@ class PathRecorder:
     ) -> list[float]:
         """First working endpoint accessor wins.
 
-        pyhpp names them ``initial()``/``end()``; the CORBA-shaped paths
-        this codebase's older call sites guard for use
-        ``getInitialConfig()``/``getEndConfig()``. Falling back to the
-        first/last sample keeps a path with neither usable.
+        pyhpp names them ``initial()``/``end()``; older call sites in this
+        codebase guard for ``getInitialConfig()``/``getEndConfig()``.
+        Falling back to the first/last sample keeps a path with neither
+        usable.
         """
         for getter in getters:
             fn = getattr(path, getter, None)

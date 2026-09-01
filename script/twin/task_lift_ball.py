@@ -329,7 +329,7 @@ def run_task(backend: str = "pyhpp", show_viewer: bool = False, viewer_type: str
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=TASK_NAME)
-    parser.add_argument("--backend", default="pyhpp", choices=["pyhpp", "corba"])
+    parser.add_argument("--backend", default="pyhpp", choices=["pyhpp"])
     parser.add_argument("--show-joints", action="store_true")
     parser.add_argument(
         "--viewer-type",

@@ -222,7 +222,7 @@ switch safe rather than a rewrite is `BackendBase`: every layer above `backends/
 once against the ABC and runs unmodified on either implementation, so this was a
 default-argument change, not a migration.
 
-*Source: `docs/hpp_python_interface/comparison_corba_vs_pyhpp.md`; `ARCHITECTURE.md` "Backends".*
+*Source: `docs/legacy/hpp_python_interface/comparison_corba_vs_pyhpp.md`; `ARCHITECTURE.md` "Backends".*
 
 ### 04.3 — Fixing the constraint-graph factory's memoization bug upstream
 *axis: runtime · upstream*

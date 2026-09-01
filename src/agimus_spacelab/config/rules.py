@@ -26,8 +26,7 @@ class RuleGenerator:
         Returns:
             List of Rule objects
         """
-        # This will be implemented specifically for each backend
-        # as Rule classes differ between CORBA and PyHPP
+        # This will be implemented specifically for the backend's Rule class
         raise NotImplementedError("Backend-specific implementation required")
 
     @staticmethod

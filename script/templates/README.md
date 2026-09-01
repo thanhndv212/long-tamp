@@ -65,11 +65,8 @@ The rest of the file (setup, planning, replay menu) works without modification.
 # Print joint names to find correct values for joint_groups in the YAML:
 python script/my_robot/task_my_task.py --show-joints
 
-# Plan with the PyHPP backend (no CORBA server needed):
+# Plan with the PyHPP backend:
 python script/my_robot/task_my_task.py --backend pyhpp
-
-# Plan with the CORBA backend:
-python script/my_robot/task_my_task.py --backend corba
 ```
 
 ### Real-world examples

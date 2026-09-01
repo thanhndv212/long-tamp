@@ -34,12 +34,12 @@ This module provides ConstraintGraphFactory subclasses optimized for
 sequential grasp planning where only one transition is needed per phase.
 
 Example:
-    >>> from hpp.corbaserver.manipulation import ConstraintGraph
-    >>> from hpp.corbaserver.manipulation.sequential_graph_factory import (
+    >>> from pyhpp.manipulation import Graph
+    >>> from agimus_spacelab.planning.sequential_graph_factory import (
     ...     SequentialConstraintGraphFactory
     ... )
     >>>
-    >>> graph = ConstraintGraph(robot, "graph")
+    >>> graph = Graph("graph", robot, ps)
     >>> factory = SequentialConstraintGraphFactory(
     ...     graph,
     ...     current_grasps=(None, 0, None),  # gripper1 holds handle0
@@ -53,10 +53,7 @@ Example:
 from functools import lru_cache
 from typing import Iterable, Optional, Sequence, Tuple
 
-try:
-    from hpp.corbaserver.manipulation import ConstraintGraphFactory
-except ImportError:
-    from pyhpp.manipulation.constraint_graph_factory import ConstraintGraphFactory
+from pyhpp.manipulation.constraint_graph_factory import ConstraintGraphFactory
 
 from agimus_spacelab.logging import get_logger
 
@@ -173,10 +170,8 @@ class PrunedRecursionMixin:
 def pruned_factory_class(base: type) -> type:
     """Return ``base`` with `PrunedRecursionMixin` woven in.
 
-    The backend decides the base class (CORBA and pyhpp ship separate copies
-    of ``ConstraintGraphFactory``), so the mixin is applied at the call site
-    rather than baked into a fixed subclass.  Cached, so repeated builds
-    reuse one class object.
+    The mixin is applied at the call site rather than baked into a fixed
+    subclass. Cached, so repeated builds reuse one class object.
     """
     return type(f"Pruned{base.__name__}", (PrunedRecursionMixin, base), {})
 

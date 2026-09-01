@@ -21,11 +21,11 @@ Step 4: Run.
     # Print joint names (useful when filling joint_groups in the YAML):
     python script/my_robot/task_my_task.py --show-joints
 
-    # Plan with the PyHPP backend (no CORBA server needed):
+    # Plan with the PyHPP backend:
     python script/my_robot/task_my_task.py --backend pyhpp
 
-    # Plan with the CORBA backend:
-    python script/my_robot/task_my_task.py --backend corba --no-viz
+    # Same, without the viewer:
+    python script/my_robot/task_my_task.py --backend pyhpp --no-viz
 
 HOW IT WORKS
 ============
@@ -366,7 +366,7 @@ def main() -> int:
     parser.add_argument(
         "--backend",
         default="pyhpp",
-        choices=["pyhpp", "corba"],
+        choices=["pyhpp"],
         help="HPP backend (default: pyhpp)",
     )
     parser.add_argument(
