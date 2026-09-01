@@ -1,25 +1,31 @@
 # TWIN "Lift Ball" task configuration (YAML)
-# Two independent UR5 arms simultaneously grasp a ball at two handles and
-# lift it together — TWIN-benchmark-style bimanual task (see PerAct2/TWIN,
-# research-vault/papers/twin-benchmark.md), ported onto agimus_spacelab's
-# HPP-based grasp/motion planner rather than TWIN's own RLBench simulator.
+# Two independent Franka Panda arms simultaneously grasp a ball at two
+# handles and lift it together — TWIN-benchmark-style bimanual task (see
+# PerAct2/TWIN, research-vault/papers/twin-benchmark.md), ported onto
+# agimus_spacelab's HPP-based grasp/motion planner rather than TWIN's own
+# RLBench simulator.
 #
-# Robot + object assets reused from the sibling hpp-practicals repo
+# Panda (with its real 2-DOF articulated parallel gripper, panda_finger_
+# joint1/2) replaces this task's original UR5 + rigid-tool0 setup — see
+# script/twin/README.md for why. Assets:
+#   - panda_bimanual.urdf.template + script/twin/assets/panda/meshes/:
+#     vendored from Gepetto/example-robot-data's panda_description
+#     (upstream: frankaemika/franka_description, Apache 2.0). The `urdf`
+#     paths below are placeholders — task_lift_ball.py renders the
+#     template (substituting an absolute mesh dir) to a temp file at
+#     runtime and overrides FILE_PATHS with that path, same as it already
+#     does for the ball's URDF/SRDF.
+#   - panda_bimanual.srdf: HPP gripper semantics authored fresh (not
+#     shipped upstream — example-robot-data's panda.srdf is MoveIt-style,
+#     no <gripper> concept), reusing its disable_collisions pairs.
+#   - pokeball_bimanual.urdf / .srdf: unchanged from the UR5 version of
+#     this task — ball geometry/handles don't depend on which arm holds
+#     them.
+#
+# Ground + ball still reused from the sibling hpp-practicals repo
 # (package://hpp_practicals/...) — see script/twin/README.md for the
 # one-time dev-environment setup (`AMENT_PREFIX_PATH` for package://
-# resolution). URDF/SRDF paths below are the ORIGINAL hpp_practicals ones
-# (kept for provenance); task_lift_ball.py overrides three of them at
-# runtime with local, derived copies under script/twin/assets/ — since this
-# repo doesn't (yet) register itself as an ament package for a package://
-# URI to reach a local file directly:
-#   - ur5_gripper_viser.urdf (both arms): <visual> mesh refs swapped from
-#     unsupported .osg to the matching .stl collision meshes, so the arms
-#     actually render in the viser browser viewer (collision/kinematics
-#     unchanged)
-#   - pokeball_bimanual.urdf: <visual> mesh swapped .osg -> .dae (same fix)
-#   - pokeball_bimanual.srdf: adds a second handle at the same point with a
-#     different approach direction (SpaceLab RS1 dual-handle precedent) —
-#     hpp_practicals' original pokeball.srdf has only one handle
+# resolution).
 #
 # Consumed by: YamlTaskLoader (src/agimus_spacelab/config/yaml_loader.py)
 
@@ -30,21 +36,24 @@ task: twin_lift_ball
 # ---------------------------------------------------------------------------
 paths:
   robot:
-    ur5_left:
-      urdf: "package://hpp_practicals/urdf/ur5_gripper.urdf"
-      srdf: "package://hpp_practicals/srdf/ur5_gripper.srdf"
-    ur5_right:
-      urdf: "package://hpp_practicals/urdf/ur5_gripper.urdf"
-      srdf: "package://hpp_practicals/srdf/ur5_gripper.srdf"
-      # [x, y, z, qx, qy, qz, qw] — 1.6m from ur5_left along X, rotated 180
-      # degrees about Z so it faces back toward the shared workspace. 0.9m
-      # was tried first and was too tight: both arms' neutral resting
-      # posture (elbow up, forearm forward) already collided
-      # (ur5_left/wrist_2_link_0 vs ur5_right/forearm_link_0) before any
-      # approach motion — UR5 reach is ~0.85m, so 1.6m base separation
-      # keeps a healthy margin while the ball (at the midpoint) stays
-      # within each arm's reach.
-      pose: [1.6, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+    panda_left:
+      # Overridden at runtime — see header comment.
+      urdf: "OVERRIDDEN_AT_RUNTIME_see_task_lift_ball.py"
+      srdf: "OVERRIDDEN_AT_RUNTIME_see_task_lift_ball.py"
+    panda_right:
+      urdf: "OVERRIDDEN_AT_RUNTIME_see_task_lift_ball.py"
+      srdf: "OVERRIDDEN_AT_RUNTIME_see_task_lift_ball.py"
+      # [x, y, z, qx, qy, qz, qw] — 1.1m from panda_left along X, rotated
+      # 180 degrees about Z so it faces back toward the shared workspace.
+      # Narrower than the UR5 setup's 1.6m: Panda's shoulder (panda_joint1)
+      # sits at z=0.333 in its own frame, well above UR5's z=0.089, so a
+      # target down at UR5's old (0.8, 0, 0.3) needed a much deeper reach
+      # for Panda and its IK failed to converge at all (verified: the same
+      # grasp succeeds once the target is closer/higher, e.g. (0.35, 0.45)
+      # — a pure reachability issue, not a constraint/orientation bug).
+      # 1.1m keeps the ball at the midpoint (0.55m) comfortably inside
+      # each arm's ~0.855m reach.
+      pose: [1.1, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
 
   environment:
     ground: "package://hpp_practicals/urdf/ur_benchmark/ground.urdf"
@@ -59,36 +68,50 @@ paths:
 # Scene selection
 # ---------------------------------------------------------------------------
 robots:
-  - ur5_left
-  - ur5_right
+  - panda_left
+  - panda_right
 
 environments:
   - ground
 
 # ---------------------------------------------------------------------------
 # Robot joint groups — same bounds for both arms, namespaced per robot.
+# Initial values are Panda's own standard "ready" pose (elbow bent, hand
+# facing forward) — the group_state "default" in Gepetto/example-robot-
+# data's panda.srdf. Bounds are the URDF's real joint limits (Panda's arm
+# joints are hard-limited, unlike UR5's continuous ones, so unlike that
+# config these aren't a blanket +/-2*pi). Finger joints are frozen (see
+# FREEZE_JOINT_SUBSTRINGS in task_lift_ball.py) at a width that roughly
+# frames the 0.05m-diameter ball — purely cosmetic, since this task's
+# grasp is a rigid TCP constraint, not simulated finger closing.
 # ---------------------------------------------------------------------------
 joint_groups:
-  UR5_LEFT:
-    - {joint: ur5_left/shoulder_pan_joint,  initial:  0.00, bounds: [-6.2832, 6.2832]}
-    - {joint: ur5_left/shoulder_lift_joint, initial: -1.57, bounds: [-6.2832, 6.2832]}
-    - {joint: ur5_left/elbow_joint,         initial:  1.57, bounds: [-6.2832, 6.2832]}
-    - {joint: ur5_left/wrist_1_joint,       initial:  0.00, bounds: [-6.2832, 6.2832]}
-    - {joint: ur5_left/wrist_2_joint,       initial:  0.00, bounds: [-6.2832, 6.2832]}
-    - {joint: ur5_left/wrist_3_joint,       initial:  0.00, bounds: [-6.2832, 6.2832]}
-  UR5_RIGHT:
-    - {joint: ur5_right/shoulder_pan_joint,  initial:  0.00, bounds: [-6.2832, 6.2832]}
-    - {joint: ur5_right/shoulder_lift_joint, initial: -1.57, bounds: [-6.2832, 6.2832]}
-    - {joint: ur5_right/elbow_joint,         initial:  1.57, bounds: [-6.2832, 6.2832]}
-    - {joint: ur5_right/wrist_1_joint,       initial:  0.00, bounds: [-6.2832, 6.2832]}
-    - {joint: ur5_right/wrist_2_joint,       initial:  0.00, bounds: [-6.2832, 6.2832]}
-    - {joint: ur5_right/wrist_3_joint,       initial:  0.00, bounds: [-6.2832, 6.2832]}
+  PANDA_LEFT:
+    - {joint: panda_left/panda_joint1,       initial:  0.000000, bounds: [-2.8973, 2.8973]}
+    - {joint: panda_left/panda_joint2,       initial: -0.785398, bounds: [-1.7628, 1.7628]}
+    - {joint: panda_left/panda_joint3,       initial:  0.000000, bounds: [-2.8973, 2.8973]}
+    - {joint: panda_left/panda_joint4,       initial: -2.356190, bounds: [-3.0718, -0.0698]}
+    - {joint: panda_left/panda_joint5,       initial:  0.000000, bounds: [-2.8973, 2.8973]}
+    - {joint: panda_left/panda_joint6,       initial:  1.570700, bounds: [-0.0175, 3.7525]}
+    - {joint: panda_left/panda_joint7,       initial:  0.785398, bounds: [-2.8973, 2.8973]}
+    - {joint: panda_left/panda_finger_joint1, initial: 0.025, bounds: [0.0, 0.04]}
+    - {joint: panda_left/panda_finger_joint2, initial: 0.025, bounds: [0.0, 0.04]}
+  PANDA_RIGHT:
+    - {joint: panda_right/panda_joint1,       initial:  0.000000, bounds: [-2.8973, 2.8973]}
+    - {joint: panda_right/panda_joint2,       initial: -0.785398, bounds: [-1.7628, 1.7628]}
+    - {joint: panda_right/panda_joint3,       initial:  0.000000, bounds: [-2.8973, 2.8973]}
+    - {joint: panda_right/panda_joint4,       initial: -2.356190, bounds: [-3.0718, -0.0698]}
+    - {joint: panda_right/panda_joint5,       initial:  0.000000, bounds: [-2.8973, 2.8973]}
+    - {joint: panda_right/panda_joint6,       initial:  1.570700, bounds: [-0.0175, 3.7525]}
+    - {joint: panda_right/panda_joint7,       initial:  0.785398, bounds: [-2.8973, 2.8973]}
+    - {joint: panda_right/panda_finger_joint1, initial: 0.025, bounds: [0.0, 0.04]}
+    - {joint: panda_right/panda_finger_joint2, initial: 0.025, bounds: [0.0, 0.04]}
 
 # ---------------------------------------------------------------------------
 # Freeflyer bounds applied to every object root joint (the ball)
 # ---------------------------------------------------------------------------
 freeflyer_bounds:
-  translation: [[0.0, 1.6], [-0.4, 0.4], [0.0, 0.8]]
+  translation: [[0.0, 1.1], [-0.4, 0.4], [0.0, 0.9]]
   quaternion:  [[-1.0001, 1.0001], [-1.0001, 1.0001],
                 [-1.0001, 1.0001], [-1.0001, 1.0001]]
 
@@ -97,21 +120,21 @@ freeflyer_bounds:
 # GraspSequencePlanner can freeze the arm not involved in a given phase.
 # ---------------------------------------------------------------------------
 arm_groups:
-  ur5_left:
-    joint_keyword: "ur5_left"
+  panda_left:
+    joint_keyword: "panda_left"
     grippers:
-      - ur5_left/gripper
-  ur5_right:
-    joint_keyword: "ur5_right"
+      - panda_left/gripper
+  panda_right:
+    joint_keyword: "panda_right"
     grippers:
-      - ur5_right/gripper
+      - panda_right/gripper
 
 # ---------------------------------------------------------------------------
 # Objects
 # ---------------------------------------------------------------------------
 objects:
   ball:
-    initial_pose_xyzquat: [0.8, 0.0, 0.3, 0.0, 0.0, 0.0, 1.0]
+    initial_pose_xyzquat: [0.55, 0.0, 0.45, 0.0, 0.0, 0.0, 1.0]
     handles:
       - ball/handle
       - ball/handle2
@@ -121,23 +144,25 @@ objects:
 # Grippers (flat list of gripper frame names)
 # ---------------------------------------------------------------------------
 grippers:
-  - ur5_left/gripper
-  - ur5_right/gripper
+  - panda_left/gripper
+  - panda_right/gripper
 
 # ---------------------------------------------------------------------------
 # Valid gripper -> handle pairs (drives factory graph construction) — each
 # arm gets its own handle so both can grasp the ball simultaneously.
 # ---------------------------------------------------------------------------
 valid_pairs:
-  ur5_left/gripper:
+  panda_left/gripper:
     - ball/handle
-  ur5_right/gripper:
+  panda_right/gripper:
     - ball/handle2
 
 environment_contacts: {}
 
 # ---------------------------------------------------------------------------
 # Freeze joints — none frozen by default; per-phase freezing is handled by
-# arm_groups + frozen_arms_mode="auto" in GraspSequencePlanner.
+# arm_groups + frozen_arms_mode="auto" in GraspSequencePlanner. Finger
+# joints are frozen separately (FREEZE_JOINT_SUBSTRINGS in
+# task_lift_ball.py) since they're cosmetic-only for this task.
 # ---------------------------------------------------------------------------
 freeze_joints: []

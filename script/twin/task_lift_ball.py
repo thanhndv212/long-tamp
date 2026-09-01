@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """TWIN "Lift Ball" — bimanual grasp-sequence task (YAML-driven).
 
-Two independent UR5 arms (`ur5_left`, `ur5_right`) simultaneously grasp a
-ball at two handles, then lift it together — the agimus_spacelab port of
-TWIN/PerAct2's "lift ball" bimanual benchmark task (see
+Two independent Franka Panda arms (`panda_left`, `panda_right`) — chosen
+for their real 2-DOF articulated parallel gripper, unlike this task's
+original UR5 + rigid-tool0 setup — simultaneously grasp a ball at two
+handles, then lift it together. The agimus_spacelab port of TWIN/PerAct2's
+"lift ball" bimanual benchmark task (see
 research-vault/agimus-spacelab/agimus-spacelab-next-ideas.md idea 2 and
 research-vault/papers/twin-benchmark.md). See script/twin/README.md for
 the one-time dev-environment setup (hpp_practicals package resolution).
@@ -17,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import tempfile
 from pathlib import Path
 
 from agimus_spacelab.config.yaml_loader import YamlTaskLoader
@@ -30,33 +33,62 @@ _HERE = Path(__file__).parent
 _YAML_PATH = _HERE / "config" / "twin_lift_ball_config.yaml"
 _BALL_URDF_PATH = _HERE / "assets" / "pokeball_bimanual.urdf"
 _BALL_SRDF_PATH = _HERE / "assets" / "pokeball_bimanual.srdf"
-_UR5_VISER_URDF_PATH = _HERE / "assets" / "ur5_gripper_viser.urdf"
+_PANDA_URDF_TEMPLATE_PATH = _HERE / "assets" / "panda_bimanual.urdf.template"
+_PANDA_SRDF_PATH = _HERE / "assets" / "panda_bimanual.srdf"
+_PANDA_MESH_DIR = _HERE / "assets" / "panda" / "meshes"
 
 GRASP_GOALS: list[str] = [
-    "ur5_left/gripper grasps ball/handle",
-    "ur5_right/gripper grasps ball/handle2",
+    "panda_left/gripper grasps ball/handle",
+    "panda_right/gripper grasps ball/handle2",
 ]
 
 # Both grasps happen as one phase each; nothing releases — the "lift" is a
 # separate plan_loop() call once both grasps are active (see run_task()).
 GRASP_SEQUENCE: list[tuple[str, str | None]] = [
-    ("ur5_left/gripper", "ball/handle"),
-    ("ur5_right/gripper", "ball/handle2"),
+    ("panda_left/gripper", "ball/handle"),
+    ("panda_right/gripper", "ball/handle2"),
 ]
 
-FREEZE_JOINT_SUBSTRINGS: list[str] = []
+# Finger joints are frozen (fixed at their initial YAML value throughout
+# planning) — this task's grasp is a rigid TCP constraint, not simulated
+# finger closing, so their only role is to render at a sensible width.
+FREEZE_JOINT_SUBSTRINGS: list[str] = ["panda_finger_joint"]
 COLLISION_EXCLUSIONS: list[tuple[str, str]] = []
 
 # How far to lift the ball (meters) once both arms hold it.
 LIFT_HEIGHT_M = 0.10
 
+
+def _render_panda_urdf() -> str:
+    """Substitute the vendored Panda URDF template's mesh-dir placeholder
+    with an absolute path and write it to a temp file.
+
+    Needed because pinocchio's URDF loader resolves non-`package://` mesh
+    paths against the process's CWD, not the URDF file's own directory —
+    so a plain relative path baked into the checked-in template wouldn't
+    reliably find the meshes regardless of where this script is run from.
+    """
+    text = _PANDA_URDF_TEMPLATE_PATH.read_text()
+    text = text.replace("{{PANDA_MESH_DIR}}", str(_PANDA_MESH_DIR))
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".urdf", prefix="panda_bimanual_", delete=False
+    )
+    tmp.write(text)
+    tmp.close()
+    return tmp.name
+
+
 _loader = YamlTaskLoader(_YAML_PATH)
 # Override with local, derived asset copies — see the config YAML's header
-# comment for why (viser-compatible visual meshes; a second ball handle).
+# comment for why (viser-compatible visual meshes; a second ball handle;
+# a rendered-from-template Panda URDF with an absolute mesh path).
 _loader.file_paths["objects"]["ball"]["urdf"] = str(_BALL_URDF_PATH)
 _loader.file_paths["objects"]["ball"]["srdf"] = str(_BALL_SRDF_PATH)
-_loader.file_paths["robot"]["ur5_left"]["urdf"] = str(_UR5_VISER_URDF_PATH)
-_loader.file_paths["robot"]["ur5_right"]["urdf"] = str(_UR5_VISER_URDF_PATH)
+_PANDA_RENDERED_URDF_PATH = _render_panda_urdf()
+_loader.file_paths["robot"]["panda_left"]["urdf"] = _PANDA_RENDERED_URDF_PATH
+_loader.file_paths["robot"]["panda_left"]["srdf"] = str(_PANDA_SRDF_PATH)
+_loader.file_paths["robot"]["panda_right"]["urdf"] = _PANDA_RENDERED_URDF_PATH
+_loader.file_paths["robot"]["panda_right"]["srdf"] = str(_PANDA_SRDF_PATH)
 
 
 class LiftBallTask(ManipulationTask):
@@ -79,7 +111,9 @@ class LiftBallTask(ManipulationTask):
         return _loader.build_initial_config(objects=self.task_config.OBJECTS)
 
 
-_LIFT_JOINT_STEP = -0.04  # rad; see docstring below for why this magnitude
+# rad; see _lift_the_ball()'s docstring for why this joint/magnitude.
+_LIFT_JOINT_NAME = "panda_joint2"
+_LIFT_JOINT_STEP = 0.10
 _LIFT_MAX_STEPS = 8
 
 
@@ -92,26 +126,35 @@ def _lift_the_ball(
     is a *dependent* quantity of the arms' joint angles, not a free
     variable — perturbing the ball's own Z in a project_on_node() guess
     gets silently reprojected right back to zero net change (verified
-    empirically: dz == 0.0 exactly). What actually moves the ball is
-    perturbing the ARMS' joints and letting the grasp constraints carry the
-    ball along with them.
+    empirically on the UR5 version of this task: dz == 0.0 exactly). What
+    actually moves the ball is perturbing the ARMS' joints and letting the
+    grasp constraints carry the ball along with them.
 
     q_target for plan_loop() must already satisfy both grasp constraints —
     it's planned between, not projected by, plan_loop(). Build it by
-    perturbing both arms' shoulder_lift_joint (moved together, matching
-    their mirrored mounting) in a copy of the current (valid) configuration,
-    then projecting that guess onto the current dual-grasp node's
-    constraints via ConfigGenerator.project_on_node(). Empirically this
-    projector only accepts sizeable, same-signed steps here — smaller steps
-    (+/-0.01 to +/-0.03) fail to converge at all, while -0.04 reliably lands
-    on a valid nearby configuration and lifts (dz=+0.017m per step) — so the
-    full lift is built up incrementally rather than guessed in one jump.
+    perturbing both arms' panda_joint2 (Panda's "shoulder lift" analogue —
+    its axis, after joint1's Z-rotation and a -90 degree X offset, tilts
+    the upper arm up/down, same role UR5's shoulder_lift_joint played) in
+    a copy of the current (valid) configuration, then projecting that guess
+    onto the current dual-grasp node's constraints via
+    ConfigGenerator.project_on_node(). Small steps can fail to converge, so
+    the full lift is built up incrementally rather than guessed in one jump.
+
+    Unlike the UR5 version, a single fixed sign for the step isn't reliable
+    here: which sign of panda_joint2 actually raises the ball (rather than
+    lowering it) depends on exactly which randomized configuration the
+    grasp search landed on for *this* run — elbow-up vs elbow-down variants
+    of the "same" grasp pose respond oppositely (observed directly: one run
+    lifted fine with a negative step, another produced dz=-0.03 with the
+    same negative step). So each step tries both signs and keeps whichever
+    both projects successfully and raises the ball; if neither does, the
+    loop stops where it is rather than drifting downward.
     """
     model = task.robot.model()
     ball_joint_id = model.getJointId("ball/root_joint")
     idx_q = model.joints[ball_joint_id].idx_q  # start of [x,y,z,qx,qy,qz,qw] in q
-    idx_left = model.joints[model.getJointId("ur5_left/shoulder_lift_joint")].idx_q
-    idx_right = model.joints[model.getJointId("ur5_right/shoulder_lift_joint")].idx_q
+    idx_left = model.joints[model.getJointId(f"panda_left/{_LIFT_JOINT_NAME}")].idx_q
+    idx_right = model.joints[model.getJointId(f"panda_right/{_LIFT_JOINT_NAME}")].idx_q
 
     node_name = seq_planner.grasp_tracker.get_current_state_name()
     # config_gen lives on the planner (lazily constructed there), not on
@@ -120,17 +163,25 @@ def _lift_the_ball(
     z_start = q_after_grasps[idx_q + 2]
     q_current = list(q_after_grasps)
     for _ in range(_LIFT_MAX_STEPS):
-        if q_current[idx_q + 2] - z_start >= LIFT_HEIGHT_M:
+        z_now = q_current[idx_q + 2]
+        if z_now - z_start >= LIFT_HEIGHT_M:
             break
-        q_guess = list(q_current)
-        q_guess[idx_left] += _LIFT_JOINT_STEP
-        q_guess[idx_right] += _LIFT_JOINT_STEP
-        ok, q_projected = seq_planner.config_gen.project_on_node(
-            node_name, q_guess, verbose=False
-        )
-        if not ok:
+        best_q, best_dz = None, 0.0
+        for sign in (1, -1):
+            q_guess = list(q_current)
+            q_guess[idx_left] += sign * _LIFT_JOINT_STEP
+            q_guess[idx_right] += sign * _LIFT_JOINT_STEP
+            ok, q_projected = seq_planner.config_gen.project_on_node(
+                node_name, q_guess, verbose=False
+            )
+            if not ok:
+                continue
+            dz = q_projected[idx_q + 2] - z_now
+            if dz > best_dz:
+                best_q, best_dz = q_projected, dz
+        if best_q is None:
             break
-        q_current = q_projected
+        q_current = best_q
 
     total_dz = q_current[idx_q + 2] - z_start
     if total_dz <= 0.0:
@@ -143,7 +194,7 @@ def _lift_the_ball(
         }
 
     return seq_planner.plan_loop(
-        gripper="ur5_left/gripper",
+        gripper="panda_left/gripper",
         q_current=q_after_grasps,
         q_target=q_current,
         verbose=True,

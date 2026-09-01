@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+<!--
+  HPP-manipulation semantics for the vendored Panda URDF
+  (panda_bimanual.urdf.template) — not shipped upstream, since
+  Gepetto/example-robot-data's panda.srdf is a MoveIt-style SRDF (planning
+  groups, group_states, disable_collisions) with no <gripper>/<handle>
+  concept. The disable_collisions pairs below are reused verbatim from
+  that file; only the <gripper> tag is new.
+
+  Gripper frame: panda_hand_tcp, a zero-mass frame link already defined in
+  the URDF at the natural "reach out" point between the open fingers
+  (0.1034m along the hand's own +Z from panda_hand). Its local pose here
+  is identity — verified numerically that panda_hand_tcp's local +Z
+  already points in the arm's outward/approach direction, matching HPP's
+  "gripper local-Z = approach direction" convention (same one used for
+  pokeball_bimanual.srdf's handle/handle2), so no extra rotation is needed
+  the way UR5's tool0-based gripper required one.
+-->
+<robot name="panda">
+  <disable_collisions link1="panda_hand" link2="panda_leftfinger" reason="Adjacent"/>
+  <disable_collisions link1="panda_hand" link2="panda_link3" reason="Never"/>
+  <disable_collisions link1="panda_hand" link2="panda_link4" reason="Never"/>
+  <disable_collisions link1="panda_hand" link2="panda_link5" reason="Default"/>
+  <disable_collisions link1="panda_hand" link2="panda_link6" reason="Never"/>
+  <disable_collisions link1="panda_hand" link2="panda_link7" reason="Adjacent"/>
+  <disable_collisions link1="panda_hand" link2="panda_rightfinger" reason="Adjacent"/>
+  <disable_collisions link1="panda_leftfinger" link2="panda_link3" reason="Never"/>
+  <disable_collisions link1="panda_leftfinger" link2="panda_link4" reason="Never"/>
+  <disable_collisions link1="panda_leftfinger" link2="panda_link6" reason="Never"/>
+  <disable_collisions link1="panda_leftfinger" link2="panda_link7" reason="Never"/>
+  <disable_collisions link1="panda_leftfinger" link2="panda_rightfinger" reason="Default"/>
+  <disable_collisions link1="panda_link0" link2="panda_link1" reason="Adjacent"/>
+  <disable_collisions link1="panda_link0" link2="panda_link2" reason="Never"/>
+  <disable_collisions link1="panda_link0" link2="panda_link3" reason="Never"/>
+  <disable_collisions link1="panda_link0" link2="panda_link4" reason="Never"/>
+  <disable_collisions link1="panda_link1" link2="panda_link2" reason="Adjacent"/>
+  <disable_collisions link1="panda_link1" link2="panda_link3" reason="Never"/>
+  <disable_collisions link1="panda_link1" link2="panda_link4" reason="Never"/>
+  <disable_collisions link1="panda_link2" link2="panda_link3" reason="Adjacent"/>
+  <disable_collisions link1="panda_link2" link2="panda_link4" reason="Never"/>
+  <disable_collisions link1="panda_link3" link2="panda_link4" reason="Adjacent"/>
+  <disable_collisions link1="panda_link3" link2="panda_link5" reason="Never"/>
+  <disable_collisions link1="panda_link3" link2="panda_link6" reason="Never"/>
+  <disable_collisions link1="panda_link3" link2="panda_link7" reason="Never"/>
+  <disable_collisions link1="panda_link3" link2="panda_rightfinger" reason="Never"/>
+  <disable_collisions link1="panda_link4" link2="panda_link5" reason="Adjacent"/>
+  <disable_collisions link1="panda_link4" link2="panda_link6" reason="Never"/>
+  <disable_collisions link1="panda_link4" link2="panda_link7" reason="Never"/>
+  <disable_collisions link1="panda_link4" link2="panda_rightfinger" reason="Never"/>
+  <disable_collisions link1="panda_link5" link2="panda_link6" reason="Adjacent"/>
+  <disable_collisions link1="panda_link5" link2="panda_link7" reason="Default"/>
+  <disable_collisions link1="panda_link6" link2="panda_link7" reason="Adjacent"/>
+  <disable_collisions link1="panda_link6" link2="panda_rightfinger" reason="Never"/>
+  <disable_collisions link1="panda_link7" link2="panda_rightfinger" reason="Never"/>
+
+  <gripper name="gripper" clearance="0.03">
+    <position> 0 0 0  1 0 0 0 </position>
+    <link name="panda_hand_tcp" />
+  </gripper>
+</robot>

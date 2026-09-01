@@ -14,13 +14,29 @@
     <position> 0 0 0 0.7071067811865476 0 0.7071067811865476 0 </position>
     <link name="base_link"/>
   </handle>
-  <!-- Numerically constructed so this handle's local-Z (approach direction)
-       is exactly antipodal to `handle`'s — verified via pinocchio
-       (handle's local-Z ~= [1,0,0] world; this one ~= [-1,0,0]) — so the
-       two grippers approach the ball from opposite sides rather than
-       converging into each other. -->
+  <!-- Fully antipodal orientation (handle's local-Z ~= [1,0,0] world,
+       this one ~= [-1,0,0] — numerically verified via pinocchio), same as
+       the original UR5 version of this task, where it worked fine. With
+       Panda's bulkier articulated hands (unlike UR5's slender tool0) that
+       alone wasn't enough: both handles sitting at the ball's exact center
+       (position 0 0 0) put both TCPs at the identical point, and the two
+       full-size hands' fingers collided converging on it from opposite
+       sides ("Collision between object panda_left/panda_leftfinger_3 and
+       panda_right/panda_leftfinger_2", solver residual ~0 — the pose
+       constraint itself was never the problem). A 45-degree-tilted
+       approach was tried too (avoiding a head-on collision) but still
+       collided once both TCPs were coincident, and offsetting *that*
+       tilted position outward made it worse — the offset direction ended
+       up moving panda_right's target IN, toward panda_left's side.
+       `handle` (panda_left's grasp, proven working) and the ball's own
+       size are left untouched; instead this handle's position alone is
+       offset +0.05m along world +X only — i.e. away from panda_left,
+       toward panda_right's own side of the ball — which unambiguously
+       separates the two TCPs along the arms' shared baseline axis without
+       touching the (harder to reason about) approach-direction geometry
+       at all. -->
   <handle name="handle2" clearance="0.025">
-    <position> 0 0 0 0.7071067811865477 0 -0.7071067811865474 0 </position>
+    <position> 0.05 0 0  0.7071067811865477 0 -0.7071067811865474 0 </position>
     <link name="base_link"/>
   </handle>
   <contact name="bottom">
