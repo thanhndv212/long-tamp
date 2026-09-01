@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<!--
+  Derived from hpp_practicals' urdf/ur_benchmark/pokeball.urdf + srdf/ur_benchmark/pokeball.srdf
+  (LGPL v2, Florent Lamiraux / Guilhem Saurel, LAAS-CNRS) — the geometry (a 0.025m
+  radius sphere) is unchanged; a second handle is added at the same point with a
+  distinct orientation, following the pattern already proven in production for
+  simultaneous dual-arm holds (SpaceLab's RS1/h_RS1_FG + RS1/h_RS1_WB, same xyz,
+  different approach direction). Used with the *original*, unmodified
+  package://hpp_practicals/urdf/ur_benchmark/pokeball.urdf for geometry — only the
+  SRDF (grasp semantics) is overridden. See script/twin/README.md.
+-->
+<robot name="pokeball">
+  <handle name="handle" clearance="0.025">
+    <position> 0 0 0 0.7071067811865476 0 0.7071067811865476 0 </position>
+    <link name="base_link"/>
+  </handle>
+  <!-- Numerically constructed so this handle's local-Z (approach direction)
+       is exactly antipodal to `handle`'s — verified via pinocchio
+       (handle's local-Z ~= [1,0,0] world; this one ~= [-1,0,0]) — so the
+       two grippers approach the ball from opposite sides rather than
+       converging into each other. -->
+  <handle name="handle2" clearance="0.025">
+    <position> 0 0 0 0.7071067811865477 0 -0.7071067811865474 0 </position>
+    <link name="base_link"/>
+  </handle>
+  <contact name="bottom">
+    <link name="base_link"/>
+    <point>
+       0.01  0.01 -0.025
+      -0.01  0.01 -0.025
+      -0.01 -0.01 -0.025
+       0.01 -0.01 -0.025
+    </point>
+    <shape>
+      4 3 2 1 0
+    </shape>
+  </contact>
+</robot>

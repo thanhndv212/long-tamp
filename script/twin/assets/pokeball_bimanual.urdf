@@ -1,0 +1,47 @@
+<!--
+  Derived from hpp_practicals' urdf/ur_benchmark/pokeball.urdf (LGPL v2,
+  Florent Lamiraux / Guilhem Saurel, LAAS-CNRS) — geometry unchanged except
+  for the <visual>, which is a plain <sphere> primitive here instead of the
+  pokeball.dae mesh (matching the <collision> geometry, which was already a
+  sphere).
+
+  Why: pyhpp_viser's Viewer._update_geometry_frames() computes each
+  geometry's rendered position as
+    M.translation * entry.geometry_object.meshScale
+  — i.e. it multiplies the geometry's WORLD TRANSLATION by its mesh's
+  <mesh scale="..."> factor, which is only supposed to scale the mesh's
+  local vertices. pokeball.dae needs scale="0.025 0.025 0.025" (the mesh
+  asset is modeled ~1m across); every other geometry in this scene has
+  unit scale, so this bug only bites the ball — it renders squashed to
+  within ~2.5cm of world-frame origin no matter its real pose (confirmed:
+  getJointPosition('ball/root_joint') reports the correct FK pose; only
+  the *rendered* position is wrong). A primitive has no meshScale to
+  trigger this, so it renders correctly; the tradeoff is losing the
+  pokeball look for a plain sphere. See script/twin/README.md.
+-->
+<robot name="pokeball">
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0" />
+      <mass value="0.6"/>
+      <inertia ixx="0.001" ixy="0.0" ixz="0.0"
+	       iyy="0.001" iyz="0.0"
+	       izz="0.001" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <sphere radius="0.025"/>
+      </geometry>
+      <material name="pokeball_red">
+        <color rgba="0.85 0.1 0.1 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+	<sphere radius="0.025"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>

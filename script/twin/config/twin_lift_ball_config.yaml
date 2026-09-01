@@ -1,0 +1,143 @@
+# TWIN "Lift Ball" task configuration (YAML)
+# Two independent UR5 arms simultaneously grasp a ball at two handles and
+# lift it together — TWIN-benchmark-style bimanual task (see PerAct2/TWIN,
+# research-vault/papers/twin-benchmark.md), ported onto agimus_spacelab's
+# HPP-based grasp/motion planner rather than TWIN's own RLBench simulator.
+#
+# Robot + object assets reused from the sibling hpp-practicals repo
+# (package://hpp_practicals/...) — see script/twin/README.md for the
+# one-time dev-environment setup (`AMENT_PREFIX_PATH` for package://
+# resolution). URDF/SRDF paths below are the ORIGINAL hpp_practicals ones
+# (kept for provenance); task_lift_ball.py overrides three of them at
+# runtime with local, derived copies under script/twin/assets/ — since this
+# repo doesn't (yet) register itself as an ament package for a package://
+# URI to reach a local file directly:
+#   - ur5_gripper_viser.urdf (both arms): <visual> mesh refs swapped from
+#     unsupported .osg to the matching .stl collision meshes, so the arms
+#     actually render in the viser browser viewer (collision/kinematics
+#     unchanged)
+#   - pokeball_bimanual.urdf: <visual> mesh swapped .osg -> .dae (same fix)
+#   - pokeball_bimanual.srdf: adds a second handle at the same point with a
+#     different approach direction (SpaceLab RS1 dual-handle precedent) —
+#     hpp_practicals' original pokeball.srdf has only one handle
+#
+# Consumed by: YamlTaskLoader (src/agimus_spacelab/config/yaml_loader.py)
+
+task: twin_lift_ball
+
+# ---------------------------------------------------------------------------
+# File paths (used by SceneBuilder)
+# ---------------------------------------------------------------------------
+paths:
+  robot:
+    ur5_left:
+      urdf: "package://hpp_practicals/urdf/ur5_gripper.urdf"
+      srdf: "package://hpp_practicals/srdf/ur5_gripper.srdf"
+    ur5_right:
+      urdf: "package://hpp_practicals/urdf/ur5_gripper.urdf"
+      srdf: "package://hpp_practicals/srdf/ur5_gripper.srdf"
+      # [x, y, z, qx, qy, qz, qw] — 1.6m from ur5_left along X, rotated 180
+      # degrees about Z so it faces back toward the shared workspace. 0.9m
+      # was tried first and was too tight: both arms' neutral resting
+      # posture (elbow up, forearm forward) already collided
+      # (ur5_left/wrist_2_link_0 vs ur5_right/forearm_link_0) before any
+      # approach motion — UR5 reach is ~0.85m, so 1.6m base separation
+      # keeps a healthy margin while the ball (at the midpoint) stays
+      # within each arm's reach.
+      pose: [1.6, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+
+  environment:
+    ground: "package://hpp_practicals/urdf/ur_benchmark/ground.urdf"
+
+  objects:
+    ball:
+      urdf: "package://hpp_practicals/urdf/ur_benchmark/pokeball.urdf"
+      # srdf intentionally omitted — see note above, filled in by
+      # task_lift_ball.py at runtime.
+
+# ---------------------------------------------------------------------------
+# Scene selection
+# ---------------------------------------------------------------------------
+robots:
+  - ur5_left
+  - ur5_right
+
+environments:
+  - ground
+
+# ---------------------------------------------------------------------------
+# Robot joint groups — same bounds for both arms, namespaced per robot.
+# ---------------------------------------------------------------------------
+joint_groups:
+  UR5_LEFT:
+    - {joint: ur5_left/shoulder_pan_joint,  initial:  0.00, bounds: [-6.2832, 6.2832]}
+    - {joint: ur5_left/shoulder_lift_joint, initial: -1.57, bounds: [-6.2832, 6.2832]}
+    - {joint: ur5_left/elbow_joint,         initial:  1.57, bounds: [-6.2832, 6.2832]}
+    - {joint: ur5_left/wrist_1_joint,       initial:  0.00, bounds: [-6.2832, 6.2832]}
+    - {joint: ur5_left/wrist_2_joint,       initial:  0.00, bounds: [-6.2832, 6.2832]}
+    - {joint: ur5_left/wrist_3_joint,       initial:  0.00, bounds: [-6.2832, 6.2832]}
+  UR5_RIGHT:
+    - {joint: ur5_right/shoulder_pan_joint,  initial:  0.00, bounds: [-6.2832, 6.2832]}
+    - {joint: ur5_right/shoulder_lift_joint, initial: -1.57, bounds: [-6.2832, 6.2832]}
+    - {joint: ur5_right/elbow_joint,         initial:  1.57, bounds: [-6.2832, 6.2832]}
+    - {joint: ur5_right/wrist_1_joint,       initial:  0.00, bounds: [-6.2832, 6.2832]}
+    - {joint: ur5_right/wrist_2_joint,       initial:  0.00, bounds: [-6.2832, 6.2832]}
+    - {joint: ur5_right/wrist_3_joint,       initial:  0.00, bounds: [-6.2832, 6.2832]}
+
+# ---------------------------------------------------------------------------
+# Freeflyer bounds applied to every object root joint (the ball)
+# ---------------------------------------------------------------------------
+freeflyer_bounds:
+  translation: [[0.0, 1.6], [-0.4, 0.4], [0.0, 0.8]]
+  quaternion:  [[-1.0001, 1.0001], [-1.0001, 1.0001],
+                [-1.0001, 1.0001], [-1.0001, 1.0001]]
+
+# ---------------------------------------------------------------------------
+# Arm groups — maps each arm's joint keyword to its gripper(s), so
+# GraspSequencePlanner can freeze the arm not involved in a given phase.
+# ---------------------------------------------------------------------------
+arm_groups:
+  ur5_left:
+    joint_keyword: "ur5_left"
+    grippers:
+      - ur5_left/gripper
+  ur5_right:
+    joint_keyword: "ur5_right"
+    grippers:
+      - ur5_right/gripper
+
+# ---------------------------------------------------------------------------
+# Objects
+# ---------------------------------------------------------------------------
+objects:
+  ball:
+    initial_pose_xyzquat: [0.8, 0.0, 0.3, 0.0, 0.0, 0.0, 1.0]
+    handles:
+      - ball/handle
+      - ball/handle2
+    contact_surfaces: []
+
+# ---------------------------------------------------------------------------
+# Grippers (flat list of gripper frame names)
+# ---------------------------------------------------------------------------
+grippers:
+  - ur5_left/gripper
+  - ur5_right/gripper
+
+# ---------------------------------------------------------------------------
+# Valid gripper -> handle pairs (drives factory graph construction) — each
+# arm gets its own handle so both can grasp the ball simultaneously.
+# ---------------------------------------------------------------------------
+valid_pairs:
+  ur5_left/gripper:
+    - ball/handle
+  ur5_right/gripper:
+    - ball/handle2
+
+environment_contacts: {}
+
+# ---------------------------------------------------------------------------
+# Freeze joints — none frozen by default; per-phase freezing is handled by
+# arm_groups + frozen_arms_mode="auto" in GraspSequencePlanner.
+# ---------------------------------------------------------------------------
+freeze_joints: []
