@@ -25,7 +25,6 @@ from pathlib import Path
 from agimus_spacelab.config.yaml_loader import YamlTaskLoader
 from agimus_spacelab.tasks import ManipulationTask
 from agimus_spacelab.tasks.grasp_sequence import GraspSequencePlanner
-from agimus_spacelab.visualization import visualize_all_grippers, visualize_all_handles
 
 TASK_NAME = "TWIN: Lift Ball (bimanual)"
 
@@ -33,6 +32,7 @@ _HERE = Path(__file__).parent
 _YAML_PATH = _HERE / "config" / "twin_lift_ball_config.yaml"
 _BALL_URDF_PATH = _HERE / "assets" / "pokeball_bimanual.urdf"
 _BALL_SRDF_PATH = _HERE / "assets" / "pokeball_bimanual.srdf"
+_GROUND_URDF_PATH = _HERE / "assets" / "ground_bimanual.urdf"
 _PANDA_URDF_TEMPLATE_PATH = _HERE / "assets" / "panda_bimanual.urdf.template"
 _PANDA_SRDF_PATH = _HERE / "assets" / "panda_bimanual.srdf"
 _PANDA_MESH_DIR = _HERE / "assets" / "panda" / "meshes"
@@ -84,6 +84,7 @@ _loader = YamlTaskLoader(_YAML_PATH)
 # a rendered-from-template Panda URDF with an absolute mesh path).
 _loader.file_paths["objects"]["ball"]["urdf"] = str(_BALL_URDF_PATH)
 _loader.file_paths["objects"]["ball"]["srdf"] = str(_BALL_SRDF_PATH)
+_loader.file_paths["environment"]["ground"] = str(_GROUND_URDF_PATH)
 _PANDA_RENDERED_URDF_PATH = _render_panda_urdf()
 _loader.file_paths["robot"]["panda_left"]["urdf"] = _PANDA_RENDERED_URDF_PATH
 _loader.file_paths["robot"]["panda_left"]["srdf"] = str(_PANDA_SRDF_PATH)
@@ -312,17 +313,6 @@ def run_task(backend: str = "pyhpp", show_viewer: bool = False, viewer_type: str
         except Exception as exc:
             print(f"⚠ Visualization unavailable: {exc}")
             return True
-        print("Displaying gripper/handle frames...")
-        visualize_all_grippers(
-            task.planner.viewer,
-            [gripper for gripper, _ in GRASP_SEQUENCE],
-            show_approach=False,
-        )
-        visualize_all_handles(
-            task.planner.viewer,
-            [handle for _, handle in GRASP_SEQUENCE],
-            show_approach=False,
-        )
         print("Replaying full sequence in the viewer...")
         _replay_all(task, seq_planner)
         print("✓ Replay done. Viewer stays up — Ctrl+C to exit.")

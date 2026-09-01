@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!--
+  Derived from hpp_practicals' urdf/ur_benchmark/ground.urdf (LGPL v2,
+  Florent Lamiraux / Guilhem Saurel, LAAS-CNRS) — same flat box, just
+  bigger and re-centered. The original 1x1m box is centered at world
+  origin, which only covers panda_left's base (at world X=0); panda_right
+  (at world X=1.1, per twin_lift_ball_config.yaml's arm separation) sits
+  entirely off it. This one is 1.8x1.2m, centered at X=0.55 — the arms'
+  own midpoint (also the ball's X position) — with margin past each arm's
+  ~0.855m reach envelope on both ends.
+-->
+<robot name="ground">
+  <link name="ground_base">
+    <visual>
+      <geometry>
+        <box size="1.8 1.2 0.02"/>
+      </geometry>
+      <origin xyz="0.55 0 -0.01"/>
+      <material name="Orange">
+        <color rgba="1 0.4 0.3 0.6"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="1.8 1.2 0.02"/>
+      </geometry>
+      <origin xyz="0.55 0 -0.02"/>
+    </collision>
+  </link>
+</robot>
