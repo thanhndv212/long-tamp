@@ -27,7 +27,7 @@ def print_joint_info(robot):
 import numpy as np
 from pinocchio import Quaternion
 
-from agimus_spacelab.utils import xyzquat_to_se3
+from agimus_spacelab.utils import se3_to_xyzquat, xyzquat_to_se3
 
 # ---------------------------------------------------------------------------
 # Viewer-type detection helpers
@@ -50,11 +50,43 @@ _VISER_FRAME_REGISTRY: Dict[str, Any] = {}
 
 
 def _viser_xyzquat_to_wxyz(pose: list) -> tuple:
-    """Convert [x,y,z, qw,qx,qy,qz] HPP pose to (position, wxyz) viser style."""
+    """Convert [x,y,z,qx,qy,qz,qw] pose (codebase-standard order — see
+    utils.transforms.se3_to_xyzquat) to (position, wxyz) viser style."""
     pos = np.array(pose[:3], dtype=float)
-    # HPP pose convention: qw,qx,qy,qz
-    wxyz = np.array([pose[3], pose[4], pose[5], pose[6]], dtype=float)
+    wxyz = np.array([pose[6], pose[3], pose[4], pose[5]], dtype=float)
     return pos, wxyz
+
+
+def _handle_or_gripper_local_pose(robot, obj) -> tuple:
+    """Return (joint_name, local_pose_xyzquat) for a Handle or Gripper.
+
+    Neither `getHandlePositionInJoint` nor `getGripperPositionInJoint`
+    exist on this pyhpp build's `Device` — only `getParentJointId()` (int)
+    and `.localPosition` (pinocchio.SE3) do, so both are derived from those.
+    """
+    joint_name = robot.model().names[obj.getParentJointId()]
+    local_pose = se3_to_xyzquat(obj.localPosition)
+    return joint_name, local_pose
+
+
+def _world_pose_from_joint(robot, joint_name: str, local_pose) -> list:
+    """Compose a joint-local pose with that joint's current world pose.
+
+    Only needed for viser: gepetto parents the added frame node under the
+    link's own scene-graph group, so the local pose is enough there. viser
+    has no such parenting for an ad-hoc `add_frame()` node, so the frame
+    must be placed at its true world pose explicitly. Requires the robot's
+    current configuration to already be the one you want frames drawn for.
+    """
+    if joint_name == "universe":
+        return list(local_pose)
+    from pyhpp.pinocchio import ComputationFlag
+
+    robot.computeForwardKinematics(ComputationFlag.JOINT_POSITION)
+    robot.computeFramesForwardKinematics()
+    joint_pose = robot.getJointPosition(joint_name)  # [x,y,z,qx,qy,qz,qw]
+    world_se3 = xyzquat_to_se3(joint_pose) * xyzquat_to_se3(local_pose)
+    return se3_to_xyzquat(world_se3).tolist()
 
 
 def _viser_add_frame(
@@ -218,12 +250,18 @@ def displayHandle(
 
     try:
         robot = viewer.robot if hasattr(viewer, "robot") else viewer._robot
-        joint, pose = robot.getHandlePositionInJoint(handle_name)
+        handle_obj = robot.handles()[handle_name]
+        joint, pose = _handle_or_gripper_local_pose(robot, handle_obj)
         hname = "handle__" + handle_name.replace("/", "_")
 
         if _is_viser_viewer(viewer):
+            world_pose = _world_pose_from_joint(robot, joint, pose)
             _viser_add_frame(
-                viewer, hname, pose, axes_length=axis_length, axes_radius=axis_radius
+                viewer,
+                hname,
+                world_pose,
+                axes_length=axis_length,
+                axes_radius=axis_radius,
             )
         else:
             viewer.client.gui.addXYZaxis(hname, frame_color, axis_radius, axis_length)
@@ -232,7 +270,7 @@ def displayHandle(
                 viewer.client.gui.addToGroup(hname, robot.name + "/" + link)
             else:
                 viewer.client.gui.addToGroup(hname, robot.name)
-            viewer.client.gui.applyConfiguration(hname, pose)
+            viewer.client.gui.applyConfiguration(hname, list(pose))
         return True
     except Exception as e:
         logger.warning("Could not display handle %s: %s", handle_name, e)
@@ -266,12 +304,18 @@ def displayGripper(
 
     try:
         robot = viewer.robot if hasattr(viewer, "robot") else viewer._robot
-        joint, pose = robot.getGripperPositionInJoint(gripper_name)
+        gripper_obj = robot.grippers()[gripper_name]
+        joint, pose = _handle_or_gripper_local_pose(robot, gripper_obj)
         gname = "gripper__" + gripper_name.replace("/", "_")
 
         if _is_viser_viewer(viewer):
+            world_pose = _world_pose_from_joint(robot, joint, pose)
             _viser_add_frame(
-                viewer, gname, pose, axes_length=axis_length, axes_radius=axis_radius
+                viewer,
+                gname,
+                world_pose,
+                axes_length=axis_length,
+                axes_radius=axis_radius,
             )
         else:
             viewer.client.gui.addXYZaxis(gname, frame_color, axis_radius, axis_length)
@@ -280,7 +324,7 @@ def displayGripper(
                 viewer.client.gui.addToGroup(gname, robot.name + "/" + link)
             else:
                 viewer.client.gui.addToGroup(gname, robot.name)
-            viewer.client.gui.applyConfiguration(gname, pose)
+            viewer.client.gui.applyConfiguration(gname, list(pose))
         return True
     except Exception as e:
         logger.warning("Could not display gripper %s: %s", gripper_name, e)
