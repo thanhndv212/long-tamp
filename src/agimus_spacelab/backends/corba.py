@@ -191,8 +191,25 @@ class CorbaBackend(BackendBase):
         srdf_path: Optional[str] = None,
         root_joint_type: str = "anchor",
         composite_name: str = None,
+        pose: Optional[Any] = None,
     ):
-        """Load robot using CORBA."""
+        """Load robot using CORBA.
+
+        Deprecated backend: unlike PyHPPBackend, this does not support
+        inserting a second independent robot into an existing composite —
+        each call still (re)creates `self.robot`/`self.ps`. `pose` is
+        accepted for interface parity with `BackendBase.load_robot` but is
+        not applied; pass it only when using the PyHPP backend.
+        """
+        if pose is not None:
+            warnings.warn(
+                f"CorbaBackend.load_robot: 'pose' is not supported by this "
+                f"deprecated backend and will be ignored for robot "
+                f"'{robot_name}'. Multi-independent-robot placement "
+                f"requires backend='pyhpp'.",
+                UserWarning,
+                stacklevel=2,
+            )
 
         self.packageName, self.urdfName = parse_package_uri(urdf_path)
         self.urdfSuffix = ""

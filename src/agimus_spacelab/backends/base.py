@@ -122,8 +122,16 @@ class BackendBase(ABC):
         srdf_path: Optional[str] = None,
         root_joint_type: str = "anchor",
         composite_name: Optional[str] = None,
+        pose: Optional[Any] = None,
     ) -> Any:
         """Load robot model.
+
+        Loading a second (or third, ...) robot inserts it into the same
+        composite device rather than replacing the first — the device is
+        only (re)created on the first call. Use `pose` to place an
+        anchor-rooted robot's base anywhere but world-identity, so multiple
+        independent fixed-base robots can share one scene without
+        overlapping at the origin.
 
         Args:
             robot_name: Name identifier for the robot
@@ -131,6 +139,9 @@ class BackendBase(ABC):
             srdf_path: Optional path to SRDF file
             root_joint_type: Type of root joint ("anchor", "freeflyer", etc.)
             composite_name: Name for composite robot (defaults to robot_name)
+            pose: Optional world pose (pinocchio.SE3) for this robot's root,
+                relative to its parent joint. Defaults to identity. Ignored
+                by backends/root-joint-types that don't support it.
 
         Returns:
             Backend-specific robot object

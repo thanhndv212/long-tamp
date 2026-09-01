@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from agimus_spacelab.logging import get_logger
 from agimus_spacelab.planning import create_planner
+from agimus_spacelab.utils.transforms import xyzquat_to_se3
 
 logger = get_logger("planning.scene")
 
@@ -91,16 +92,29 @@ class SceneBuilder:
     def load_robot(
         self, composite_names: List[str], robot_names: List[str]
     ) -> "SceneBuilder":
-        """Load the composite robot (UR10 + VISPA)."""
+        """Load one or more robots into the scene.
+
+        Each robot in `robot_names` is loaded into the same composite
+        device (see `BackendBase.load_robot`) — the first call creates it,
+        later calls insert into it. An optional `pose` (xyzquat list, e.g.
+        `[x, y, z, qx, qy, qz, qw]`) in that robot's `FILE_PATHS["robot"]`
+        entry places its root; robots loading without one default to world
+        identity, which is only correct for a single robot or one whose
+        placement is already baked into its own URDF.
+        """
         logger.info("Loading robot (%s)...", robot_names)
         for id, rb_name in enumerate(robot_names):
             if rb_name in self.FILE_PATHS["robot"]:
+                robot_paths = self.FILE_PATHS["robot"][rb_name]
+                raw_pose = robot_paths.get("pose")
+                pose = xyzquat_to_se3(raw_pose) if raw_pose else None
                 self.planner.load_robot(
                     robot_name=rb_name,
-                    urdf_path=self.FILE_PATHS["robot"][rb_name]["urdf"],
-                    srdf_path=self.FILE_PATHS["robot"][rb_name]["srdf"],
+                    urdf_path=robot_paths["urdf"],
+                    srdf_path=robot_paths["srdf"],
                     root_joint_type="anchor",
                     composite_name=composite_names[id],
+                    pose=pose,
                 )
             else:
                 logger.warning("Unknown robot: %s", rb_name)

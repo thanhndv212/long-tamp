@@ -239,12 +239,20 @@ class YamlTaskLoader:
     def _build_file_paths(self) -> dict[str, Any]:
         paths = self._data.get("paths", {})
 
-        robot_paths: dict[str, dict[str, str]] = {}
+        robot_paths: dict[str, dict[str, Any]] = {}
         for name, rdata in paths.get("robot", {}).items():
-            robot_paths[name] = {
+            robot_entry: dict[str, Any] = {
                 "urdf": rdata.get("urdf", ""),
                 "srdf": rdata.get("srdf", ""),
             }
+            # Optional root pose [x, y, z, qx, qy, qz, qw] for this robot,
+            # e.g. to place two independent fixed-base robots in one scene
+            # (see SceneBuilder.load_robot). Omit for a robot whose
+            # placement is already baked into its own URDF, or when there's
+            # only one robot in the scene.
+            if "pose" in rdata:
+                robot_entry["pose"] = [float(v) for v in rdata["pose"]]
+            robot_paths[name] = robot_entry
 
         env_paths: dict[str, str] = {}
         for name, urdf in paths.get("environment", {}).items():

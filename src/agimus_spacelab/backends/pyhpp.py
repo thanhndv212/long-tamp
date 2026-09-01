@@ -308,9 +308,20 @@ class PyHPPBackend(BackendBase):
         srdf_path: Optional[str] = None,
         root_joint_type: str = "anchor",
         composite_name: str = None,
+        pose: Optional[SE3] = None,
     ):
-        """Load robot using PyHPP."""
-        self.device = Device(robot_name)
+        """Load robot using PyHPP.
+
+        The first call creates the composite `Device`/`Problem`; later calls
+        load onto that same device instead of recreating it, so multiple
+        independent robots can share one scene. `pose` (if given) places
+        this robot's root — otherwise it loads at world identity, which is
+        only safe when there's a single robot or its placement is already
+        baked into the URDF (as SpaceLab's combined `allRobots_*` URDF does).
+        """
+        is_first_robot = self.device is None
+        if is_first_robot:
+            self.device = Device(robot_name)
 
         urdf.loadModel(
             self.device,
@@ -322,8 +333,12 @@ class PyHPPBackend(BackendBase):
             SE3.Identity(),
         )
 
-        # Create problem
-        self.problem = Problem(self.device)
+        if pose is not None:
+            self.device.setRobotRootPosition(robot_name, pose)
+
+        if is_first_robot:
+            # Create problem
+            self.problem = Problem(self.device)
 
         return self.device
 
