@@ -12,13 +12,13 @@ from typing import Any, Dict
 
 import pytest
 
-from agimus_spacelab.logging import (
+from long_tamp.logging import (
     RunLogger,
     load_run_log,
     iter_events,
     get_replay_config,
 )
-from agimus_spacelab.logging.run_logger import (
+from long_tamp.logging.run_logger import (
     _make_serializable,
     _serialize_task_config,
 )

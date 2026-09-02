@@ -1,16 +1,14 @@
-# Agimus Spacelab - Manipulation Planning Framework
+# Long-TAMP - Long-Horizon Task-and-Motion Planning
 
-Multi-arm collaborative manipulation planning for SpaceLab assembly tasks using HPP (Humanoid Path Planner).
+Long-horizon, multi-arm task-and-motion planning (TAMP) for manipulation, built on HPP (Humanoid Path Planner).
 
-`agimus_spacelab` plans **long, multi-step assembly sequences** for **several robot arms working together** on **many movable objects** in a single shared scene. It builds on HPP's constraint-graph manipulation planning and adds a task/orchestration layer that turns a high-level assembly goal (grip this, move that, hand it over, place it) into a single concatenated, collision-free motion for the whole multi-robot system.
-
-![The SpaceLab assembly cell — UR10 and VISPA arms, RS reflector panels, and grasp/handle frames — in the browser-based viser viewer](docs/full_scene.png)
+`long_tamp` plans **long, multi-step manipulation sequences** for **several robot arms working together** on **many movable objects** in a single shared scene. It builds on HPP's constraint-graph manipulation planning and adds a task/orchestration layer that turns a high-level goal (grip this, move that, hand it over, place it) into a single concatenated, collision-free motion for the whole multi-robot system. See `script/twin/` for a runnable bimanual example.
 
 ## Capabilities
 
 - **Long-horizon sequence planning.** The `GraspSequencePlanner` chains an arbitrary number of grasp/place/hand-over phases into one continuous plan. Each phase gets a *minimal, phase-local* constraint graph and the paths are concatenated across phases, so planning cost grows **linearly O(N)** with the number of grasps instead of combinatorially **O(N!)** — long assembly missions stay tractable.
-- **Multiple robots (multi-arm & collaborative).** The scene composes several arms into one planning model (e.g. UR10 + VISPA + VISPA2, a ~70-DOF composite) that plan in a shared, mutually-collision-aware world. Arms can act independently, cooperate on the same object, or hand objects off between each other.
-- **Multiple objects.** Any number of free-flying objects and tools (reflector panels, frame gripper, screw driver, …) coexist in the scene. Grasp legality is data-driven via `VALID_PAIRS` (which gripper may grasp which handle), so adding objects/tools is a config change, not a code change.
+- **Multiple robots (multi-arm & collaborative).** The scene composes several arms into one planning model (a composite `Device` spanning all of them) that plan in a shared, mutually-collision-aware world. Arms can act independently, cooperate on the same object, or hand objects off between each other.
+- **Multiple objects.** Any number of free-flying objects and tools coexist in the scene. Grasp legality is data-driven via `VALID_PAIRS` (which gripper may grasp which handle), so adding objects/tools is a config change, not a code change.
 - **Constraint-graph manipulation planning.** Grasp, placement, and transition constraints are generated from a declarative `ManipulationConfig`; the constraint graph and its edges are built automatically per phase.
 - **Reproducibility, introspection & crash recovery.** Structured, crash-safe JSONL run logging captures every phase/edge attempt for replay, debugging, and auditing (see *Run Logging*); a separate path-capture mechanism (`PathRecorder`) samples every planned/executed path to disk as it happens, so a run can be continuity-checked or replayed in a fresh process after a crash, and long missions can checkpoint and resume rather than replan from the start (see [`docs/usage/standalone-usage.md`](docs/usage/standalone-usage.md) §§8–10).
 - **Modular architecture.** Reusable building blocks — `SceneBuilder`, `ConstraintBuilder`, `ConfigGenerator`, `ManipulationTask`, `create_planner()` — compose into custom tasks.
@@ -19,29 +17,29 @@ Multi-arm collaborative manipulation planning for SpaceLab assembly tasks using 
 
 ## Installation
 
-`agimus_spacelab` has two distinct dependency tiers, and this drives how you install it:
+`long_tamp` has two distinct dependency tiers, and this drives how you install it:
 
 | Tier | Packages | Source |
 |------|----------|--------|
 | **Python (PyPI)** | `numpy`, `pyyaml`, `pinocchio` (`pin`), and the viser viewer stack (`viser`, `trimesh`, `pycollada`) | `pip` |
 | **HPP native bindings** | `hpp-python` (pyhpp), `hpp-toppra`, `hpp-gepetto-viewer`, … | **robotpkg / conda-forge / source only — NOT on PyPI** |
 
-The HPP native bindings are C++ extension modules and **cannot be installed with pip**. `pip install agimus-spacelab` therefore gives you a working *pure-Python* package (config parsing, planning-graph construction, transforms, run logging, viser viewer), but the planning **backends** must be provided by your environment (the `hpp-agimus` container, robotpkg, or conda-forge). Instantiating a backend without its bindings raises an `ImportError` explaining exactly what is missing.
+The HPP native bindings are C++ extension modules and **cannot be installed with pip**. `pip install long-tamp` therefore gives you a working *pure-Python* package (config parsing, planning-graph construction, transforms, run logging, viser viewer), but the planning **backends** must be provided by your environment (the `hpp-agimus` container, robotpkg, or conda-forge). Instantiating a backend without its bindings raises an `ImportError` explaining exactly what is missing.
 
-Install in **two steps, in this order**: first the HPP native bindings that provide the planning backends, then the `agimus_spacelab` package itself. Installing the package first is pointless — it cannot plan until the backends are on the path.
+Install in **two steps, in this order**: first the HPP native bindings that provide the planning backends, then the `long_tamp` package itself. Installing the package first is pointless — it cannot plan until the backends are on the path.
 
 ---
 
 ### Step 1 — Install the HPP native bindings (do this first)
 
-These C++ extension modules provide the planning backends and **cannot be installed with pip**. Put them in place before installing or running `agimus_spacelab`. There are two ways to obtain them: the robotpkg binary (1a) or a source build / container (1b). **The default PyHPP backend currently requires the source build (1b)**, because the stable robotpkg binary does not yet ship the extra bindings — see the caveat below.
+These C++ extension modules provide the planning backends and **cannot be installed with pip**. Put them in place before installing or running `long_tamp`. There are two ways to obtain them: the robotpkg binary (1a) or a source build / container (1b). **The default PyHPP backend currently requires the source build (1b)**, because the stable robotpkg binary does not yet ship the extra bindings — see the caveat below.
 
 #### 1a. Binary install via robotpkg
 
 Follow the **[official HPP installation guide](https://humanoid-path-planner.github.io/hpp-doc/installation/installation.html)** to add the robotpkg APT repository and set up your environment (`PATH`, `LD_LIBRARY_PATH`, `PYTHONPATH`, `CMAKE_PREFIX_PATH` under `/opt/openrobots`) — that page is the authoritative source for repository setup and exact package availability per Ubuntu release, so it isn't duplicated here.
 
 > **⚠️ Prefer the source-built/devel environment over the stable robotpkg
-> release for the PyHPP backend.** `agimus_spacelab` relies on a handful of
+> release for the PyHPP backend.** `long_tamp` relies on a handful of
 > `pyhpp` bindings — `RSTimeParameterization`, `SimpleTimeParameterization`,
 > `EnforceTransitionSemantic`, `GraphRandomShortcut` / `GraphPartialShortcut`,
 > `SplineGradientBased_bezier{1,3,5}`, and `ProgressiveProjector` — that the
@@ -54,7 +52,7 @@ Follow the **[official HPP installation guide](https://humanoid-path-planner.git
 > symbols before relying on it** — `import pyhpp` succeeding doesn't confirm
 > that:
 > ```bash
-> python -c "from agimus_spacelab import get_available_backends; print(get_available_backends())"
+> python -c "from long_tamp import get_available_backends; print(get_available_backends())"
 > ```
 > If `pyhpp` is missing from the result, or constructing it raises **"PyHPP
 > backend unavailable,"** one of the symbols above is absent from your
@@ -80,8 +78,8 @@ sudo apt-get install \
 Both are required, not just `hpp-python` — despite the name, the second package is where
 **all** viewer bindings live, including `pyhpp_viser` (the browser-based viser viewer this
 project defaults to), not just the legacy Qt/CORBA Gepetto viewer. `hpp-python` alone plans
-headlessly with no viewer at all; without the second package, `./interactive_planning.py -i`
-from Quick Start has nothing to display into.
+headlessly with no viewer at all; without the second package, `task_lift_ball.py
+--viewer-type viser` from Quick Start has nothing to display into.
 
 **Not available as a binary — TOPPRA.** `hpp-toppra` and its `toppra` C++
 dependency are not published in robotpkg (checked: absent from both `pub`
@@ -103,7 +101,7 @@ Pick the one matching your target ROS 2 version, build it (`run_docker.sh` in ea
 
 ---
 
-### Step 2 — Install the `agimus_spacelab` package
+### Step 2 — Install the `long_tamp` package
 
 With the HPP native bindings from Step 1 in place, install the package itself — either with pip (standalone / development) or with CMake (inside an HPP workspace).
 
@@ -166,11 +164,11 @@ The pip extras below carry **no PyPI packages** — they are documented install 
 
 | Extra | Command | Native packages to install separately |
 |-------|---------|---------------------------------------|
-| `toppra` | `pip install "agimus-spacelab[toppra]"` | `hpp-toppra`, `toppra` — **source build only** (not in robotpkg) |
+| `toppra` | `pip install "long-tamp[toppra]"` | `hpp-toppra`, `toppra` — **source build only** (not in robotpkg) |
 
 ### Backend availability at runtime
 
-The viser browser viewer ships by default. The other optimizers/viewers are detected at import time and expose `HAS_*` flags in `agimus_spacelab.backends.pyhpp` (`HAS_PYHPP`, `HAS_TOPPRA`, `HAS_VISER`, `HAS_GEPETTO_VIEWER`). A missing backend fails loudly only when you try to construct it, with guidance on how to obtain the bindings.
+The viser browser viewer ships by default. The other optimizers/viewers are detected at import time and expose `HAS_*` flags in `long_tamp.backends.pyhpp` (`HAS_PYHPP`, `HAS_TOPPRA`, `HAS_VISER`, `HAS_GEPETTO_VIEWER`). A missing backend fails loudly only when you try to construct it, with guidance on how to obtain the bindings.
 
 ## Usage
 
@@ -184,10 +182,7 @@ selection.
 
 - **Start from a template**: `script/templates/task_config_template.yaml` +
   `task_my_task.py` — copy, fill in the `<PLACEHOLDER>`s, run.
-- **Read a real, minimal example**: `script/spacelab/task_grasp_FG_yaml.py` (multi-arm scene).
-- **Explore interactively, no script-writing required**:
-  `script/spacelab/interactive_planning.py -i` — enumerate feasible grasp goals and solve
-  them from a menu.
+- **Read a real, minimal example**: `script/twin/task_lift_ball.py` (bimanual scene).
 
 ## Package structure & architecture
 
@@ -256,13 +251,13 @@ and update this copy to match.
 
 ## Run Logging
 
-`agimus_spacelab` includes a structured run logger that writes a crash-safe JSONL event
+`long_tamp` includes a structured run logger that writes a crash-safe JSONL event
 stream for every planning run — one event per phase/edge attempt, plus a JSON snapshot and a
 replay-ready YAML on close. Use it to replay configurations, debug failures, and audit
 results.
 
 Logging is **on by default** for every `ManipulationTask` (`log_dir="auto"` creates
-`/tmp/agimus_spacelab/<task_slug>_<timestamp>/`; pass an explicit path to redirect it, or
+`/tmp/long_tamp/<task_slug>_<timestamp>/`; pass an explicit path to redirect it, or
 `None` to disable). `RunLogger` also works standalone, independent of `ManipulationTask`.
 
 | Event | When emitted |
@@ -283,11 +278,11 @@ Python `logging` hierarchy — see [`docs/usage/standalone-usage.md`](docs/usage
 ## Documentation
 
 - **Architecture**: [`ARCHITECTURE.md`](ARCHITECTURE.md) — module layering, dependency direction, data flow. Dated at the top; check it before trusting a claim about what exists.
-- **Usage guide (living reference)**: [`docs/usage/standalone-usage.md`](docs/usage/standalone-usage.md) — writing a task, multi-phase sequences, resume/replay/checkpoints, backends, example scripts. [`docs/usage/dbt-integration.md`](docs/usage/dbt-integration.md) covers the ROS 2 / Dynamic Behavior Tree stack on top of this same library.
-- **Development report**: [`docs/report/development-report.md`](docs/report/development-report.md) — *why* the framework is built this way: architecture decisions vs. bare HPP, measured before/after numbers, project timeline, and a bugs-found appendix. A point-in-time report, not a living reference.
+- **Usage guide (living reference)**: [`docs/usage/standalone-usage.md`](docs/usage/standalone-usage.md) — writing a task, multi-phase sequences, resume/replay/checkpoints, backends, example scripts.
+- **Development report**: [`docs/legacy/report/development-report.md`](docs/legacy/report/development-report.md) — *why* the framework is built this way: architecture decisions vs. bare HPP, measured before/after numbers, project timeline, and a bugs-found appendix. A point-in-time report, not a living reference.
 - **Design rationale for specific mechanisms**: [`docs/features/`](docs/features/); **upstream HPP defects worked around here**: [`docs/bugs/`](docs/bugs/).
 - **API Reference**: See docstrings in source files.
-- **SpaceLab setup specifics**: [`script/spacelab/README.md`](script/spacelab/README.md) — the SpaceLab scene, its scripts, and the screwdriving TaskPlan + BehaviorTree.CPP mission; defers to the docs above for the generic package.
+- **ROS-free BehaviorTree.CPP integration**: [`docs/usage/behaviortree-integration.md`](docs/usage/behaviortree-integration.md).
 
 ## License
 

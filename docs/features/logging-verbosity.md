@@ -1,10 +1,8 @@
 # Console/file log verbosity split
 
-**Components**: `agimus_spacelab.logging.setup.configure_logging`,
-`agimus_spacelab.tasks.base.ManipulationTask`,
-`script/spacelab/screwdriving_sequence.py`
-**Status**: Implemented 2026-08-14. The `--log-level` CLI flag and the retry-loop throttle
-land with the screwdriving-sequence changes; everything else is in this commit.
+**Components**: `long_tamp.logging.setup.configure_logging`,
+`long_tamp.tasks.base.ManipulationTask`, plus each task script's own CLI
+**Status**: Implemented 2026-08-14.
 
 ---
 
@@ -44,11 +42,11 @@ configure_logging(
 `ManipulationTask.__init__` gained `log_level: str = "INFO"` (`"DEBUG"` / `"INFO"` /
 `"WARNING"` / `"ERROR"`), resolved via `getattr(logging, log_level.upper(), logging.INFO)`
 and passed through as `console_level`. The log file under
-`/tmp/agimus_spacelab/<task_slug>_<YYYYMMDD_HHMMSS>/` always captures full `DEBUG`.
+`/tmp/long_tamp/<task_slug>_<YYYYMMDD_HHMMSS>/` always captures full `DEBUG`.
 
 ## `--log-level` flag
 
-`script/spacelab/screwdriving_sequence.py` exposes it on the CLI:
+A task script exposes it on the CLI (see `script/templates/` for the pattern):
 
 ```
 --log-level {DEBUG,INFO,WARNING,ERROR}   Console log verbosity (default: INFO).
@@ -64,7 +62,7 @@ so these fire hundreds of times per run. Demoted to `DEBUG` (still in the log fi
 | File | Messages |
 | --- | --- |
 | `planning/graph.py` | factory setup (grippers, objects, environment contacts, rules, filter), `generate()`, `initialize()`, node/edge counts, global-constraint addition, `build_phase_graph` entry, non-phase object locking |
-| `planning/constraints.py` | per-joint "✓ Locked joint" lines (both PyHPP and CORBA paths) |
+| `planning/constraints.py` | per-joint "✓ Locked joint" lines |
 | `backends/pyhpp.py` | time-parameterization success lines (TOPPRA, trapezoidal, STP, generic) |
 
 Warnings and failures stay at `WARNING` throughout — nothing that reports a problem was
@@ -95,6 +93,6 @@ the same `should_log = attempt == 1 or attempt % 25 == 0` throttle as
 - a quiet console still writing full detail to the file;
 - an explicit `file_level` being respected.
 
-An autouse fixture saves/clears/restores the `agimus_spacelab` logger's handlers around
+An autouse fixture saves/clears/restores the `long_tamp` logger's handlers around
 each test — `configure_logging()` is idempotent, so without it whichever test ran first
 would pin the handler configuration for every test after it in the same process.

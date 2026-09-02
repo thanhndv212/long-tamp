@@ -570,9 +570,9 @@ The factory uses fixed constraint names:
 - Placement complement: add `"/complement"`
 - Preplacement: `"preplace_{object}"`
 
-### A.6 How `agimus_spacelab` uses the factory
+### A.6 How `long_tamp` uses the factory
 
-In this repo, `agimus_spacelab.planning.graph.GraphBuilder` supports factory mode
+In this repo, `long_tamp.planning.graph.GraphBuilder` supports factory mode
 on the PyHPP backend:
 
 ```python
@@ -580,6 +580,6 @@ graph = GraphBuilder(planner, robot, ps, backend="pyhpp")
 graph.build_graph_for_task(MyTaskConfig, mode="factory")
 ```
 
-`agimus_spacelab.planning.constraints.FactoryConstraintLibrary` centralizes the
+`long_tamp.planning.constraints.FactoryConstraintLibrary` centralizes the
 factory naming conventions so code can reliably reference factory-created
 constraint names.

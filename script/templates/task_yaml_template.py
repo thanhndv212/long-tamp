@@ -61,9 +61,9 @@ import sys
 from pathlib import Path
 from typing import List, Tuple, Optional
 
-from agimus_spacelab.tasks.grasp_sequence import GraspSequencePlanner
-from agimus_spacelab.tasks import ManipulationTask
-from agimus_spacelab.config.yaml_loader import YamlTaskLoader
+from long_tamp.tasks.grasp_sequence import GraspSequencePlanner
+from long_tamp.tasks import ManipulationTask
+from long_tamp.config.yaml_loader import YamlTaskLoader
 
 
 # ---------------------------------------------------------------------------
@@ -380,7 +380,7 @@ def main() -> int:
         # Useful for finding correct joint names for joint_groups in the YAML.
         task = MyRobotTask(backend=args.backend)
         task.setup(skip_graph=True)
-        from agimus_spacelab.visualization import print_joint_info
+        from long_tamp.visualization import print_joint_info
         print_joint_info(task.robot)
         return 0
 

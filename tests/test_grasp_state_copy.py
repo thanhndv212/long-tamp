@@ -18,7 +18,7 @@ No pyhpp/HPP dependency -- GraspStateTracker is pure Python -- but kept
 alongside the other grasp-sequence tests for discoverability.
 """
 
-from agimus_spacelab.planning.grasp_state import GraspStateTracker
+from long_tamp.planning.grasp_state import GraspStateTracker
 
 GRIPPERS = ["g_ur10_tool", "g_vispa2_wb6", "g_SD_part"]
 HANDLES = ["h_FG_tool", "h_RS6_WB", "h_RS6_CON0"]

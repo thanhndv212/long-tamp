@@ -1,4 +1,4 @@
-# CI for agimus_spacelab.
+# CI for long_tamp.
 #
 # NOTE: the test suite (tests/) cannot run on a plain Python runner — it imports
 # pinocchio / pyhpp, which are HPP native bindings not available on PyPI. A real

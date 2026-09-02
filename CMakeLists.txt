@@ -1,17 +1,17 @@
 # Copyright (c) 2025 CNRS
 # Author: Thanh Nguyen
 #
-# This file is part of agimus-spacelab.
-# agimus-spacelab is free software: you can redistribute it
+# This file is part of long-tamp.
+# long-tamp is free software: you can redistribute it
 # and/or modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation, either version
 # 3 of the License, or (at your option) any later version.
 
 cmake_minimum_required(VERSION 3.22)
 
-set(PROJECT_NAME agimus_spacelab)
-set(PROJECT_DESCRIPTION "Agimus Spacelab - Manipulation Planning Framework")
-set(PROJECT_URL "https://gitlab.laas.fr/agimus-project/agimus_spacelab")
+set(PROJECT_NAME long_tamp)
+set(PROJECT_DESCRIPTION "Long-TAMP - Manipulation Planning Framework")
+set(PROJECT_URL "https://github.com/thanhndv212/long-tamp")
 
 set(PROJECT_USE_CMAKE_EXPORT TRUE)
 
@@ -104,7 +104,7 @@ endif()
 
 # Install Python modules
 install(
-  DIRECTORY ${PROJECT_SOURCE_DIR}/src/agimus_spacelab
+  DIRECTORY ${PROJECT_SOURCE_DIR}/src/long_tamp
   DESTINATION ${PYTHON_SITELIB}
   PATTERN "*.pyc" EXCLUDE
   PATTERN "__pycache__" EXCLUDE

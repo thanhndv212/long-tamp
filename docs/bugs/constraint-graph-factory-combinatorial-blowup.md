@@ -7,9 +7,9 @@ genuine CPU work for phases with many simultaneously-held grippers/objects, with
 and no way to distinguish "still working" from "will never return"
 **Affects**: Any `ConstraintGraphFactory`-based graph construction with more than ~6-7
 simultaneous grippers/handles, regardless of how restrictive the grasp filter is;
-observed on the final phase (13/13) of a 13-phase SpaceLab assembly sequence
-(`script/spacelab/test_full_sequence.py`), the phase with the most grippers (8) and
-objects (7) held simultaneously in the whole sequence
+observed on the final phase (13/13) of a real 13-phase, multi-arm assembly sequence,
+the phase with the most grippers (8) and objects (7) held simultaneously in the whole
+sequence
 
 ---
 
@@ -69,7 +69,7 @@ def _recurse(self, grippers, handles, grasps, depth):
 `_existState()`/`_makeState()` (the memoization pair) read/write `self.states`, but
 `self.states` is populated **only** inside `_makeState`, itself only called
 `if nextIsAllowed:`. So a `nGrasps` combination *rejected* by `graspIsAllowed` (e.g. by
-`agimus_spacelab`'s `SequentialGraspFilter`, a trivial O(1) tuple-equality check — confirmed
+`long_tamp`'s `SequentialGraspFilter`, a trivial O(1) tuple-equality check — confirmed
 not itself the bottleneck) is never added to `self.states`. `isNewState` is therefore `True`
 on **every** visit to that combination, from **every** distinct parent path that reaches
 it — not just the first.
@@ -165,9 +165,9 @@ becomes a problem again at greater scale.
 
 ## Final Outcome
 
-Confirmed fixed and verified end-to-end on the real 13-phase SpaceLab assembly sequence —
-phase 13's graph construction, previously stalled indefinitely, now completes and the full
-sequence runs to completion.
+Confirmed fixed and verified end-to-end on the real 13-phase assembly sequence that
+surfaced this bug — phase 13's graph construction, previously stalled indefinitely, now
+completes and the full sequence runs to completion.
 
 ---
 
@@ -184,7 +184,7 @@ Standalone, HPP-independent reproduction (runs in seconds, no Docker/robot/scene
    `makeTransition` that record into plain `set()`s instead of touching real graph objects
    (legal — these are the only `@abc.abstractmethod`s).
 4. Reuse the real `SequentialGraspFilter`
-   (`agimus_spacelab/src/agimus_spacelab/planning/sequential_grasp_filter.py`, pure Python,
+   (`long_tamp/src/long_tamp/planning/sequential_grasp_filter.py`, pure Python,
    no compiled deps) plus one deliberately adversarial non-monotonic filter.
 5. For several N (2..8 grippers/handles), diff the resulting state/transition sets between
    unpatched and patched `_recurse` (must match exactly) and assert call counts drop
@@ -209,13 +209,13 @@ can only be inspected/updated via `docker exec`, unlike `src/`, which is a live 
 
 - `hpp-python/src/pyhpp/manipulation/constraint_graph_factory.py` —
   `GraphFactoryAbstract._recurse()`, `_existState()`, `_makeState()`
-- `agimus_spacelab/src/agimus_spacelab/planning/sequential_grasp_filter.py` —
+- `long_tamp/src/long_tamp/planning/sequential_grasp_filter.py` —
   `SequentialGraspFilter.__call__()`
-- `agimus_spacelab/src/agimus_spacelab/planning/graph.py` — `create_factory_graph()`,
+- `long_tamp/src/long_tamp/planning/graph.py` — `create_factory_graph()`,
   `build_phase_graph()` (pre-existing partial mitigation: restricts grippers/objects to
   phase-relevant ones, which reduces N for every phase except the last, where nearly
   everything is already held)
-- `agimus_spacelab/src/agimus_spacelab/planning/sequential_graph_factory.py` —
+- `long_tamp/src/long_tamp/planning/sequential_graph_factory.py` —
   `SequentialConstraintGraphFactory`/`SequentialTransitionFilter` (currently unused dead
   code path; shares the same underlying `_recurse` and would automatically benefit from
   this fix if ever adopted)

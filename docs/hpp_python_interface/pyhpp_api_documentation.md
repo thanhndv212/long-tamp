@@ -1958,7 +1958,7 @@ else:
 
 ## 6. Visualization
 
-agimus_spacelab supports two viewer backends.  Both are selected via a
+long_tamp supports two viewer backends.  Both are selected via a
 `viewer_type` parameter accepted by `ManipulationTask`, `PyHPPBackend`, and
 `CorbaBackend`.
 
@@ -1975,7 +1975,7 @@ agimus_spacelab supports two viewer backends.  Both are selected via a
 Pass `viewer_type` when constructing the task or backend:
 
 ```python
-from agimus_spacelab.tasks import ManipulationTask
+from long_tamp.tasks import ManipulationTask
 
 # Default — auto-selects best available viewer
 task = ManipulationTask(robot_config, backend="pyhpp")
@@ -1990,7 +1990,7 @@ task = ManipulationTask(robot_config, backend="pyhpp", viewer_type="gepetto")
 Or directly on a backend:
 
 ```python
-from agimus_spacelab.backends import PyHPPBackend, CorbaBackend
+from long_tamp.backends import PyHPPBackend, CorbaBackend
 
 backend = PyHPPBackend(viewer_type="viser")
 backend.setup_viewer()   # launches viewer (browser tab not opened automatically)
@@ -2104,7 +2104,7 @@ animate_path_viser(viewer, path, speed=1.0, fps=30)
 ### 6.4 Video Recording
 
 ```python
-from agimus_spacelab.visualization.video_recorder import VideoRecorder, record_path_playback
+from long_tamp.visualization.video_recorder import VideoRecorder, record_path_playback
 ```
 
 #### Gepetto — async frame capture
@@ -2158,10 +2158,10 @@ Both backends encode to video with **ffmpeg** using H.264 and produce a
 
 ### 6.5 Handle / Gripper Frame Visualization
 
-`agimus_spacelab.visualization.viz` works with both gepetto and viser viewers.
+`long_tamp.visualization.viz` works with both gepetto and viser viewers.
 
 ```python
-from agimus_spacelab.visualization.viz import (
+from long_tamp.visualization.viz import (
     displayHandle, displayGripper,
     displayHandleApproach, displayGripperApproach,
     visualize_all_handles, visualize_all_grippers,

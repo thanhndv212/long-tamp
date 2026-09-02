@@ -1,4 +1,4 @@
-> **Legacy.** The CORBA backend (`agimus_spacelab.backends.corba`) has been
+> **Legacy.** The CORBA backend (`long_tamp.backends.corba`) has been
 > removed from this package as part of the open-source release prep — the
 > PyHPP backend is now the only supported backend. Kept here for historical
 > reference only.
@@ -1292,7 +1292,7 @@ If you are migrating to PyHPP:
 - Replace string-based selection (`selectPathPlanner("BiRRTPlanner")`) by constructing bound objects and setting them on a `pyhpp.core.Problem` / `pyhpp.core.ProblemSolver`.
 - Replace string constraint names by Python-wrapped constraint objects (`Transformation`, `Implicit`, etc.) and direct method calls.
 
-See also: [hpp/src/agimus_spacelab/doc/comparison_corba_vs_pyhpp.md](hpp/src/agimus_spacelab/doc/comparison_corba_vs_pyhpp.md)
+See also: [hpp/src/long_tamp/doc/comparison_corba_vs_pyhpp.md](hpp/src/long_tamp/doc/comparison_corba_vs_pyhpp.md)
 
 ---
 

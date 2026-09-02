@@ -3,9 +3,9 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "agimus-spacelab"
+name = "long-tamp"
 version = "0.1.0"
-description = "Agimus Spacelab - Manipulation Planning Framework"
+description = "Long-TAMP - Manipulation Planning Framework"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "LGPL-3.0"}
@@ -84,20 +84,20 @@ docs = [
 ]
 
 all = [
-    "agimus-spacelab[dev,docs]",
+    "long-tamp[dev,docs]",
 ]
 
 [project.urls]
-Homepage = "https://gitlab.laas.fr/agimus-project/agimus_spacelab"
-Documentation = "https://agimus-spacelab.readthedocs.io"
-Repository = "https://gitlab.laas.fr/agimus-project/agimus_spacelab"
-Issues = "https://gitlab.laas.fr/agimus-project/agimus_spacelab/issues"
+Homepage = "https://github.com/thanhndv212/long-tamp"
+Documentation = "https://long-tamp.readthedocs.io"
+Repository = "https://github.com/thanhndv212/long-tamp"
+Issues = "https://github.com/thanhndv212/long-tamp/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-agimus_spacelab = ["py.typed"]
+long_tamp = ["py.typed"]
 
 [tool.ruff]
 extend-exclude = ["cmake"]
@@ -111,7 +111,7 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
-addopts = "-v --cov=agimus_spacelab --cov-report=html --cov-report=term"
+addopts = "-v --cov=long_tamp --cov-report=html --cov-report=term"
 
 [tool.black]
 line-length = 88

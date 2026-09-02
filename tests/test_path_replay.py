@@ -19,8 +19,8 @@ from typing import ClassVar
 
 import pytest
 
-from agimus_spacelab.planning.path_recorder import PathRecorder
-from agimus_spacelab.planning.path_replay import load_manifest, validate
+from long_tamp.planning.path_recorder import PathRecorder
+from long_tamp.planning.path_replay import load_manifest, validate
 
 
 class FakePath:

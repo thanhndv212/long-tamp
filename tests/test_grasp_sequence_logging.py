@@ -4,17 +4,17 @@ phases/edges used to be invisible to RunLogger-based analysis/replay
 because every ``self.run_logger.log(...)`` call in the shared
 plan_sequence()/resume_sequence() helpers was gated by ``not is_resume``.
 
-See docs/plans/refactor-codebase.md's "Decision needed: the logging
+See docs/legacy/plans/refactor-codebase.md's "Decision needed: the logging
 asymmetry" section (fixed 2026-08-09).
 
-Importing agimus_spacelab requires pyhpp (see that same doc's
+Importing long_tamp requires pyhpp (see that same doc's
 verification-model notes) even though the helpers under test have no HPP
 dependency themselves, so these tests must run inside the hpp-arm64
 container.
 """
 
-from agimus_spacelab.planning.grasp_state import GraspStateTracker
-from agimus_spacelab.tasks.grasp_sequence import GraspSequencePlanner
+from long_tamp.planning.grasp_state import GraspStateTracker
+from long_tamp.tasks.grasp_sequence import GraspSequencePlanner
 
 
 class _FakeRunLogger:

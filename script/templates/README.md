@@ -73,32 +73,13 @@ python script/my_robot/task_my_task.py --backend pyhpp
 
 | Config | Task script | Description |
 |---|---|---|
-| `script/config/spacelab_config.yaml` | `script/spacelab/task_grasp_FG_yaml.py` | SpaceLab multi-arm — complex reference |
+| `script/twin/config/twin_lift_ball_config.yaml` | `script/twin/task_lift_ball.py` | Bimanual multi-arm — complex reference |
 
----
-
-## Python-config templates (legacy)
-
-The older Python-based approach requires a `spacelab_config.py` to exist.
-Use these only when maintaining existing SpaceLab-specific scripts.
-
-**Files**
-
-- `task_config_template.py` — Python config class template (SpaceLab-specific imports)
-- `task_template.py` — Python task script template (imports `ManipulationConfig`)
-
-**Steps**
-
-1. Copy `task_config_template.py` → `script/config/<your_task>_config.py`
-2. Copy `task_template.py` → `script/spacelab/task_<your_task>.py`
-3. In the task file update `initialize_task_config()` to import your config
-   module and select `TaskConfigurations.<YourClass>`.
-
-### Notes on grippers (Python config style)
+### Notes on grippers
 
 Canonical config uses a nested schema:
 
 - `ManipulationConfig.GRIPPERS[group_key] = {gripper_frame: gripper_joint}`
 
-The config template shows how to extract `(GRIPPER_NAME, GRIPPER_JOINT)` while
-keeping `GRIPPERS = [GRIPPER_NAME]` for downstream usage.
+Extract `(GRIPPER_NAME, GRIPPER_JOINT)` from that nested form while keeping
+`GRIPPERS = [GRIPPER_NAME]` for downstream usage.

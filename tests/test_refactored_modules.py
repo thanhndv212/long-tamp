@@ -24,20 +24,20 @@ class TestInteractiveMenu:
 
     def test_import(self):
         """Test that interactive module can be imported."""
-        from agimus_spacelab.utils.interactive import interactive_menu
+        from long_tamp.utils.interactive import interactive_menu
 
         assert callable(interactive_menu)
 
     def test_empty_options_returns_empty_list(self):
         """Test that empty options returns empty list."""
-        from agimus_spacelab.utils.interactive import interactive_menu
+        from long_tamp.utils.interactive import interactive_menu
 
         result = interactive_menu("Test", [], multi_select=False)
         assert result == []
 
     def test_numbered_menu_fallback(self):
         """Test numbered menu fallback when getch unavailable."""
-        from agimus_spacelab.utils.interactive import _numbered_menu
+        from long_tamp.utils.interactive import _numbered_menu
 
         # Test quit option
         with patch("builtins.input", return_value="q"):
@@ -56,7 +56,7 @@ class TestInteractiveMenu:
 
     def test_terminal_control_functions(self):
         """Test terminal control functions don't raise."""
-        from agimus_spacelab.utils.interactive import (
+        from long_tamp.utils.interactive import (
             clear_line,
             move_cursor_up,
             hide_cursor,
@@ -81,7 +81,7 @@ class TestCLIArguments:
 
     def test_import(self):
         """Test that CLI module can be imported."""
-        from agimus_spacelab.cli import (
+        from long_tamp.cli import (
             add_common_arguments,
             add_task_arguments,
             add_advanced_arguments,
@@ -94,7 +94,7 @@ class TestCLIArguments:
     def test_add_common_arguments(self):
         """Test adding common arguments to parser."""
         import argparse
-        from agimus_spacelab.cli import add_common_arguments
+        from long_tamp.cli import add_common_arguments
 
         parser = argparse.ArgumentParser()
         add_common_arguments(parser)
@@ -114,7 +114,7 @@ class TestCLIArguments:
     def test_add_task_arguments(self):
         """Test adding task arguments to parser."""
         import argparse
-        from agimus_spacelab.cli import add_task_arguments
+        from long_tamp.cli import add_task_arguments
 
         parser = argparse.ArgumentParser()
         add_task_arguments(parser)
@@ -129,7 +129,7 @@ class TestCLIArguments:
 
     def test_parse_grasp_sequence(self):
         """Test parsing grasp sequence strings."""
-        from agimus_spacelab.cli import parse_grasp_sequence
+        from long_tamp.cli import parse_grasp_sequence
 
         result = parse_grasp_sequence("g1:h1,g2:h2")
         assert result == [("g1", "h1"), ("g2", "h2")]
@@ -144,7 +144,7 @@ class TestCLIArguments:
 
     def test_parse_goal_pairs(self):
         """Test parsing goal pairs to state strings."""
-        from agimus_spacelab.cli import parse_goal_pairs
+        from long_tamp.cli import parse_goal_pairs
 
         result = parse_goal_pairs(["g1:h1", "g2:h2"])
         assert result == ["g1 grasps h1", "g2 grasps h2"]
@@ -164,7 +164,7 @@ class TestPathIO:
 
     def test_import(self):
         """Test that path_io module can be imported."""
-        from agimus_spacelab.planning.path_io import (
+        from long_tamp.planning.path_io import (
             PathLoadError,
             load_paths_from_directory,
             replay_paths,
@@ -177,7 +177,7 @@ class TestPathIO:
 
     def test_path_load_error(self):
         """Test PathLoadError exception."""
-        from agimus_spacelab.planning.path_io import PathLoadError
+        from long_tamp.planning.path_io import PathLoadError
 
         error = PathLoadError("Test message", requires_graph=True)
         assert error.message == "Test message"
@@ -188,14 +188,14 @@ class TestPathIO:
 
     def test_get_path_files_nonexistent_dir(self):
         """Test get_path_files with nonexistent directory."""
-        from agimus_spacelab.planning.path_io import get_path_files
+        from long_tamp.planning.path_io import get_path_files
 
         result = get_path_files("/nonexistent/path")
         assert result == {"native": [], "json": []}
 
     def test_get_path_files_empty_dir(self):
         """Test get_path_files with empty directory."""
-        from agimus_spacelab.planning.path_io import get_path_files
+        from long_tamp.planning.path_io import get_path_files
 
         with tempfile.TemporaryDirectory() as tmpdir:
             result = get_path_files(tmpdir)
@@ -203,7 +203,7 @@ class TestPathIO:
 
     def test_get_path_files_with_files(self):
         """Test get_path_files finds files correctly."""
-        from agimus_spacelab.planning.path_io import get_path_files
+        from long_tamp.planning.path_io import get_path_files
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create test files
@@ -217,7 +217,7 @@ class TestPathIO:
 
     def test_get_num_paths_empty_planner(self):
         """Test get_num_paths with mock planner."""
-        from agimus_spacelab.planning.path_io import get_num_paths
+        from long_tamp.planning.path_io import get_num_paths
 
         # Test with empty mock
         mock_planner = MagicMock(spec=[])
@@ -232,7 +232,7 @@ class TestPathIO:
 
     def test_replay_paths(self):
         """Test replay_paths function."""
-        from agimus_spacelab.planning.path_io import replay_paths
+        from long_tamp.planning.path_io import replay_paths
 
         mock_planner = MagicMock()
         mock_planner.play_path = MagicMock()
@@ -245,7 +245,7 @@ class TestPathIO:
 
     def test_replay_paths_with_failure(self):
         """Test replay_paths handles failures."""
-        from agimus_spacelab.planning.path_io import replay_paths
+        from long_tamp.planning.path_io import replay_paths
 
         mock_planner = MagicMock()
         mock_planner.play_path = MagicMock(
@@ -268,7 +268,7 @@ class TestConfigLoader:
 
     def test_import(self):
         """Test that config_loader module can be imported."""
-        from agimus_spacelab.cli.config_loader import (
+        from long_tamp.cli.config_loader import (
             load_task_config,
             get_default_config_dir,
         )
@@ -279,12 +279,11 @@ class TestConfigLoader:
     def test_get_default_config_dir(self):
         """config/ sits beside the script, i.e. in the script's OWN directory.
 
-        This mirrors the real layout every task script relies on --
-        script/spacelab/screwdriving_sequence.py loads
-        script/spacelab/config/ -- so the config dir is the script's parent
-        plus "config", not its grandparent.
+        This mirrors the real layout every task script relies on -- a
+        script loads its own sibling config/ directory, so the config dir
+        is the script's parent plus "config", not its grandparent.
         """
-        from agimus_spacelab.cli.config_loader import get_default_config_dir
+        from long_tamp.cli.config_loader import get_default_config_dir
         from pathlib import Path
 
         script_path = Path("/some/script/dir/script.py")
@@ -302,7 +301,7 @@ class TestInteractivePickers:
 
     def test_import(self):
         """Test that interactive_pickers module can be imported."""
-        from agimus_spacelab.cli.interactive_pickers import (
+        from long_tamp.cli.interactive_pickers import (
             select_grasp_pairs,
             select_frozen_arms,
             browse_configurations,

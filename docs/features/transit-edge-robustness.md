@@ -1,12 +1,12 @@
 # Arm-transit robustness: spline-optimizer fallback and phase-index sync
 
-**Script**: `script/spacelab/screwdriving_sequence.py` —
-`ScrewdrivingSequenceTask._attempt_move_to_target()`, the single attempt behind
-`move_arm_to_target_nonstop()` and `_search_via_point()`
+**Origin**: `_attempt_move_to_target()`, the single attempt behind
+`move_arm_to_target_nonstop()` and `_search_via_point()` in a multi-arm task's
+transit-planning helper
 **Status**: Implemented 2026-08-14
 
 Two independent fixes in the same code path — the "move an arm to a target pose" transit
-used for VISPA/UR10 home moves and via-points.
+used for arm home moves and via-points.
 
 ---
 

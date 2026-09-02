@@ -1,33 +1,30 @@
-# Using `agimus_spacelab` as a standalone library
+# Using `long_tamp` as a standalone library
 
-How to write, run, resume, and replay a manipulation-planning task with `agimus_spacelab`
-directly — no ROS 2, no DBT. For the ROS 2 / DBT integration, see
-[`dbt-integration.md`](dbt-integration.md).
+How to write, run, resume, and replay a manipulation-planning task with `long_tamp`
+directly — no ROS 2. For the ROS-free BehaviorTree.CPP integration, see
+[`behaviortree-integration.md`](behaviortree-integration.md).
 
 This doc describes the **current** API (branch `main`, commit `e1844c9`). The package was
 heavily refactored in 2026-08; if you find older examples elsewhere in the repo that
 contradict this doc, trust this doc and the root [`README.md`](../../README.md) /
 [`ARCHITECTURE.md`](../../ARCHITECTURE.md).
 
-> **Stale references to ignore.** `src/agimus_spacelab/__init__.py`'s docstring mentions
+> **Stale references to ignore.** `src/long_tamp/__init__.py`'s docstring mentions
 > `TaskOrchestrator`, `TaskBuilder`, `PlanningBridge` — these classes don't exist. Use *this*
 > doc, the root README, and `script/templates/README.md` instead.
-> (`script/spacelab/README.md` is current and scoped to the SpaceLab setup specifically — it
-> defers to this doc and the root README for the generic package.)
 
 ---
 
 ## 1. What it is
 
-`agimus_spacelab` is a pure-Python planning library (with C++ HPP bindings underneath) that
+`long_tamp` is a pure-Python planning library (with C++ HPP bindings underneath) that
 turns a high-level assembly goal — *grip this, move that, hand it over, place it* — into one
 concatenated, collision-free motion for a multi-robot, multi-object scene. Its headline
 feature is **linear-cost sequence planning**: `GraspSequencePlanner` chains N grasp/place
 phases into one plan, each phase getting a *minimal* phase-local constraint graph, so cost
 grows **O(N)** instead of **O(N!)**.
 
-Nothing under `src/agimus_spacelab/` imports `rclpy` — this library has no ROS 2 dependency.
-`ros2_ws_agimusxads` is a downstream *consumer* (see [`dbt-integration.md`](dbt-integration.md)).
+Nothing under `src/long_tamp/` imports `rclpy` — this library has no ROS 2 dependency.
 
 ## 2. Layered architecture
 
@@ -59,9 +56,9 @@ version:
    docker exec -it hpp-agimus bash
    source ~/devel/ros2_ws_agimusxads/scripts/source.sh
    ```
-2. **Then the package**: `cd hpp/src/agimus_spacelab && pip install -e .` (or the CMake path:
+2. **Then the package**: `cd hpp/src/long_tamp && pip install -e .` (or the CMake path:
    `cd build && make install` — required after every Python change if you built via CMake).
-3. Verify: `python -c "from agimus_spacelab import get_available_backends; print(get_available_backends())"`.
+3. Verify: `python -c "from long_tamp import get_available_backends; print(get_available_backends())"`.
 
 ## 4. Core concepts
 
@@ -71,7 +68,7 @@ version:
 | Constraints | `planning.constraints.ConstraintBuilder` | grasp / placement / locked-joint constraints |
 | Graph | `planning.graph.GraphBuilder` | builds the HPP constraint graph (states + edges) |
 | Config generation | `planning.config.ConfigGenerator` | samples/solves robot configurations |
-| Backend | `backends.PyHPPBackend` / `CorbaBackend` | the actual HPP solver, behind a uniform `BackendBase` interface |
+| Backend | `backends.PyHPPBackend` | the actual HPP solver, behind a uniform `BackendBase` interface |
 | Task | `tasks.ManipulationTask` | glues the four above together for one task |
 | Sequence planner | `tasks.grasp_sequence.GraspSequencePlanner` | plans a *sequence* of grasp/release phases as one linear-cost plan |
 
@@ -111,9 +108,8 @@ python script/<robot>/task_<name>.py --backend pyhpp
 
 ### 5b. Minimal working reference
 
-`script/spacelab/task_grasp_FG_yaml.py` is a real, runnable example for the multi-arm
-SpaceLab scene (UR10 grasps `frame_gripper`, VISPA/VISPA2 frozen) — read it before writing
-a new task from the template.
+`script/twin/task_lift_ball.py` is a real, runnable example for a bimanual scene — read
+it before writing a new task from the template.
 
 ### 5c. What a task looks like, conceptually
 
@@ -199,13 +195,10 @@ This mechanism only survives within one `GraspSequencePlanner` instance / one pr
 
 ### 8b. Cross-process checkpoints (diagnostic re-runs)
 
-Long scripts (e.g. `screwdriving_sequence.py`) dump `(q_current, held_grasps)` to
-`$AGIMUS_CHECKPOINT_DIR/phase_{NN:02d}.json`. `script/spacelab/repro_phase_range.py` loads one
-and calls `plan_sequence()` directly on a phase sub-range — turns a 20+ minute re-run into
-seconds when debugging one failing phase:
-```bash
-python repro_phase_range.py --start 5 --end 7 --checkpoint-dir /tmp/checkpoints --backend pyhpp
-```
+A long-running task script can dump `(q_current, held_grasps)` to
+`$AGIMUS_CHECKPOINT_DIR/phase_{NN:02d}.json` after each phase. A small script that loads
+one and calls `plan_sequence()` directly on a phase sub-range turns a 20+ minute re-run
+into seconds when debugging one failing phase.
 
 ## 9. Capturing and replaying a whole run
 
@@ -214,7 +207,7 @@ happens, so a run can be replayed **without rebuilding any constraint graph**, i
 process, after the original run exited (crashed, was killed, or finished normally).
 
 ```python
-from agimus_spacelab.planning.path_recorder import PathRecorder
+from long_tamp.planning.path_recorder import PathRecorder
 
 recorder = PathRecorder(output_dir, planner=backend, dt=0.05)
 recorder.begin_step(step_idx, "grasp RS1")
@@ -226,15 +219,9 @@ Writes `manifest.json` (atomically rewritten after every segment — crash-safe)
 `seg_{index:04d}_{kind}[_{edge}].json` waypoint files. `mark()`/`rollback(mark)` drop segments
 from an abandoned block replan (motion that never actually happened).
 
-Replay from the CLI, no scene/HPP session needed for a pure continuity check:
-```bash
-python script/spacelab/replay_captured_paths.py /tmp/run/paths --check     # continuity only, seconds
-python script/spacelab/replay_captured_paths.py /tmp/run/paths             # visual replay (viser/gepetto)
-python script/spacelab/replay_captured_paths.py /tmp/run/paths --only RS1 --speed 2
-```
-Or in Python:
+Validate or replay in Python, no scene/HPP session needed for a pure continuity check:
 ```python
-from agimus_spacelab.planning.path_replay import load_manifest, validate
+from long_tamp.planning.path_replay import load_manifest, validate
 m = load_manifest(directory)
 report = validate(m)          # independently re-derives seam continuity from the files on disk
 assert report.ok
@@ -247,12 +234,12 @@ independently, so velocity is zero at each junction). Feed it seam-checked ids f
 ## 10. Run logging (structured JSONL, separate from path capture)
 
 `RunLogger` is wired automatically (`ManipulationTask(log_dir="auto")` → default
-`/tmp/agimus_spacelab/<task_slug>_<timestamp>/`) and emits events (`run_start`,
+`/tmp/long_tamp/<task_slug>_<timestamp>/`) and emits events (`run_start`,
 `config_snapshot`, `sequence_start`, `phase_start`, `edge_start`, `edge_end`, `phase_end`,
 `run_end`) during `plan_sequence()`/`resume_sequence()`. Inspect afterward:
 ```python
-from agimus_spacelab.logging import print_run_summary, load_run_log, get_replay_config
-print_run_summary("/tmp/agimus_spacelab/.../run_....jsonl")
+from long_tamp.logging import print_run_summary, load_run_log, get_replay_config
+print_run_summary("/tmp/long_tamp/.../run_....jsonl")
 ```
 `get_replay_config()` returns `{backend, task_name, task_config, setup_params, sequence}` —
 enough to reproduce a run without re-deriving it by hand. This is a log of *what happened*, not
@@ -277,32 +264,16 @@ in `planning/planner.py` are the usual entry points.
 
 | Script | Use it to learn |
 |---|---|
-| `script/spacelab/task_grasp_FG_yaml.py` | one grasp, multi-arm scene, YAML config |
-| `script/spacelab/interactive_planning.py -i` | menu-driven exploration: enumerate feasible goals from `VALID_PAIRS`, solve interactively |
-| `script/spacelab/test_full_sequence.py` | full 13-phase assembly, non-stop auto-resume-on-failure mode |
-| `script/spacelab/screwdriving_sequence.py` | everything together: multi-phase sequence + lookahead hints + path capture + end-of-run replay menu (2300+ lines — the flagship reference) |
-| `script/spacelab/repro_phase_range.py` | fast checkpoint-based re-run of one phase range |
-| `script/spacelab/replay_captured_paths.py` | CLI replay of a `PathRecorder` manifest |
-| `script/spacelab/benchmark_optimizer_phases.py` | compare path-quality across optimizer settings |
+| `script/twin/task_lift_ball.py` | bimanual grasp + lift, YAML config, factory-mode graph |
+| `script/templates/task_my_task.py` | minimal single-robot template to copy for a new task |
 
-## 13. The screwdriving pattern (SpaceLab-specific, not a framework feature)
+A long-horizon, multi-phase, checkpoint/resume/replay mission (chaining many phases with
+lookahead hints, path capture, and an end-of-run replay menu, as described in §7-9 above)
+is the pattern `GraspSequencePlanner` + `PathRecorder` are built for; there is no such
+example currently shipped in this repo — the previous one was mission-specific and not
+part of the open-source release.
 
-Nothing in `src/agimus_spacelab/` knows about "screws" or "holes" — this is entirely a
-**script-level pattern** in `screwdriving_sequence.py`, riding on `GraspSequencePlanner`
-+ lookahead + `PathRecorder`. Vocabulary if you're reading that script:
-- **Interfaces**: adjacent RS-part pairs screwed together once both are placed
-  (RS1–RS6, RS6–RS5, RS2–RS1, RS2–RS3, RS3–RS4).
-- **Holes**: handle names `CON0..CON3` per part.
-- `SCREW_PLAN_RS`: a hand-written table mapping each of the six placement turns to
-  `(target_part, (hole_names...))`.
-- Each turn is split into an **A-block** (`A0`: frame-gripper grasp alone) and **A-REST**
-  (workbench grasp + grasp/release pairs per hole) — the lookahead's workbench-grasp probe
-  needs to run from the part's real in-place pose, not its staging pose.
-
-See [`docs/features/screwdriving-sequence-assembly-order.md`](../features/screwdriving-sequence-assembly-order.md)
-if you're extending this pattern to a new assembly order.
-
-## 14. Config format reference
+## 13. Config format reference
 
 YAML top-level keys: `robots`, `environments`, `joint_groups`, `objects` (handles, contact
 surfaces, initial pose), `grippers`, `valid_pairs` (gripper → allowed handles — this is what
@@ -311,13 +282,13 @@ drives grasp legality), `arm_groups`, `freeze_joints`, `environment_contacts`, `
 `optimization` (shortcut loops, TOPPRA params), `freeflyer_bounds`. Loaded via
 `config.yaml_loader.YamlTaskLoader(yaml_path)`, exposing `.file_paths`, `.joint_bounds_class`,
 `.task_config` (dynamic config object), `.build_initial_config()`. Real example:
-`script/spacelab/config/spacelab_config.yaml` (complex, multi-arm). Template:
+`script/twin/config/twin_lift_ball_config.yaml` (multi-arm). Template:
 `script/templates/task_config_template.yaml`.
 
 The older dataclass style (`config/base_config.py` → `BaseTaskConfig`) still works but isn't
 recommended for new tasks — YAML needs no Python changes to add a robot/object.
 
-## 15. Running tests
+## 14. Running tests
 
 ```bash
 cd build && make install     # if you edited src/ and built via CMake
@@ -326,7 +297,6 @@ python -m pytest tests/ -v   # 118 pass, 0 fail, 16 skip (baseline) — inside t
 Most illustrative for learning the API by example:
 - `tests/test_grasp_sequence_resume_state.py` — exact resume-state-restoration contract (§8a).
 - `tests/test_path_replay.py` — `PathRecorder` → `load_manifest` → `validate` round-trip (§9).
-- `tests/test_replay_menu.py` — the end-of-run replay-menu keybindings (`<index>`, `s<N>`, `a`).
 - `tests/test_grasp_state_copy.py` — the tracker-copy isolation invariant behind lookahead (§7).
 
 ## 16. Known gotchas

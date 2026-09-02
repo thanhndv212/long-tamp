@@ -7,7 +7,7 @@
 > Code examples in this file that pass `pyhpp_constraints=` to these methods are
 > historical and will raise `TypeError` with the current API.
 
-**Package**: agimus_spacelab / hpp-python / hpp-manipulation  
+**Package**: long_tamp / hpp-python / hpp-manipulation  
 **Component**: `PyHPPConstraintGraphFactory.buildPlacement()`, `GraphBuilder.create_factory_graph()`  
 **Severity**: High — all PyHPP factory-mode planning fails silently  
 **Affects**: PyHPP backend with `--factory` mode, no-contact placement objects
@@ -55,7 +55,7 @@ constraint**. During `Edge::generateTargetConfig`, the planner calls
 - **Residual**: consistently 0.1773906184320775 (not random — repeatable use-after-free
   pattern corrupting the projector state)
 - **Failure rate**: 1000/1000 attempts
-- **Edge**: `spacelab/g_ur10_tool > frame_gripper/h_FG_tool | f_01`
+- **Edge**: `arm1/tool_gripper > frame_gripper/h_FG_tool | f_01`
 - **No crash** — the use-after-free is silent; the projector simply returns a wrong
   (non-zero) residual
 
@@ -180,8 +180,8 @@ return self.graph_builder.create_factory_graph(
 ```
 
 **Files changed**:
-- `src/agimus_spacelab/planning/graph.py`
-- `src/agimus_spacelab/tasks/base.py`
+- `src/long_tamp/planning/graph.py`
+- `src/long_tamp/tasks/base.py`
 
 ---
 
@@ -189,7 +189,7 @@ return self.graph_builder.create_factory_graph(
 
 Before the above fixes could take effect, a fourth issue existed:
 `FactoryConstraintRegistry.register_from_defs()` was pre-registering placement constraints
-as `RelativeTransformation` (CORBA-style) before factory graph creation. This caused
+as `RelativeTransformation` before factory graph creation. This caused
 `buildPlacement()` to see `placeAlreadyCreated=True` and skip the `LockedJoint` path
 entirely — but the pre-registered `RelativeTransformation` is wrong for PyHPP's foliation
 model for no-contact objects.
@@ -199,8 +199,8 @@ PyHPP + no-contact case, and a corresponding `skip_placement` parameter in
 `constraints.py.FactoryConstraintRegistry.register_from_defs()`.
 
 **Files changed**:
-- `src/agimus_spacelab/tasks/base.py`
-- `src/agimus_spacelab/planning/constraints.py`
+- `src/long_tamp/tasks/base.py`
+- `src/long_tamp/planning/constraints.py`
 
 ---
 
@@ -212,7 +212,7 @@ After all fixes, `generate_via_edge` for the factory graph succeeds:
 ✓ Set robot current configuration for factory graph construction
 ✓ Generated graph structure
 ✓ SUCCESS q_wp_0_...|_f generated via edge '...| f' after 5 attempts
-✓ Goal state: spacelab/g_ur10_tool grasps frame_gripper/h_FG_tool
+✓ Goal state: arm1/tool_gripper grasps frame_gripper/h_FG_tool
 ```
 
 ---
@@ -221,12 +221,14 @@ After all fixes, `generate_via_edge` for the factory graph succeeds:
 
 ```bash
 # Before fix: fails 1000/1000 on f_01, then f after partial fix
-cd script/spacelab
-python task_grasp_frame_gripper.py --factory --backend pyhpp --no-viz
+python your_task_script.py --factory --backend pyhpp --no-viz
 
 # After fix: succeeds
-python task_grasp_frame_gripper.py --factory --backend pyhpp --no-viz
+python your_task_script.py --factory --backend pyhpp --no-viz
 ```
+
+Reproduced against a task with a factory-mode grasp constraint and a no-contact
+placement object; see `script/templates/` for the shape of such a task script.
 
 ---
 

@@ -4,9 +4,9 @@
 Two independent Franka Panda arms (`panda_left`, `panda_right`) — chosen
 for their real 2-DOF articulated parallel gripper, unlike this task's
 original UR5 + rigid-tool0 setup — simultaneously grasp a ball at two
-handles, then lift it together. The agimus_spacelab port of TWIN/PerAct2's
+handles, then lift it together. The long_tamp port of TWIN/PerAct2's
 "lift ball" bimanual benchmark task (see
-research-vault/agimus-spacelab/agimus-spacelab-next-ideas.md idea 2 and
+research-vault/long-tamp/long-tamp-next-ideas.md idea 2 and
 research-vault/papers/twin-benchmark.md). See script/twin/README.md for
 the one-time dev-environment setup (hpp_practicals package resolution).
 
@@ -22,9 +22,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-from agimus_spacelab.config.yaml_loader import YamlTaskLoader
-from agimus_spacelab.tasks import ManipulationTask
-from agimus_spacelab.tasks.grasp_sequence import GraspSequencePlanner
+from long_tamp.config.yaml_loader import YamlTaskLoader
+from long_tamp.tasks import ManipulationTask
+from long_tamp.tasks.grasp_sequence import GraspSequencePlanner
 
 TASK_NAME = "TWIN: Lift Ball (bimanual)"
 
@@ -344,7 +344,7 @@ def main() -> int:
     if args.show_joints:
         task = LiftBallTask(backend=args.backend)
         task.setup(skip_graph=True)
-        from agimus_spacelab.visualization import print_joint_info
+        from long_tamp.visualization import print_joint_info
 
         print_joint_info(task.robot)
         return 0

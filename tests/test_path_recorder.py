@@ -29,7 +29,7 @@ from typing import ClassVar
 
 import pytest
 
-from agimus_spacelab.planning.path_recorder import PathRecorder, SeamError
+from long_tamp.planning.path_recorder import PathRecorder, SeamError
 
 
 class FakePath:
@@ -143,7 +143,7 @@ class TestOrdering:
         rec = r.record_path(
             FakePath([0.0], [1.0]),
             kind="grasp",
-            edge_name="spacelab/g_ur10_tool > frame_gripper/h_FG_tool | f_01",
+            edge_name="arm1/g_tool > frame_gripper/h_FG_tool | f_01",
         )
         assert "/" not in rec["waypoint_file"]
         assert os.path.exists(os.path.join(r.output_dir, rec["waypoint_file"]))
@@ -415,7 +415,7 @@ class TestPhaseResults:
             {
                 "phase": 1,
                 "gripper": "g_fg",
-                "handle": "RS1/h_RS1_FG",
+                "handle": "part1/h_fg",
                 "edges": ["e_01", "e_12"],
                 "complete": True,
                 "paths": [FakePath([0.0], [1.0]), FakePath([1.0], [2.0])],
@@ -424,7 +424,7 @@ class TestPhaseResults:
             {
                 "phase": 2,
                 "gripper": "g_wb",
-                "handle": "RS1/h_RS1_WB",
+                "handle": "part1/h_wb",
                 "edges": ["e_23"],
                 "complete": True,
                 "paths": [FakePath([2.0], [3.0])],
@@ -446,7 +446,7 @@ class TestPhaseResults:
                     "phase": 1,
                     "gripper": "g_fg",
                     "handle": None,
-                    "released": "RS1/h_RS1_FG",
+                    "released": "part1/h_fg",
                     "edges": ["e_21", "e_10"],
                     "complete": True,
                     "paths": [FakePath([0.0], [1.0]), FakePath([1.0], [2.0])],
@@ -454,7 +454,7 @@ class TestPhaseResults:
             ]
         )
         assert [w["kind"] for w in written] == ["release", "release"]
-        assert written[0]["released"] == "RS1/h_RS1_FG"
+        assert written[0]["released"] == "part1/h_fg"
 
     def test_a_direct_release_fallback_has_fewer_paths_than_edge_names(self, tmp_path):
         """_build_release_phase_info filters None paths out of "paths" but
@@ -638,14 +638,13 @@ class TestResumedPhases:
     The recorder records what it is given and never decides on its own that
     a path did not happen: whether a failed attempt's edges are real motion
     depends on where the retry starts from, which only the caller knows.
-    Found live on RS2's FG grasp, where the recorder's skip-the-incomplete
-    rule left a 5.08 rad jump in the manifest.
+    Found live on a long mission's mid-sequence grasp retry, where the
+    recorder's skip-the-incomplete rule left a 5.08 rad jump in the manifest.
 
-    The mission script is what discards an abandoned attempt (see
-    ``ScrewdrivingSequenceTask._drop_abandoned_phase``), now that
+    The calling task is what discards an abandoned attempt, now that
     resume_sequence restarts a failed phase from where the call began. This
-    stays the recorder's contract because the two other callers differ:
-    test_full_sequence.py plans in one call, and a resume from disk re-enters
+    stays the recorder's contract because other callers differ: a single
+    plan_sequence() call plans in one shot, and a resume from disk re-enters
     a directory whose earlier segments must be continued, not re-judged.
 
     resume_sequence also *deletes* incomplete phases from phase_results
@@ -661,7 +660,7 @@ class TestResumedPhases:
 
         # plan_sequence: _01 lands, _12 fails -> partial entry
         partial = {
-            "phase": 1, "gripper": "g_fg", "handle": "RS2/h_RS2_FG",
+            "phase": 1, "gripper": "g_fg", "handle": "part2/h_fg",
             "edges": ["e_01", "e_12"], "complete": False,
             "paths": [FakePath(home, pre_a)],
         }
@@ -669,7 +668,7 @@ class TestResumedPhases:
 
         # resume_sequence drops the partial and replans from pre_a
         complete = {
-            "phase": 1, "gripper": "g_fg", "handle": "RS2/h_RS2_FG",
+            "phase": 1, "gripper": "g_fg", "handle": "part2/h_fg",
             "edges": ["e_01", "e_12"], "complete": True,
             "paths": [FakePath(pre_a, pre_b), FakePath(pre_b, grasp)],
         }

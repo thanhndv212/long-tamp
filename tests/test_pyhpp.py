@@ -11,7 +11,7 @@ import numpy as np
 from unittest.mock import MagicMock
 
 try:
-    from agimus_spacelab.backends.pyhpp import PyHPPBackend as PyHPPManipulationPlanner, HAS_PYHPP
+    from long_tamp.backends.pyhpp import PyHPPBackend as PyHPPManipulationPlanner, HAS_PYHPP
 except ImportError:
     HAS_PYHPP = False
 
@@ -286,7 +286,7 @@ class TestValidateEdgeEndpoints:
         planner = PyHPPManipulationPlanner()
         planner.graph = None
 
-        with caplog.at_level(logging.DEBUG, logger="agimus_spacelab"):
+        with caplog.at_level(logging.DEBUG, logger="long_tamp"):
             result = planner._validate_edge_endpoints(
                 object(), "edge01", np.array([0.0]), np.array([1.0])
             )
@@ -302,7 +302,7 @@ class TestValidateEdgeEndpoints:
 
         planner.graph = _FakeGraph()
 
-        with caplog.at_level(logging.DEBUG, logger="agimus_spacelab"):
+        with caplog.at_level(logging.DEBUG, logger="long_tamp"):
             result = planner._validate_edge_endpoints(
                 object(), "edge01", np.array([0.0]), np.array([1.0])
             )
@@ -323,7 +323,7 @@ class TestValidateEdgeEndpoints:
         graph.errorThreshold.return_value = 1e-3
         planner.graph = graph
 
-        with caplog.at_level(logging.DEBUG, logger="agimus_spacelab"):
+        with caplog.at_level(logging.DEBUG, logger="long_tamp"):
             planner._validate_edge_endpoints(
                 object(), "edge01", np.array([0.0]), np.array([1.0])
             )

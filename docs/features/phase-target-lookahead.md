@@ -1,13 +1,13 @@
 # Phase-target lookahead (`find_feasible_phase_target` + `phase_q_hints`)
 
-**Package**: agimus_spacelab
-**Component**: `agimus_spacelab.tasks.grasp_sequence.GraspSequencePlanner`
+**Package**: long_tamp
+**Component**: `long_tamp.tasks.grasp_sequence.GraspSequencePlanner`
 **Status**: Implemented 2026-08-14. The planner-side API and its tests are in this commit;
-the caller wiring in `script/spacelab/screwdriving_sequence.py` (see below) lands with
-the screwdriving-sequence changes.
-**Motivating failure**: RS6's `CON0` grasp failing ~2300+ consecutive target-generation
-attempts, and RS5's failing 878/878 draws per attempt, in the SpaceLab screwdriving
-sequence
+a caller wires it into its own retry loop the same way (see §Caller wiring below).
+**Motivating failure**: in a long, multi-phase assembly mission, a later phase's grasp
+target failing ~2300+ consecutive target-generation attempts (and, on another part,
+878/878 draws per attempt) because an earlier phase's random commitment had already
+made it unreachable
 
 ---
 
@@ -30,19 +30,19 @@ fresh (possibly bad) one.
 ## The failure class this fixes
 
 Two simultaneous fixed-offset grasps on the same rigid object fully determine that
-object's orientation. In the screwdriving sequence, `RSx` is held by `frame_gripper`
-(carried by UR10) **and** by `vispa2` (the WB grasp) at the same time. Once both are
-committed, `RSx`'s orientation is frozen — and the next phase, VISPA's screwdriver grasp on
-`RSx/h_RSx_CON0`, has no remaining freedom to fix a bad orientation.
+object's orientation. In a multi-gripper assembly mission, a part can be held by one
+gripper (e.g. carried by a first arm) **and** by a second gripper (a second-phase grasp)
+at the same time. Once both are committed, the part's orientation is frozen — and the
+next phase's grasp on that same part has no remaining freedom to fix a bad orientation.
 
 Evidence from live runs:
 
 | Observation | Measurement |
 | --- | --- |
-| RS6 `CON0` target generation after a bad WB commitment | ~2300+ consecutive failures, **0** ever reaching collision-checking |
-| …with the next arm frozen, and after the 30-failure unfreeze escalation fired | Same — freeing `vispa2` cannot move an object already pinned by two *other* fixed grasps |
-| Visual confirmation (viser) | `CON0`'s face was turned away from the screwdriver |
-| RS5 `CON0`, same edge shape | 878/878 target draws failing at solver convergence |
+| Target generation after a bad second-grasp commitment | ~2300+ consecutive failures, **0** ever reaching collision-checking |
+| …with the next arm frozen, and after the 30-failure unfreeze escalation fired | Same — freeing the frozen arm cannot move an object already pinned by two *other* fixed grasps |
+| Visual confirmation (viser) | The target grasp face was turned away from the approaching tool |
+| Same edge shape, a different part | 878/878 target draws failing at solver convergence |
 
 So the retry loop was structurally incapable of succeeding: it was hammering phase N+1
 against a phase-N commitment it could not undo.
@@ -55,12 +55,12 @@ against a phase-N commitment it could not undo.
 
 ```python
 chain = seq_planner.find_feasible_phase_target(
-    phase_n=("spacelab/g_vispa2_wb6", "RS6/h_RS6_WB"),
-    phase_n1=("screw_driver/g_SD_part", "RS6/h_RS6_CON0"),
+    phase_n=("arm2/gripper", "part/handle_a"),
+    phase_n1=("arm3/gripper", "part/handle_b"),
     q_current=q_current,
     q_scene_init=q_scene_init,
-    frozen_arms_n=["vispa_"],
-    frozen_arms_n1=["ur10", "vispa2"],
+    frozen_arms_n=["arm1_"],
+    frozen_arms_n1=["arm2", "arm3"],
     probe_timeout=5.0,
     max_candidates=100,
 )
@@ -75,8 +75,8 @@ Per candidate it:
 3. builds phase N+1's graph and probes its edge chain with a short `probe_timeout`,
    discarding the resulting config — only "does a solution exist" matters.
 
-Two full `build_phase_graph()` calls per candidate, not one: `self.graph` / the CORBA
-server graph is a **singleton**, so building phase N+1's graph tears down phase N's. There
+Two full `build_phase_graph()` calls per candidate, not one: `self.graph` is a
+**singleton**, so building phase N+1's graph tears down phase N's. There
 is no way to hold both alive and compare candidates side by side.
 
 The real `self.grasp_tracker` is never mutated. Committing a hypothetical grasp to the real
@@ -96,10 +96,10 @@ free DOFs it doesn't constrain pass straight through. Hinting only the terminal 
 the pregrasp edge randomized, so the last edge solves from a `q_from` the probe never saw
 and its result drifts off the validated candidate — taking the phase N+1 guarantee with it.
 
-That is not hypothetical. On 2026-08-13 with terminal-only hinting, RS5's pregrasp edge was
-redrawn 6× (5 planning failures), moving the free UR10 arm and with it RS5 itself; the
-`CON0` grasp the lookahead had *just verified* then failed 878/878 draws. The lookahead
-reported success and the run still lost `CON0`.
+That is not hypothetical. On 2026-08-13 with terminal-only hinting, a pregrasp edge was
+redrawn 6× (5 planning failures), moving the free arm and with it the held part itself;
+the next grasp the lookahead had *just verified* then failed 878/878 draws. The lookahead
+reported success and the run still lost that grasp.
 
 ### 3. `_edge_hints_for_phase(phase_hint, n_edges)` — accepted shapes
 
@@ -149,28 +149,27 @@ grasps as already held and plan a structurally different, unsatisfiable sequence
 
 ---
 
-## Caller wiring (`script/spacelab/screwdriving_sequence.py`)
+## Caller wiring
 
-- `LOOKAHEAD_PHASE_PAIR = (0, 1)` — 0-based within an RS part's A-REST block: WB grasp
-  protects the following `CON0` grasp. One pair covers every RS index; the block shape is
-  identical.
-- `_lookahead_hint_for_block()` calls `find_feasible_phase_target()` in an **unbounded**
-  round loop, with `gc.collect()` every 5 rounds. It never falls back to blind, unhinted
-  generation — that fallback *is* the failure mode being replaced. Each round explores
-  genuinely fresh candidates, so more rounds keep buying real coverage (unlike blind `CON0`
-  retries against a dead commitment). Ctrl+C is the escape hatch, matching this file's
-  other non-stop retry loops.
-- `run_block_nonstop(..., phase_q_hints_factory=...)` takes a **factory**, not a
-  precomputed dict. If the block breaks the chain mid-phase, it rolls the tracker back with
-  `reset_grasp_tracker_to_call_start()`, re-runs the lookahead for a genuinely fresh
-  candidate, and replans the block from its start rather than resuming forward on a void
+A caller that repeats the same two-phase grasp shape across many parts/units typically
+wires this in as:
+
+- A phase-pair constant identifying which (phase N, phase N+1) shape needs protecting —
+  one pair usually covers every repetition of that shape in the mission.
+- A helper that calls `find_feasible_phase_target()` in an **unbounded** round loop, with
+  periodic `gc.collect()` (e.g. every 5 rounds) to bound the C++ graph memory the retries
+  accumulate. It should never fall back to blind, unhinted generation — that fallback *is*
+  the failure mode this feature replaces. Each round explores genuinely fresh candidates,
+  so more rounds keep buying real coverage (unlike blind retries against a dead
+  commitment).
+- A block-runner that takes a hint **factory**, not a precomputed dict, so that if the
+  block breaks the chain mid-phase it can roll the tracker back with
+  `reset_grasp_tracker_to_call_start()`, re-run the lookahead for a genuinely fresh
+  candidate, and replan the block from its start rather than resuming forward on a void
   guarantee.
-- Gating: the lookahead runs only when the turn's screw target is the part placed that turn
-  (`_screw_target(rs) == rs`), which under the current `SCREW_PLAN_RS` means every screwing
-  turn. See
-  [screwdriving-sequence-assembly-order.md](screwdriving-sequence-assembly-order.md) for why
-  that condition, and why a plan entry naming an *already-placed* part could not be
-  protected by *this* lookahead even in principle.
+- Gating: only run the lookahead where the shape actually recurs — a plan entry that
+  doesn't match the protected phase-pair shape can't be protected by *this* lookahead
+  even in principle.
 
 ---
 
@@ -179,19 +178,19 @@ grasps as already held and plan a structurally different, unsatisfiable sequence
 Not flat-rate cheap. `build_phase_graph()`'s cost scales with how many objects/grippers are
 already held, not a constant:
 
-| Checkpoint | Held at that point | Measured per `build_phase_graph()` |
+| Checkpoint | Objects/grippers held at that point | Measured per `build_phase_graph()` |
 | --- | --- | --- |
-| RS6 | RS1 only | ~65 ms |
-| RS2 | RS1 + RS5 + RS6 | ~6.2–6.4 s |
+| Early in the mission | One held | ~65 ms |
+| Mid-mission | Three held | ~6.2–6.4 s |
 
-Target generation itself stays fast throughout (~30 ms/attempt, confirmed still true at
-RS2). So a candidate that reaches the phase-N+1 probe costs roughly **7–12 s by RS2**, and
-worse for RS3/RS4.
+Target generation itself stays fast throughout (~30 ms/attempt, confirmed still true
+mid-mission). So a candidate that reaches the phase-N+1 probe costs roughly **7–12 s** by
+that point, and worse the further into the mission it gets.
 
 `max_candidates` defaults to **100** for that reason: 20 was tried and starved the search
-at RS2 (whole budget exhausted in ~22 s, while a slightly luckier draw found a candidate on
-attempt #2). 100 gives up to ~15–20 min worst case — still trivial next to the multi-hour
-blind-retry stalls it replaces.
+mid-mission (whole budget exhausted in ~22 s, while a slightly luckier draw found a
+candidate on attempt #2). 100 gives up to ~15–20 min worst case — still trivial next to
+the multi-hour blind-retry stalls it replaces.
 
 ---
 
@@ -200,10 +199,10 @@ blind-retry stalls it replaces.
 - **Grasp phases only** (`handle is not None`) for both N and N+1. Release phases use
   `get_release_edge_sequence`, not wired in — the one real caller never needs it.
 - **Manual frozen-arms resolution only** (explicit list per phase; not `auto` /
-  `interactive` / `global`), matching `run_block_nonstop`'s `frozen_arms_mode="manual"`.
-- **One phase of lookahead depth.** Protecting RS2/RS3/RS4's turns would need a deeper
-  lookahead spanning the screwed part's *own earlier* turn. Not built — no evidence yet
-  that it's needed there.
+  `interactive` / `global`), matching `frozen_arms_mode="manual"`.
+- **One phase of lookahead depth.** Protecting a later turn that itself depends on an
+  even-earlier turn's commitment would need a deeper lookahead spanning that earlier
+  turn too. Not built — no evidence yet that it's needed.
 - A hint for a phase a resume starts *after* is inert: that phase is already committed, and
   resuming cannot undo a bad commitment.
 
@@ -213,10 +212,11 @@ blind-retry stalls it replaces.
 
 | File | Kind | Covers |
 | --- | --- | --- |
-| `tests/test_lookahead_phase_target.py` | HPP integration | The real RS6 case, seeded from `tests/fixtures/rs6_phase01_wb_grasp_checkpoint.json` (pulled from the live run's `--checkpoint-dir`, *before* the bad commitment). Asserts a candidate is found within budget, the chain has one config per edge, the real tracker is not mutated, and — the actual proof — that feeding the hint into a real `plan_sequence()` makes `CON0` succeed where the unhinted baseline fails every time. |
 | `tests/test_grasp_sequence_phase_q_hints.py` | Unit (fakes) | Which `generate_via_edge()` call site receives which hint: full-chain expansion, length-mismatch fallback, single-edge and multi-edge phases, wrong-`phase_idx` hints ignored, omitted-hints backward compatibility, retry-regeneration call receiving **no** hint, and chain-break recording in `invalidated_phase_hints` (including that an unhinted phase's redraw is *not* recorded). |
 | `tests/test_grasp_state_copy.py` | Unit (pure Python) | `GraspStateTracker.copy()` mutation isolation in both directions, and that phase indices are not carried over. |
 
-`test_lookahead_phase_target.py` runs the real solver against actual SRDF constraints —
-expect seconds, not milliseconds. All three need `pyhpp`, so they run inside the
-`hpp-arm64` container like every other test that imports the package.
+Both need `pyhpp`, so they run inside the `hpp-arm64` container like every other test
+that imports the package. An HPP-integration test that reproduces the real failure case
+against actual SRDF constraints (not fakes) also exists in the private validation
+environment this feature was developed against, seeded from a real mission checkpoint —
+not included here since that checkpoint is mission-specific data.

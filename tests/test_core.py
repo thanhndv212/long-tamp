@@ -1,10 +1,10 @@
 """
-Tests for agimus_spacelab core functionality.
+Tests for long_tamp core functionality.
 """
 
 import pytest
 import numpy as np
-from agimus_spacelab import get_available_backends, check_backend
+from long_tamp import get_available_backends, check_backend
 
 
 def test_get_available_backends():
@@ -36,13 +36,13 @@ class TestConfigBuilder:
     
     def test_import(self):
         """Test importing ConfigBuilder."""
-        from agimus_spacelab.utils import ConfigBuilder
+        from long_tamp.utils import ConfigBuilder
         builder = ConfigBuilder()
         assert builder is not None
     
     def test_add_joint_config(self):
         """Test adding joint configurations."""
-        from agimus_spacelab.utils import ConfigBuilder
+        from long_tamp.utils import ConfigBuilder
         
         builder = ConfigBuilder()
         builder.add_joint_config([1.0, 2.0, 3.0])
@@ -53,7 +53,7 @@ class TestConfigBuilder:
     
     def test_add_multiple_configs(self):
         """Test adding multiple configurations."""
-        from agimus_spacelab.utils import ConfigBuilder
+        from long_tamp.utils import ConfigBuilder
         
         builder = ConfigBuilder()
         builder.add_joint_config([1.0, 2.0])
@@ -69,7 +69,7 @@ class TestBoundsManager:
     
     def test_freeflyer_bounds(self):
         """Test creating freeflyer bounds."""
-        from agimus_spacelab.utils import BoundsManager
+        from long_tamp.utils import BoundsManager
         
         bounds = BoundsManager.freeflyer_bounds()
         
@@ -78,7 +78,7 @@ class TestBoundsManager:
     
     def test_revolute_bounds(self):
         """Test creating revolute joint bounds."""
-        from agimus_spacelab.utils import BoundsManager
+        from long_tamp.utils import BoundsManager
         
         bounds = BoundsManager.revolute_bounds(-1.0, 1.0)
         
@@ -90,7 +90,7 @@ class TestTransformUtils:
     
     def test_xyzrpy_to_xyzquat(self):
         """Test RPY to quaternion conversion."""
-        from agimus_spacelab.utils import xyzrpy_to_xyzquat
+        from long_tamp.utils import xyzrpy_to_xyzquat
         
         xyzrpy = [1.0, 2.0, 3.0, 0.0, 0.0, 0.0]
         xyzquat = xyzrpy_to_xyzquat(xyzrpy)
@@ -101,7 +101,7 @@ class TestTransformUtils:
     
     def test_normalize_quaternion(self):
         """Test quaternion normalization."""
-        from agimus_spacelab.utils import normalize_quaternion
+        from long_tamp.utils import normalize_quaternion
         
         q = [0.5, 0.5, 0.5, 0.5]
         q_norm = normalize_quaternion(q)

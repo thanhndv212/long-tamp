@@ -76,11 +76,11 @@ def _load_cgf():
 
 
 try:
-    from agimus_spacelab.planning.sequential_graph_factory import (
+    from long_tamp.planning.sequential_graph_factory import (
         PrunedRecursionMixin,
         pruned_factory_class,
     )
-    from agimus_spacelab.planning.sequential_grasp_filter import (
+    from long_tamp.planning.sequential_grasp_filter import (
         SequentialGraspFilter,
     )
 
@@ -159,7 +159,7 @@ def _run(factory_cls, n, grasp_filter=None, targets=None):
 @unittest.skipUnless(
     _cgf_available() and HAVE_MIXIN,
     "needs a pyhpp install (or $HPP_PYTHON_SRC_DIR) and an importable "
-    "agimus_spacelab.planning",
+    "long_tamp.planning",
 )
 class TestPrunedRecursion(unittest.TestCase):
 

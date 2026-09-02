@@ -133,7 +133,7 @@ def _run_factory(factory_cls, n, grasp_filter=None):
 
 _FILTER_PATH = (
     Path(__file__).parent.parent
-    / "src/agimus_spacelab/planning/sequential_grasp_filter.py"
+    / "src/long_tamp/planning/sequential_grasp_filter.py"
 )
 
 

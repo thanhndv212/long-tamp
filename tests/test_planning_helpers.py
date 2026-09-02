@@ -2,8 +2,8 @@
 Unit tests for pure-logic/dispatch helpers extracted from planning/ modules
 as part of the Phase 3 mid-size-hotspot refactor.
 
-Importing agimus_spacelab requires pyhpp even for helpers with no HPP
-dependency themselves (see docs/plans/refactor-codebase.md's Phase 2
+Importing long_tamp requires pyhpp even for helpers with no HPP
+dependency themselves (see docs/legacy/plans/refactor-codebase.md's Phase 2
 verification-model note), so these tests must run inside the hpp-arm64
 container.
 """
@@ -11,9 +11,9 @@ container.
 import numpy as np
 from unittest.mock import MagicMock
 
-from agimus_spacelab.planning.config import ConfigGenerator
-from agimus_spacelab.planning.graph import GraphBuilder
-from agimus_spacelab.planning.scene import SceneBuilder
+from long_tamp.planning.config import ConfigGenerator
+from long_tamp.planning.graph import GraphBuilder
+from long_tamp.planning.scene import SceneBuilder
 
 
 def _make_scene_builder(backend):
@@ -198,7 +198,7 @@ class TestLockNonphaseObjects:
             ["obj2/root_joint"],
         )
         monkeypatch.setattr(
-            "agimus_spacelab.planning.constraints.ConstraintBuilder",
+            "long_tamp.planning.constraints.ConstraintBuilder",
             fake_builder,
         )
 
@@ -215,7 +215,7 @@ class TestLockNonphaseObjects:
             "boom"
         )
         monkeypatch.setattr(
-            "agimus_spacelab.planning.constraints.ConstraintBuilder",
+            "long_tamp.planning.constraints.ConstraintBuilder",
             fake_builder,
         )
 
@@ -240,7 +240,7 @@ class TestApplySequentialFilter:
         real_import = builtins.__import__
 
         def fake_import(name, *args, **kwargs):
-            if name == "agimus_spacelab.planning.sequential_grasp_filter":
+            if name == "long_tamp.planning.sequential_grasp_filter":
                 raise ImportError("not available")
             return real_import(name, *args, **kwargs)
 

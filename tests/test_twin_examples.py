@@ -14,7 +14,7 @@ skip cleanly, rather than failing, when that isn't configured.
 import pytest
 
 try:
-    from agimus_spacelab.backends.pyhpp import HAS_PYHPP, PyHPPBackend
+    from long_tamp.backends.pyhpp import HAS_PYHPP, PyHPPBackend
 except ImportError:
     HAS_PYHPP = False
 

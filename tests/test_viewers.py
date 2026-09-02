@@ -22,7 +22,7 @@ import pytest
 # Guard: skip entire module if PyHPP is not installed
 # ---------------------------------------------------------------------------
 try:
-    from agimus_spacelab.backends.pyhpp import (
+    from long_tamp.backends.pyhpp import (
         PyHPPBackend,
         HAS_PYHPP,
         HAS_VISER,
@@ -151,7 +151,7 @@ class TestSetupViewerUnavailableLibrary:
     def test_viser_import_error_when_unavailable(self, monkeypatch):
         if HAS_VISER:
             pytest.skip("pyhpp_viser is installed — cannot test missing-library path")
-        import agimus_spacelab.backends.pyhpp as _mod
+        import long_tamp.backends.pyhpp as _mod
         b = _make_backend()
         # Fake a loaded device so the robot-check passes
         b.device = object()
@@ -248,7 +248,7 @@ class TestViewerTypeDispatch:
     def test_dispatch_viser_sets_viser_viewer(self, monkeypatch):
         """viewer_type='viser' → _ViserViewer instantiated."""
         from pyhpp_viser import Viewer as ViserViewer
-        import agimus_spacelab.backends.pyhpp as _mod
+        import long_tamp.backends.pyhpp as _mod
 
         created = []
 
@@ -274,7 +274,7 @@ class TestViewerTypeDispatch:
     @requires_gepetto
     def test_dispatch_gepetto_sets_gepetto_viewer(self, monkeypatch):
         """viewer_type='gepetto' → _GepettoViewer instantiated."""
-        import agimus_spacelab.backends.pyhpp as _mod
+        import long_tamp.backends.pyhpp as _mod
 
         created = []
 
@@ -294,7 +294,7 @@ class TestViewerTypeDispatch:
     @requires_viser
     def test_dispatch_auto_prefers_viser(self, monkeypatch):
         """viewer_type='auto' → viser preferred over gepetto when both available."""
-        import agimus_spacelab.backends.pyhpp as _mod
+        import long_tamp.backends.pyhpp as _mod
 
         viser_created = []
 
@@ -318,7 +318,7 @@ class TestViewerTypeDispatch:
     @requires_pyhpp
     def test_dispatch_auto_falls_back_to_gepetto_when_no_viser(self, monkeypatch):
         """viewer_type='auto' → falls back to gepetto when viser missing."""
-        import agimus_spacelab.backends.pyhpp as _mod
+        import long_tamp.backends.pyhpp as _mod
 
         gepetto_created = []
 
@@ -339,7 +339,7 @@ class TestViewerTypeDispatch:
     @requires_pyhpp
     def test_dispatch_auto_raises_when_neither_available(self, monkeypatch):
         """viewer_type='auto' → ImportError when no viewer is installed."""
-        import agimus_spacelab.backends.pyhpp as _mod
+        import long_tamp.backends.pyhpp as _mod
 
         monkeypatch.setattr(_mod, "HAS_VISER", False)
         monkeypatch.setattr(_mod, "HAS_GEPETTO_VIEWER", False)
@@ -359,7 +359,7 @@ class TestVisualizeDispatch:
     """visualize() calls viewer.display() for viser, viewer() for gepetto."""
 
     def _backend_with_fake_viser(self, monkeypatch):
-        import agimus_spacelab.backends.pyhpp as _mod
+        import long_tamp.backends.pyhpp as _mod
 
         calls = []
 
@@ -417,7 +417,7 @@ class TestPlayPathDispatch:
         branch does exactly that), so the viser branch calls playPath().
         This test asserted loadPath() and so pinned the silent no-op.
         """
-        import agimus_spacelab.backends.pyhpp as _mod
+        import long_tamp.backends.pyhpp as _mod
         import numpy as np
 
         play_calls = []

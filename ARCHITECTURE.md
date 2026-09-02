@@ -1,16 +1,16 @@
-# agimus_spacelab — Architecture
+# long_tamp — Architecture
 
 **Last reviewed against source:** 2026-08-18, commit `bc4898d`. This doc lags actual
 code by design (it documents layer boundaries, not every module) — if a newer module or
-feature isn't listed below, check `git log --since=<this date> -- src/agimus_spacelab`
+feature isn't listed below, check `git log --since=<this date> -- src/long_tamp`
 before assuming it's missing rather than just undocumented.
 
-`agimus_spacelab` is a **standalone Python library** for multi-arm, multi-object
+`long_tamp` is a **standalone Python library** for multi-arm, multi-object
 manipulation planning on top of HPP (Humanoid Path Planner). This document
 describes the architecture of the package *by itself* — its module layering,
 core abstractions, and data flow — independent of any ROS 2 workspace,
 launch stack, or robot-specific integration it may be consumed from. Nothing
-in `src/agimus_spacelab/` imports `rclpy` or any ROS 2 package; ROS 2 is,
+in `src/long_tamp/` imports `rclpy` or any ROS 2 package; ROS 2 is,
 at most, a downstream consumer (e.g. building this package with `colcon`
 alongside other packages) and a way to obtain URDF/SRDF files, not a
 dependency of the planning logic.
@@ -112,8 +112,8 @@ Dependency direction is strictly downward: `tasks` depends on `planning`
 and `backends`; `planning` depends on `backends`; `backends` depends on
 nothing else in the package. `config`, `logging`, `visualization`, `utils`
 are horizontal support layers with no dependency on `tasks`/`planning`
-internals (aside from `planning/config.py` optionally importing SpaceLab
-config helpers lazily, guarded by `try/except ImportError`, to avoid a
+internals (aside from `planning/config.py` optionally importing a task's
+own config module lazily, guarded by `try/except ImportError`, to avoid a
 hard coupling).
 
 ## Backends (`backends/`)
@@ -208,9 +208,9 @@ Each class here does one job and is usable on its own, independent of the
   segment), so a run's motion can be continuity-checked or replayed in a
   *separate process* — after the original crashed, was killed, or simply
   exited — without rebuilding any constraint graph.
-  `script/spacelab/replay_captured_paths.py` is the CLI entry point;
   `path_replay.py`'s `load_manifest()`/`validate()` re-derive segment
-  continuity independently of the recorder that wrote them.
+  continuity independently of the recorder that wrote them; there is no
+  shipped CLI entry point for this yet, only the library functions.
 
 ## Task orchestration (`tasks/`)
 
@@ -262,8 +262,8 @@ same runtime shape consumed by `SceneBuilder`/`ManipulationTask`:
   task script robot-agnostic: no Python file in the framework needs to
   know a specific robot's joint or file names, only the YAML does. See
   `script/templates/` for the copy-paste starting point and
-  `script/spacelab/config/spacelab_config.yaml` for a complex
-  real-world example.
+  `script/twin/config/twin_lift_ball_config.yaml` for a real-world
+  example.
 - **`RuleGenerator`** (`rules.py`) — generates constraint-graph factory
   rules (grasp rules, sequential rules, priority rules) from a config
   object, used when wiring a `ConstraintGraphFactory`.
@@ -367,7 +367,7 @@ This package has no ROS 2 nodes, topics, services, actions, or launch
 files of its own — it is a planning *library*. How a mission/behavior
 tree layer, a ROS 2 executor, or a Gazebo simulation invokes this
 package (e.g. the wider `ros2_ws_agimusxads` workspace) is integration
-detail that lives outside `agimus_spacelab` and outside the scope of
+detail that lives outside `long_tamp` and outside the scope of
 this document. The `CMakeLists.txt` / `package.xml` in this repo only
 exist so the package can optionally be installed via `colcon`/`ament`
 alongside an HPP source build (`WITH_PYHPP` / `WITH_TOPPRA` options

@@ -1,6 +1,6 @@
-site_name: agimus_spacelab
-site_description: Multi-arm collaborative manipulation planning for SpaceLab assembly tasks using HPP.
-repo_url: https://gitlab.laas.fr/dvtnguyen/agimus_spacelab
+site_name: long_tamp
+site_description: Long-horizon, multi-arm task-and-motion planning (TAMP) for manipulation, built on HPP.
+repo_url: https://github.com/thanhndv212/long-tamp
 docs_dir: docs
 site_dir: site
 
@@ -57,32 +57,27 @@ nav:
   - Usage:
       - Overview: usage/README.md
       - Standalone usage: usage/standalone-usage.md
-      - DBT / ROS 2 integration: usage/dbt-integration.md
       - BehaviorTree.CPP integration: usage/behaviortree-integration.md
   - Features:
       - Overview: features/README.md
       - Phase-target lookahead: features/phase-target-lookahead.md
-      - Screwdriving sequence assembly order: features/screwdriving-sequence-assembly-order.md
       - Transit edge robustness: features/transit-edge-robustness.md
       - Logging verbosity: features/logging-verbosity.md
   - Bugs (upstream HPP):
       - Constraint-graph factory combinatorial blowup: bugs/constraint-graph-factory-combinatorial-blowup.md
       - hpp-core unbounded planning loops: bugs/hpp-core-unbounded-planning-loops.md
       - hpp-manipulation leaf projection bug: bugs/hpp-manipulation-leaf-projection-bug.md
-      - Motion quality / time parameterization: bugs/motion-quality-time-parameterization.md
       - pyhpp factory locked-joint bugs: bugs/pyhpp-factory-locked-joint-bugs.md
   - HPP Python interface:
       - pyhpp API documentation: hpp_python_interface/pyhpp_api_documentation.md
       - Path planners comparison: hpp_python_interface/path-planners-comparison.md
       - hpp-manipulation complete motion plan: hpp_python_interface/hpp_manipulation_complete_motion_plan.md
-  - Legacy (CORBA backend, removed):
+  - Legacy (CORBA backend and SpaceLab example, removed):
       - CORBA API documentation: legacy/hpp_python_interface/corba_api_documentation.md
       - CORBA vs pyhpp comparison: legacy/hpp_python_interface/comparison_corba_vs_pyhpp.md
-  - Plans:
-      - Refactor codebase: plans/refactor-codebase.md
-      - Model/asset source diff: plans/model-asset-source-diff.md
-      - BehaviorTree screwdriving task-planning: plans/behaviortree-screwdriving-taskplan.md
+      - Motion quality / time parameterization: legacy/bugs/motion-quality-time-parameterization.md
+      - Refactor codebase: legacy/plans/refactor-codebase.md
+      - DBT / ROS 2 integration: legacy/usage/dbt-integration.md
+      - Development report: legacy/report/development-report.md
   - Development report:
       - Overview: report/README.md
-      - Full report: report/development-report.md
-      - BehaviorTree screwdriving report: report/behaviortree-screwdriving-report.md

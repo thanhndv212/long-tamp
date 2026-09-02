@@ -1,7 +1,7 @@
 """
 Unit tests for pure-logic helpers extracted from ManipulationTask.run().
 
-Importing agimus_spacelab requires pyhpp (see
+Importing long_tamp requires pyhpp (see
 docs/plans/refactor-manipulation-task-run.md's verification-model
 correction) even though the helpers under test have no HPP dependency
 themselves, so these tests must run inside the hpp-arm64 container.
@@ -11,7 +11,7 @@ import logging
 
 import pytest
 
-from agimus_spacelab.tasks.base import ManipulationTask
+from long_tamp.tasks.base import ManipulationTask
 
 
 class _ConcreteTask(ManipulationTask):
@@ -286,7 +286,7 @@ class TestPlayAndRecord:
     def test_record_true_uses_play_and_record_path(self, caplog):
         task = _make_task()
         task.planner = _FakePlanner()
-        with caplog.at_level(logging.INFO, logger="agimus_spacelab"):
+        with caplog.at_level(logging.INFO, logger="long_tamp"):
             task._play_and_record(3, True, "clip", "/out", 25)
         assert task.planner.play_and_record_calls == [(3, "clip", "/out", 25)]
         assert task.planner.play_calls == []
@@ -296,7 +296,7 @@ class TestPlayAndRecord:
     def test_record_false_falls_back_to_play_path(self, caplog):
         task = _make_task()
         task.planner = _FakePlanner()
-        with caplog.at_level(logging.INFO, logger="agimus_spacelab"):
+        with caplog.at_level(logging.INFO, logger="long_tamp"):
             task._play_and_record(2, False, None, "/out", 25)
         assert task.planner.play_calls == [2]
         assert task.planner.play_and_record_calls == []
@@ -311,7 +311,7 @@ class TestPlayAndRecord:
     def test_exception_is_caught_not_raised(self, caplog):
         task = _make_task()
         task.planner = _FakePlanner(raise_on="record")
-        with caplog.at_level(logging.WARNING, logger="agimus_spacelab"):
+        with caplog.at_level(logging.WARNING, logger="long_tamp"):
             task._play_and_record(0, True, None, "/out", 25)  # must not raise
         assert "Path playback failed" in caplog.text
 
@@ -532,14 +532,14 @@ class TestSetupLockedJointConstraints:
             return (["locked::j1", "locked::j2"], ["j1", "j2"])
 
         monkeypatch.setattr(
-            "agimus_spacelab.tasks.base.ConstraintBuilder"
+            "long_tamp.tasks.base.ConstraintBuilder"
             ".create_locked_joint_constraints",
             staticmethod(fake_create),
         )
         task = _make_setup_task(q_init=[0.0, 0.0])
         task.ps = "ps"
         task.robot = "robot"
-        with caplog.at_level(logging.INFO, logger="agimus_spacelab"):
+        with caplog.at_level(logging.INFO, logger="long_tamp"):
             result = task._setup_locked_joint_constraints(["j1", "j2"])
         assert result == ["locked::j1", "locked::j2"]
         assert captured["patterns"] == ["j1", "j2"]
@@ -547,7 +547,7 @@ class TestSetupLockedJointConstraints:
 
     def test_empty_frozen_names_returns_none(self, monkeypatch):
         monkeypatch.setattr(
-            "agimus_spacelab.tasks.base.ConstraintBuilder"
+            "long_tamp.tasks.base.ConstraintBuilder"
             ".create_locked_joint_constraints",
             staticmethod(lambda *a, **k: (["c"], [])),  # frozen_names empty
         )
@@ -571,7 +571,7 @@ class TestSetupLockedJointConstraints:
             return (["c::x"], ["x"])
 
         monkeypatch.setattr(
-            "agimus_spacelab.tasks.base.ConstraintBuilder"
+            "long_tamp.tasks.base.ConstraintBuilder"
             ".create_locked_joint_constraints",
             staticmethod(fake_create),
         )

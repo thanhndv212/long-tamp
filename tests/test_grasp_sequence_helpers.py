@@ -2,15 +2,15 @@
 Unit tests for the _play_single_phase_path dispatch extracted from
 GraspSequencePlanner.replay_sequence() (refactor Phase 1B, step 1B.6).
 
-Importing agimus_spacelab requires pyhpp (see
-docs/plans/refactor-codebase.md's verification-model notes) even though the
+Importing long_tamp requires pyhpp (see
+docs/legacy/plans/refactor-codebase.md's verification-model notes) even though the
 helper under test has no HPP dependency itself, so these tests must run
 inside the hpp-arm64 container.
 """
 
 import logging
 
-from agimus_spacelab.tasks.grasp_sequence import GraspSequencePlanner
+from long_tamp.tasks.grasp_sequence import GraspSequencePlanner
 
 
 def _make_planner():
@@ -70,7 +70,7 @@ class TestPlaySinglePhasePath:
     def test_record_branch_returns_video_file(self, caplog):
         planner = _make_planner()
         planner.planner = _FakeBackend()
-        with caplog.at_level(logging.INFO, logger="agimus_spacelab"):
+        with caplog.at_level(logging.INFO, logger="long_tamp"):
             result = planner._play_single_phase_path(
                 path="p0", edge_name="e0", phase=_phase(), idx=0,
                 record=True, visualizer=None, output_dir="/out",
@@ -100,7 +100,7 @@ class TestPlaySinglePhasePath:
     def test_visualizer_branch_when_not_recording(self, caplog):
         planner = _make_planner()
         planner.planner = _FakeBackend()
-        with caplog.at_level(logging.INFO, logger="agimus_spacelab"):
+        with caplog.at_level(logging.INFO, logger="long_tamp"):
             result = planner._play_single_phase_path(
                 path="p0", edge_name="e0", phase=_phase(), idx=0,
                 record=False, visualizer="viz-obj", output_dir="/out",
@@ -115,7 +115,7 @@ class TestPlaySinglePhasePath:
     def test_plain_fallback_when_no_record_and_no_viz(self, caplog):
         planner = _make_planner()
         planner.planner = _FakeBackend()
-        with caplog.at_level(logging.INFO, logger="agimus_spacelab"):
+        with caplog.at_level(logging.INFO, logger="long_tamp"):
             result = planner._play_single_phase_path(
                 path="p0", edge_name="e0", phase=_phase(), idx=0,
                 record=False, visualizer=None, output_dir="/out",
@@ -132,7 +132,7 @@ class TestPlaySinglePhasePath:
         # Backend with none of the three methods
         planner.planner = _FakeBackend(has_record=False, has_viz=False,
                                        has_plain=False)
-        with caplog.at_level(logging.WARNING, logger="agimus_spacelab"):
+        with caplog.at_level(logging.WARNING, logger="long_tamp"):
             result = planner._play_single_phase_path(
                 path="p0", edge_name="e0", phase=_phase(), idx=0,
                 record=False, visualizer=None, output_dir="/out",

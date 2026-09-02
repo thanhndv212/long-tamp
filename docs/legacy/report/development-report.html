@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>long_tamp — Development &amp; Engineering Report</title>
+<style>
+  :root{
+    --paper:#EEF1EC;
+    --paper-raised:#F8F9F6;
+    --ink:#1A2129;
+    --ink-muted:#5B6570;
+    --ink-faint:#8A9198;
+    --line:#D5D9D1;
+    --line-strong:#B9C0B7;
+    --accent:#C5660B;
+    --accent-ink:#7A3F07;
+    --accent-soft:#F3E0C8;
+    --teal:#0F6E63;
+    --teal-soft:#D9EBE7;
+    --rust:#A8402F;
+    --rust-soft:#F1DBD4;
+    --code-bg:#26313A;
+    --code-ink:#DCE4E8;
+    --code-accent:#E8A94E;
+    --shadow: 0 1px 2px rgba(26,33,41,0.06), 0 6px 20px rgba(26,33,41,0.05);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#14181B;
+      --paper-raised:#1B2024;
+      --ink:#E8EAE4;
+      --ink-muted:#A2ABA5;
+      --ink-faint:#727B76;
+      --line:#2B3236;
+      --line-strong:#3A4247;
+      --accent:#EDA55B;
+      --accent-ink:#F6C98A;
+      --accent-soft:#3A2C18;
+      --teal:#5FBFAF;
+      --teal-soft:#17302C;
+      --rust:#E08876;
+      --rust-soft:#3A211D;
+      --code-bg:#0F1417;
+      --code-ink:#DDE6E9;
+      --code-accent:#F0B368;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#14181B;
+    --paper-raised:#1B2024;
+    --ink:#E8EAE4;
+    --ink-muted:#A2ABA5;
+    --ink-faint:#727B76;
+    --line:#2B3236;
+    --line-strong:#3A4247;
+    --accent:#EDA55B;
+    --accent-ink:#F6C98A;
+    --accent-soft:#3A2C18;
+    --teal:#5FBFAF;
+    --teal-soft:#17302C;
+    --rust:#E08876;
+    --rust-soft:#3A211D;
+    --code-bg:#0F1417;
+    --code-ink:#DDE6E9;
+    --code-accent:#F0B368;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+  }
+
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family: Georgia, "Iowan Old Style", "New York", "Noto Serif", "Times New Roman", serif;
+    font-size:17px;
+    line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono, code, pre, .num, .tag, .kicker, th, .stat-cap, nav a, .badge{
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, "Roboto Mono", monospace;
+  }
+  h1,h2,h3,h4{
+    font-family: "Bahnschrift", "SF Compact Condensed", "Roboto Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+    text-wrap: balance;
+    font-weight:700;
+    letter-spacing:0.01em;
+    color:var(--ink);
+  }
+  p{ text-wrap: pretty; }
+  a{ color:var(--accent-ink); text-decoration-color:var(--line-strong); text-underline-offset:3px; }
+  a:hover{ text-decoration-color: currentColor; }
+  a:focus-visible, button:focus-visible, summary:focus-visible{
+    outline:2px solid var(--teal); outline-offset:2px;
+  }
+  ::selection{ background:var(--accent-soft); }
+
+  .num{ font-variant-numeric: tabular-nums; }
+
+  /* ---------- layout shell ---------- */
+  .shell{
+    max-width:1280px;
+    margin:0 auto;
+    padding: 0 24px;
+    display:grid;
+    grid-template-columns: 250px minmax(0,1fr);
+    gap:56px;
+  }
+  @media (max-width: 920px){
+    .shell{ grid-template-columns: 1fr; }
+  }
+
+  /* ---------- top masthead ---------- */
+  .masthead{
+    border-bottom:1px solid var(--line);
+    background:
+      linear-gradient(180deg, var(--paper-raised), var(--paper));
+  }
+  .masthead-inner{
+    max-width:1280px;
+    margin:0 auto;
+    padding: 52px 24px 34px;
+  }
+  .kicker{
+    text-transform:uppercase;
+    letter-spacing:0.16em;
+    font-size:12px;
+    color:var(--teal);
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:18px;
+  }
+  .kicker .dot{ width:6px;height:6px;background:var(--teal); display:inline-block; }
+  h1.title{
+    font-size: clamp(2.1rem, 5vw, 3.4rem);
+    line-height:1.02;
+    margin: 0 0 10px;
+  }
+  h1.title .id{
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    font-weight:600;
+  }
+  .subtitle{
+    font-family: "Bahnschrift", "SF Compact Condensed", "Roboto Condensed", "Arial Narrow", sans-serif;
+    font-size:1.15rem;
+    color:var(--ink-muted);
+    max-width:60ch;
+    margin: 0 0 30px;
+  }
+  .stat-strip{
+    display:grid;
+    grid-template-columns: repeat(5, minmax(0,1fr));
+    border-top:1px solid var(--line);
+    border-left:1px solid var(--line);
+  }
+  @media (max-width: 900px){ .stat-strip{ grid-template-columns: repeat(2, minmax(0,1fr)); } }
+  .stat{
+    border-right:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+    padding:16px 16px 18px;
+  }
+  .stat-val{
+    font-family: "Bahnschrift", "SF Compact Condensed", "Roboto Condensed", "Arial Narrow", sans-serif;
+    font-weight:700;
+    font-size:1.28rem;
+    color:var(--accent-ink);
+    font-variant-numeric: tabular-nums;
+    line-height:1.15;
+  }
+  .stat-cap{
+    margin-top:6px;
+    font-size:11.5px;
+    color:var(--ink-muted);
+    line-height:1.4;
+    letter-spacing:0.01em;
+  }
+
+  /* ---------- sidebar nav ---------- */
+  aside.toc{
+    padding-top:44px;
+  }
+  aside.toc .toc-inner{
+    position:sticky;
+    top:24px;
+  }
+  aside.toc .toc-label{
+    text-transform:uppercase;
+    font-size:11px;
+    letter-spacing:0.14em;
+    color:var(--ink-faint);
+    margin-bottom:12px;
+  }
+  nav.toclist{ display:flex; flex-direction:column; }
+  nav.toclist a{
+    display:block;
+    padding:7px 0;
+    font-size:13px;
+    color:var(--ink-muted);
+    text-decoration:none;
+    border-left:2px solid transparent;
+    padding-left:12px;
+    margin-left:-13px;
+  }
+  nav.toclist a:hover{ color:var(--ink); border-left-color:var(--line-strong); }
+  nav.toclist a.lvl2{ padding-left:24px; font-size:12px; }
+  .toc-mobile{ display:none; }
+  @media (max-width: 920px){
+    aside.toc{ display:none; }
+    .toc-mobile{
+      display:block;
+      margin: 24px 24px 0;
+      border:1px solid var(--line);
+      background:var(--paper-raised);
+    }
+    .toc-mobile summary{
+      cursor:pointer;
+      padding:12px 16px;
+      font-family: "Bahnschrift","Roboto Condensed",sans-serif;
+      font-weight:700;
+      font-size:13px;
+      text-transform:uppercase;
+      letter-spacing:0.08em;
+    }
+    .toc-mobile nav.toclist{ padding: 0 16px 16px; }
+  }
+
+  /* ---------- main content ---------- */
+  main{ min-width:0; padding: 44px 0 100px; }
+  section{ margin-bottom:64px; scroll-margin-top:20px; }
+  section > .sec-head{
+    display:flex;
+    align-items:baseline;
+    gap:14px;
+    border-bottom:2px solid var(--ink);
+    padding-bottom:10px;
+    margin-bottom:22px;
+  }
+  section > .sec-head .sec-no{
+    font-family: ui-monospace, monospace;
+    font-size:13px;
+    color:var(--accent-ink);
+    font-weight:600;
+  }
+  h2{ font-size:1.55rem; margin:0; }
+  h3{ font-size:1.18rem; margin: 34px 0 10px; }
+  h3 .sub-no{ color:var(--accent-ink); margin-right:8px; }
+  h4{ font-size:1rem; margin: 22px 0 8px; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-muted); font-weight:700;}
+  p{ margin: 0 0 14px; max-width:74ch; }
+  ul, ol{ max-width:74ch; padding-left:1.3em; margin:0 0 14px;}
+  li{ margin-bottom:6px; }
+  strong{ color:var(--ink); }
+
+  .lede{
+    font-size:1.08rem;
+    color:var(--ink-muted);
+    max-width:70ch;
+  }
+
+  /* ---------- callouts ---------- */
+  .callout{
+    border-left:3px solid var(--accent);
+    background:var(--paper-raised);
+    padding:14px 18px;
+    margin: 18px 0 22px;
+    max-width:74ch;
+    box-shadow:var(--shadow);
+  }
+  .callout .callout-label{
+    text-transform:uppercase;
+    font-size:10.5px;
+    letter-spacing:0.12em;
+    color:var(--accent-ink);
+    margin-bottom:6px;
+    font-family: ui-monospace, monospace;
+    font-weight:700;
+  }
+  .callout p:last-child{ margin-bottom:0; }
+  .callout.teal{ border-left-color:var(--teal); }
+  .callout.teal .callout-label{ color:var(--teal); }
+  .callout.rust{ border-left-color:var(--rust); }
+  .callout.rust .callout-label{ color:var(--rust); }
+
+  /* ---------- decision cards ---------- */
+  .decision{
+    border:1px solid var(--line);
+    background:var(--paper-raised);
+    padding: 22px 26px 24px;
+    margin: 0 0 26px;
+    box-shadow:var(--shadow);
+  }
+  .decision .dhead{
+    display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;
+    margin-bottom:4px;
+  }
+  .decision .dnum{
+    font-family: ui-monospace, monospace;
+    font-size:13px;
+    color:var(--paper);
+    background:var(--accent);
+    padding:2px 8px;
+  }
+  .decision h3{ margin:0; font-size:1.15rem; flex:1 1 auto; }
+  .decision .daxis{
+    font-family: ui-monospace, monospace;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--teal);
+    background:var(--teal-soft);
+    padding:3px 8px;
+    white-space:nowrap;
+  }
+  .decision .dgrid{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 28px;
+    margin: 14px 0;
+    padding: 12px 0;
+    border-top:1px dashed var(--line-strong);
+    border-bottom:1px dashed var(--line-strong);
+  }
+  @media (max-width:640px){ .decision .dgrid{ grid-template-columns:1fr; } }
+  .dgrid .k{ font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-faint); margin-bottom:2px;}
+  .dgrid .v{ font-size:14.5px; }
+  .metric-row{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    margin: 6px 0 4px;
+  }
+  .metric{
+    font-family: "Bahnschrift","Roboto Condensed",sans-serif;
+    font-weight:700; font-size:1.3rem; color:var(--accent-ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .arrow{ color:var(--ink-faint); font-size:1.1rem; }
+  .src{
+    font-size:12px; color:var(--ink-faint); margin-top:10px;
+  }
+  .src code{ font-size:11.5px; }
+
+  /* ---------- tables ---------- */
+  .tablewrap{ overflow-x:auto; margin: 8px 0 22px; max-width:100%; }
+  table{
+    border-collapse:collapse;
+    width:100%;
+    min-width:520px;
+    font-size:14px;
+    background:var(--paper-raised);
+  }
+  caption{
+    text-align:left;
+    font-size:12px;
+    color:var(--ink-faint);
+    margin-bottom:6px;
+    font-family: ui-monospace, monospace;
+  }
+  th, td{
+    border-bottom:1px solid var(--line);
+    padding:9px 14px;
+    text-align:left;
+    vertical-align:top;
+  }
+  th{
+    text-transform:uppercase;
+    font-size:11px;
+    letter-spacing:0.06em;
+    color:var(--ink-muted);
+    font-weight:600;
+    border-bottom:2px solid var(--line-strong);
+    white-space:nowrap;
+  }
+  td.num, th.num{ text-align:right; font-variant-numeric:tabular-nums; }
+  tr:last-child td{ border-bottom:1px solid var(--line-strong); }
+  tbody tr:hover{ background: var(--accent-soft); }
+
+  /* ---------- code ---------- */
+  pre.code{
+    background:var(--code-bg);
+    color:var(--code-ink);
+    padding:16px 18px;
+    overflow-x:auto;
+    font-size:13px;
+    line-height:1.55;
+    margin: 10px 0 20px;
+    max-width:100%;
+  }
+  pre.code .c{ color:#8FA0A8; } /* comments */
+  pre.code .s{ color:#B7D6A6; } /* strings */
+  pre.code .k{ color: var(--code-accent); } /* keywords */
+  code.inline{
+    background:var(--paper-raised);
+    border:1px solid var(--line);
+    padding:1px 6px;
+    font-size:0.86em;
+    color:var(--accent-ink);
+  }
+
+  /* ---------- step list (guide) ---------- */
+  .steps{ counter-reset: stepnum; }
+  .step{
+    position:relative;
+    padding: 4px 0 22px 46px;
+    border-left:1px solid var(--line-strong);
+    margin-left:15px;
+  }
+  .step:last-child{ border-left-color:transparent; padding-bottom:0;}
+  .step::before{
+    counter-increment: stepnum;
+    content: counter(stepnum);
+    position:absolute; left:-15px; top:0;
+    width:30px; height:30px;
+    background:var(--paper);
+    border:1px solid var(--ink);
+    color:var(--ink);
+    font-family: ui-monospace, monospace;
+    font-size:13px; font-weight:700;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .step h4{ margin-top:0; text-transform:none; letter-spacing:0; color:var(--ink); font-size:1.02rem; font-family:"Bahnschrift","Roboto Condensed",sans-serif;}
+
+  /* ---------- timeline ---------- */
+  .tl{ list-style:none; margin:0; padding:0; max-width:none; }
+  .tl li{
+    display:grid;
+    grid-template-columns: 108px 1fr;
+    gap:20px;
+    padding: 12px 0;
+    border-top:1px solid var(--line);
+  }
+  .tl li:first-child{ border-top:1px solid var(--line-strong); }
+  .tl .when{
+    font-family: ui-monospace, monospace;
+    font-size:12.5px;
+    color:var(--ink-faint);
+    padding-top:2px;
+  }
+  .tl .what strong{ display:block; margin-bottom:3px; }
+  .tl .what p{ margin:0; font-size:14.5px; color:var(--ink-muted); }
+
+  /* ---------- appendix bug cards ---------- */
+  details.bug{
+    border:1px solid var(--line);
+    background:var(--paper-raised);
+    margin-bottom:12px;
+  }
+  details.bug summary{
+    cursor:pointer;
+    list-style:none;
+    padding:14px 18px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+  details.bug summary::-webkit-details-marker{ display:none; }
+  details.bug summary::before{
+    content:"+";
+    font-family:ui-monospace,monospace;
+    font-weight:700;
+    color:var(--rust);
+    border:1px solid var(--rust);
+    width:20px;height:20px;
+    display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;
+  }
+  details.bug[open] summary::before{ content:"–"; }
+  details.bug .bug-title{ font-weight:700; flex:1 1 260px; }
+  .badge{
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    padding:2px 8px;
+    background:var(--rust-soft);
+    color:var(--rust);
+    white-space:nowrap;
+  }
+  .badge.pkg{ background:var(--teal-soft); color:var(--teal); }
+  details.bug .bug-body{ padding: 0 18px 18px; border-top:1px solid var(--line); }
+  details.bug .bug-body p{ margin: 12px 0 0; font-size:14.5px; }
+
+  /* ---------- misc ---------- */
+  hr.rule{ border:none; border-top:1px solid var(--line); margin:40px 0; }
+  .foot{
+    border-top:1px solid var(--line);
+    padding-top:20px;
+    font-size:12.5px;
+    color:var(--ink-faint);
+  }
+  .pill-row{ display:flex; gap:8px; flex-wrap:wrap; margin: 6px 0 18px; }
+  .pill{
+    font-family:ui-monospace,monospace;
+    font-size:11.5px;
+    border:1px solid var(--line-strong);
+    padding:3px 9px;
+    color:var(--ink-muted);
+  }
+  figure{ margin: 12px 0 22px; max-width:100%; }
+  figcaption{ font-size:12px; color:var(--ink-faint); margin-top:8px; font-family:ui-monospace,monospace; }
+  .diagram-wrap{ border:1px solid var(--line); background:var(--paper-raised); padding:14px; overflow-x:auto; }
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <div class="masthead-inner">
+    <div class="kicker"><span class="dot"></span> Engineering Report &nbsp;·&nbsp; Multi-arm Manipulation Planning</div>
+    <h1 class="title"><span class="id">long_tamp</span></h1>
+    <p class="subtitle">How a task/orchestration layer built on top of HPP (Humanoid Path Planner) turns a high-level SpaceLab assembly goal into one collision-free motion for several robot arms — the decisions that made it faster and more reliable than planning against bare HPP, and a guide to building a mission with it.</p>
+    <div class="stat-strip">
+      <div class="stat"><div class="stat-val">O(N!) → O(N)</div><div class="stat-cap">grasp-sequence planning cost vs. sequence length</div></div>
+      <div class="stat"><div class="stat-val">20 min → sec.</div><div class="stat-cap">constraint-graph construction, 8-gripper phase</div></div>
+      <div class="stat"><div class="stat-val">~4.0×</div><div class="stat-cap">PyHPP vs. CORBA on hot-path planning calls</div></div>
+      <div class="stat"><div class="stat-val">1145 → 208</div><div class="stat-cap">lines in the planner's largest method, same behavior</div></div>
+      <div class="stat"><div class="stat-val">9 mo / 473</div><div class="stat-cap">development span and commit count, Nov ’25 – Aug ’26</div></div>
+    </div>
+  </div>
+</div>
+
+<details class="toc-mobile">
+  <summary>Contents</summary>
+  <nav class="toclist">
+    <a href="#overview">Overview</a>
+    <a href="#timeline">Timeline</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#decisions">Engineering decisions</a>
+    <a href="#performance">Performance summary</a>
+    <a href="#guide">Usage guide</a>
+    <a href="#appendix-a">Appendix A — Bugs found &amp; fixed</a>
+    <a href="#appendix-b">Appendix B — Codebase &amp; open items</a>
+  </nav>
+</details>
+
+<div class="shell">
+  <aside class="toc">
+    <div class="toc-inner">
+      <div class="toc-label">Contents</div>
+      <nav class="toclist">
+        <a href="#overview">01 — Overview</a>
+        <a href="#timeline">02 — Timeline</a>
+        <a href="#architecture">03 — Architecture</a>
+        <a href="#decisions">04 — Engineering decisions</a>
+        <a href="#performance">05 — Performance summary</a>
+        <a href="#guide">06 — Usage guide</a>
+        <a href="#guide-install" class="lvl2">Install</a>
+        <a href="#guide-concepts" class="lvl2">Core concepts</a>
+        <a href="#guide-mission" class="lvl2">Build a mission</a>
+        <a href="#guide-ops" class="lvl2">Logging, checkpoints, tuning</a>
+        <a href="#appendix-a">07 — Appendix A · Bugs</a>
+        <a href="#appendix-b">08 — Appendix B · Codebase</a>
+      </nav>
+    </div>
+  </aside>
+
+  <main>
+
+    <!-- ============================================================ -->
+    <section id="overview">
+      <div class="sec-head"><span class="sec-no">01</span><h2>Overview</h2></div>
+
+      <p class="lede">HPP (Humanoid Path Planner) is a general-purpose C++ constraint-graph manipulation planner, reachable from Python either through a CORBA server or through direct <code class="inline">pyhpp</code> bindings. On its own, HPP answers a narrower question than a SpaceLab assembly mission asks: given one constraint graph and one start/goal pair, find a path. <code class="inline">long_tamp</code> is the layer above that answers the mission-level question — <em>grasp this, hand it to the other arm, screw it down, six times, without a human replanning between steps</em> — by treating HPP as a backend rather than a fork.</p>
+
+      <p>That framing matters for what "better, faster, more efficient" means here. Nothing in this repository modifies HPP's planning algorithms. What <code class="inline">long_tamp</code> contributes sits on four separate axes, and the decisions in §04 are grouped along them:</p>
+      <ul>
+        <li><strong>Algorithmic:</strong> restructuring how a multi-grasp mission's constraint graph gets built, so cost scales with the number of grasps instead of their combinations.</li>
+        <li><strong>Runtime:</strong> defaulting to the in-process Python bindings over the CORBA server, and fixing a real upstream defect that undid a chunk of that gain.</li>
+        <li><strong>Reliability:</strong> replacing silent, unbounded hangs and unrecoverable dead-end commitments with bounded, retriable, resumable planning.</li>
+        <li><strong>Usability:</strong> collapsing what used to be an 800-line, hand-wired Python script per robot into a declarative YAML file plus a ~200-line task script built from shared, independently-tested primitives.</li>
+      </ul>
+
+      <p>The package itself has no ROS 2 dependency — it is a planning library (<code class="inline">pip install -e .</code>, run as ordinary Python scripts) meant to sit underneath a behavior-tree / mission layer, not a node graph of its own. <a href="#architecture">§03</a> covers the module layering; <a href="#guide">§06</a> is a hands-on guide to building a mission with it.</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="timeline">
+      <div class="sec-head"><span class="sec-no">02</span><h2>Timeline</h2></div>
+      <p class="lede">Roughly nine months, 473 commits, from a CORBA proof-of-concept to a checkpointed, resumable, multi-arm screwdriving mission.</p>
+
+      <ul class="tl">
+        <li>
+          <div class="when">2025-11 – 12</div>
+          <div class="what">
+            <strong>CORBA foundation</strong>
+            <p>Initial commit ports a "grasp ball in a box" example onto <code class="inline">hpp-manipulation-corba</code>; the first task-orchestration framework and SpaceLab UR10 tool-grasp task follow within the month.</p>
+          </div>
+        </li>
+        <li>
+          <div class="when">2026-01 – 04</div>
+          <div class="what">
+            <strong>PyHPP lands as a second backend</strong>
+            <p>Dual CORBA/PyHPP support, a <code class="inline">GraphBuilder</code> unifying declarative graph definition across both, and a <code class="inline">ConfigGenerator</code> for waypoint generation. <code class="inline">BackendBase</code> formalizes the interface so task code stops caring which backend it runs on.</p>
+          </div>
+        </li>
+        <li>
+          <div class="when">2026-04 – 07</div>
+          <div class="what">
+            <strong>Modularization &amp; config-as-data</strong>
+            <p><code class="inline">SceneBuilder</code> / <code class="inline">ConstraintBuilder</code> / <code class="inline">ConfigGenerator</code> split out of monolithic task scripts; the YAML-driven <code class="inline">YamlTaskLoader</code> replaces hand-wired per-robot Python config. <code class="inline">GraspSequencePlanner</code> is introduced for chained, multi-phase grasp/release/hand-over sequences with resume support.</p>
+          </div>
+        </li>
+        <li>
+          <div class="when">2026-08-01 – 09</div>
+          <div class="what">
+            <strong>Production hardening, round one</strong>
+            <p>Five stacked wall-clock-hang bugs found and fixed across <code class="inline">long_tamp</code> and upstream <code class="inline">hpp-core</code> (§04.4); the constraint-graph-factory memoization defect found and fixed in <code class="inline">hpp-python</code> (§04.3); a disciplined, container-verified refactor of the 4,500-line <code class="inline">GraspSequencePlanner</code> (§04.10).</p>
+          </div>
+        </li>
+        <li>
+          <div class="when">2026-08-13 – 16</div>
+          <div class="what">
+            <strong>The screwdriving sequence</strong>
+            <p>13-phase assembly extended with a per-part screwdriving stage across six modules. Phase-target lookahead (§04.5), arm-transit robustness fixes, console/file log-verbosity split, checkpoint/resume, and a hand-written per-turn assembly-order table all land in the same push — the most recent, most heavily instrumented mission in the repository.</p>
+          </div>
+        </li>
+        <li>
+          <div class="when">2026-08-16 – 17</div>
+          <div class="what">
+            <strong>Resume correctness</strong>
+            <p>Most recent commits tighten resume semantics specifically: a failed phase now restarts from where it <em>began</em> rather than where it stopped, an attempt's paths are dropped if it never completed, a block replans from its entry once resuming stops making progress, and a finished run's full path is joined into one playable <code class="inline">PathVector</code> for replay.</p>
+          </div>
+        </li>
+      </ul>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="architecture">
+      <div class="sec-head"><span class="sec-no">03</span><h2>Architecture</h2></div>
+      <p class="lede">Four layers, strictly downward-dependent, plus horizontal support layers with no dependency back into task orchestration.</p>
+
+      <figure>
+        <div class="diagram-wrap">
+<pre class="mermaid">
+%%{init: {'theme':'neutral'}}%%
+flowchart TB
+    script["script/&lt;br/&gt;end-user task scripts, one per robot/mission&lt;br/&gt;the only place robot-specific wiring lives"]
+    tasks["tasks/&lt;br/&gt;ManipulationTask, GraspSequencePlanner,&lt;br/&gt;InteractiveGraspSequenceBuilder"]
+    planning["planning/&lt;br/&gt;SceneBuilder, ConstraintBuilder, GraphBuilder,&lt;br/&gt;ConfigGenerator, GraspStateTracker,&lt;br/&gt;SequentialConstraintGraphFactory, SequentialGraspFilter"]
+    backends["backends/&lt;br/&gt;BackendBase (ABC) → PyHPPBackend, CorbaBackend&lt;br/&gt;only layer importing pyhpp.* / hpp.corbaserver.*"]
+
+    config["config/&lt;br/&gt;BaseTaskConfig, YamlTaskLoader, RuleGenerator"]
+    logging_["logging/&lt;br/&gt;RunLogger, JSONL event schema"]
+    viz["visualization/&lt;br/&gt;graph diagrams, frame display, video"]
+    cli["cli/&lt;br/&gt;argparse helpers, interactive pickers"]
+
+    script --> tasks
+    tasks --> planning
+    planning --> backends
+
+    tasks -.uses.-> config
+    tasks -.uses.-> logging_
+    tasks -.uses.-> viz
+    script -.uses.-> cli
+</pre>
+        </div>
+        <figcaption>fig. 1 — module layering, src/long_tamp. Dependency direction is strictly downward.</figcaption>
+      </figure>
+
+      <p><code class="inline">backends/</code> is the only layer that imports HPP-specific bindings. <code class="inline">BackendBase</code> is an ABC covering everything a planning primitive needs — robot/environment/object loading, constraint-graph state/edge creation, path planning and validation, path I/O, visualization — implemented by <code class="inline">PyHPPBackend</code> (default) and <code class="inline">CorbaBackend</code> (deprecated, kept for back-compat). Both imports are wrapped in <code class="inline">try/except ImportError</code>, so the pure-Python parts of the package — config parsing, transforms, run logging, graph visualization — import and work even with zero HPP bindings installed; a missing backend only raises when something actually tries to construct it.</p>
+
+      <p><code class="inline">planning/</code> holds backend-agnostic primitives, each independently usable: <code class="inline">SceneBuilder</code> loads robots/environment/objects with a fluent API; <code class="inline">ConstraintBuilder</code> creates grasp/placement/complement/locked-joint constraints through one signature for either backend; <code class="inline">GraphBuilder</code> builds the constraint graph either via factory (auto-generated from declared grasp rules) or manually (explicit state/edge calls, for graphs the factory's combinatorial model doesn't fit); <code class="inline">ConfigGenerator</code> projects and generates waypoint configurations along graph edges.</p>
+
+      <p><code class="inline">tasks/</code> is the orchestration layer: <code class="inline">ManipulationTask</code> is the lifecycle contract every task implements (<code class="inline">setup()</code> → <code class="inline">run()</code>); <code class="inline">GraspSequencePlanner</code> — the largest module in the package — chains an arbitrary-length sequence of grasp/release/hand-over phases into one continuous, concatenated plan, with pause/resume, checkpointing, and replay.</p>
+
+      <figure>
+        <div class="diagram-wrap">
+<pre class="mermaid">
+%%{init: {'theme':'neutral'}}%%
+flowchart TD
+    yaml["YAML config"] -->|YamlTaskLoader| loaded["file_paths, joint_bounds_class, task_config"]
+    loaded --> setup["ManipulationTask.setup()"]
+
+    setup --> scene["SceneBuilder&lt;br/&gt;load robots, env, objects"]
+    setup --> constraints["ConstraintBuilder /&lt;br/&gt;FactoryConstraintRegistry"]
+    setup --> gbuild["GraphBuilder&lt;br/&gt;factory or manual"]
+
+    scene --> plan["GraspSequencePlanner.plan_sequence()"]
+    constraints --> plan
+    gbuild --> plan
+
+    plan --> p1["1. build_phase_graph()&lt;br/&gt;GraphBuilder + SequentialConstraintGraphFactory"]
+    p1 --> p2["2. GraspStateTracker picks the edge name"]
+    p2 --> p3["3. ConfigGenerator.generate_via_edge() builds the target config"]
+    p3 --> p4["4. backend.solve() → optimize → time-parameterize"]
+    p4 --> p5["5. RunLogger.log(phase_end); optional auto-save"]
+    p5 -->|next phase| p1
+    p5 --> result["concatenated multi-phase path — O(N) planning cost"]
+</pre>
+        </div>
+        <figcaption>fig. 2 — the phase loop that every mission ultimately runs through.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="decisions">
+      <div class="sec-head"><span class="sec-no">04</span><h2>Engineering decisions</h2></div>
+      <p class="lede">Ten decisions, roughly in the order they compound: the algorithmic restructuring that made long missions <em>possible</em>, the runtime and reliability work that made them <em>practical</em>, then the usability and process decisions that made them <em>repeatable</em>. Each entry states the baseline it replaced, what changed, and the measured effect — sourced from this repository's own design docs, bug reports, and refactor logs, not estimated after the fact.</p>
+
+      <!-- D1 -->
+      <div class="decision" id="d1">
+        <div class="dhead"><span class="dnum">01</span><h3>Phase-local constraint graphs: O(N!) collapsed to O(N)</h3><span class="daxis">algorithmic</span></div>
+        <p>A single monolithic <code class="inline">ConstraintGraphFactory</code> graph over every possible grasp combination is HPP's default model, and it is exactly as expensive as it sounds: for a mission with <em>N</em> sequential grasp/place/hand-over phases across several grippers and objects, the number of reachable grasp combinations grows factorially in <em>N</em>. A six-part, multi-hole assembly like the SpaceLab screwdriving mission never gets a graph built at all under that model.</p>
+        <div class="dgrid">
+          <div><div class="k">Baseline</div><div class="v">one graph over all grasp combinations — O(N!) states/edges</div></div>
+          <div><div class="k">Mechanism</div><div class="v"><code class="inline">SequentialConstraintGraphFactory</code> + <code class="inline">SequentialGraspFilter</code>, invoked per phase via <code class="inline">build_phase_graph()</code></div></div>
+        </div>
+        <p><code class="inline">GraspSequencePlanner</code> never builds the full combinatorial graph. Each phase gets a fresh, <em>minimal</em> graph restricted to the grippers/handles actually relevant to that phase; <code class="inline">SequentialConstraintGraphFactory</code> overrides <code class="inline">transitionIsAllowed()</code> so only states/edges reachable along the one planned grasp sequence get built at all, and <code class="inline">SequentialGraspFilter</code> answers "is this grasp tuple on the planned path" in O(1) via abbreviated state strings. Planning cost across a whole mission becomes the sum of <em>N</em> cheap phase-local builds instead of one graph sized to every combination that was never going to be used.</p>
+        <div class="metric-row"><span class="metric">O(N!)</span><span class="arrow">→</span><span class="metric">O(N)</span></div>
+        <p class="src">Source: <code>ARCHITECTURE.md</code> "Design goals"; <code>src/long_tamp/planning/sequential_graph_factory.py</code>, <code>sequential_grasp_filter.py</code>.</p>
+      </div>
+
+      <!-- D2 -->
+      <div class="decision" id="d2">
+        <div class="dhead"><span class="dnum">02</span><h3>In-process PyHPP as the default backend</h3><span class="daxis">runtime</span></div>
+        <p>HPP is reachable two ways from Python: a CORBA server (separate process, string-keyed RPC, serialize every config/path across the wire) or <code class="inline">pyhpp</code> — direct pybind11 bindings living in the same process as the caller. <code class="inline">long_tamp</code> defaults every task to PyHPP and keeps CORBA only for back-compat, now marked deprecated.</p>
+        <div class="tablewrap">
+          <table>
+            <caption>microbenchmark, 10,000 operations, HPP 6.1.0 — internal comparison doc, not a formal published result</caption>
+            <thead><tr><th>Operation</th><th class="num">CORBA</th><th class="num">PyHPP</th><th class="num">Speedup</th></tr></thead>
+            <tbody>
+              <tr><td>Random config sampling</td><td class="num">1.2 s</td><td class="num">0.3 s</td><td class="num">4.0×</td></tr>
+              <tr><td>Configuration validation</td><td class="num">0.8 s</td><td class="num">0.2 s</td><td class="num">4.0×</td></tr>
+              <tr><td>Constraint evaluation</td><td class="num">1.5 s</td><td class="num">0.4 s</td><td class="num">3.8×</td></tr>
+              <tr><td>Path projection (100 steps)</td><td class="num">2.5 s</td><td class="num">0.8 s</td><td class="num">3.1×</td></tr>
+              <tr><td>Graph state projection</td><td class="num">1.8 s</td><td class="num">0.5 s</td><td class="num">3.6×</td></tr>
+              <tr><td>Simple planning (100 iter)</td><td class="num">5.2 s</td><td class="num">2.1 s</td><td class="num">2.5×</td></tr>
+              <tr><td>Memory, 10k-node plan</td><td class="num">≈1.5 GB (client+server)</td><td class="num">≈0.8 GB (single process)</td><td class="num">≈1.9×</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>The gap narrows for long-running planning (2–3×, dominated by compute rather than IPC) and widens for small, frequent operations (up to 4×, dominated by serialization) — consistent with the theory: PyHPP's overhead is a function-call, CORBA's is a round trip. What made the switch safe rather than a rewrite is <code class="inline">BackendBase</code>: every layer above <code class="inline">backends/</code> is written once against the ABC and runs unmodified on either implementation, so this was a default-argument change, not a migration.</p>
+        <p class="src">Source: <code>docs/hpp_python_interface/comparison_corba_vs_pyhpp.md</code>; <code>ARCHITECTURE.md</code> "Backends".</p>
+      </div>
+
+      <!-- D3 -->
+      <div class="decision" id="d3">
+        <div class="dhead"><span class="dnum">03</span><h3>Fixing the constraint-graph factory's memoization bug upstream</h3><span class="daxis">runtime · upstream</span></div>
+        <p>Even with phase-local scoping (§04.1), the densest phase of a 13-phase sequence — 8 grippers × 7 objects simultaneously held — stalled <code class="inline">factory.generate()</code> for 20+ minutes of genuinely-computing CPU with zero output. Root cause: <code class="inline">GraphFactoryAbstract._recurse()</code> in <code class="inline">hpp-python</code> only memoizes <em>accepted</em> grasp combinations; a combination <em>rejected</em> by the grasp filter is re-explored from every distinct order in which grippers/handles can reach it. This was a real regression from the module's own documented O(N) intent for a restrictive sequential filter, confirmed by a standalone, HPP-independent reproduction — not inherent combinatorial cost.</p>
+        <div class="tablewrap">
+          <table>
+            <caption>standalone repro, <code>_recurse()</code> call counts, before/after a one-line fix</caption>
+            <thead><tr><th>grippers × handles</th><th class="num">buggy</th><th class="num">fixed</th></tr></thead>
+            <tbody>
+              <tr><td>2 × 1</td><td class="num">3</td><td class="num">3</td></tr>
+              <tr><td>4 × 3</td><td class="num">222</td><td class="num">73</td></tr>
+              <tr><td>6 × 5</td><td class="num">137,266</td><td class="num">4,051</td></tr>
+              <tr><td>7 × 6</td><td class="num">&gt; 3,000,000 (aborted)</td><td class="num">37,633</td></tr>
+              <tr><td>8 × 7 (production worst case)</td><td class="num">— (would dwarf 7×6)</td><td class="num">394,353</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>The fix adds a visited-set independent from the existing (differently-scoped) <code class="inline">self.states</code> dict, so rejected combinations are marked seen without disturbing the actually-created-states bookkeeping other code depends on. States and transitions produced were diffed exactly equal before/after across multiple gripper counts, including an adversarial non-monotonic filter — only the redundant recursion was eliminated.</p>
+        <div class="metric-row"><span class="metric">20+ min hang</span><span class="arrow">→</span><span class="metric">seconds</span></div>
+        <p class="src">Source: <code>docs/bugs/constraint-graph-factory-combinatorial-blowup.md</code>. Fixed in <code>hpp-python/src/pyhpp/manipulation/constraint_graph_factory.py</code>.</p>
+      </div>
+
+      <!-- D4 -->
+      <div class="decision" id="d4">
+        <div class="dhead"><span class="dnum">04</span><h3>Systematic wall-clock bounding — ending indefinite hangs</h3><span class="daxis">reliability</span></div>
+        <p>A 13-phase sequential grasp task would occasionally freeze for 30–45+ minutes with zero output and no crash — indistinguishable from a true infinite loop. Investigation found <strong>five independent missing-timeout bugs</strong> stacked across the stack, none inherent to the planning problem's difficulty:</p>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>#</th><th>Where</th><th>Missing bound</th></tr></thead>
+            <tbody>
+              <tr><td class="num">1</td><td><code class="inline">GraspSequencePlanner._plan_release_subphase()</code></td><td>no retry-on-failure, unlike the main grasp-edge loop</td></tr>
+              <tr><td class="num">2</td><td><code class="inline">ConfigGenerator.generate_via_edge()</code></td><td>attempt-count cap only, no wall-clock timeout</td></tr>
+              <tr><td class="num">3</td><td><code class="inline">hpp-core::Astar::findPath()</code></td><td>no iteration cap, no timeout at all</td></tr>
+              <tr><td class="num">4</td><td><code class="inline">continuousValidation::Progressive::validateStraightPath()</code></td><td>step size can shrink toward zero near tangent collisions</td></tr>
+              <tr><td class="num">5</td><td><code class="inline">PathOptimizer::timeOut</code></td><td>existed but defaulted to infinity and was never set on <code class="inline">innerProblem()</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Each got a real wall-clock bound (30 s for the A* extraction and the optimizer time-out, 15 s for continuous validation, checked every 1000 steps to avoid the check itself adding overhead) plus, for the Python-side retry gap, the same regenerate-and-retry pattern the rest of the file already used. None of these change what a solvable problem returns — they change "will hang forever" into "will fail cleanly and get another random seed."</p>
+        <div class="metric-row"><span class="metric">30–45+ min silent stalls</span><span class="arrow">→</span><span class="metric">bounded, ≤400 s worst case demonstrated</span></div>
+        <p class="src">Source: <code>docs/bugs/hpp-core-unbounded-planning-loops.md</code>.</p>
+      </div>
+
+      <!-- D5 -->
+      <div class="decision" id="d5">
+        <div class="dhead"><span class="dnum">05</span><h3>Phase-target lookahead — spending planning time to buy back a dead end</h3><span class="daxis">reliability</span></div>
+        <p>Bounding hangs (§04.4) doesn't help when a phase can never succeed at all. Two fixed-offset grasps on the same rigid object fully determine its orientation; once <code class="inline">frame_gripper</code> and <code class="inline">vispa2</code> both hold a part, its orientation is frozen, and if that orientation happens to be wrong for the <em>next</em> phase's screwdriver grasp, no amount of retrying the next phase can fix it — it isn't the phase that made the bad choice. Live evidence: RS6's <code class="inline">CON0</code> grasp failed <strong>2,300+ consecutive</strong> target-generation attempts, 0% ever reaching collision-checking; RS5 failed 878/878.</p>
+        <p><code class="inline">find_feasible_phase_target()</code> draws a candidate for phase N, commits it on a <em>throwaway copy</em> of the grasp tracker, and probes whether phase N+1 is still reachable before the real run ever sees that candidate. Only a candidate that passes gets replayed into the real call as a per-edge warm-start hint chain — hinting only the terminal edge was tried and found insufficient (a redrawn pregrasp edge silently drifted the validated candidate away from what was probed), so the whole chain is threaded through, not just the final config.</p>
+        <div class="dgrid">
+          <div><div class="k">Cost, disclosed</div><div class="v">not flat: ~65 ms/candidate early, ~6.2–6.4 s by the point 3 objects are already held</div></div>
+          <div><div class="k">Bound</div><div class="v"><code class="inline">max_candidates=100</code> → ≤ 15–20 min worst case</div></div>
+        </div>
+        <div class="metric-row"><span class="metric">2,300+ failures, 0% success</span><span class="arrow">→</span><span class="metric">bounded search, reliable commit</span></div>
+        <p>This is a genuine trade, stated honestly rather than presented as a free win: a mission that used no lookahead was faster whenever it happened to draw a lucky commitment, and unrecoverable whenever it didn't. Twenty tried as the candidate budget starved the search at a harder checkpoint; 100 buys headroom at the cost of a worst case that is still an order of magnitude below the multi-hour blind-retry stalls it replaces.</p>
+        <p>The lookahead is also why a separate, quieter fix mattered: each candidate does <em>two</em> full <code class="inline">build_phase_graph()</code> calls (§04.3's factory, probing phase N then phase N+1), so 100 candidates is up to 200 builds per round. Each build's retired <code class="inline">ConstraintGraphFactory</code> leaves a small Python reference cycle — <code class="inline">ConstraintFactory</code> ↔ its own <code class="inline">graphfactory</code> back-reference — that pins roughly 235 MB of C++ graph memory until a generation-2 garbage collection happens to run. Left alone, 200 builds/round is on the order of 45 GB stranded per round. <code class="inline">GraphBuilder._break_factory_cycle()</code> cuts that reference explicitly at the end of every <code class="inline">build_phase_graph()</code> call instead of waiting on the GC. See Appendix A.</p>
+        <p class="src">Source: <code>docs/features/phase-target-lookahead.md</code>; <code>docs/usage/standalone-usage.md</code> §16.</p>
+      </div>
+
+      <!-- D6 -->
+      <div class="decision" id="d6">
+        <div class="dhead"><span class="dnum">06</span><h3>Motion-quality tuning — valid paths that are also usable ones</h3><span class="daxis">execution quality</span></div>
+        <p>A path can be collision-free and constraint-satisfying and still be unusable: full velocity-limit execution with no safety margin, an optimizer pipeline that smooths before it shortens (so the shortcut re-kinks an already-smooth curve), and cubic splines too low-order to fit long multi-via-point transits smoothly. None of these were deliberate choices — <code class="inline">SimpleTimeParameterization/safety</code> was simply never set on either backend, defaulting HPP-core's own <code class="inline">1.0</code> (100% of joint velocity limits) straight through to execution.</p>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Parameter</th><th>Before</th><th>After</th></tr></thead>
+            <tbody>
+              <tr><td>Time-param safety factor</td><td>unset → 1.0 (full speed)</td><td>tunable, default 0.95, SpaceLab mission uses 0.5</td></tr>
+              <tr><td>Transit optimizer order (CORBA)</td><td>smooth, then shortcut</td><td>shortcut first, then smooth</td></tr>
+              <tr><td>Spline order</td><td><code class="inline">bezier3</code> (cubic)</td><td><code class="inline">bezier5</code> (quintic)</td></tr>
+              <tr><td>Zero-velocity at state junctions</td><td>forced</td><td>disabled — velocity now carries through</td></tr>
+              <tr><td>Shortcut attempts/pass</td><td>5 (HPP default)</td><td>50, YAML-overridable</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Framed against §04.2's runtime numbers, this is a deliberately different efficiency axis: not planning wall-clock, but execution safety and smoothness — the property that actually matters once a mission is meant to run on hardware rather than only inside a solver.</p>
+        <p class="src">Source: <code>docs/bugs/motion-quality-time-parameterization.md</code>.</p>
+      </div>
+
+      <!-- D7 -->
+      <div class="decision" id="d7">
+        <div class="dhead"><span class="dnum">07</span><h3>Config-as-data: the YAML task loader</h3><span class="daxis">usability</span></div>
+        <p>Before <code class="inline">YamlTaskLoader</code>, a new robot meant a new Python config module hard-coding URDF paths, joint names, and valid grasp pairs directly into code the planning framework imported. <code class="inline">YamlTaskLoader</code> reads one YAML file and produces everything <code class="inline">SceneBuilder</code>/<code class="inline">ManipulationTask</code> need — no file in the framework needs to know a specific robot's joint or file names, only the YAML does.</p>
+        <div class="metric-row"><span class="metric">new robot = new Python module</span><span class="arrow">→</span><span class="metric">new robot = one YAML file</span></div>
+        <p>Adding an object or tool to an existing mission is a <code class="inline">valid_pairs</code> edit in YAML, not a code change anywhere in <code class="inline">src/</code>. <code class="inline">script/templates/task_config_template.yaml</code> and <code class="inline">task_my_task.py</code> are fully generic — copy, fill placeholders, run — and <code class="inline">script/config/graspball_config.yaml</code> is the minimal real-world proof it isn't just a template exercise. §06.3 walks through this end to end.</p>
+        <p class="src">Source: <code>ARCHITECTURE.md</code> "Configuration"; <code>src/long_tamp/config/yaml_loader.py</code>.</p>
+      </div>
+
+      <!-- D8 -->
+      <div class="decision" id="d8">
+        <div class="dhead"><span class="dnum">08</span><h3>Composable primitives over monolithic task scripts</h3><span class="daxis">usability</span></div>
+        <p>The pre-modularization pattern was one large script per task mixing scene setup, constraint definitions, graph construction, and configuration generation inline. <code class="inline">SceneBuilder</code>, <code class="inline">ConstraintBuilder</code>, <code class="inline">GraphBuilder</code>, and <code class="inline">ConfigGenerator</code> split those concerns into independently-testable, single-purpose, fluent objects a task composes rather than a god-object it inherits from.</p>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th></th><th>Before</th><th>After</th></tr></thead>
+            <tbody>
+              <tr><td>Per-task script</td><td>800+ lines, monolithic</td><td>~500 lines task-specific + ~700 lines shared</td></tr>
+              <tr><td>New task from scratch</td><td>copy &amp; hand-modify 800 lines</td><td>~200 lines, framework does the rest</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>The shared 700 lines are the leverage: a bug fixed once in <code class="inline">ConfigGenerator</code> is fixed for every task that uses it, rather than needing to be re-found and re-patched per copy-pasted script.</p>
+        <p class="src">Source: <code>script/spacelab/README.md</code>, "Comparison: Before vs After Refactoring".</p>
+      </div>
+
+      <!-- D9 -->
+      <div class="decision" id="d9">
+        <div class="dhead"><span class="dnum">09</span><h3>Reproducibility infrastructure: three independent mechanisms, not one</h3><span class="daxis">operability</span></div>
+        <p>Three separate systems cover three separate failure scopes — worth naming precisely rather than as one blob, because each answers a different question about a run.</p>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Mechanism</th><th>Answers</th><th>Survives</th></tr></thead>
+            <tbody>
+              <tr><td><code class="inline">RunLogger</code> (JSONL event log)</td><td>"what happened" — every phase/edge attempt, timing, success/failure</td><td>process exit; read back post-mortem</td></tr>
+              <tr><td><code class="inline">resume_sequence()</code> (in-process)</td><td>"continue this planner" after one phase's failure</td><td>nothing — same Python session, same object, only</td></tr>
+              <tr><td><code class="inline">PathRecorder</code> / <code class="inline">--checkpoint-dir</code></td><td>"replay this run's motion" without rebuilding any constraint graph</td><td>a killed process, a crashed container, a new session entirely</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><code class="inline">RunLogger</code> is on by default for every <code class="inline">ManipulationTask</code>. <code class="inline">resume_sequence()</code> is the cheap, same-session recovery path — it restarts the failed phase from where the call <em>began</em>, never from wherever the failed attempt physically stopped, because a search must never resume mid-motion. <code class="inline">PathRecorder</code> is the durable one: it samples every planned/executed path to disk as it happens (<code class="inline">manifest.json</code>, atomically rewritten after each segment), so <code class="inline">script/spacelab/replay_captured_paths.py</code> can replay or continuity-check a run in a fresh process with no HPP session at all. The screwdriving mission's <code class="inline">--checkpoint-dir</code>/<code class="inline">--resume</code> flags sit on top of this: a multi-hour, ~30-phase run interrupted by a crash, a container restart, or Ctrl+C resumes from the last completed phase instead of replanning from the start.</p>
+        <p>The most recent commits in the repository (2026-08-16/17) are entirely about making that resume <em>correct</em>, not just present: a phase that failed mid-attempt now restarts from where the phase began; a phase attempt's partial paths are dropped if it never completed, so a resume can't silently splice a broken segment into the concatenated result; and a block that keeps failing to make progress under resume now replans itself from its entry rather than continuing to retry forward on a guarantee resume can no longer improve.</p>
+        <div class="metric-row"><span class="metric">crash = replan from scratch</span><span class="arrow">→</span><span class="metric">crash = resume from last checkpoint</span></div>
+        <p class="src">Source: <code>README.md</code> "Run Logging"; <code>docs/usage/standalone-usage.md</code> §§8–10; <code>script/spacelab/screwdriving_sequence.py</code> CLI; recent commits <code>e1844c9</code>, <code>1e48314</code>, <code>794d988</code>, <code>f8d7651</code>, <code>7cfde13</code>.</p>
+      </div>
+
+      <!-- D10 -->
+      <div class="decision" id="d10">
+        <div class="dhead"><span class="dnum">10</span><h3>Extract-verify-commit: refactoring the production planner without behavior regression</h3><span class="daxis">process</span></div>
+        <p><code class="inline">GraspSequencePlanner.plan_sequence()</code> — the method that actually drives production missions — had grown to 1,145 lines at nesting depth 7, ~90% structurally duplicated with the 919-line <code class="inline">resume_sequence()</code> beside it, with zero test coverage beyond an incidental mention elsewhere. That combination (largest, riskiest, least-tested) is precisely where a rewrite would be most tempting and most dangerous, so the refactor instead extracted one already-identical block at a time into a private, independently-callable method — verified byte-identical via block-by-block diff against the original before being called from both sites — with a real container run's <code class="inline">phase_results</code> JSON diffed against a captured baseline after every step, not eyeballed.</p>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Method</th><th class="num">Before (lines / depth)</th><th class="num">After (lines / depth)</th></tr></thead>
+            <tbody>
+              <tr><td><code class="inline">plan_sequence()</code></td><td class="num">1145 / 7</td><td class="num">208 / 3</td></tr>
+              <tr><td><code class="inline">resume_sequence()</code></td><td class="num">919 / 7</td><td class="num">165 / 4</td></tr>
+              <tr><td><code class="inline">ManipulationTask.run()</code></td><td class="num">365 / 7</td><td class="num">108 / 4</td></tr>
+              <tr><td><code class="inline">build_phase_graph()</code></td><td class="num">299 / 4</td><td class="num">114 / —</td></tr>
+              <tr><td><code class="inline">plan_transition_edge()</code></td><td class="num">271 / 4</td><td class="num">123 / —</td></tr>
+              <tr><td><code class="inline">disable_collisions_between_subtrees()</code></td><td class="num">213 / 4</td><td class="num">42 / —</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>The extraction also surfaced and fixed a real, independent bug along the way: <code class="inline">resume_sequence()</code> silently emitted none of <code class="inline">RunLogger</code>'s per-phase events, so a mission that succeeded via resume was invisible to replay/audit tooling for every phase it completed on that path — an oversight from the two functions evolving independently after being copy-pasted, fixed as its own decoupled commit with 7 new unit tests, not folded into the structural diff.</p>
+        <p>This decision is why §04.5 and §04.9 were tractable to build at all: a 1,145-line, untested, depth-7 function is where new logic goes to become unverifiable.</p>
+        <p class="src">Source: <code>docs/plans/refactor-codebase.md</code>.</p>
+      </div>
+
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="performance">
+      <div class="sec-head"><span class="sec-no">05</span><h2>Performance summary</h2></div>
+      <p class="lede">The headline numbers from §04, consolidated. Each row cites the decision and source document it came from — none of these are re-derived estimates.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Axis</th><th>Before</th><th>After</th><th>Decision</th></tr></thead>
+          <tbody>
+            <tr><td>Grasp-sequence planning cost vs. phase count</td><td>O(N!)</td><td>O(N)</td><td><a href="#d1">§04.1</a></td></tr>
+            <tr><td>Constraint-graph construction, 8-gripper phase</td><td>20+ min hang, no output</td><td>seconds (394,353 calls, matches closed-form floor)</td><td><a href="#d3">§04.3</a></td></tr>
+            <tr><td>Random config sampling (10k ops)</td><td>1.2 s (CORBA)</td><td>0.3 s (PyHPP), 4.0×</td><td><a href="#d2">§04.2</a></td></tr>
+            <tr><td>Path projection, 100 steps</td><td>2.5 s (CORBA)</td><td>0.8 s (PyHPP), 3.1×</td><td><a href="#d2">§04.2</a></td></tr>
+            <tr><td>Memory, 10k-node plan</td><td>≈1.5 GB (client+server)</td><td>≈0.8 GB (single process)</td><td><a href="#d2">§04.2</a></td></tr>
+            <tr><td>Indefinite multi-phase hangs</td><td>30–45+ min silent stalls, unbounded</td><td>bounded per-stage timeouts; ≤400 s worst case demonstrated</td><td><a href="#d4">§04.4</a></td></tr>
+            <tr><td>RS6 <code class="inline">CON0</code> grasp-target search</td><td>2,300+ consecutive failures, 0% success</td><td>bounded lookahead, reliable commit</td><td><a href="#d5">§04.5</a></td></tr>
+            <tr><td>Executed path speed</td><td>100% velocity limits (unset safety factor)</td><td>tunable, mission default 50%</td><td><a href="#d6">§04.6</a></td></tr>
+            <tr><td>New-robot onboarding</td><td>new Python config module</td><td>one YAML file</td><td><a href="#d7">§04.7</a></td></tr>
+            <tr><td>Per-task script size</td><td>800+ monolithic lines</td><td>~200 lines + 700 shared</td><td><a href="#d8">§04.8</a></td></tr>
+            <tr><td>Crash recovery, long mission</td><td>replan from the start</td><td>resume from last checkpoint</td><td><a href="#d9">§04.9</a></td></tr>
+            <tr><td><code class="inline">plan_sequence()</code> size / depth</td><td>1145 lines / depth 7</td><td>208 lines / depth 3</td><td><a href="#d10">§04.10</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout teal">
+        <div class="callout-label">Read honestly</div>
+        <p>Two of these rows are not free wins. §04.5's lookahead adds real planning time (up to ~15–20 minutes worst case) in exchange for removing an unrecoverable failure mode; §04.6 trades raw speed (50% velocity) for execution safety. Both are stated as trades in §04, not hidden inside a bigger-is-better number.</p>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="guide">
+      <div class="sec-head"><span class="sec-no">06</span><h2>Usage guide</h2></div>
+      <p class="lede">Installing the package, the vocabulary you need before reading a task script, and a worked, step-by-step walkthrough of building a new mission from the repository's own templates.</p>
+
+      <div class="callout teal">
+        <div class="callout-label">Living reference</div>
+        <p>This section is a snapshot. The repository's own maintained, continuously-updated usage reference is <code class="inline">docs/usage/standalone-usage.md</code> (plus <code class="inline">dbt-integration.md</code> for the ROS 2 / Dynamic-Behavior-Tree consumer built on top of this same library) — when the two disagree, trust that doc, not this one. It's also explicit about a stale reference elsewhere in the repo: <code class="inline">src/long_tamp/__init__.py</code>'s docstring (mentions <code class="inline">TaskOrchestrator</code>/<code class="inline">TaskBuilder</code>/<code class="inline">PlanningBridge</code>, none of which exist). <code class="inline">script/spacelab/README.md</code> was rewritten and is now current, scoped to the SpaceLab setup specifically. This report cites it once, in §04.8, and only for a historical lines-of-code comparison predating that rewrite.</p>
+      </div>
+
+      <h3 id="guide-install"><span class="sub-no">06.1</span>Installation</h3>
+      <p><code class="inline">long_tamp</code> has two dependency tiers, installed in order — the native bindings first, the package second, because the package cannot plan until the backends are on the path.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Tier</th><th>Packages</th><th>Source</th></tr></thead>
+          <tbody>
+            <tr><td>Python (PyPI)</td><td><code class="inline">numpy&lt;2</code>, <code class="inline">pyyaml</code>, <code class="inline">pinocchio</code>, the viser viewer stack</td><td><code class="inline">pip</code></td></tr>
+            <tr><td>HPP native bindings</td><td><code class="inline">hpp-python</code> (pyhpp), <code class="inline">hpp-toppra</code>, <code class="inline">hpp-gepetto-viewer</code>, <code class="inline">omniORBpy</code>, …</td><td>robotpkg / conda-forge / source build — <strong>not on PyPI</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <pre class="code"><span class="c"># 1 — native HPP bindings (pick one)</span>
+<span class="c">#   1a. robotpkg binary — fine for CORBA, NOT sufficient for the default</span>
+<span class="c">#       PyHPP backend today (missing several custom symbols):</span>
+sudo apt-get install robotpkg-py312-hpp-python robotpkg-py312-qt5-hpp-gepetto-viewer
+
+<span class="c">#   1b. source build / container — required for PyHPP right now.</span>
+<span class="c">#       Docker definitions: gitlab.laas.fr/dvtnguyen/dockers ("hpp/" or "hpp-humble/")</span>
+
+<span class="c"># 2 — the package itself, once the bindings above are on PYTHONPATH</span>
+pip install -e .                 <span class="c"># editable install, default viser viewer</span>
+pip install -e ".[dev]"          <span class="c"># + pytest, black, ruff, sphinx</span></pre>
+      <div class="callout rust">
+        <div class="callout-label">Known trap</div>
+        <p>Do not <code class="inline">pip install pinocchio</code> on top of a robotpkg environment. The robotpkg / <code class="inline">/opt/openrobots</code> pinocchio is built against NumPy 1.x; a stray NumPy 2.x shadows the system copy and segfaults the C-extension. <code class="inline">pinocchio</code> is intentionally not a default dependency for this reason — use the <code class="inline">[standalone]</code> extra only when no HPP stack is present at all.</p>
+      </div>
+
+      <h3 id="guide-concepts"><span class="sub-no">06.2</span>Core concepts, in the order you'll meet them</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Concept</th><th>What it is</th></tr></thead>
+          <tbody>
+            <tr><td><code class="inline">YamlTaskLoader</code></td><td>Reads one YAML file, produces file paths, joint bounds, and a <code class="inline">task_config</code> — the robot-agnostic entry point for every new mission.</td></tr>
+            <tr><td><code class="inline">SceneBuilder</code></td><td>Fluent loader for robots, static environment, and movable objects into a backend instance.</td></tr>
+            <tr><td><code class="inline">ConstraintBuilder</code></td><td>Creates grasp / placement / locked-joint constraints against either backend through one signature.</td></tr>
+            <tr><td><code class="inline">GraphBuilder</code></td><td>Builds the constraint graph — factory mode (auto-generated) or manual mode (hand-wired states/edges).</td></tr>
+            <tr><td><code class="inline">ConfigGenerator</code></td><td>Projects/generates waypoint configurations by walking graph edges.</td></tr>
+            <tr><td><code class="inline">ManipulationTask</code></td><td>The lifecycle contract a concrete task implements: <code class="inline">setup()</code> → <code class="inline">run()</code>.</td></tr>
+            <tr><td><code class="inline">GraspSequencePlanner</code></td><td>Chains an arbitrary-length sequence of grasp/release phases into one continuous, concatenated, resumable plan.</td></tr>
+            <tr><td><code class="inline">BackendBase</code></td><td>The ABC (<code class="inline">PyHPPBackend</code> / <code class="inline">CorbaBackend</code>) — pick with <code class="inline">--backend pyhpp|corba</code>; everything above it is backend-blind.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 id="guide-mission"><span class="sub-no">06.3</span>Build your first mission, step by step</h3>
+      <p>This walks through the repository's own templates (<code class="inline">script/templates/</code>) with a concrete worked example: an arm picking up one object by one handle. The mechanism is identical for a multi-arm, multi-phase mission — you're only ever extending <code class="inline">GRASP_SEQUENCE</code>.</p>
+
+      <div class="steps">
+        <div class="step">
+          <h4>Copy the YAML template</h4>
+          <p><code class="inline">cp script/templates/task_config_template.yaml script/config/my_robot_config.yaml</code>, then replace every placeholder. This one file is the entire robot-specific surface — nothing in <code class="inline">src/</code> needs editing.</p>
+          <pre class="code"><span class="c"># my_robot_config.yaml</span>
+task: my_pick_task
+
+paths:
+  robot:
+    my_robot:
+      urdf: "package://my_pkg/urdf/my_robot.urdf"
+      srdf: "package://my_pkg/srdf/my_robot.srdf"
+  environment:
+    table: "package://my_pkg/urdf/table.urdf"
+  objects:
+    my_object:
+      urdf: "package://my_pkg/urdf/my_object.urdf"
+      srdf: "package://my_pkg/srdf/my_object.srdf"   <span class="c"># defines the handle</span>
+
+robots: [my_robot]
+environments: [table]
+
+joint_groups:
+  ARM:
+    - {joint: my_robot/joint_1, initial: 0.00, bounds: [-3.14159, 3.14159]}
+    - {joint: my_robot/joint_2, initial: -1.57, bounds: [-3.14159, 3.14159]}
+    <span class="c"># ... one entry per active joint</span>
+
+objects:
+  my_object:
+    initial_pose_xyzrpy: [0.4, 0.0, 0.1,  0.0, 0.0, 0.0]
+    handles: [my_object/handle]
+    contact_surfaces: []
+
+grippers: [my_robot/gripper]
+valid_pairs:
+  my_robot/gripper: [my_object/handle]</pre>
+        </div>
+
+        <div class="step">
+          <h4>Copy the task script</h4>
+          <p><code class="inline">cp script/templates/task_my_task.py script/my_robot/task_pick.py</code>, then edit only the five <code class="inline">&lt;!-- EDIT --&gt;</code>-marked sections at the top — everything below "Framework code" runs unmodified.</p>
+          <pre class="code">TASK_NAME       = "My Robot: Pick"
+_YAML_PATH      = Path(__file__).parent.parent / "config" / "my_robot_config.yaml"
+GRASP_GOALS     = ["my_robot/gripper grasps my_object/handle"]
+GRASP_SEQUENCE  = [("my_robot/gripper", "my_object/handle")]
+FREEZE_JOINT_SUBSTRINGS = []
+COLLISION_EXCLUSIONS    = []</pre>
+        </div>
+
+        <div class="step">
+          <h4>Find your joint names</h4>
+          <p>Not sure what to put in <code class="inline">joint_groups</code>? Load the scene without planning and print every joint name and rank.</p>
+          <pre class="code">python script/my_robot/task_pick.py --show-joints</pre>
+        </div>
+
+        <div class="step">
+          <h4>Run it</h4>
+          <p>PyHPP needs no server; CORBA needs <code class="inline">hppcorbaserver</code> running first.</p>
+          <pre class="code">python script/my_robot/task_pick.py --backend pyhpp
+python script/my_robot/task_pick.py --backend corba --no-viz</pre>
+          <p>Under the hood: <code class="inline">setup()</code> wires scene + constraints + graph; a <code class="inline">GraspSequencePlanner</code> is built from those pieces and <code class="inline">plan_sequence(GRASP_SEQUENCE, q_init)</code> runs the phase loop from fig. 2. On success, an interactive replay menu lets you play any individual phase's path or the whole sequence.</p>
+        </div>
+
+        <div class="step">
+          <h4>Extend to grasp-then-release</h4>
+          <p>A release phase is a <code class="inline">None</code> handle in the same list — the planner auto-inserts the pregrasp/retract waypoints.</p>
+          <pre class="code">GRASP_SEQUENCE = [
+    ("my_robot/gripper", "my_object/handle"),   <span class="c"># grasp</span>
+    ("my_robot/gripper", None),                 <span class="c"># release</span>
+]</pre>
+        </div>
+
+        <div class="step">
+          <h4>Extend to multiple arms</h4>
+          <p>Add the second arm's robot/joint_groups/grippers to the YAML, then interleave both arms' phases in one sequence — a hand-over is just one arm's release immediately followed by the other's grasp on the same handle.</p>
+          <pre class="code">GRASP_SEQUENCE = [
+    ("arm1/gripper", "object1/handle"),
+    ("arm2/gripper", "object2/handle"),
+    ("arm1/gripper", None),
+    ("arm2/gripper", None),
+]</pre>
+        </div>
+
+        <div class="step">
+          <h4>Inspect what actually happened</h4>
+          <p>Logging is on by default (<a href="#d9">§04.9</a>) — every run writes a JSONL event stream under <code class="inline">/tmp/long_tamp/&lt;task_slug&gt;_&lt;timestamp&gt;/</code>.</p>
+          <pre class="code">from long_tamp.logging import print_run_summary, get_replay_config
+
+print_run_summary("/tmp/long_tamp/my_pick_.../run_....jsonl")
+cfg = get_replay_config("/tmp/long_tamp/my_pick_.../run_....jsonl")  <span class="c"># reproduce the run</span></pre>
+        </div>
+
+        <div class="step">
+          <h4>For long missions: checkpoint and resume</h4>
+          <p>The production reference for this is <code class="inline">screwdriving_sequence.py</code>'s CLI — a ~30-phase mission that needs to survive a crash mid-run.</p>
+          <pre class="code">python script/spacelab/screwdriving_sequence.py --checkpoint-dir auto
+<span class="c"># ... interrupted or crashed ...</span>
+python script/spacelab/screwdriving_sequence.py --checkpoint-dir auto --resume</pre>
+          <p><code class="inline">--checkpoint-dir auto</code> creates a gitignored, timestamped directory; <code class="inline">--resume</code> picks up the most recent one and continues from the last completed phase, not the start.</p>
+        </div>
+
+        <div class="step">
+          <h4>Tune execution speed and smoothness</h4>
+          <p>The single most impactful knob is <code class="inline">time_param_safety</code> in the YAML's <code class="inline">optimization:</code> block (<a href="#d6">§04.6</a>).</p>
+          <pre class="code">optimization:
+  time_param_safety: 0.5   <span class="c"># 1.0 = full speed, 0.5 = half — good default for demos</span>
+  random_shortcut_loops: 50</pre>
+        </div>
+
+        <div class="step">
+          <h4>Test your task</h4>
+          <p>Importing anything from <code class="inline">long_tamp</code> transitively imports <code class="inline">pyhpp</code>, so the test suite needs the HPP bindings on the path — run it inside whatever container/environment provides them.</p>
+          <pre class="code">python -m pytest tests/ -q</pre>
+        </div>
+      </div>
+
+      <h3 id="guide-ops"><span class="sub-no">06.4</span>Command reference</h3>
+      <div class="tablewrap">
+        <table>
+          <caption>script/spacelab/screwdriving_sequence.py — the most heavily instrumented mission script, useful as a reference for flags worth copying into your own</caption>
+          <thead><tr><th>Flag</th><th>Effect</th></tr></thead>
+          <tbody>
+            <tr><td><code class="inline">--backend {pyhpp,corba}</code></td><td>Planning backend (default <code class="inline">pyhpp</code>).</td></tr>
+            <tr><td><code class="inline">--viewer-type {auto,viser,gepetto}</code></td><td>Viewer selection; viser needs no X11.</td></tr>
+            <tr><td><code class="inline">--checkpoint-dir DIR|auto|none</code></td><td>Step/phase checkpoints + captured paths. <code class="inline">auto</code> creates a gitignored, timestamped directory.</td></tr>
+            <tr><td><code class="inline">--resume</code></td><td>Resume from the latest checkpoint in <code class="inline">--checkpoint-dir</code>.</td></tr>
+            <tr><td><code class="inline">--auto-save-dir DIR|auto|none</code></td><td>Capture planned paths as sampled-waypoint JSON + manifest.</td></tr>
+            <tr><td><code class="inline">--play-full</code></td><td>Join every captured segment into one <code class="inline">PathVector</code> and animate it after the run.</td></tr>
+            <tr><td><code class="inline">--no-replay</code></td><td>Skip the interactive replay menu (on by default).</td></tr>
+            <tr><td><code class="inline">--log-level {DEBUG,INFO,WARNING,ERROR}</code></td><td>Console verbosity only — the per-run log file always keeps full <code class="inline">DEBUG</code> detail (<a href="#d9">§04.9</a>).</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Beyond that one script, a handful of others are worth reading before writing your own — each demonstrates one layer in isolation:</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Script</th><th>Demonstrates</th></tr></thead>
+          <tbody>
+            <tr><td><code class="inline">script/graspball/test_graspball_yaml.py</code></td><td>the smallest end-to-end YAML task — single arm, one object</td></tr>
+            <tr><td><code class="inline">script/graspball/graspball_pyhpp_example.py</code></td><td>raw <code class="inline">PyHPPBackend</code> calls with no <code class="inline">Task</code>/config layer — the primitives §03 sits on top of</td></tr>
+            <tr><td><code class="inline">script/spacelab/interactive_planning.py -i</code></td><td>menu-driven exploration — enumerate feasible goals from <code class="inline">valid_pairs</code>, solve interactively</td></tr>
+            <tr><td><code class="inline">script/spacelab/repro_phase_range.py</code></td><td>fast, checkpoint-seeded re-run of one phase range — turns a 20+ minute reproduction into seconds while debugging</td></tr>
+            <tr><td><code class="inline">script/spacelab/replay_captured_paths.py</code></td><td><code class="inline">PathRecorder</code> manifest replay/continuity-check, no HPP session needed (<a href="#d9">§04.9</a>)</td></tr>
+            <tr><td><code class="inline">script/spacelab/benchmark_optimizer_phases.py</code></td><td>compares path quality across optimizer settings (<a href="#d6">§04.6</a>)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="appendix-a">
+      <div class="sec-head"><span class="sec-no">07</span><h2>Appendix A — Bugs found &amp; fixed</h2></div>
+      <p class="lede">Five defects, spanning <code class="inline">long_tamp</code> itself and two upstream packages (<code class="inline">hpp-core</code>, <code class="inline">hpp-python</code>, <code class="inline">hpp-manipulation</code>), condensed from the full write-ups in <code class="inline">docs/bugs/</code>. Kept out of the main narrative per the report's scope — the decisions in §04 that motivated each fix are cross-referenced.</p>
+
+      <details class="bug">
+        <summary><span class="bug-title">Constraint-graph factory: rejected grasp combinations never memoized</span><span class="badge pkg">hpp-python</span><span class="badge">critical</span></summary>
+        <div class="bug-body">
+          <p><strong>Symptom:</strong> 20+ minutes of continuous CPU work building the constraint graph for an 8-gripper/7-object phase, no error, no output.</p>
+          <p><strong>Cause:</strong> <code class="inline">GraphFactoryAbstract._recurse()</code> memoizes accepted states in <code class="inline">self.states</code>, but that dict is only populated when a combination is accepted — a rejected combination is re-explored from every distinct order that reaches it.</p>
+          <p><strong>Fix:</strong> a separate visited-set for rejected combinations, independent of <code class="inline">self.states</code>'s different meaning. Verified: identical state/transition sets before and after across multiple gripper counts and an adversarial filter; call counts collapsed from millions to the closed-form combinatorial floor. See <a href="#d3">§04.3</a>.</p>
+        </div>
+      </details>
+
+      <details class="bug">
+        <summary><span class="bug-title">Five stacked missing wall-clock bounds cause indefinite planning hangs</span><span class="badge pkg">long_tamp / hpp-core</span><span class="badge">critical</span></summary>
+        <div class="bug-body">
+          <p><strong>Symptom:</strong> a 13-phase sequential grasp task freezing 30–45+ minutes at a time, indistinguishable from an infinite loop.</p>
+          <p><strong>Cause:</strong> five independent bugs — a missing retry loop in <code class="inline">_plan_release_subphase()</code>; <code class="inline">generate_via_edge()</code> bounded only by attempt count, not time; <code class="inline">hpp-core::Astar::findPath()</code> with no bound at all; <code class="inline">continuousValidation::Progressive</code>'s step size shrinking toward zero near tangent collisions; <code class="inline">PathOptimizer/timeOut</code> existing but defaulting to infinity and never being set on the transition planner's inner problem.</p>
+          <p><strong>Fix:</strong> a real wall-clock bound at each site (retry loop, 30 s A* extraction, 15 s continuous-validation check every 1000 steps, 30 s optimizer timeout set on both the outer and inner problem). See <a href="#d4">§04.4</a>.</p>
+        </div>
+      </details>
+
+      <details class="bug">
+        <summary><span class="bug-title"><code class="inline">WaypointEdge::generateTargetConfig</code> returns uninitialized memory on failure</span><span class="badge pkg">hpp-manipulation</span><span class="badge">high</span></summary>
+        <div class="bug-body">
+          <p><strong>Symptom:</strong> a failed waypoint-edge projection writes partially-initialized buffer contents (values like <code class="inline">6.455e-310</code>) into the caller's output config anyway, then returns <code class="inline">false</code> — a retry loop that reuses that buffer as its next seed gets garbage-in, garbage-out.</p>
+          <p><strong>Fix proposed:</strong> work on a temporary buffer and only write to the output parameter on success. Still present in source as of the review in Appendix B — tracked there as <code class="inline">T01</code>.</p>
+        </div>
+      </details>
+
+      <details class="bug">
+        <summary><span class="bug-title">Motion quality: unset time-parameterization safety factor and wrong optimizer order</span><span class="badge pkg">long_tamp</span><span class="badge">medium</span></summary>
+        <div class="bug-body">
+          <p><strong>Symptom:</strong> paths executed at 100% of joint velocity limits by default (unsafe / hard to inspect), and the CORBA transit pipeline smoothed before shortcutting, letting the shortcut re-kink an already-smooth curve.</p>
+          <p><strong>Fix:</strong> tunable <code class="inline">time_param_safety</code> (default 0.95), reordered optimizer pipeline (shortcut, then smooth), cubic→quintic splines, disabled forced zero-velocity at state junctions. See <a href="#d6">§04.6</a>.</p>
+        </div>
+      </details>
+
+      <details class="bug">
+        <summary><span class="bug-title">PyHPP factory mode: three interacting <code class="inline">LockedJoint</code> bugs, 100% grasp-edge failure</span><span class="badge pkg">long_tamp / hpp-python</span><span class="badge">high</span></summary>
+        <div class="bug-body">
+          <p><strong>Symptom:</strong> <code class="inline">generate_via_edge()</code> failed 1000/1000 attempts for every grasp edge in PyHPP factory mode.</p>
+          <p><strong>Cause, three parts:</strong> (1) <code class="inline">Equality</code> instead of <code class="inline">EqualToZero</code> comparison type on a <code class="inline">LockedJoint</code> triggered a silent use-after-free in <code class="inline">ExplicitConstraintSet::rightHandSideFromInput()</code>, producing a fixed, repeatable-but-wrong residual; (2) the intermediate fix's <code class="inline">ComparisonTypes(nv)</code> call used a constructor signature that doesn't exist; (3) <code class="inline">factory.generate()</code> read the robot's current configuration to decide where to lock a no-contact object, but that configuration was still the default identity at the point the factory ran, locking every such object at the origin instead of its real starting pose.</p>
+          <p><strong>Fix:</strong> correct comparison-type construction, plus explicitly setting the robot's current configuration to <code class="inline">q_init</code> before <code class="inline">factory.generate()</code> runs.</p>
+        </div>
+      </details>
+
+      <details class="bug">
+        <summary><span class="bug-title"><code class="inline">ConstraintGraphFactory</code> back-reference cycle leaks ~235 MB per phase-graph build</span><span class="badge pkg">long_tamp</span><span class="badge">medium</span></summary>
+        <div class="bug-body">
+          <p><strong>Symptom:</strong> memory climbing steadily across a long sequence, worst on the phase-target lookahead (<a href="#d5">§04.5</a>), which issues up to 200 phase-graph builds per lookahead round.</p>
+          <p><strong>Cause:</strong> a retired <code class="inline">ConstraintGraphFactory</code> owns a <code class="inline">ConstraintFactory</code> that holds a back-reference to it — a two-object Python cycle, only ~200 objects, but it pins the entire C++ graph behind it. Clearing <code class="inline">self.factory</code> frees nothing; the ~235 MB stays unreachable until a generation-2 garbage collection happens to run, which Python does not guarantee promptly under steady allocation pressure.</p>
+          <p><strong>Fix:</strong> <code class="inline">GraphBuilder._break_factory_cycle()</code> explicitly cuts the back-reference at the end of every <code class="inline">build_phase_graph()</code> call, once the replacement graph is safely built — confirmed present at <code class="inline">src/long_tamp/planning/graph.py:1226</code>. Distinct from the algorithmic memoization fix in <a href="#d3">§04.3</a>: same subsystem, different bug class (Python refcounting vs. redundant recursion).</p>
+        </div>
+      </details>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="appendix-b">
+      <div class="sec-head"><span class="sec-no">08</span><h2>Appendix B — Codebase &amp; open items</h2></div>
+
+      <h3><span class="sub-no">08.1</span>Codebase, as measured</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Area</th><th class="num">Lines</th><th>Note</th></tr></thead>
+          <tbody>
+            <tr><td><code class="inline">src/long_tamp/</code>, total</td><td class="num">22,363</td><td>library code</td></tr>
+            <tr><td><code class="inline">tasks/grasp_sequence.py</code></td><td class="num">4,508</td><td>largest module — <code class="inline">GraspSequencePlanner</code> + <code class="inline">InteractiveGraspSequenceBuilder</code></td></tr>
+            <tr><td><code class="inline">planning/graph.py</code></td><td class="num">1,547</td><td></td></tr>
+            <tr><td><code class="inline">planning/constraints.py</code></td><td class="num">1,048</td><td></td></tr>
+            <tr><td><code class="inline">tasks/base.py</code></td><td class="num">967</td><td></td></tr>
+            <tr><td><code class="inline">visualization/viz.py</code></td><td class="num">942</td><td></td></tr>
+            <tr><td><code class="inline">script/</code>, total</td><td class="num">≈6,985</td><td>CLI entry points and worked examples, excluded from the library-level audit</td></tr>
+            <tr><td><code class="inline">tests/</code></td><td class="num">28 files</td><td><strong>118 pass · 0 fail · 16 skip</strong> — current baseline per <code class="inline">docs/usage/standalone-usage.md</code> §15. (204 passing, 7 pre-existing failures, was a mid-refactor snapshot in <code class="inline">docs/plans/refactor-codebase.md</code> — superseded, kept here only to show the count moved.)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout rust">
+        <div class="callout-label">Disclosed limitation</div>
+        <p>An independent code-review pass (<code class="inline">checkpoints/CODE_REVIEW_REPORT.md</code>) measured overall test coverage at <strong>14.2%</strong>, inverted relative to risk: <code class="inline">grasp_sequence.py</code> — the production planner — sat at <strong>5.3%</strong> at review time, versus 89.1% on the already-well-tested <code class="inline">path_recorder.py</code>. §04.10's refactor is what makes closing that gap tractable, not a claim that it's already closed.</p>
+      </div>
+
+      <h3><span class="sub-no">08.2</span>Open items from the last review pass</h3>
+      <p>Twelve findings, prioritized by severity × effort; not all are resolved as of this report. Included for completeness rather than omitted — a report that only lists fixed issues isn't a trustworthy account of where the codebase stands.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>#</th><th>Finding</th><th>Severity</th><th>Effort</th></tr></thead>
+          <tbody>
+            <tr><td class="num">T01</td><td><code class="inline">WaypointEdge</code> uninitialized output on failure (C++, upstream)</td><td>High</td><td>Small</td></tr>
+            <tr><td class="num">T02</td><td>Finite-value guard on generated configs bypassed unless <code class="inline">verbose=True</code></td><td>High</td><td>Small</td></tr>
+            <tr><td class="num">T03</td><td><code class="inline">concatenatePath</code> failure swallowed while still returning <code class="inline">success=True</code></td><td>High</td><td>Small</td></tr>
+            <tr><td class="num">T05</td><td>Package unimportable without <code class="inline">pyhpp</code>; orchestration-path test coverage</td><td>High</td><td>Medium</td></tr>
+            <tr><td class="num">T04</td><td><code class="inline">__all__</code> exports names that were never actually imported</td><td>Medium</td><td>Small</td></tr>
+            <tr><td class="num">T06</td><td>CORBA/PyHPP seed-preparation divergence (freeflyer DOF handling)</td><td>Medium</td><td>Medium</td></tr>
+            <tr><td class="num">T07</td><td>No viewer/server teardown — viser/gepetto/CORBA connections leak across repeated runs</td><td>Medium</td><td>Medium</td></tr>
+            <tr><td class="num">T08</td><td>96% method-name overlap between the two backends — copy-paste, not interface-driven</td><td>Medium</td><td>Med/Large</td></tr>
+            <tr><td class="num">T09</td><td>Waypoint-suffix naming hard-coded in 5+ files, including a fragile <code class="inline">[:-3]</code> slice</td><td>Medium</td><td>Medium</td></tr>
+            <tr><td class="num">T10</td><td>Shared mutable class-level defaults (latent, not yet triggered)</td><td>Low</td><td>Small</td></tr>
+            <tr><td class="num">T11</td><td>Split the <code class="inline">GraspSequencePlanner</code> god class — gated on T05 landing first</td><td>Medium</td><td>Large</td></tr>
+            <tr><td class="num">T12</td><td>Vendored <code class="inline">jrl-cmakemodules</code> copy under <code class="inline">cmake/</code>, unclear provenance</td><td>Low</td><td>Small</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="pill-row">
+        <span class="pill">T12 status: cmake/ still untracked in the working tree at time of writing</span>
+      </p>
+
+      <h3><span class="sub-no">08.3</span>Package metadata</h3>
+      <div class="tablewrap">
+        <table>
+          <tbody>
+            <tr><td>Package</td><td><code class="inline">long-tamp</code> 0.1.0</td></tr>
+            <tr><td>License</td><td>LGPL-3.0</td></tr>
+            <tr><td>Python</td><td>≥ 3.8</td></tr>
+            <tr><td>Hard runtime deps</td><td><code class="inline">numpy&lt;2</code>, <code class="inline">pyyaml</code>, <code class="inline">viser</code>, <code class="inline">trimesh</code>, <code class="inline">pycollada</code></td></tr>
+            <tr><td>Native deps (not on PyPI)</td><td><code class="inline">hpp-python</code>, <code class="inline">hpp-toppra</code>, <code class="inline">hpp-gepetto-viewer</code>, <code class="inline">hpp-manipulation-corba</code> (deprecated), <code class="inline">omniORBpy</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="foot">
+      Compiled from <code class="inline">long_tamp</code>'s own documentation set — <code class="inline">README.md</code>, <code class="inline">ARCHITECTURE.md</code>, <code class="inline">docs/features/</code>, <code class="inline">docs/bugs/</code>, <code class="inline">docs/plans/</code>, <code class="inline">docs/usage/</code>, <code class="inline">docs/hpp_python_interface/</code>, <code class="inline">checkpoints/CODE_REVIEW_REPORT.md</code> — and the repository's commit history (473 commits, initial commit 2025-11-20). No figures in this report were re-derived or estimated beyond what those sources state. Where two sources disagreed (§04.9, §08.1), the newer/more-authoritative one is used and the discrepancy is stated rather than silently resolved.
+    </div>
+
+  </main>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true, securityLevel: "loose" });
+</script>
+</body>
+</html>

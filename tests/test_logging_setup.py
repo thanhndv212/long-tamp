@@ -1,9 +1,9 @@
 """
-Unit tests for ``agimus_spacelab.logging.setup.configure_logging``.
+Unit tests for ``long_tamp.logging.setup.configure_logging``.
 
 These tests require no HPP backend — they only exercise the pure-Python
 logging infrastructure. Each test uses a fresh logger name (via
-``logging.getLogger("agimus_spacelab").manager.loggerDict`` cleanup) so
+``logging.getLogger("long_tamp").manager.loggerDict`` cleanup) so
 ``configure_logging``'s idempotent "skip if handlers already attached"
 behavior from an earlier test doesn't leak into the next one.
 """
@@ -14,15 +14,15 @@ import tempfile
 
 import pytest
 
-from agimus_spacelab.logging import configure_logging
+from long_tamp.logging import configure_logging
 
 
 @pytest.fixture(autouse=True)
-def _reset_agimus_spacelab_logger():
+def _reset_long_tamp_logger():
     """configure_logging() is idempotent (skips re-attaching handlers), so
     without this, whichever test runs first would pin the handler config
     for every test after it in the same process."""
-    logger = logging.getLogger("agimus_spacelab")
+    logger = logging.getLogger("long_tamp")
     saved_handlers = list(logger.handlers)
     saved_level = logger.level
     logger.handlers = []
@@ -78,7 +78,7 @@ class TestConfigureLoggingConsoleFileSplit:
             logger = configure_logging(
                 log_dir=tmp, run_id="r", console_level=logging.WARNING,
             )
-            probe = logging.getLogger("agimus_spacelab.some.module")
+            probe = logging.getLogger("long_tamp.some.module")
             probe.info("this should reach the file but not raise console level")
 
             log_path = os.path.join(tmp, "r.log")

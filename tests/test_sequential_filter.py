@@ -9,10 +9,10 @@ combinatorics from O(N!) to O(1) states per transition.
 import sys
 import os
 
-# Add agimus_spacelab to path
+# Add long_tamp to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from agimus_spacelab.planning.sequential_grasp_filter import (
+from long_tamp.planning.sequential_grasp_filter import (
     SequentialGraspFilter,
     grasps_dict_to_tuple,
     grasps_tuple_to_dict,

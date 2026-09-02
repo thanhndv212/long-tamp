@@ -3,10 +3,10 @@ Unit tests for the shared video-output-directory default, replacing the
 hardcoded personal path (``/home/dvtnguyen/devel/demos``) that was
 duplicated across 8 method signatures in 4 files.
 
-See docs/plans/refactor-codebase.md's cross-cutting "hardcoded personal
+See docs/legacy/plans/refactor-codebase.md's cross-cutting "hardcoded personal
 path default" note (fixed 2026-08-09).
 
-Importing agimus_spacelab requires pyhpp even though most of what's under
+Importing long_tamp requires pyhpp even though most of what's under
 test here has no HPP dependency itself (see that same doc's
 verification-model notes), so these tests must run inside the
 hpp-arm64 container.
@@ -15,11 +15,11 @@ hpp-arm64 container.
 import inspect
 from pathlib import Path
 
-from agimus_spacelab.backends.pyhpp import PyHPPBackend
-from agimus_spacelab.tasks.base import ManipulationTask
-from agimus_spacelab.tasks.grasp_sequence import GraspSequencePlanner
-from agimus_spacelab.visualization import default_video_output_dir
-from agimus_spacelab.visualization.video_recorder import (
+from long_tamp.backends.pyhpp import PyHPPBackend
+from long_tamp.tasks.base import ManipulationTask
+from long_tamp.tasks.grasp_sequence import GraspSequencePlanner
+from long_tamp.visualization import default_video_output_dir
+from long_tamp.visualization.video_recorder import (
     VideoRecorder,
     record_path_playback,
 )

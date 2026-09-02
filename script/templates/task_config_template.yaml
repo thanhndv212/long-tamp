@@ -6,7 +6,7 @@
 # 2. Fill in every  <PLACEHOLDER>  with your robot's values.
 # 3. In your task script, load it with YamlTaskLoader:
 #
-#       from agimus_spacelab.config.yaml_loader import YamlTaskLoader
+#       from long_tamp.config.yaml_loader import YamlTaskLoader
 #       _loader = YamlTaskLoader(Path(__file__).parent.parent / "config" / "my_robot_config.yaml")
 #
 # 4. Pass _loader.file_paths and _loader.joint_bounds_class to ManipulationTask.

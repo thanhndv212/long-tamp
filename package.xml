@@ -1,10 +1,10 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>agimus_spacelab</name>
+  <name>long_tamp</name>
   <version>0.1.0</version>
   <description>
-    Agimus Spacelab - A generalized manipulation planning framework
+    Long-TAMP - A generalized manipulation planning framework
     using the PyHPP backend for HPP-based manipulation tasks.
   </description>
   
@@ -13,9 +13,9 @@
   
   <license>LGPL-3.0</license>
   
-  <url type="website">https://gitlab.laas.fr/agimus-project/agimus_spacelab</url>
-  <url type="repository">https://gitlab.laas.fr/agimus-project/agimus_spacelab</url>
-  <url type="bugtracker">https://gitlab.laas.fr/agimus-project/agimus_spacelab/issues</url>
+  <url type="website">https://github.com/thanhndv212/long-tamp</url>
+  <url type="repository">https://github.com/thanhndv212/long-tamp</url>
+  <url type="bugtracker">https://github.com/thanhndv212/long-tamp/issues</url>
   
   <!-- Build tool dependencies -->
   <buildtool_depend>cmake</buildtool_depend>

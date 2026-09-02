@@ -1,12 +1,14 @@
-# Using `agimus_spacelab` with BehaviorTree.CPP (ROS-free)
+# Using `long_tamp` with BehaviorTree.CPP (ROS-free)
 
-A third way to drive `agimus_spacelab`, alongside the plain-Python API
-([`standalone-usage.md`](standalone-usage.md)) and the ROS 2 / DBT stack
-([`dbt-integration.md`](dbt-integration.md)): a standalone C++ executable that compiles a
+A second way to drive `long_tamp`, alongside the plain-Python API
+([`standalone-usage.md`](standalone-usage.md)): a standalone C++ executable that compiles a
 versioned task-plan IR into a BehaviorTree.CPP tree and drives HPP through an in-process
-CPython bridge. No ROS, no network boundary, no `libDBT.so`. It targets the same eventual
-consumer as the DBT layer — a mission executive — but keeps the whole call chain in one
-process and one language boundary (C++ ↔ embedded CPython) instead of crossing ROS 2.
+CPython bridge. No ROS, no network boundary. It targets a mission executive as its eventual
+consumer, but keeps the whole call chain in one process and one language boundary
+(C++ ↔ embedded CPython) rather than crossing a process/network boundary like a ROS 2
+integration would. (A ROS 2 / Dynamic-Behavior-Tree integration previously existed here —
+see [`../legacy/usage/dbt-integration.md`](../legacy/usage/dbt-integration.md) — but is tied
+to a proprietary mission executive and isn't part of this release.)
 
 This is also the intended landing spot for a **future** VLM/LLM planner: the IR, capability
 registry, validator, and compiler are the extension points a model would target. That
@@ -36,7 +38,7 @@ Embedded CPython bridge (PythonSession)
 Python TaskPlanningSession / HostSession (session.py, host.py)
     │
     ▼
-Your mission-specific adapter (own module, own factory in host.py) ──► agimus_spacelab / PyHPP
+Your mission-specific adapter (own module, own factory in host.py) ──► long_tamp / PyHPP
 ```
 
 The generic layer ships one adapter, `create_fake_session` (used for CTest
@@ -54,13 +56,13 @@ for the historical design record.
 
 | File | Role |
 |---|---|
-| `src/agimus_spacelab/tasks/task_planning/model.py` | `TaskPlan` — schema/semantic validation, canonical JSON, SHA-256 `plan_fingerprint` binding the plan *and* the capability registry snapshot |
-| `src/agimus_spacelab/tasks/task_planning/capabilities.py` | `CapabilityDescriptor` (policy: required params, `max_attempts`, `max_timeout`, `restartable`) and `CapabilityRegistry` (binds descriptors to trusted callables; `freeze()`s before execution) |
-| `src/agimus_spacelab/tasks/task_planning/compiler.py` | `compile_behavior_tree()` — deterministic, allowlisted-element IR→XML compiler; output carries its own `artifact_fingerprint` |
-| `src/agimus_spacelab/tasks/task_planning/session.py` | `TaskPlanningSession` — dispatches transactions/conditions through the frozen registry; freezes the registry on construction |
-| `src/agimus_spacelab/tasks/task_planning/host.py` | Allowlisted session factories the C++ host is permitted to call: `create_fake_session`, plus one per mission you add (§9) |
+| `src/long_tamp/tasks/task_planning/model.py` | `TaskPlan` — schema/semantic validation, canonical JSON, SHA-256 `plan_fingerprint` binding the plan *and* the capability registry snapshot |
+| `src/long_tamp/tasks/task_planning/capabilities.py` | `CapabilityDescriptor` (policy: required params, `max_attempts`, `max_timeout`, `restartable`) and `CapabilityRegistry` (binds descriptors to trusted callables; `freeze()`s before execution) |
+| `src/long_tamp/tasks/task_planning/compiler.py` | `compile_behavior_tree()` — deterministic, allowlisted-element IR→XML compiler; output carries its own `artifact_fingerprint` |
+| `src/long_tamp/tasks/task_planning/session.py` | `TaskPlanningSession` — dispatches transactions/conditions through the frozen registry; freezes the registry on construction |
+| `src/long_tamp/tasks/task_planning/host.py` | Allowlisted session factories the C++ host is permitted to call: `create_fake_session`, plus one per mission you add (§9) |
 | `examples/behaviortree/` | C++ host: `main.cpp` (CLI + allowlist), `python_session.{hpp,cpp}` (CPython bridge), `task_nodes.{hpp,cpp}` (generic BT node types) |
-| `src/agimus_spacelab/planning/path_recorder.py`, `path_io.py` | `PathRecorder` capture and `replay`/validation helpers a mission-specific session can reuse for checkpointing |
+| `src/long_tamp/planning/path_recorder.py`, `path_io.py` | `PathRecorder` capture and `replay`/validation helpers a mission-specific session can reuse for checkpointing |
 
 ## 3. Task Plan IR contract
 
@@ -118,7 +120,7 @@ attached.
 earlier version dispatched PyHPP calls from a `std::async` worker and crashed on the
 cross-thread GIL/HPP-state violation; there is no thread pool in the current design.
 
-**Exit codes** (also the contract `run_taskplan_bt_supervised.py` interprets):
+**Exit codes** (also the contract a process supervisor should interpret, per §9):
 
 | Code | Meaning | Retried by the supervisor? |
 |---|---|---|
@@ -191,19 +193,16 @@ without touching HPP at all.
    `allowed_factories` set in `examples/behaviortree/src/main.cpp` — a factory not on both
    allowlists (Python import path *and* C++ set) can never be reached from the host.
 
-## 10. Relationship to the DBT/ROS integration
+## 10. Design properties
 
-Both eventually call the same `agimus_spacelab` planning primitives, but the boundaries and
-guarantees differ:
-
-| | BehaviorTree.CPP (this doc) | DBT / ROS 2 |
-|---|---|---|
-| Process boundary | None — one process, embedded CPython | ROS 2 services/actions across processes |
-| Mission format | Versioned, validated JSON IR compiled deterministically to BT XML | Hand-authored Petri-net `<Mission>` XML wired to C++ callbacks |
-| Capability contract | Explicit `CapabilityDescriptor` registry, frozen before execution | Implicit — whatever the ROS service/action schema exposes |
-| Checkpointing | Built-in atomic checkpoint + fingerprint validation | None at this layer (`resume_sequence` is in-memory, process-lifetime only) |
-| Physical execution | None — plans/advances simulated HPP configuration only | Drives Gazebo/`ros2_control` through the mock hardware stack |
-| Model/LLM extension point | Yes (deferred) — IR/registry/validator are the intended target | Not designed for this |
-
-If you need physical robot execution today, that's the DBT/ROS 2 stack
-([`dbt-integration.md`](dbt-integration.md)), not this one.
+- **Process boundary**: none — one process, embedded CPython, no RPC.
+- **Mission format**: versioned, validated JSON IR compiled deterministically to BT XML —
+  not a hand-authored tree wired directly to C++ callbacks.
+- **Capability contract**: explicit `CapabilityDescriptor` registry, frozen before
+  execution — not implicit in whatever a service/action schema happens to expose.
+- **Checkpointing**: built-in atomic checkpoint + fingerprint validation (§8).
+- **Physical execution**: none — this host plans/advances simulated HPP configuration
+  only; driving physical robots or a simulator is a downstream execution bridge's job,
+  a separate package outside this library's planning-only scope.
+- **Model/LLM extension point**: yes (deferred) — the IR/registry/validator are the
+  intended target for a future model-proposed mission.

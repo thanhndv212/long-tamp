@@ -25,13 +25,13 @@ collision-retry redraw breaks the chain. They do not exercise
 (needs a real HPP graph/solver -- see test_lookahead_phase_target.py) or
 prove the hint actually fixes RS6 (see that same integration test).
 
-Importing agimus_spacelab requires pyhpp even though the method under test
+Importing long_tamp requires pyhpp even though the method under test
 has no HPP dependency itself, so these tests must run inside the
 hpp-arm64 container (same convention as test_grasp_sequence_logging.py /
 test_grasp_sequence_resume_state.py).
 """
 
-from agimus_spacelab.tasks.grasp_sequence import GraspSequencePlanner
+from long_tamp.tasks.grasp_sequence import GraspSequencePlanner
 
 
 class _FakePath:

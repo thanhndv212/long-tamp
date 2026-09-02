@@ -1,16 +1,16 @@
 # Bug Report: Unbounded Loops in HPP Planning/Optimization Cause Indefinite Hangs
 
-**Package**: agimus_spacelab / hpp-core / hpp-manipulation
+**Package**: long_tamp / hpp-core / hpp-manipulation
 **Component**: `GraspSequencePlanner._plan_release_subphase()`, `hpp-core::PathPlanner`,
 `hpp-core::continuousValidation::Progressive`, `hpp-core::PathOptimizer`
 (`RandomShortcut`, `SplineGradientBased`)
 **Severity**: Critical — long sequential grasp/release plans could hang indefinitely with
 no error, no timeout, and no way to distinguish "still working" from "will never return"
 **Affects**: Any multi-phase sequential grasp task (`GraspSequencePlanner`) with more than
-a few simultaneous grasps; observed on `script/spacelab/test_full_sequence.py`'s 13-phase
-SpaceLab assembly sequence, specifically the auto-release step ahead of phase 4
-(`frame_gripper` releasing `RS1` before grasping `RS6`) and recurring intermittently at
-later phases (6, 10) due to unseeded randomness
+a few simultaneous grasps; observed on a real 13-phase, multi-arm assembly sequence,
+specifically an auto-release step ahead of phase 4 (releasing one held part before
+grasping the next) and recurring intermittently at later phases (6, 10) due to unseeded
+randomness
 
 ---
 
@@ -19,7 +19,7 @@ later phases (6, 10) due to unseeded randomness
 A 13-phase sequential grasp-and-release task would occasionally freeze for 30–45+ minutes
 at a time with zero console output and no crash, indistinguishable from a true infinite
 loop. Root-caused to **five separate, independent bugs** stacked across the planning
-stack — one in `agimus_spacelab`'s own retry logic, and four in upstream `hpp-core`'s
+stack — one in `long_tamp`'s own retry logic, and four in upstream `hpp-core`'s
 motion-planning/optimization pipeline, each missing a wall-clock bound that every sibling
 algorithm in the same codebase already has. None of these are inherent to the planning
 problem's difficulty — the underlying task is solvable in seconds once each loop is
@@ -32,7 +32,7 @@ on one unlucky sample.
 
 ### Problem
 
-`GraspSequencePlanner._plan_release_subphase()` (`src/agimus_spacelab/tasks/grasp_sequence.py`)
+`GraspSequencePlanner._plan_release_subphase()` (`src/long_tamp/tasks/grasp_sequence.py`)
 plans the two waypoint edges of an auto-release ("grasped → pregrasp → free") in a single
 shot each. If `generate_via_edge()`'s underlying IK solver or `plan_transition_edge()`'s RRT
 search draws an unlucky random seed, the whole release attempt raises immediately — with no
@@ -49,7 +49,7 @@ to ever get a second chance at a luckier random seed.
 
 ### Root Cause
 
-`_plan_release_subphase()` (`src/agimus_spacelab/tasks/grasp_sequence.py:219`) called
+`_plan_release_subphase()` (`src/long_tamp/tasks/grasp_sequence.py:219`) called
 `generate_via_edge()`/`plan_transition_edge()` once per waypoint edge (`_21`, `_10`, and the
 direct-edge fallback) with no surrounding retry loop, unlike the main grasp-edge code path.
 
@@ -83,7 +83,7 @@ for _attempt_21 in range(self._MAX_COLLISION_RETRIES):
 
 (mirrored for `_10` and the direct-edge fallback)
 
-**Files changed**: `src/agimus_spacelab/tasks/grasp_sequence.py`
+**Files changed**: `src/long_tamp/tasks/grasp_sequence.py`
 
 **Verification**: With only this fix applied, the previously-stuck phase-4 release completed
 in ~20–25s (comparable to every other phase), across multiple full test runs.
@@ -94,7 +94,7 @@ in ~20–25s (comparable to every other phase), across multiple full test runs.
 
 ### Problem
 
-`generate_via_edge()` (`src/agimus_spacelab/planning/config.py`) shoots up to
+`generate_via_edge()` (`src/long_tamp/planning/config.py`) shoots up to
 `max_attempts` (1000) random configurations through HPP's Newton-Raphson constraint
 projector, bounded only by attempt *count*, never by wall-clock time. Each C++ solve is
 itself bounded (`graph.maxIterations()`, 10000 per attempt — see `graph.py`'s
@@ -123,7 +123,7 @@ for i in range(self.max_attempts):
     ...
 ```
 
-**Files changed**: `src/agimus_spacelab/planning/config.py`
+**Files changed**: `src/long_tamp/planning/config.py`
 
 **Note**: this alone is insufficient on its own — see Bugs 3–5, which are the calls that
 actually needed a Python-level timeout to have any effect. It's still valid defense in
@@ -250,7 +250,7 @@ while (finished < 2 && valid) {
 `PathOptimizer` already has a correctly-designed stopping mechanism:
 `shouldStop()` checks both `maxIterations_` and `timeOut_`, armed via `monitorExecution()`
 at the start of every `optimize()` call. But both default to infinity
-(`path-optimizer.cc:41-42`), and **nothing in `agimus_spacelab` ever set a finite value** —
+(`path-optimizer.cc:41-42`), and **nothing in `long_tamp` ever set a finite value** —
 so an optimizer that keeps finding genuine (if vanishingly small) cost improvements, or
 hits a pathological path geometry, had no wall-clock backstop at all. Traced via full
 `SplineGradientBased` iteration tracing: one call ran 5,560+ fast iterations (~4ms each,
@@ -281,7 +281,7 @@ except Exception as e:
     print(f"      [TP] ✗ PathOptimizer/timeOut on innerProblem failed: {e}")
 ```
 
-**Files changed**: `src/agimus_spacelab/backends/pyhpp.py`
+**Files changed**: `src/long_tamp/backends/pyhpp.py`
 (`_apply_transition_planner_defaults`)
 
 ---
@@ -300,28 +300,22 @@ auto-resume instead of hangs.
 
 ## Reproduction
 
-```bash
-# Fast, isolated repro of the hardest phases using a checkpoint (see below),
-# instead of the ~20-25 min needed to run phases 1-11 first:
-cd script/spacelab
-AGIMUS_CHECKPOINT_DIR=/tmp/agimus_checkpoints python3 test_full_sequence.py --no-viz  # once, to populate checkpoints
-python3 -u repro_phase_range.py --start 11 --end 12 --checkpoint-dir /tmp/agimus_checkpoints
-```
-
-`repro_phase_range.py` (new, `script/spacelab/repro_phase_range.py`) replays any phase
-range directly from a `GraspSequencePlanner.plan_sequence()`/`resume_sequence()` checkpoint
-(dumped via `AGIMUS_CHECKPOINT_DIR`), seeding grasp state and the true scene-initial
-configuration (`q_scene_init`, a new optional parameter on `plan_sequence()`) without
-re-running earlier phases.
+Reproducing this class of bug on a long sequence is expensive if every attempt replans
+from phase 1. The pattern that made it tractable: checkpoint grasp state and the true
+scene-initial configuration (`q_scene_init`, an optional parameter on `plan_sequence()`)
+after each phase, then write a small script that seeds a fresh
+`GraspSequencePlanner`/`resume_sequence()` call directly from a saved checkpoint and
+replays only the phase range that reproduces the hang — instead of the full runtime
+needed to reach it from phase 1 each time.
 
 ---
 
 ## References
 
-- `src/agimus_spacelab/tasks/grasp_sequence.py` — `_plan_release_subphase()`,
+- `src/long_tamp/tasks/grasp_sequence.py` — `_plan_release_subphase()`,
   `_MAX_COLLISION_RETRIES`
-- `src/agimus_spacelab/planning/config.py` — `ConfigGenerator.generate_via_edge()`
-- `src/agimus_spacelab/backends/pyhpp.py` — `_apply_transition_planner_defaults()`,
+- `src/long_tamp/planning/config.py` — `ConfigGenerator.generate_via_edge()`
+- `src/long_tamp/backends/pyhpp.py` — `_apply_transition_planner_defaults()`,
   `plan_transition_edge()`
 - `hpp-core/src/path-planner.cc` — `PathPlanner::solve()`, `tryConnectInitAndGoals()`
 - `hpp-core/src/astar.hh` — `Astar::findPath()`

@@ -1,6 +1,6 @@
 import pytest
 
-from agimus_spacelab.tasks.task_planning import (
+from long_tamp.tasks.task_planning import (
     CapabilityDescriptor,
     CapabilityRegistry,
     PlanValidationError,

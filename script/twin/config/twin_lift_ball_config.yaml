@@ -2,7 +2,7 @@
 # Two independent Franka Panda arms simultaneously grasp a ball at two
 # handles and lift it together — TWIN-benchmark-style bimanual task (see
 # PerAct2/TWIN, research-vault/papers/twin-benchmark.md), ported onto
-# agimus_spacelab's HPP-based grasp/motion planner rather than TWIN's own
+# long_tamp's HPP-based grasp/motion planner rather than TWIN's own
 # RLBench simulator.
 #
 # Panda (with its real 2-DOF articulated parallel gripper, panda_finger_
@@ -27,7 +27,7 @@
 # one-time dev-environment setup (`AMENT_PREFIX_PATH` for package://
 # resolution).
 #
-# Consumed by: YamlTaskLoader (src/agimus_spacelab/config/yaml_loader.py)
+# Consumed by: YamlTaskLoader (src/long_tamp/config/yaml_loader.py)
 
 task: twin_lift_ball
 

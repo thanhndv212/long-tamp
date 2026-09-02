@@ -14,12 +14,12 @@ phase (``retry_from_edge`` is 0 or -1, and both resolve to
 ``start_edge_idx = 0`` in _run_phase_loop), so the call's start config is
 the correct input for the edge being replanned.
 
-Importing agimus_spacelab requires pyhpp, so these run in the hpp-arm64
+Importing long_tamp requires pyhpp, so these run in the hpp-arm64
 container.
 """
 
-from agimus_spacelab.planning.grasp_state import GraspStateTracker
-from agimus_spacelab.tasks.grasp_sequence import GraspSequencePlanner
+from long_tamp.planning.grasp_state import GraspStateTracker
+from long_tamp.tasks.grasp_sequence import GraspSequencePlanner
 
 BLOCK_ENTRY = [0.0, 0.0]
 DRIFTED = [9.0, 9.0]

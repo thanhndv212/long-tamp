@@ -1,7 +1,7 @@
 import json
 import xml.etree.ElementTree as ET
 
-from agimus_spacelab.tasks.task_planning.host import create_fake_session
+from long_tamp.tasks.task_planning.host import create_fake_session
 
 
 def test_fake_host_session_exposes_json_contract_and_compiled_tree():
