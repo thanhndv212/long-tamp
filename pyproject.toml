@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Long-TAMP - Manipulation Planning Framework"
 readme = "README.md"
 requires-python = ">=3.8"
-license = {text = "LGPL-3.0"}
+license = {text = "MIT"}
 authors = [
     {name = "Thanh Nguyen", email = "dvtnguyen@laas.fr"}
 ]
@@ -19,7 +19,7 @@ keywords = ["robotics", "manipulation", "motion-planning", "hpp", "agimus"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",

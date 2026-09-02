@@ -31,7 +31,7 @@ Advanced Usage:
 __version__ = "0.1.0"
 __author__ = "Thanh Nguyen"
 __email__ = "dvtnguyen@laas.fr"
-__license__ = "LGPL-3.0"
+__license__ = "MIT"
 
 # Import from new module structure
 from .backends import (

@@ -2,10 +2,8 @@
 # Author: Thanh Nguyen
 #
 # This file is part of long-tamp.
-# long-tamp is free software: you can redistribute it
-# and/or modify it under the terms of the GNU Lesser General Public
-# License as published by the Free Software Foundation, either version
-# 3 of the License, or (at your option) any later version.
+# long-tamp is free software: you can redistribute it and/or modify it
+# under the terms of the MIT License. See the LICENSE file for details.
 
 cmake_minimum_required(VERSION 3.22)
 

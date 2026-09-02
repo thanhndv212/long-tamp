@@ -150,7 +150,7 @@ Python `logging` hierarchy — see [`docs/usage/standalone-usage.md`](docs/usage
 
 ## License
 
-LGPL-3.0 - See [LICENSE](LICENSE) file
+MIT - See [LICENSE](LICENSE) file
 
 
 ---
