@@ -53,6 +53,7 @@ plugins:
 
 nav:
   - Home: index.md
+  - Installation: INSTALL.md
   - Architecture: architecture.md
   - Usage:
       - Overview: usage/README.md

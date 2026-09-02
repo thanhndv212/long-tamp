@@ -2,18 +2,15 @@
 
 Long-horizon, multi-arm task-and-motion planning (TAMP) for manipulation, built on HPP (Humanoid Path Planner).
 
-`long_tamp` plans **long, multi-step manipulation sequences** for **several robot arms working together** on **many movable objects** in a single shared scene. It builds on HPP's constraint-graph manipulation planning and adds a task/orchestration layer that turns a high-level goal (grip this, move that, hand it over, place it) into a single concatenated, collision-free motion for the whole multi-robot system. See `script/twin/` for a runnable bimanual example.
+`long_tamp` plans **long, multi-step manipulation sequences** for **several robot arms** on **many movable objects** in a shared scene. **Motion planning** is HPP's constraint-graph planner, driven through a plain-Python task API. **Task planning** is a declarative task plan compiled to **BehaviorTree.CPP**, for standalone, ROS-free mission execution (see *Task Planning* below).
 
 ## Capabilities
 
-- **Long-horizon sequence planning.** The `GraspSequencePlanner` chains an arbitrary number of grasp/place/hand-over phases into one continuous plan. Each phase gets a *minimal, phase-local* constraint graph and the paths are concatenated across phases, so planning cost grows **linearly O(N)** with the number of grasps instead of combinatorially **O(N!)** — long assembly missions stay tractable.
-- **Multiple robots (multi-arm & collaborative).** The scene composes several arms into one planning model (a composite `Device` spanning all of them) that plan in a shared, mutually-collision-aware world. Arms can act independently, cooperate on the same object, or hand objects off between each other.
-- **Multiple objects.** Any number of free-flying objects and tools coexist in the scene. Grasp legality is data-driven via `VALID_PAIRS` (which gripper may grasp which handle), so adding objects/tools is a config change, not a code change.
-- **Constraint-graph manipulation planning.** Grasp, placement, and transition constraints are generated from a declarative `ManipulationConfig`; the constraint graph and its edges are built automatically per phase.
-- **Reproducibility, introspection & crash recovery.** Structured, crash-safe JSONL run logging captures every phase/edge attempt for replay, debugging, and auditing (see *Run Logging*); a separate path-capture mechanism (`PathRecorder`) samples every planned/executed path to disk as it happens, so a run can be continuity-checked or replayed in a fresh process after a crash, and long missions can checkpoint and resume rather than replan from the start (see [`docs/usage/standalone-usage.md`](docs/usage/standalone-usage.md) §§8–10).
-- **Modular architecture.** Reusable building blocks — `SceneBuilder`, `ConstraintBuilder`, `ConfigGenerator`, `ManipulationTask`, `create_planner()` — compose into custom tasks.
+- **Long-horizon sequence planning.** `GraspSequencePlanner` chains an arbitrary number of grasp/place/hand-over phases, each with its own minimal phase-local constraint graph, so planning cost grows **linearly (O(N))** with the number of grasps instead of combinatorially (**O(N!)**).
+- **Multiple robots & objects.** The scene composes several arms into one shared, mutually-collision-aware planning model — able to act independently, cooperate, or hand off objects — alongside any number of free-flying objects/tools, with grasp legality data-driven via `VALID_PAIRS` so adding one is a config change.
+- **Reproducibility, introspection & crash recovery.** Crash-safe JSONL run logging plus a path-capture mechanism (`PathRecorder`) record every phase/edge/path so a run can be replayed, continuity-checked, and checkpointed/resumed rather than replanned from scratch.
+- **Declarative task planning → BehaviorTree.CPP.** A versioned, capability-checked task plan (`tasks/task_planning/`) compiles deterministically to a BehaviorTree.CPP tree, run by a standalone C++ host through an embedded-CPython bridge with no ROS and no network hop (see *Task Planning* below).
 - **Scene visualization.** Interactive 3D viewers: browser-based **viser** (default, no X11) or **gepetto-viewer** (Qt).
-- **PyHPP backend**: in-process bindings via `hpp-python`.
 
 ## Installation
 
@@ -113,6 +110,28 @@ maintained source — it's dated at the top and covers dependency direction and 
 class does in more depth than fits here. If the two ever disagree, trust `ARCHITECTURE.md`
 and update this copy to match.
 
+## Task Planning (BehaviorTree.CPP)
+
+Alongside the plain-Python `ManipulationTask` API, `tasks/task_planning/` is a second,
+declarative entry point: a versioned JSON **TaskPlan IR** (`sequence` / `fallback` / `retry` /
+`condition` / `operation` / `transaction` nodes), validated against a `CapabilityRegistry`,
+compiles deterministically to a **BehaviorTree.CPP** tree. A standalone C++ host
+(`examples/behaviortree/`) runs that tree via an in-process, embedded-CPython bridge — one
+process, no ROS, no network hop. It ships with built-in checkpoint/resume and path-capture
+validation for long, restartable missions, and is the intended integration point for a future
+model-proposed (VLM/LLM) plan.
+
+| Stage | File |
+|-------|------|
+| IR validation & fingerprinting | `tasks/task_planning/model.py` (`TaskPlan`) |
+| Capability policy | `tasks/task_planning/capabilities.py` (`CapabilityRegistry`) |
+| IR → BT XML compiler | `tasks/task_planning/compiler.py` |
+| C++ host + CPython bridge | `examples/behaviortree/` |
+
+Build with `-DBUILD_BEHAVIORTREE_EXAMPLES=ON`. Full IR schema, the compiler's node mapping,
+build/run steps, checkpointing, and how to add a mission or capability:
+[`docs/usage/behaviortree-integration.md`](docs/usage/behaviortree-integration.md).
+
 ## Run Logging
 
 `long_tamp` includes a structured run logger that writes a crash-safe JSONL event
@@ -141,6 +160,7 @@ Python `logging` hierarchy — see [`docs/usage/standalone-usage.md`](docs/usage
 
 ## Documentation
 
+- **Installation**: [`docs/INSTALL.md`](docs/INSTALL.md) — robotpkg vs. source build, pip/CMake install paths, optional extras, backend detection.
 - **Architecture**: [`ARCHITECTURE.md`](ARCHITECTURE.md) — module layering, dependency direction, data flow. Dated at the top; check it before trusting a claim about what exists.
 - **Usage guide (living reference)**: [`docs/usage/standalone-usage.md`](docs/usage/standalone-usage.md) — writing a task, multi-phase sequences, resume/replay/checkpoints, backends, example scripts.
 - **Development report**: [`docs/legacy/report/development-report.md`](docs/legacy/report/development-report.md) — *why* the framework is built this way: architecture decisions vs. bare HPP, measured before/after numbers, project timeline, and a bugs-found appendix. A point-in-time report, not a living reference.
@@ -155,4 +175,4 @@ MIT - See [LICENSE](LICENSE) file
 
 ---
 
-**Last Updated**: 2026-08-18
+**Last Updated**: 2026-09-02
