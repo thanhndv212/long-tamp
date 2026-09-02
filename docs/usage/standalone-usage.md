@@ -44,7 +44,7 @@ everything above it is backend-agnostic.
 
 ## 3. Install (summary)
 
-Full instructions with troubleshooting are in the root [`README.md`](../../README.md). Short
+Full instructions with troubleshooting are in [`docs/INSTALL.md`](../INSTALL.md). Short
 version:
 
 1. **HPP native bindings first** (not on PyPI). The default PyHPP backend needs the
