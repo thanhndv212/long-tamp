@@ -1,9 +1,9 @@
 # CI for long_tamp.
 #
-# NOTE: the test suite (tests/) cannot run on a plain GitHub-hosted runner — it imports
-# pinocchio / pyhpp, which are HPP native bindings not available on PyPI. A real test job
-# needs an HPP-stack image (source-built HPP) pulled into the job; add it here once one is
-# published somewhere a hosted runner can reach:
+# NOTE: the full test suite (tests/) needs the HPP native bindings (pyhpp), which are not
+# on PyPI, so it still can't run end-to-end on a plain GitHub-hosted runner. A real
+# full-suite job needs an HPP-stack image (source-built HPP) pulled into the job; add it
+# here once one is published somewhere a hosted runner can reach:
 #
 #   test:
 #     runs-on: ubuntu-latest
@@ -13,8 +13,12 @@
 #       - run: pip install --no-deps -e .
 #       - run: python -m pytest tests/ -v
 #
-# For now CI does lint only, which runs anywhere. Mirrors agimus_spacelab's
-# .gitlab-ci.yml (same split: enforcing F-codes + format check, advisory full style set).
+# The `test-standalone` job below covers what *is* runnable on a plain hosted runner: the
+# `[standalone]` extra (pinocchio from PyPI, no pyhpp) plus the full test suite, which
+# self-skips every pyhpp-dependent test via existing `HAS_PYHPP`/`check_backend` guards
+# rather than failing to collect — `import long_tamp` itself no longer requires pyhpp.
+# Mirrors agimus_spacelab's .gitlab-ci.yml for the lint jobs (same split: enforcing F-codes
+# + format check, advisory full style set).
 
 name: lint
 
@@ -51,3 +55,19 @@ jobs:
       # Burn it down, then fold rules into the enforcing `lint` job.
       - run: ruff check src
         continue-on-error: true
+
+  test-standalone:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # No HPP native bindings anywhere in this job — installs pinocchio from PyPI
+      # instead (the [standalone] extra), the same environment shape a first-time
+      # PyPI user gets. Exercises that `import long_tamp` and the pure-Python test
+      # subset work with zero HPP stack present; pyhpp-dependent tests self-skip.
+      - run: pip install --upgrade pip && pip install -e ".[standalone,dev]"
+      - run: python -c "import long_tamp; print(long_tamp.get_available_backends())"
+      - run: python -m pytest tests/ -q
+      - run: python script/validate_standalone_install.py

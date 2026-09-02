@@ -53,9 +53,23 @@ Example:
 from functools import lru_cache
 from typing import Iterable, Optional, Sequence, Tuple
 
-from pyhpp.manipulation.constraint_graph_factory import ConstraintGraphFactory
-
 from long_tamp.logging import get_logger
+
+# `ConstraintGraphFactory` (the base class SequentialConstraintGraphFactory
+# below extends) comes from the HPP native bindings, which are not on PyPI
+# and may be absent (e.g. a `pip install ".[standalone]"` environment with no
+# HPP stack). Guard it so importing this module — and everything upstream of
+# it, up to `import long_tamp` itself — doesn't hard-fail; only instantiating
+# SequentialConstraintGraphFactory without pyhpp does.
+try:
+    from pyhpp.manipulation.constraint_graph_factory import ConstraintGraphFactory
+
+    HAS_PYHPP = True
+    PYHPP_IMPORT_ERROR = None
+except ImportError as _e:
+    HAS_PYHPP = False
+    PYHPP_IMPORT_ERROR = _e
+    ConstraintGraphFactory = object
 
 from .sequential_grasp_filter import (
     SequentialGraspFilter,
@@ -235,6 +249,16 @@ class SequentialConstraintGraphFactory(PrunedRecursionMixin, ConstraintGraphFact
             Call setGrippers() and setObjects() after initialization to
             populate gripper/handle name lists needed by filters.
         """
+        if not HAS_PYHPP:
+            detail = (
+                f" (underlying error: {PYHPP_IMPORT_ERROR})"
+                if PYHPP_IMPORT_ERROR is not None
+                else ""
+            )
+            raise ImportError(
+                "SequentialConstraintGraphFactory requires pyhpp (HPP native "
+                "bindings), which is not installed." + detail
+            )
         super().__init__(graph)
 
         self.current_grasps_tuple = current_grasps
