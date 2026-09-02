@@ -46,9 +46,7 @@ def get_backend(name: str = "auto"):
     """
     if name in ("auto", "pyhpp"):
         if not HAS_PYHPP:
-            raise ImportError(
-                "PyHPP backend not available. Please install hpp-python."
-            )
+            raise ImportError("PyHPP backend not available. Please install hpp-python.")
         return PyHPPBackend
     else:
         raise ValueError(f"Unknown backend: {name}")

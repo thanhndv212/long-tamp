@@ -260,9 +260,7 @@ class GraphBuilder:
             )
         else:
             # No constraints to add (free motion edge)
-            logger.info(
-                "✓ No constraints added to edge '%s' (free motion)", edge_name
-            )
+            logger.info("✓ No constraints added to edge '%s' (free motion)", edge_name)
 
     def add_global_constraints(
         self,

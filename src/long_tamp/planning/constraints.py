@@ -476,9 +476,7 @@ class ConstraintBuilder:
                 locked = LockedJoint(robot, jn, values, comp)
                 locked_constraints.append(locked)
                 frozen_names.append(jn)
-                logger.debug(
-                    "✓ Locked joint (PyHPP): %s (nq=%d, nv=%d)", jn, size, nv
-                )
+                logger.debug("✓ Locked joint (PyHPP): %s (nq=%d, nv=%d)", jn, size, nv)
             except Exception as e:
                 logger.warning("Failed to lock %s: %s", jn, e)
 

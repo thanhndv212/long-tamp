@@ -3132,9 +3132,11 @@ class GraspSequencePlanner:
                         attempt + 1,
                         self._MAX_COLLISION_RETRIES,
                         e,
-                        ", regenerating target"
-                        if attempt < self._MAX_COLLISION_RETRIES - 1
-                        else "",
+                        (
+                            ", regenerating target"
+                            if attempt < self._MAX_COLLISION_RETRIES - 1
+                            else ""
+                        ),
                     )
                 if attempt < self._MAX_COLLISION_RETRIES - 1:
                     try:
@@ -3381,9 +3383,7 @@ class GraspSequencePlanner:
         self.phase_results.append(phase_result)
 
         if verbose:
-            logger.info(
-                "✓ plan_loop('%s') succeeded (%.2fs)", gripper, edge_total_time
-            )
+            logger.info("✓ plan_loop('%s') succeeded (%.2fs)", gripper, edge_total_time)
 
         return {
             "success": True,
