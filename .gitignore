@@ -38,8 +38,10 @@ env/
 # MkDocs
 site/
 
-# IDEs
-.github/
+# IDEs / local AI-tool config -- but keep .github/workflows/ (real CI, must be tracked
+# for GitHub Actions to run it).
+.github/*
+!.github/workflows/
 .vscode/
 .idea/
 *.swp

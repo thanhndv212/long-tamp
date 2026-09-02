@@ -1,0 +1,53 @@
+# CI for long_tamp.
+#
+# NOTE: the test suite (tests/) cannot run on a plain GitHub-hosted runner — it imports
+# pinocchio / pyhpp, which are HPP native bindings not available on PyPI. A real test job
+# needs an HPP-stack image (source-built HPP) pulled into the job; add it here once one is
+# published somewhere a hosted runner can reach:
+#
+#   test:
+#     runs-on: ubuntu-latest
+#     container: <registry>/hpp-agimus:<tag>
+#     steps:
+#       - uses: actions/checkout@v4
+#       - run: pip install --no-deps -e .
+#       - run: python -m pytest tests/ -v
+#
+# For now CI does lint only, which runs anywhere. Mirrors agimus_spacelab's
+# .gitlab-ci.yml (same split: enforcing F-codes + format check, advisory full style set).
+
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --upgrade pip && pip install ruff black
+      # Enforcing: real errors (pyflakes F-codes: undefined/unused names, etc.) and
+      # formatting. These are kept clean in the tree, so a failure here is a genuine
+      # regression and blocks the workflow.
+      - run: ruff check --select F src
+      - run: black --check src
+
+  lint-style:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --upgrade pip && pip install ruff
+      # Advisory: the full ruff style set still carries debt (RUF012 mutable class
+      # defaults, RUF013 implicit-optional, ambiguous unicode, …). Reported, not blocking.
+      # Burn it down, then fold rules into the enforcing `lint` job.
+      - run: ruff check src
+        continue-on-error: true
