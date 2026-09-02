@@ -69,8 +69,8 @@ code is put together*, not how to deploy it.
 │  Everything above this line is backend-blind.                      │
 └────────────────────────────────────────────────────────────────┘
 
-  config/  — declarative task configuration (BaseTaskConfig, YamlTaskLoader,
-             RuleGenerator) consumed by tasks/ and planning/
+  config/  — declarative task configuration (BaseTaskConfig, YamlTaskLoader)
+             consumed by tasks/ and planning/
   logging/ — RunLogger + JSONL event schema, cross-cutting, used by tasks/
   visualization/ — constraint-graph diagrams, handle/gripper frame display,
              video recording; cross-cutting, used by tasks/ and scripts
@@ -85,7 +85,7 @@ flowchart TB
     planning["planning/<br/>SceneBuilder, ConstraintBuilder, GraphBuilder,<br/>ConfigGenerator, GraspStateTracker,<br/>SequentialConstraintGraphFactory,<br/>SequentialGraspFilter, path_io,<br/>path_recorder, path_replay"]
     backends["backends/<br/>BackendBase (ABC) → PyHPPBackend<br/>only layer importing pyhpp.*"]
 
-    config["config/<br/>BaseTaskConfig, YamlTaskLoader, RuleGenerator"]
+    config["config/<br/>BaseTaskConfig, YamlTaskLoader"]
     logging_["logging/<br/>RunLogger, JSONL event schema"]
     viz["visualization/<br/>graph diagrams, frame display, video"]
     utils["utils/<br/>transforms, interactive menus"]
@@ -264,9 +264,6 @@ same runtime shape consumed by `SceneBuilder`/`ManipulationTask`:
   `script/templates/` for the copy-paste starting point and
   `script/twin/config/twin_lift_ball_config.yaml` for a real-world
   example.
-- **`RuleGenerator`** (`rules.py`) — generates constraint-graph factory
-  rules (grasp rules, sequential rules, priority rules) from a config
-  object, used when wiring a `ConstraintGraphFactory`.
 
 ## Cross-cutting layers
 

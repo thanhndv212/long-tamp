@@ -58,7 +58,7 @@ flowchart TB
     planning["planning/<br/>SceneBuilder, ConstraintBuilder, GraphBuilder,<br/>ConfigGenerator, GraspStateTracker,<br/>SequentialConstraintGraphFactory,<br/>SequentialGraspFilter, path_io,<br/>path_recorder, path_replay"]
     backends["backends/<br/>BackendBase (ABC) → PyHPPBackend<br/>only layer importing pyhpp.*"]
 
-    config["config/<br/>BaseTaskConfig, YamlTaskLoader, RuleGenerator"]
+    config["config/<br/>BaseTaskConfig, YamlTaskLoader"]
     logging_["logging/<br/>RunLogger, JSONL event schema"]
     viz["visualization/<br/>graph diagrams, frame display, video"]
     utils["utils/<br/>transforms, interactive menus"]
