@@ -137,6 +137,13 @@ COLLISION_EXCLUSIONS: List[Tuple[str, str]] = [
     # shoulder_lift_joint, so the exclusion above never covered it.
     ("ur10_left/pedestal", "ur10_left/elbow_joint"),
     ("ur10_right/pedestal", "ur10_right/elbow_joint"),
+    # Same story, another link further down the chain: random_config's
+    # per-attempt failure tally (long_tamp.backends.pyhpp) surfaced
+    # "pedestal_0 and wrist_1_link_0" as a dominant failure reason
+    # (78/1000 in one batch) — wrist_1_link is attached to wrist_1_joint,
+    # still a different joint than the two exclusions above cover.
+    ("ur10_left/pedestal", "ur10_left/wrist_1_joint"),
+    ("ur10_right/pedestal", "ur10_right/wrist_1_joint"),
 ]
 
 # Pick up each leg, let it settle onto a table socket, release; alternating
