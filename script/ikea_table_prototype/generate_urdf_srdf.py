@@ -16,14 +16,21 @@ this example doesn't have — a single generic Robotiq gripper does all the
 grasping, and the leg-into-table mate is a plain placement constraint, the
 same mechanism the ball uses to rest on the ground.
 
-Visual geometry is a plain box (same as collision), not the real vendored
-STL meshes — those bake in the actual IKEA LACK table's screw-hole/
-dowel-hole surface detail, which rendered visibly and wasn't wanted even
-for local prototyping (see URDF_TEMPLATE's own comment). No <mesh
-filename> anywhere in the generated output means none of the earlier
-"regenerate per environment, absolute mesh paths aren't portable" caveat
-applies to *these* files anymore — it still applies to the UR10/Robotiq
-arm URDFs elsewhere in this directory, which do reference real meshes.
+Visual geometry references generate_hole_peg_meshes.py's output — a
+box-with-holes table mesh and a box-with-peg leg mesh — not the real
+vendored STL meshes. Those bake in the actual IKEA LACK table's real
+screw-hole/dowel-hole surface detail, which rendered visibly and wasn't
+wanted even for local prototyping; the generated meshes give a genuine
+recessed hole / protruding peg instead, built fresh via trimesh boolean
+ops on the same box dimensions already used for collision, not derived
+from the real mesh in any way. Collision stays the plain convex box (see
+URDF_TEMPLATE's own comment for why). Run generate_hole_peg_meshes.py
+before this script.
+
+Mesh paths ARE absolute again here (unlike the brief plain-box-only
+version of this file), so the earlier "regenerate per environment"
+caveat is back in play for these two objects too, same as the
+UR10/Robotiq arm URDFs elsewhere in this directory.
 
 Output is committed on this local-only branch for convenience, same as
 everything else here — see ../README.md.
@@ -33,6 +40,11 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 GEN_DIR = HERE / "generated"
+# Run generate_hole_peg_meshes.py first — authored directly in meters
+# (matching LEG_HALF_EXTENT/TABLE_HALF_EXTENT below), so no <mesh scale>
+# is needed (avoids the pyhpp_viser bug documented in
+# rescale_robotiq_meshes.py's / rescale_ikea_meshes.py's docstrings).
+MESH_GENERATED_DIR = HERE / "assets" / "meshes_generated"
 
 # (name, mesh file, world pos in the reference MJCF, half-extent collision
 #  box, local-frame top connection-site z, local-frame corner half-extents)
@@ -61,13 +73,15 @@ URDF_TEMPLATE = """<?xml version="1.0"?>
   dimensions read from the vendored reference MJCF (LACK table,
   originally from clvrai/furniture, itself real IKEA product geometry).
 
-  Visual geometry is the same plain box as collision, not the real
-  {mesh_path_basename} mesh — that mesh bakes in the real IKEA table's
-  actual screw-hole/dowel-hole surface detail, which rendered visibly and
-  wasn't wanted even for local prototyping. The vendored mesh file itself
-  is untouched (still in assets/meshes*/, referenced by nothing now) in
-  case a future pass wants it back for something other than direct
-  display.
+  Visual geometry is {visual_mesh_basename} — a fresh, programmatically
+  generated box-with-holes/box-with-peg mesh (see
+  generate_hole_peg_meshes.py; NOT the real vendored IKEA STL, which
+  bakes in the actual product's screw-hole surface detail and wasn't
+  wanted even for local prototyping). Collision stays the plain convex
+  box below — HPP-FCL's narrow-phase checking wants convex shapes, and
+  the hole/peg mesh isn't; visual/collision not matching exactly is
+  standard practice (detailed visual mesh, simple convex collision
+  proxy).
 -->
 <robot name="{name}">
   <link name="base_link">
@@ -79,7 +93,7 @@ URDF_TEMPLATE = """<?xml version="1.0"?>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <box size="{box_size}"/>
+        <mesh filename="{visual_mesh_path}"/>
       </geometry>
       <material name="light_wood">
         <color rgba="0.82 0.71 0.55 1.0"/>
@@ -163,6 +177,11 @@ def write(path: Path, content: str) -> None:
 def main() -> None:
     GEN_DIR.mkdir(exist_ok=True)
 
+    leg_peg_mesh_path = str((MESH_GENERATED_DIR / "leg_with_peg.stl").resolve())
+    table_holes_mesh_path = str(
+        (MESH_GENERATED_DIR / "table_with_holes.stl").resolve()
+    )
+
     lx, ly, lz = LEG_HALF_EXTENT
     leg_box_size = f"{2*lx} {2*ly} {2*lz}"
     leg_mass = "0.3"
@@ -172,7 +191,8 @@ def main() -> None:
         urdf = URDF_TEMPLATE.format(
             name=name,
             mass=leg_mass,
-            mesh_path_basename=leg["mesh"],
+            visual_mesh_basename="leg_with_peg.stl",
+            visual_mesh_path=leg_peg_mesh_path,
             box_size=leg_box_size,
         )
         write(GEN_DIR / f"{name}.urdf", urdf)
@@ -190,7 +210,8 @@ def main() -> None:
     table_urdf = URDF_TEMPLATE.format(
         name="table",
         mass="2.0",
-        mesh_path_basename="table.stl",
+        visual_mesh_basename="table_with_holes.stl",
+        visual_mesh_path=table_holes_mesh_path,
         box_size=table_box_size,
     )
     write(GEN_DIR / "table.urdf", table_urdf)

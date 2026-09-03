@@ -5,13 +5,15 @@
   dimensions read from the vendored reference MJCF (LACK table,
   originally from clvrai/furniture, itself real IKEA product geometry).
 
-  Visual geometry is the same plain box as collision, not the real
-  leg1.stl mesh — that mesh bakes in the real IKEA table's
-  actual screw-hole/dowel-hole surface detail, which rendered visibly and
-  wasn't wanted even for local prototyping. The vendored mesh file itself
-  is untouched (still in assets/meshes*/, referenced by nothing now) in
-  case a future pass wants it back for something other than direct
-  display.
+  Visual geometry is leg_with_peg.stl — a fresh, programmatically
+  generated box-with-holes/box-with-peg mesh (see
+  generate_hole_peg_meshes.py; NOT the real vendored IKEA STL, which
+  bakes in the actual product's screw-hole surface detail and wasn't
+  wanted even for local prototyping). Collision stays the plain convex
+  box below — HPP-FCL's narrow-phase checking wants convex shapes, and
+  the hole/peg mesh isn't; visual/collision not matching exactly is
+  standard practice (detailed visual mesh, simple convex collision
+  proxy).
 -->
 <robot name="leg1">
   <link name="base_link">
@@ -23,7 +25,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <box size="0.03 0.03 0.2625"/>
+        <mesh filename="/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/assets/meshes_generated/leg_with_peg.stl"/>
       </geometry>
       <material name="light_wood">
         <color rgba="0.82 0.71 0.55 1.0"/>
