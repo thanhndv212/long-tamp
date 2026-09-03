@@ -485,6 +485,28 @@
     <child link="right_inner_finger_pad" />
     <axis xyz="0 0 1" />
   </joint>
+  <link name="pedestal">
+    <visual>
+      <origin xyz="0 0 0.15" />
+      <geometry>
+        <box size="0.3 0.3 0.3" />
+      </geometry>
+      <material name="DarkGray">
+        <color rgba="0.3 0.3 0.3 1.0" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.15" />
+      <geometry>
+        <box size="0.3 0.3 0.3" />
+      </geometry>
+    </collision>
+  </link>
+  <joint name="pedestal_to_arm" type="fixed">
+    <origin xyz="0 0 0.3" rpy="0 0 0" />
+    <parent link="pedestal" />
+    <child link="world" />
+  </joint>
   <joint name="tool0_to_gripper" type="fixed">
     <origin xyz="0 0 0" rpy="0 0 0" />
     <parent link="tool0" />

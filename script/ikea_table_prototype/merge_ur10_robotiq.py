@@ -32,6 +32,15 @@ OUT_URDF = HERE / "generated" / "ur10_robotiq.urdf"
 GRIPPER_ROOT_LINK = "robotiq_arg2f_base_link"
 ARM_MOUNT_FRAME = "tool0"
 
+# Pedestal: a rigid part of this same URDF (fixed joint onto UR10's own
+# root link, "world"), not a separately-positioned environment object —
+# per live feedback that two independently-placed objects read as a gap
+# rather than one attached assembly. 0.3m tall (lowered from an initial
+# 0.5m guess, also per feedback), 0.3x0.3m footprint.
+PEDESTAL_LINK = "pedestal"
+PEDESTAL_HEIGHT = 0.3
+UR10_ROOT_LINK = "world"
+
 # Mount transform — identity, visually verified in viser. See docstring.
 MOUNT_XYZ = "0 0 0"
 MOUNT_RPY = "0 0 0"
@@ -71,6 +80,29 @@ def main() -> None:
     for child in robotiq_root:
         if child.tag in ("link", "joint"):
             combined.append(child)
+
+    pedestal_link = ET.Element("link", {"name": PEDESTAL_LINK})
+    visual = ET.SubElement(pedestal_link, "visual")
+    ET.SubElement(visual, "origin", {"xyz": f"0 0 {PEDESTAL_HEIGHT / 2}"})
+    geom = ET.SubElement(visual, "geometry")
+    ET.SubElement(geom, "box", {"size": f"0.3 0.3 {PEDESTAL_HEIGHT}"})
+    material = ET.SubElement(visual, "material", {"name": "DarkGray"})
+    ET.SubElement(material, "color", {"rgba": "0.3 0.3 0.3 1.0"})
+    collision = ET.SubElement(pedestal_link, "collision")
+    ET.SubElement(collision, "origin", {"xyz": f"0 0 {PEDESTAL_HEIGHT / 2}"})
+    geom = ET.SubElement(collision, "geometry")
+    ET.SubElement(geom, "box", {"size": f"0.3 0.3 {PEDESTAL_HEIGHT}"})
+    combined.append(pedestal_link)
+
+    pedestal_joint = ET.Element(
+        "joint", {"name": "pedestal_to_arm", "type": "fixed"}
+    )
+    ET.SubElement(
+        pedestal_joint, "origin", {"xyz": f"0 0 {PEDESTAL_HEIGHT}", "rpy": "0 0 0"}
+    )
+    ET.SubElement(pedestal_joint, "parent", {"link": PEDESTAL_LINK})
+    ET.SubElement(pedestal_joint, "child", {"link": UR10_ROOT_LINK})
+    combined.append(pedestal_joint)
 
     mount_joint = ET.Element(
         "joint", {"name": "tool0_to_gripper", "type": "fixed"}

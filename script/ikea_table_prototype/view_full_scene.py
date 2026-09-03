@@ -7,11 +7,14 @@ container (after sourcing config.sh); uses the .container.urdf variant of
 the combined arm (mesh paths baked to that environment).
 
 Layout (not yet task-tuned, just "does everything fit and reach"):
-  - ur10_left mounted on a 0.5m pedestal at world origin (XY), facing +X.
-  - ur10_right on an identical pedestal at (1.5, 0, 0), rotated 180 deg
-    about Z, facing back toward ur10_left — same "face each other"
-    pattern as twin_lift_ball_config.yaml's two Pandas, scaled up for
-    UR10's ~1.3m reach (vs Panda's ~0.855m).
+  - ur10_left at world origin (XY), facing +X. Its 0.3m pedestal is now
+    part of ur10_robotiq.urdf itself (see merge_ur10_robotiq.py) — a
+    fixed joint onto UR10's own root, not a separately-positioned
+    environment object, so arm and pedestal can't visually gap apart.
+  - ur10_right at (1.5, 0, 0), rotated 180 deg about Z, facing back
+    toward ur10_left — same "face each other" pattern as
+    twin_lift_ball_config.yaml's two Pandas, scaled up for UR10's
+    ~1.3m reach (vs Panda's ~0.855m).
   - table at (0.75, 0.3, 0.5) — workbench height, off to one side.
   - leg1..leg4 upright in a row at (0.4, 0/0.15/0.3/0.45, 0.13125) —
     standing on the ground, within ur10_left's reach.
@@ -20,11 +23,16 @@ Layout (not yet task-tuned, just "does everything fit and reach"):
     UR10 is a fully-extended pose that's a poor default to view or plan
     from.
 
-Fixed this round, after live feedback that v1 had arms floor-mounted (no
-pedestal), objects effectively unpositioned, and both arms in the same
-(degenerate zero) pose: added the pedestal, gave each arm a distinct
-explicit joint config, and this version prints each object's *actual* FK
-position at the end so placement is confirmed empirically, not assumed.
+v2 fixes, per live feedback on v1 (floor-mounted arms, apparently-
+unpositioned objects, both arms in the same degenerate zero pose): added
+a pedestal (initially as a separate object at 0.5m; feedback wanted it
+lower and structurally attached, so v3 folds it into the arm URDF at
+0.3m — see merge_ur10_robotiq.py), gave each arm a distinct explicit
+joint config, and prints each object's *actual* FK position at the end
+so placement is confirmed empirically rather than assumed (all 5 matched
+their targets exactly both times — the "unpositioned" read was most
+likely the floor-mounted, same-pose layout's camera framing, not a
+placement bug).
 """
 
 from pathlib import Path
@@ -40,9 +48,11 @@ GEN = HERE / "generated"
 ARM_URDF = GEN / "ur10_robotiq.container.urdf"
 ARM_SRDF = GEN / "ur10_robotiq.srdf"
 GROUND_URDF = GEN / "ground.urdf"
-PEDESTAL_URDF = GEN / "pedestal.urdf"
-
-PEDESTAL_HEIGHT = 0.5
+# Pedestal is now part of ur10_robotiq.urdf itself (see
+# merge_ur10_robotiq.py) — a fixed joint onto UR10's own root ("world"),
+# not a separately-positioned environment object. Arm pose below is back
+# to ground level (z=0); the URDF's own pedestal_to_arm joint supplies
+# the 0.3m elevation.
 
 OBJECTS = {
     "table": (GEN / "table.urdf", GEN / "table.srdf", (0.75, 0.3, 0.5), (0, 0, 0, 1)),
@@ -52,9 +62,9 @@ OBJECTS = {
     "leg4": (GEN / "leg4.urdf", GEN / "leg4.srdf", (0.4, 0.45, 0.13125), (0, 0, 0, 1)),
 }
 
-LEFT_ARM_POSE = pin.SE3(np.eye(3), np.array([0.0, 0.0, PEDESTAL_HEIGHT]))
+LEFT_ARM_POSE = pin.SE3(np.eye(3), np.array([0.0, 0.0, 0.0]))
 RIGHT_ARM_POSE = pin.SE3(
-    pin.utils.rpyToMatrix(0, 0, np.pi), np.array([1.5, 0.0, PEDESTAL_HEIGHT])
+    pin.utils.rpyToMatrix(0, 0, np.pi), np.array([1.5, 0.0, 0.0])
 )
 
 UR10_JOINTS = [
@@ -96,12 +106,6 @@ def main() -> None:
         root_joint_type="anchor", pose=RIGHT_ARM_POSE,
     )
     backend.load_environment("ground", str(GROUND_URDF))
-    backend.load_environment(
-        "pedestal_left", str(PEDESTAL_URDF), pose=pin.SE3(np.eye(3), np.array([0.0, 0.0, 0.0]))
-    )
-    backend.load_environment(
-        "pedestal_right", str(PEDESTAL_URDF), pose=pin.SE3(np.eye(3), np.array([1.5, 0.0, 0.0]))
-    )
     for name, (urdf_path, srdf_path, _, _) in OBJECTS.items():
         backend.load_object(name, str(urdf_path), str(srdf_path))
 
