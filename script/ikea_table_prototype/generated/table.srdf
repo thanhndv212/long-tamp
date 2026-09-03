@@ -1,15 +1,15 @@
 <?xml version="1.0"?>
-<!-- GENERATED — see generate_urdf_srdf.py. Local prototype only. -->
+<!-- GENERATED — see build_assets.py. Local prototype only. -->
 <robot name="table">
   <!-- Grasp point: top face center, in case a phase needs to hold the
        table steady while a leg is attached. Tentative, same caveat as
        the leg handles. -->
-  <handle name="table/handle" clearance="0.02" approaching_direction="0 0 1">
+  <handle name="handle" clearance="0.02" approaching_direction="0 0 1">
     <position xyz="0 0 0" xyzw="0 0 0 1"/>
     <link name="base_link"/>
   </handle>
   <!-- Socket 1: mates with legN/top, at table-local (-0.305, -0.095) -->
-  <contact name="table/socket1">
+  <contact name="socket1">
     <link name="base_link"/>
     <point>
        -0.29 -0.08 0.02
@@ -22,7 +22,7 @@
     </shape>
   </contact>
   <!-- Socket 2: mates with legN/top, at table-local (-0.305, 0.095) -->
-  <contact name="table/socket2">
+  <contact name="socket2">
     <link name="base_link"/>
     <point>
        -0.29 0.11 0.02
@@ -35,7 +35,7 @@
     </shape>
   </contact>
   <!-- Socket 3: mates with legN/top, at table-local (0.305, -0.095) -->
-  <contact name="table/socket3">
+  <contact name="socket3">
     <link name="base_link"/>
     <point>
        0.32 -0.08 0.02
@@ -48,7 +48,7 @@
     </shape>
   </contact>
   <!-- Socket 4: mates with legN/top, at table-local (0.305, 0.095) -->
-  <contact name="table/socket4">
+  <contact name="socket4">
     <link name="base_link"/>
     <point>
        0.32 0.11 0.02

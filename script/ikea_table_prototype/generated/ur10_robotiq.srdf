@@ -7,8 +7,8 @@
   concept in either upstream), so this is authored fresh — same situation
   script/twin/assets/panda_bimanual.srdf was already in for Panda.
 
-  <gripper> frame: gripper_tcp, a zero-mass frame added by
-  merge_ur10_robotiq.py at 0.15m along robotiq_arg2f_base_link's own +Z
+  <gripper> frame: gripper_tcp, a zero-mass frame added by build_assets.py
+  (merge-arm stage) at 0.15m along robotiq_arg2f_base_link's own +Z
   (verified from the finger_joint/left_inner_finger_joint chain that +Z is
   the fingers' approach direction; the 0.15m distance itself is a
   published-typical estimate — visually verified in viser, arm+gripper
@@ -18,13 +18,28 @@
   construction, since it's rigidly offset along robotiq_arg2f_base_link's
   +Z with zero rotation).
 
-  disable_collisions: only the obviously-adjacent gripper linkage pairs
-  are listed below (visual estimate from the joint chain) — NOT a
-  self-collision-checked pairwise sweep like Panda's list (which was
-  reused verbatim from an existing MoveIt SRDF). Expect to need more
-  pairs once a real self-collision check is run.
+  disable_collisions: the gripper linkage pairs below are the original
+  visual estimate from the joint chain — NOT a self-collision-checked
+  pairwise sweep like Panda's list (which was reused verbatim from an
+  existing MoveIt SRDF). The plain-UR10-arm adjacent pairs (base_link
+  through wrist_3_link) were added later, live: the first real planning
+  run (task_assemble_table.py) hit "Collision between object
+  ur10_left/shoulder_link_0 and ur10_left/upper_arm_link_0" — two links
+  connected directly by shoulder_lift_joint, so their geometries always
+  touch at the joint and self-collision between them is a guaranteed
+  false positive, same as any other adjacent pair — confirming this file's
+  own prior warning that the arm chain itself was never covered (only the
+  newly-merged gripper linkage was). See
+  assets/ur10/ur10_robot_generated.urdf's own <joint> parent/child tags
+  for the chain this list follows.
 -->
 <robot name="ur10_robotiq">
+  <disable_collisions link1="base_link" link2="shoulder_link" reason="Adjacent"/>
+  <disable_collisions link1="shoulder_link" link2="upper_arm_link" reason="Adjacent"/>
+  <disable_collisions link1="upper_arm_link" link2="forearm_link" reason="Adjacent"/>
+  <disable_collisions link1="forearm_link" link2="wrist_1_link" reason="Adjacent"/>
+  <disable_collisions link1="wrist_1_link" link2="wrist_2_link" reason="Adjacent"/>
+  <disable_collisions link1="wrist_2_link" link2="wrist_3_link" reason="Adjacent"/>
   <disable_collisions link1="robotiq_arg2f_base_link" link2="left_outer_knuckle" reason="Adjacent"/>
   <disable_collisions link1="robotiq_arg2f_base_link" link2="right_outer_knuckle" reason="Adjacent"/>
   <disable_collisions link1="robotiq_arg2f_base_link" link2="left_inner_knuckle" reason="Adjacent"/>
@@ -33,10 +48,24 @@
   <disable_collisions link1="left_outer_finger" link2="left_inner_finger" reason="Adjacent"/>
   <disable_collisions link1="left_inner_finger" link2="left_inner_finger_pad" reason="Adjacent"/>
   <disable_collisions link1="left_inner_finger" link2="left_inner_knuckle" reason="Adjacent"/>
+  <!-- left_inner_finger_pad sits at the tip of left_inner_finger (fixed
+       joint, one hop past the pair above) — the four-bar linkage's other
+       branch (left_inner_knuckle) sweeps right past it by mechanical
+       design. Found live: this exact pair was every one of the 38
+       in-collision failures for phase 1's pregrasp target, and since all
+       6 gripper joints are locked at their initial (fully-open) value for
+       the whole plan, this collision is CONSTANT across every candidate,
+       not something retrying finds a way around. -->
+  <disable_collisions link1="left_inner_finger_pad" link2="left_inner_knuckle" reason="Adjacent"/>
   <disable_collisions link1="right_outer_knuckle" link2="right_outer_finger" reason="Adjacent"/>
   <disable_collisions link1="right_outer_finger" link2="right_inner_finger" reason="Adjacent"/>
   <disable_collisions link1="right_inner_finger" link2="right_inner_finger_pad" reason="Adjacent"/>
   <disable_collisions link1="right_inner_finger" link2="right_inner_knuckle" reason="Adjacent"/>
+  <!-- Mirror of the left_inner_finger_pad pair above — not yet hit live
+       (ur10_right's first grasp is phase 3), but the same static/frozen-
+       joint condition applies identically by symmetry, so there is no
+       reason to wait for it to fail the same way before fixing it. -->
+  <disable_collisions link1="right_inner_finger_pad" link2="right_inner_knuckle" reason="Adjacent"/>
   <disable_collisions link1="wrist_3_link" link2="robotiq_arg2f_base_link" reason="Adjacent"/>
   <disable_collisions link1="wrist_2_link" link2="robotiq_arg2f_base_link" reason="Never"/>
 

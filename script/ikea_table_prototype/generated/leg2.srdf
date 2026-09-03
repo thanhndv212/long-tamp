@@ -1,20 +1,38 @@
 <?xml version="1.0"?>
-<!-- GENERATED — see generate_urdf_srdf.py. Local prototype only. -->
+<!-- GENERATED — see build_assets.py. Local prototype only. -->
 <robot name="leg2">
-  <!-- Grasp point: leg center, gripper approaches from the side (world -X
-       in the leg's own frame at rest) — a parallel jaw closing across the
-       leg's 0.03x0.03 cross-section. Tentative: verify/tune live against
-       the actual Robotiq URDF once wired into a scene; the pokeball
-       precedent this repo already has is a poor analog (sphere grasps are
-       orientation-insensitive, a peg grasp is not). -->
-  <handle name="leg2/handle" clearance="0.02" approaching_direction="1 0 0">
+  <!-- Grasp point: leg center, gripper approaches from the side — a
+       parallel jaw closing across the leg's 0.03x0.03 cross-section.
+
+       approaching_direction is "-1 0 0", not "+1 0 0": HPP's
+       Handle::createPreGrasp offsets the pregrasp target by
+       +clearance*approaching_direction (in the handle's own, i.e. this
+       link's, local frame). With the legs lying flat on the workbench
+       (LEG_LIE_FLAT_QUAT in debug_view_frames.py, a 90deg rotation about
+       world Y), local +X maps to world -Z — so a "+1 0 0" direction here
+       computed a pregrasp target 2mm *below* the workbench surface,
+       confirmed empirically (query the loaded Device: handle world
+       z=0.418, computed pregrasp z=0.398 vs. workbench top z=0.400) — a
+       permanently unreachable, always-in-collision target no amount of
+       retrying could ever satisfy, which is exactly what
+       task_assemble_table.py's first real planning run hit (100% failure
+       across every attempt/rerun, always workbench- or ground-collision).
+       "-1 0 0" gives world +Z (pregrasp z=0.438, above the leg) instead —
+       verified the same way. -->
+  <handle name="handle" clearance="0.02" approaching_direction="-1 0 0">
     <position xyz="0 0 0" xyzw="0 0 0 1"/>
     <link name="base_link"/>
   </handle>
   <!-- Placement contact: the leg's top face, mated against the matching
        socket contact on the table (see table.srdf) — same mechanism as
-       script/twin/assets/pokeball_bimanual.srdf's "bottom" contact. -->
-  <contact name="leg2/top">
+       script/twin/assets/pokeball_bimanual.srdf's "bottom" contact.
+       Bare name, like that precedent's "bottom" and this file's own
+       "handle" above — pyhpp's urdf.loadModel(name=...) prefixes every
+       handle/contact with the object's load name itself (confirmed live:
+       a name of "leg2/top" here produced a double-prefixed
+       "leg2/leg2/top" at runtime, "No handle/contact with name
+       leg2/top" from HPP). -->
+  <contact name="top">
     <link name="base_link"/>
     <point>
        0.015 0.015 0.13125
