@@ -15,9 +15,11 @@ Layout (not yet task-tuned, just "does everything fit and reach"):
     toward ur10_left — same "face each other" pattern as
     twin_lift_ball_config.yaml's two Pandas, scaled up for UR10's
     ~1.3m reach (vs Panda's ~0.855m).
-  - table at (0.75, 0.3, 0.5) — workbench height, off to one side.
-  - leg1..leg4 upright in a row at (0.4, 0/0.15/0.3/0.45, 0.13125) —
-    standing on the ground, within ur10_left's reach.
+  - table at (0.75, 0, 0.5) and leg1..leg4 upright in a row at
+    (0.75, -0.225/-0.075/0.075/0.225, 0.13125) — centered at X=0.75, the
+    true midpoint between the two arm bases (x=0 and x=1.5), and Y=0.
+    Earlier had everything but the table at x=0.4, offset toward
+    ur10_left only — moved per feedback.
   - Each arm's 6 joints get a distinct, non-degenerate "ready"-ish pose
     (elbow bent) instead of the raw all-zero configuration, which for
     UR10 is a fully-extended pose that's a poor default to view or plan
@@ -58,11 +60,14 @@ ARM_SRDF = GEN / "ur10_robotiq.srdf"  # shared — offset is URDF-only
 GROUND_URDF = GEN / "ground.urdf"
 
 OBJECTS = {
-    "table": (GEN / "table.urdf", GEN / "table.srdf", (0.75, 0.3, 0.5), (0, 0, 0, 1)),
-    "leg1": (GEN / "leg1.urdf", GEN / "leg1.srdf", (0.4, 0.00, 0.13125), (0, 0, 0, 1)),
-    "leg2": (GEN / "leg2.urdf", GEN / "leg2.srdf", (0.4, 0.15, 0.13125), (0, 0, 0, 1)),
-    "leg3": (GEN / "leg3.urdf", GEN / "leg3.srdf", (0.4, 0.30, 0.13125), (0, 0, 0, 1)),
-    "leg4": (GEN / "leg4.urdf", GEN / "leg4.srdf", (0.4, 0.45, 0.13125), (0, 0, 0, 1)),
+    # Centered at X=0.75 — the true midpoint between ur10_left (x=0) and
+    # ur10_right (x=1.5) — and Y=0, instead of the earlier layout, which
+    # (aside from the table) sat at x=0.4, offset toward ur10_left only.
+    "table": (GEN / "table.urdf", GEN / "table.srdf", (0.75, 0.0, 0.5), (0, 0, 0, 1)),
+    "leg1": (GEN / "leg1.urdf", GEN / "leg1.srdf", (0.75, -0.225, 0.13125), (0, 0, 0, 1)),
+    "leg2": (GEN / "leg2.urdf", GEN / "leg2.srdf", (0.75, -0.075, 0.13125), (0, 0, 0, 1)),
+    "leg3": (GEN / "leg3.urdf", GEN / "leg3.srdf", (0.75, 0.075, 0.13125), (0, 0, 0, 1)),
+    "leg4": (GEN / "leg4.urdf", GEN / "leg4.srdf", (0.75, 0.225, 0.13125), (0, 0, 0, 1)),
 }
 
 UR10_JOINTS = [
