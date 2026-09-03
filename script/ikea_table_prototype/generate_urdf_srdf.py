@@ -111,7 +111,7 @@ SRDF_LEG_TEMPLATE = """<?xml version="1.0"?>
        {hx} -{hy} {top_z}
     </point>
     <shape>
-      0 1 2 3
+      4 0 1 2 3
     </shape>
   </contact>
 </robot>
@@ -140,7 +140,7 @@ SOCKET_CONTACT_TEMPLATE = """  <!-- Socket {i}: mates with legN/top, at table-lo
        {p3x} {p3y} {sock_z}
     </point>
     <shape>
-      0 1 2 3
+      4 0 1 2 3
     </shape>
   </contact>
 """

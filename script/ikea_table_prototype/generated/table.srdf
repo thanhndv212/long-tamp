@@ -18,7 +18,7 @@
        -0.32 -0.11 -0.02
     </point>
     <shape>
-      0 1 2 3
+      4 0 1 2 3
     </shape>
   </contact>
   <!-- Socket 2: mates with legN/top, at table-local (-0.305, 0.095) -->
@@ -31,7 +31,7 @@
        -0.32 0.08 -0.02
     </point>
     <shape>
-      0 1 2 3
+      4 0 1 2 3
     </shape>
   </contact>
   <!-- Socket 3: mates with legN/top, at table-local (0.305, -0.095) -->
@@ -44,7 +44,7 @@
        0.29 -0.11 -0.02
     </point>
     <shape>
-      0 1 2 3
+      4 0 1 2 3
     </shape>
   </contact>
   <!-- Socket 4: mates with legN/top, at table-local (0.305, 0.095) -->
@@ -57,7 +57,7 @@
        0.29 0.08 -0.02
     </point>
     <shape>
-      0 1 2 3
+      4 0 1 2 3
     </shape>
   </contact>
 </robot>
