@@ -30,7 +30,13 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 GEN_DIR = HERE / "generated"
-MESH_DIR = HERE / "assets" / "meshes"
+# meshes_scaled/ (not meshes/) — run rescale_ikea_meshes.py first. The raw
+# meshes need a non-unit <mesh scale> to come out in meters, which hits a
+# real pyhpp_viser rendering bug (see rescale_ikea_meshes.py's docstring);
+# rescale_ikea_meshes.py bakes that scale into the vertices instead, so
+# every mesh_scale= below is "1 1 1" (a no-op, safe even if the bug is
+# ever hit again).
+MESH_DIR = HERE / "assets" / "meshes_scaled"
 TEXTURE = HERE / "assets" / "textures" / "light-wood.png"
 
 # (name, mesh file, world pos in the reference MJCF, half-extent collision
@@ -165,7 +171,7 @@ def main() -> None:
             name=name,
             mass=leg_mass,
             mesh_path=mesh_path,
-            mesh_scale="0.02 0.02 0.02",
+            mesh_scale="1 1 1",
             box_size=leg_box_size,
         )
         write(GEN_DIR / f"{name}.urdf", urdf)
@@ -185,7 +191,7 @@ def main() -> None:
         name="table",
         mass="2.0",
         mesh_path=table_mesh_path,
-        mesh_scale="0.015 0.015 0.02",
+        mesh_scale="1 1 1",
         box_size=table_box_size,
     )
     write(GEN_DIR / "table.urdf", table_urdf)
