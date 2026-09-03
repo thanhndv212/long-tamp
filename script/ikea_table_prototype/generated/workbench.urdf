@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!--
+  Plain flat box, same category as ground.urdf/pedestal — generic
+  primitive, no vendored content. A static support surface for the
+  table/leg parts to actually rest on, rather than floating in mid-air at
+  an unexplained height (the table part previously sat at z=0.5 with
+  nothing under it — legs stood correctly on the ground floor, but the
+  table didn't, and a floating tabletop above floor-standing legs read as
+  an incoherent staging picture anyway). Top surface at z=0.4; table/legs
+  repositioned onto it in view_full_scene.py.
+-->
+<robot name="workbench">
+  <link name="workbench_base">
+    <visual>
+      <geometry>
+        <box size="1.0 0.6 0.04"/>
+      </geometry>
+      <origin xyz="0.75 0 0.38"/>
+      <material name="Brown">
+        <color rgba="0.45 0.32 0.2 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="1.0 0.6 0.04"/>
+      </geometry>
+      <origin xyz="0.75 0 0.38"/>
+    </collision>
+  </link>
+</robot>

@@ -15,11 +15,15 @@ Layout (not yet task-tuned, just "does everything fit and reach"):
     toward ur10_left — same "face each other" pattern as
     twin_lift_ball_config.yaml's two Pandas, scaled up for UR10's
     ~1.3m reach (vs Panda's ~0.855m).
-  - table at (0.75, 0, 0.5) and leg1..leg4 upright in a row at
-    (0.75, -0.225/-0.075/0.075/0.225, 0.13125) — centered at X=0.75, the
-    true midpoint between the two arm bases (x=0 and x=1.5), and Y=0.
-    Earlier had everything but the table at x=0.4, offset toward
-    ur10_left only — moved per feedback.
+  - workbench.urdf: a static support surface, top at z=0.4, centered at
+    (0.75, 0) — table + legs rest on top of it (own half-thickness above
+    the surface) rather than floating at an unexplained height. The
+    table used to sit at z=0.5 with nothing under it at all; legs stood
+    correctly on the ground floor, but a floating tabletop above
+    floor-standing legs was an incoherent picture regardless.
+  - table and leg1..leg4 (upright) all centered at X=0.75 — the true
+    midpoint between the two arm bases (x=0 and x=1.5) — legs spread
+    along Y at -0.225/-0.075/0.075/0.225.
   - Each arm's 6 joints get a distinct, non-degenerate "ready"-ish pose
     (elbow bent) instead of the raw all-zero configuration, which for
     UR10 is a fully-extended pose that's a poor default to view or plan
@@ -58,16 +62,42 @@ ARM_LEFT_URDF = GEN / "ur10_robotiq.container.urdf"
 ARM_RIGHT_URDF = GEN / "ur10_robotiq_right.container.urdf"
 ARM_SRDF = GEN / "ur10_robotiq.srdf"  # shared — offset is URDF-only
 GROUND_URDF = GEN / "ground.urdf"
+WORKBENCH_URDF = GEN / "workbench.urdf"
+
+# Workbench top surface is at z=0.4 (see workbench.urdf) — table/legs sit
+# on top of it (center = top + own half-thickness), not floating at an
+# unexplained height. Previously the table sat at z=0.5 with nothing
+# under it at all; legs stood correctly on the ground floor (z=0.13125,
+# their own half-height) but a floating tabletop above floor-standing
+# legs was an incoherent picture regardless — everything now rests on one
+# shared surface.
+WORKBENCH_TOP_Z = 0.4
+TABLE_HALF_THICKNESS = 0.02
+LEG_HALF_LENGTH = 0.13125
 
 OBJECTS = {
     # Centered at X=0.75 — the true midpoint between ur10_left (x=0) and
-    # ur10_right (x=1.5) — and Y=0, instead of the earlier layout, which
-    # (aside from the table) sat at x=0.4, offset toward ur10_left only.
-    "table": (GEN / "table.urdf", GEN / "table.srdf", (0.75, 0.0, 0.5), (0, 0, 0, 1)),
-    "leg1": (GEN / "leg1.urdf", GEN / "leg1.srdf", (0.75, -0.225, 0.13125), (0, 0, 0, 1)),
-    "leg2": (GEN / "leg2.urdf", GEN / "leg2.srdf", (0.75, -0.075, 0.13125), (0, 0, 0, 1)),
-    "leg3": (GEN / "leg3.urdf", GEN / "leg3.srdf", (0.75, 0.075, 0.13125), (0, 0, 0, 1)),
-    "leg4": (GEN / "leg4.urdf", GEN / "leg4.srdf", (0.75, 0.225, 0.13125), (0, 0, 0, 1)),
+    # ur10_right (x=1.5) — and Y=0.
+    "table": (
+        GEN / "table.urdf", GEN / "table.srdf",
+        (0.75, 0.0, WORKBENCH_TOP_Z + TABLE_HALF_THICKNESS), (0, 0, 0, 1),
+    ),
+    "leg1": (
+        GEN / "leg1.urdf", GEN / "leg1.srdf",
+        (0.75, -0.225, WORKBENCH_TOP_Z + LEG_HALF_LENGTH), (0, 0, 0, 1),
+    ),
+    "leg2": (
+        GEN / "leg2.urdf", GEN / "leg2.srdf",
+        (0.75, -0.075, WORKBENCH_TOP_Z + LEG_HALF_LENGTH), (0, 0, 0, 1),
+    ),
+    "leg3": (
+        GEN / "leg3.urdf", GEN / "leg3.srdf",
+        (0.75, 0.075, WORKBENCH_TOP_Z + LEG_HALF_LENGTH), (0, 0, 0, 1),
+    ),
+    "leg4": (
+        GEN / "leg4.urdf", GEN / "leg4.srdf",
+        (0.75, 0.225, WORKBENCH_TOP_Z + LEG_HALF_LENGTH), (0, 0, 0, 1),
+    ),
 }
 
 UR10_JOINTS = [
@@ -107,6 +137,7 @@ def main() -> None:
         "ur10_right", str(ARM_RIGHT_URDF), str(ARM_SRDF), root_joint_type="anchor"
     )
     backend.load_environment("ground", str(GROUND_URDF))
+    backend.load_environment("workbench", str(WORKBENCH_URDF))
     for name, (urdf_path, srdf_path, _, _) in OBJECTS.items():
         backend.load_object(name, str(urdf_path), str(srdf_path))
 
