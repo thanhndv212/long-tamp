@@ -216,7 +216,11 @@ def main() -> None:
     )
     write(GEN_DIR / "table.urdf", table_urdf)
 
-    sock_z = round(-tz, 6)
+    # Top face (+tz), not bottom (-tz) — matches generate_hole_peg_meshes.py's
+    # holes, which moved to the top surface so they're reachable by an arm
+    # approaching from above (a bottom-face hole is pressed against the
+    # workbench once the table sits flat, inaccessible).
+    sock_z = round(tz, 6)
     contact_blocks = []
     for i, (cx, cy) in enumerate(LEG_SOCKET_XY, start=1):
         corners = [(cx + sx, cy + sy) for sx in (lx, -lx) for sy in (ly, -ly)]

@@ -49,10 +49,14 @@ def build_table() -> trimesh.Trimesh:
     for cx, cy in LEG_SOCKET_XY:
         cyl = trimesh.creation.cylinder(radius=HOLE_RADIUS, height=0.06)
         # Cylinder is centered at its own origin; place it so it starts
-        # below the table's bottom face (-tz) and reaches HOLE_DEPTH up
-        # into the material — the portion below -tz has no box material
-        # to subtract, so only the overlapping part actually carves in.
-        cyl.apply_translation((cx, cy, -tz + HOLE_DEPTH - 0.03))
+        # at the table's TOP face (+tz) and reaches HOLE_DEPTH down into
+        # the material, extending further above +tz — the portion above
+        # +tz has no box material to subtract, so only the overlapping
+        # part actually carves in. Holes on top (not the underside) so
+        # they're reachable by an arm approaching from above once the
+        # table sits flat on a workbench — a bottom-face hole would be
+        # pressed against the workbench surface, inaccessible.
+        cyl.apply_translation((cx, cy, tz - HOLE_DEPTH + 0.03))
         cutters.append(cyl)
 
     result = trimesh.boolean.difference([box, *cutters])
