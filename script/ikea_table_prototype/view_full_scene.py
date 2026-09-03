@@ -73,7 +73,20 @@ WORKBENCH_URDF = GEN / "workbench.urdf"
 # shared surface.
 WORKBENCH_TOP_Z = 0.4
 TABLE_HALF_THICKNESS = 0.02
-LEG_HALF_LENGTH = 0.13125
+
+# Legs now lie flat on the workbench (long axis horizontal) instead of
+# standing upright, and moved into their own row clear of the table's
+# footprint (half-extents 0.32 x 0.12 around (0.75, 0), so y in
+# [-0.12, 0.12]) rather than overlapping it. A 90deg rotation about local
+# Y maps the leg's long local-Z axis to world +X (quaternion for that:
+# axis (0,1,0), angle pi/2 -> (x,y,z,w) = (0, sin(pi/4), 0, cos(pi/4))),
+# so the "thin" cross-section (originally local X/Y, 0.015m half-extent)
+# is what's now vertical/lateral — hence the small z-offset above the
+# surface (leg *width*, not its length, is what's resting on it) and the
+# 4-row spacing along Y only needing to clear that same thin width.
+LEG_LIE_FLAT_QUAT = (0.0, 0.7071067811865476, 0.0, 0.7071067811865476)
+LEG_HALF_WIDTH = 0.015
+LEG_Y = [-0.20, -0.28, -0.36, -0.44]
 
 OBJECTS = {
     # Centered at X=0.75 — the true midpoint between ur10_left (x=0) and
@@ -84,19 +97,19 @@ OBJECTS = {
     ),
     "leg1": (
         GEN / "leg1.urdf", GEN / "leg1.srdf",
-        (0.75, -0.225, WORKBENCH_TOP_Z + LEG_HALF_LENGTH), (0, 0, 0, 1),
+        (0.75, LEG_Y[0], WORKBENCH_TOP_Z + LEG_HALF_WIDTH), LEG_LIE_FLAT_QUAT,
     ),
     "leg2": (
         GEN / "leg2.urdf", GEN / "leg2.srdf",
-        (0.75, -0.075, WORKBENCH_TOP_Z + LEG_HALF_LENGTH), (0, 0, 0, 1),
+        (0.75, LEG_Y[1], WORKBENCH_TOP_Z + LEG_HALF_WIDTH), LEG_LIE_FLAT_QUAT,
     ),
     "leg3": (
         GEN / "leg3.urdf", GEN / "leg3.srdf",
-        (0.75, 0.075, WORKBENCH_TOP_Z + LEG_HALF_LENGTH), (0, 0, 0, 1),
+        (0.75, LEG_Y[2], WORKBENCH_TOP_Z + LEG_HALF_WIDTH), LEG_LIE_FLAT_QUAT,
     ),
     "leg4": (
         GEN / "leg4.urdf", GEN / "leg4.srdf",
-        (0.75, 0.225, WORKBENCH_TOP_Z + LEG_HALF_LENGTH), (0, 0, 0, 1),
+        (0.75, LEG_Y[3], WORKBENCH_TOP_Z + LEG_HALF_WIDTH), LEG_LIE_FLAT_QUAT,
     ),
 }
 

@@ -4,15 +4,20 @@
   — generic primitive, no vendored content. A static support surface for
   the table/leg parts to rest on. First pass only had the tabletop slab
   (z=0.36 to 0.40) with nothing under it down to the ground — same
-  "floating in mid-air" problem one level up. Legs now span z=0 (ground)
-  to z=0.36 (underside of the surface), at the 4 corners of the 1.0x0.6m
-  footprint, inset 0.05m from each edge.
+  "floating in mid-air" problem one level up. Legs span z=0 (ground) to
+  z=0.36 (underside of the surface), at the 4 corners of the footprint,
+  inset 0.05m from each edge.
+
+  Widened Y from 0.6 to 1.0m (footprint now 1.0x1.0) to fit the IKEA leg
+  parts laid flat in their own row alongside the table without either
+  falling off the bench edge or overlapping the table — see
+  view_full_scene.py's LEG_Y positions.
 -->
 <robot name="workbench">
   <link name="workbench_base">
     <visual>
       <geometry>
-        <box size="1.0 0.6 0.04"/>
+        <box size="1.0 1.0 0.04"/>
       </geometry>
       <origin xyz="0.75 0 0.38"/>
       <material name="Brown">
@@ -21,7 +26,7 @@
     </visual>
     <collision>
       <geometry>
-        <box size="1.0 0.6 0.04"/>
+        <box size="1.0 1.0 0.04"/>
       </geometry>
       <origin xyz="0.75 0 0.38"/>
     </collision>
@@ -30,56 +35,56 @@
       <geometry>
         <box size="0.05 0.05 0.36"/>
       </geometry>
-      <origin xyz="0.30 -0.25 0.18"/>
+      <origin xyz="0.30 -0.45 0.18"/>
       <material name="Brown"/>
     </visual>
     <collision>
       <geometry>
         <box size="0.05 0.05 0.36"/>
       </geometry>
-      <origin xyz="0.30 -0.25 0.18"/>
+      <origin xyz="0.30 -0.45 0.18"/>
     </collision>
 
     <visual>
       <geometry>
         <box size="0.05 0.05 0.36"/>
       </geometry>
-      <origin xyz="0.30 0.25 0.18"/>
+      <origin xyz="0.30 0.45 0.18"/>
       <material name="Brown"/>
     </visual>
     <collision>
       <geometry>
         <box size="0.05 0.05 0.36"/>
       </geometry>
-      <origin xyz="0.30 0.25 0.18"/>
+      <origin xyz="0.30 0.45 0.18"/>
     </collision>
 
     <visual>
       <geometry>
         <box size="0.05 0.05 0.36"/>
       </geometry>
-      <origin xyz="1.20 -0.25 0.18"/>
+      <origin xyz="1.20 -0.45 0.18"/>
       <material name="Brown"/>
     </visual>
     <collision>
       <geometry>
         <box size="0.05 0.05 0.36"/>
       </geometry>
-      <origin xyz="1.20 -0.25 0.18"/>
+      <origin xyz="1.20 -0.45 0.18"/>
     </collision>
 
     <visual>
       <geometry>
         <box size="0.05 0.05 0.36"/>
       </geometry>
-      <origin xyz="1.20 0.25 0.18"/>
+      <origin xyz="1.20 0.45 0.18"/>
       <material name="Brown"/>
     </visual>
     <collision>
       <geometry>
         <box size="0.05 0.05 0.36"/>
       </geometry>
-      <origin xyz="1.20 0.25 0.18"/>
+      <origin xyz="1.20 0.45 0.18"/>
     </collision>
   </link>
 </robot>
