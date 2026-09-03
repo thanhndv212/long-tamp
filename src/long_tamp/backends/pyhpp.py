@@ -281,9 +281,15 @@ class PyHPPBackend(BackendBase):
             self.problem.addConfigValidation("JointBoundValidation")
         self._shooter = self.problem.configurationShooter()
         q = np.array(self._shooter.shoot())
+        # `report` is already the C++-formatted string (e.g. "Collision
+        # between object X and Y"), empty on a valid draw -- see
+        # Problem::isConfigValid in hpp-python/src/pyhpp/core/problem.cc.
+        # Tallied here so the final warning can point at *which* pair is
+        # actually blocking, instead of just the bare attempt count.
+        failure_counts: Dict[str, int] = {}
         for attempt in range(max_attempts):
             try:
-                valid, _report = self.problem.isConfigValid(q)
+                valid, report = self.problem.isConfigValid(q)
             except Exception as e:
                 logger.warning(
                     "random_config: isConfigValid check failed (%s); "
@@ -293,12 +299,21 @@ class PyHPPBackend(BackendBase):
                 return q
             if valid:
                 return q
+            failure_counts[report] = failure_counts.get(report, 0) + 1
+            logger.debug("random_config: attempt %d invalid: %s", attempt, report)
             q = np.array(self._shooter.shoot())
         logger.warning(
             "random_config: no valid configuration found in %d attempts; "
             "returning the last (invalid) draw",
             max_attempts,
         )
+        if failure_counts:
+            top = sorted(failure_counts.items(), key=lambda kv: -kv[1])[:5]
+            logger.warning(
+                "random_config: top failure reasons over %d attempts: %s",
+                max_attempts,
+                top,
+            )
         return q
 
     def load_robot(
