@@ -11,7 +11,8 @@
   merge_ur10_robotiq.py at 0.15m along robotiq_arg2f_base_link's own +Z
   (verified from the finger_joint/left_inner_finger_joint chain that +Z is
   the fingers' approach direction; the 0.15m distance itself is a
-  published-typical estimate, NOT yet measured against this exact mesh).
+  published-typical estimate — visually verified in viser, arm+gripper
+  render correctly, but not measured against this exact mesh).
   Identity local pose here, matching panda_hand_tcp's pattern — assumes
   gripper_tcp's own +Z already points in the approach direction (true by
   construction, since it's rigidly offset along robotiq_arg2f_base_link's
