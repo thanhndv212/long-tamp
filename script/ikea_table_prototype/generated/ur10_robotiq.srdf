@@ -57,6 +57,18 @@
        the whole plan, this collision is CONSTANT across every candidate,
        not something retrying finds a way around. -->
   <disable_collisions link1="left_inner_finger_pad" link2="left_inner_knuckle" reason="Adjacent"/>
+  <!-- Same four-bar linkage, one link further up the outer branch:
+       left_outer_finger is a FIXED child of left_outer_knuckle, rigidly
+       carrying left_inner_finger's revolute pivot right past
+       left_inner_knuckle's own pivot on robotiq_arg2f_base_link — same
+       "sweeps past by mechanical design" geometry as the pad pair above,
+       just one hop further out. Found live via random_config's new
+       per-attempt failure tally (long_tamp.backends.pyhpp): dominant
+       failure reason, 167/1000 attempts in one batch, and — same as the
+       pad pair — CONSTANT across every candidate since all 6 gripper
+       joints stay frozen at their initial (fully-open) value for the
+       whole plan. -->
+  <disable_collisions link1="left_outer_finger" link2="left_inner_knuckle" reason="Adjacent"/>
   <disable_collisions link1="right_outer_knuckle" link2="right_outer_finger" reason="Adjacent"/>
   <disable_collisions link1="right_outer_finger" link2="right_inner_finger" reason="Adjacent"/>
   <disable_collisions link1="right_inner_finger" link2="right_inner_finger_pad" reason="Adjacent"/>
@@ -66,6 +78,11 @@
        joint condition applies identically by symmetry, so there is no
        reason to wait for it to fail the same way before fixing it. -->
   <disable_collisions link1="right_inner_finger_pad" link2="right_inner_knuckle" reason="Adjacent"/>
+  <!-- Mirror of the left_outer_finger pair above, same reasoning — added
+       alongside it rather than waiting to hit it live (it showed up in
+       the same failure tally anyway, 47/1000, from ur10_left's own
+       right-hand fingers). -->
+  <disable_collisions link1="right_outer_finger" link2="right_inner_knuckle" reason="Adjacent"/>
   <disable_collisions link1="wrist_3_link" link2="robotiq_arg2f_base_link" reason="Adjacent"/>
   <disable_collisions link1="wrist_2_link" link2="robotiq_arg2f_base_link" reason="Never"/>
 
