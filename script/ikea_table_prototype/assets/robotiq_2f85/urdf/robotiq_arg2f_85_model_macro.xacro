@@ -12,7 +12,7 @@
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0" />
         <geometry>
-          <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes/visual/robotiq_arg2f_85_outer_knuckle.dae" scale="0.001 0.001 0.001"/>
+          <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes_scaled/visual/robotiq_arg2f_85_outer_knuckle.dae"/>
         </geometry>
         <material name="">
           <color rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
@@ -21,7 +21,7 @@
       <collision>
         <origin xyz="0 0 0" rpy="0 0 0" />
         <geometry>
-          <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes/collision/robotiq_arg2f_85_outer_knuckle.dae" scale="0.001 0.001 0.001"/>
+          <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes_scaled/collision/robotiq_arg2f_85_outer_knuckle.dae"/>
         </geometry>
       </collision>
     </link>
@@ -37,7 +37,7 @@
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0" />
         <geometry>
-          <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes/visual/robotiq_arg2f_85_outer_finger.dae" scale="0.001 0.001 0.001"/>
+          <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes_scaled/visual/robotiq_arg2f_85_outer_finger.dae"/>
         </geometry>
         <material name="">
           <color rgba="0.1 0.1 0.1 1" />
@@ -46,7 +46,7 @@
       <collision>
         <origin xyz="0 0 0" rpy="0 0 0" />
         <geometry>
-          <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes/collision/robotiq_arg2f_85_outer_finger.dae" scale="0.001 0.001 0.001"/>
+          <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes_scaled/collision/robotiq_arg2f_85_outer_finger.dae"/>
         </geometry>
       </collision>
     </link>
@@ -62,7 +62,7 @@
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0" />
         <geometry>
-          <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes/visual/robotiq_arg2f_85_inner_knuckle.dae" scale="0.001 0.001 0.001"/>
+          <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes_scaled/visual/robotiq_arg2f_85_inner_knuckle.dae"/>
         </geometry>
         <material name="">
           <color rgba="0.1 0.1 0.1 1" />
@@ -71,7 +71,7 @@
       <collision>
         <origin xyz="0 0 0" rpy="0 0 0" />
         <geometry>
-          <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes/collision/robotiq_arg2f_85_inner_knuckle.dae" scale="0.001 0.001 0.001"/>
+          <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes_scaled/collision/robotiq_arg2f_85_inner_knuckle.dae"/>
         </geometry>
       </collision>
     </link>
@@ -87,7 +87,7 @@
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0" />
         <geometry>
-          <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes/visual/robotiq_arg2f_85_inner_finger.dae" scale="0.001 0.001 0.001"/>
+          <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes_scaled/visual/robotiq_arg2f_85_inner_finger.dae"/>
         </geometry>
         <material name="">
           <color rgba="0.1 0.1 0.1 1" />
@@ -96,7 +96,7 @@
       <collision>
         <origin xyz="0 0 0" rpy="0 0 0" />
         <geometry>
-          <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes/collision/robotiq_arg2f_85_inner_finger.dae" scale="0.001 0.001 0.001" />
+          <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes_scaled/collision/robotiq_arg2f_85_inner_finger.dae" />
         </geometry>
       </collision>
     </link>

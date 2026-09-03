@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<!--
+  GENERATED-by-hand (not scripted) — local prototype only, see
+  ../README.md. HPP-manipulation semantics for generated/ur10_robotiq.urdf.
+  Neither Gepetto/example-robot-data's ur_description nor
+  ros-industrial/robotiq ships an HPP-style SRDF (no <gripper>/<handle>
+  concept in either upstream), so this is authored fresh — same situation
+  script/twin/assets/panda_bimanual.srdf was already in for Panda.
+
+  <gripper> frame: gripper_tcp, a zero-mass frame added by
+  merge_ur10_robotiq.py at 0.15m along robotiq_arg2f_base_link's own +Z
+  (verified from the finger_joint/left_inner_finger_joint chain that +Z is
+  the fingers' approach direction; the 0.15m distance itself is a
+  published-typical estimate, NOT yet measured against this exact mesh).
+  Identity local pose here, matching panda_hand_tcp's pattern — assumes
+  gripper_tcp's own +Z already points in the approach direction (true by
+  construction, since it's rigidly offset along robotiq_arg2f_base_link's
+  +Z with zero rotation).
+
+  disable_collisions: only the obviously-adjacent gripper linkage pairs
+  are listed below (visual estimate from the joint chain) — NOT a
+  self-collision-checked pairwise sweep like Panda's list (which was
+  reused verbatim from an existing MoveIt SRDF). Expect to need more
+  pairs once a real self-collision check is run.
+-->
+<robot name="ur10_robotiq">
+  <disable_collisions link1="robotiq_arg2f_base_link" link2="left_outer_knuckle" reason="Adjacent"/>
+  <disable_collisions link1="robotiq_arg2f_base_link" link2="right_outer_knuckle" reason="Adjacent"/>
+  <disable_collisions link1="robotiq_arg2f_base_link" link2="left_inner_knuckle" reason="Adjacent"/>
+  <disable_collisions link1="robotiq_arg2f_base_link" link2="right_inner_knuckle" reason="Adjacent"/>
+  <disable_collisions link1="left_outer_knuckle" link2="left_outer_finger" reason="Adjacent"/>
+  <disable_collisions link1="left_outer_finger" link2="left_inner_finger" reason="Adjacent"/>
+  <disable_collisions link1="left_inner_finger" link2="left_inner_finger_pad" reason="Adjacent"/>
+  <disable_collisions link1="left_inner_finger" link2="left_inner_knuckle" reason="Adjacent"/>
+  <disable_collisions link1="right_outer_knuckle" link2="right_outer_finger" reason="Adjacent"/>
+  <disable_collisions link1="right_outer_finger" link2="right_inner_finger" reason="Adjacent"/>
+  <disable_collisions link1="right_inner_finger" link2="right_inner_finger_pad" reason="Adjacent"/>
+  <disable_collisions link1="right_inner_finger" link2="right_inner_knuckle" reason="Adjacent"/>
+  <disable_collisions link1="wrist_3_link" link2="robotiq_arg2f_base_link" reason="Adjacent"/>
+  <disable_collisions link1="wrist_2_link" link2="robotiq_arg2f_base_link" reason="Never"/>
+
+  <gripper name="gripper" clearance="0.03">
+    <position> 0 0 0  1 0 0 0 </position>
+    <link name="gripper_tcp" />
+  </gripper>
+</robot>

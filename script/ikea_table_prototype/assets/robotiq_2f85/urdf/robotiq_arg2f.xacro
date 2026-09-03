@@ -10,7 +10,7 @@
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0" />
         <geometry>
-          <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes/visual/robotiq_arg2f_85_base_link.dae" scale="0.001 0.001 0.001"/>
+          <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes_scaled/visual/robotiq_arg2f_85_base_link.dae"/>
         </geometry>
         <material name="">
           <color rgba="0.1 0.1 0.1 1" />
@@ -19,7 +19,7 @@
       <collision>
         <origin xyz="0 0 0" rpy="0 0 0" />
         <geometry>
-           <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes/collision/robotiq_arg2f_base_link.stl" />
+           <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/robotiq_2f85/meshes_scaled/collision/robotiq_arg2f_base_link.stl" />
         </geometry>
       </collision>
     </link>
