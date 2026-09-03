@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!-- GENERATED — see generate_urdf_srdf.py. Local prototype only. -->
+<robot name="leg2">
+  <!-- Grasp point: leg center, gripper approaches from the side (world -X
+       in the leg's own frame at rest) — a parallel jaw closing across the
+       leg's 0.03x0.03 cross-section. Tentative: verify/tune live against
+       the actual Robotiq URDF once wired into a scene; the pokeball
+       precedent this repo already has is a poor analog (sphere grasps are
+       orientation-insensitive, a peg grasp is not). -->
+  <handle name="leg2/handle" clearance="0.02" approaching_direction="1 0 0">
+    <position xyz="0 0 0" xyzw="0 0 0 1"/>
+    <link name="base_link"/>
+  </handle>
+  <!-- Placement contact: the leg's top face, mated against the matching
+       socket contact on the table (see table.srdf) — same mechanism as
+       script/twin/assets/pokeball_bimanual.srdf's "bottom" contact. -->
+  <contact name="leg2/top">
+    <link name="base_link"/>
+    <point>
+       0.015 0.015 0.13125
+      -0.015 0.015 0.13125
+      -0.015 -0.015 0.13125
+       0.015 -0.015 0.13125
+    </point>
+    <shape>
+      0 1 2 3
+    </shape>
+  </contact>
+</robot>
