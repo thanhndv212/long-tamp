@@ -45,14 +45,17 @@ from long_tamp.backends.pyhpp import PyHPPBackend
 HERE = Path(__file__).parent
 GEN = HERE / "generated"
 
-ARM_URDF = GEN / "ur10_robotiq.container.urdf"
-ARM_SRDF = GEN / "ur10_robotiq.srdf"
+# ur10_right uses a *separate* URDF (world offset baked in as an outer
+# fixed link, see merge_ur10_robotiq.py) rather than the same file loaded
+# twice with a pose= offset — PyHPPBackend.load_robot(pose=...) hits a
+# real pyhpp_viser bug where a robot's *static* (fixed-to-universe)
+# geometry doesn't reflect that post-load repositioning, only geometry
+# driven by a real moving joint does. Confirmed live: both arms' pedestals
+# were caching to the exact same [0,0,0.15] position before this fix.
+ARM_LEFT_URDF = GEN / "ur10_robotiq.container.urdf"
+ARM_RIGHT_URDF = GEN / "ur10_robotiq_right.container.urdf"
+ARM_SRDF = GEN / "ur10_robotiq.srdf"  # shared — offset is URDF-only
 GROUND_URDF = GEN / "ground.urdf"
-# Pedestal is now part of ur10_robotiq.urdf itself (see
-# merge_ur10_robotiq.py) — a fixed joint onto UR10's own root ("world"),
-# not a separately-positioned environment object. Arm pose below is back
-# to ground level (z=0); the URDF's own pedestal_to_arm joint supplies
-# the 0.3m elevation.
 
 OBJECTS = {
     "table": (GEN / "table.urdf", GEN / "table.srdf", (0.75, 0.3, 0.5), (0, 0, 0, 1)),
@@ -61,11 +64,6 @@ OBJECTS = {
     "leg3": (GEN / "leg3.urdf", GEN / "leg3.srdf", (0.4, 0.30, 0.13125), (0, 0, 0, 1)),
     "leg4": (GEN / "leg4.urdf", GEN / "leg4.srdf", (0.4, 0.45, 0.13125), (0, 0, 0, 1)),
 }
-
-LEFT_ARM_POSE = pin.SE3(np.eye(3), np.array([0.0, 0.0, 0.0]))
-RIGHT_ARM_POSE = pin.SE3(
-    pin.utils.rpyToMatrix(0, 0, np.pi), np.array([1.5, 0.0, 0.0])
-)
 
 UR10_JOINTS = [
     "shoulder_pan_joint",
@@ -98,12 +96,10 @@ def main() -> None:
     backend = PyHPPBackend(viewer_type="viser")
 
     backend.load_robot(
-        "ur10_left", str(ARM_URDF), str(ARM_SRDF),
-        root_joint_type="anchor", pose=LEFT_ARM_POSE,
+        "ur10_left", str(ARM_LEFT_URDF), str(ARM_SRDF), root_joint_type="anchor"
     )
     backend.load_robot(
-        "ur10_right", str(ARM_URDF), str(ARM_SRDF),
-        root_joint_type="anchor", pose=RIGHT_ARM_POSE,
+        "ur10_right", str(ARM_RIGHT_URDF), str(ARM_SRDF), root_joint_type="anchor"
     )
     backend.load_environment("ground", str(GROUND_URDF))
     for name, (urdf_path, srdf_path, _, _) in OBJECTS.items():

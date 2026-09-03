@@ -15,10 +15,20 @@ rescale_robotiq_meshes.py's docstring for a real pyhpp_viser rendering bug
 this ran into along the way (non-unit <mesh scale> collapses geometry
 toward world origin).
 
-Used twice at the SceneBuilder level (paths.robot.ur10_left /
-paths.robot.ur10_right with a pose offset), same pattern as
-script/twin/assets/panda_bimanual.urdf.template being reused for both
-arms — no per-arm prefixing needed in the URDF itself.
+Generates TWO files: ur10_robotiq.urdf (identity world placement, for
+ur10_left) and ur10_robotiq_right.urdf (world offset baked in via an outer
+"world_mount" fixed link, for ur10_right). The offset is baked into the
+URDF itself rather than applied via PyHPPBackend.load_robot(pose=...) /
+Device.setRobotRootPosition() after loading — found a real pyhpp_viser bug
+where that post-load repositioning isn't reflected in *static* (fixed-to-
+universe) geometry rendering: ur10_right's pedestal rendered at ur10_left's
+position (both cached [0,0,0.15]) even though the real FK/model data was
+already correct (confirmed via direct Pinocchio queries before concluding
+this was a viewer bug, not a modeling one) — only geometry driven by a real
+moving joint reflected the offset correctly. Baking the offset into the
+URDF's own static structure instead sidesteps that code path entirely,
+matching how ur10_left (loaded at identity, i.e. no post-load reposition)
+already rendered correctly from the start.
 """
 
 import xml.etree.ElementTree as ET
@@ -27,7 +37,6 @@ from pathlib import Path
 HERE = Path(__file__).parent
 UR10_URDF = HERE / "assets" / "ur10" / "ur10_robot_generated.urdf"
 ROBOTIQ_URDF = HERE / "assets" / "robotiq_2f85" / "urdf" / "robotiq_2f85_generated.urdf"
-OUT_URDF = HERE / "generated" / "ur10_robotiq.urdf"
 
 GRIPPER_ROOT_LINK = "robotiq_arg2f_base_link"
 ARM_MOUNT_FRAME = "tool0"
@@ -55,8 +64,14 @@ MOUNT_RPY = "0 0 0"
 TCP_LINK = "gripper_tcp"
 TCP_Z = "0.15"
 
+WORLD_MOUNT_LINK = "world_mount"
+# ur10_right's world placement — 1.5m along X, rotated 180deg about Z to
+# face back toward ur10_left. Matches view_full_scene.py's layout.
+RIGHT_ARM_XYZ = "1.5 0 0"
+RIGHT_ARM_RPY = "0 0 3.141592653589793"
 
-def main() -> None:
+
+def build(world_xyz: str | None, world_rpy: str | None) -> ET.Element:
     ur10_tree = ET.parse(UR10_URDF)
     ur10_root = ur10_tree.getroot()
 
@@ -120,10 +135,35 @@ def main() -> None:
     ET.SubElement(tcp_joint, "child", {"link": TCP_LINK})
     combined.append(tcp_joint)
 
-    OUT_URDF.parent.mkdir(exist_ok=True)
-    ET.indent(combined, space="  ")
-    ET.ElementTree(combined).write(OUT_URDF, xml_declaration=True, encoding="unicode")
-    print(f"wrote {OUT_URDF.relative_to(HERE.parent.parent)}")
+    if world_xyz is not None:
+        world_mount_link = ET.Element("link", {"name": WORLD_MOUNT_LINK})
+        combined.append(world_mount_link)
+        world_mount_joint = ET.Element(
+            "joint", {"name": "world_mount_to_pedestal", "type": "fixed"}
+        )
+        ET.SubElement(
+            world_mount_joint, "origin", {"xyz": world_xyz, "rpy": world_rpy}
+        )
+        ET.SubElement(world_mount_joint, "parent", {"link": WORLD_MOUNT_LINK})
+        ET.SubElement(world_mount_joint, "child", {"link": PEDESTAL_LINK})
+        combined.append(world_mount_joint)
+
+    return combined
+
+
+def write(root: ET.Element, out_path: Path) -> None:
+    out_path.parent.mkdir(exist_ok=True)
+    ET.indent(root, space="  ")
+    ET.ElementTree(root).write(out_path, xml_declaration=True, encoding="unicode")
+    print(f"wrote {out_path.relative_to(HERE.parent.parent)}")
+
+
+def main() -> None:
+    write(build(None, None), HERE / "generated" / "ur10_robotiq.urdf")
+    write(
+        build(RIGHT_ARM_XYZ, RIGHT_ARM_RPY),
+        HERE / "generated" / "ur10_robotiq_right.urdf",
+    )
 
 
 if __name__ == "__main__":
