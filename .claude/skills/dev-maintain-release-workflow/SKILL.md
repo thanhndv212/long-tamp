@@ -100,23 +100,23 @@ Until then, both repos are developed in parallel, and most feature/fix work shou
   `research-vault/agimus-spacelab/agimus-spacelab-opensource-release.md` in the workspace
   vault for the full reasoning) and must not be reintroduced.
 
-### The `spacelab-example` branch
+### The `spacelab-example` branch — does not exist in `long_tamp`
 
-`long_tamp`'s GitHub repo carries a `spacelab-example` branch — the full working SpaceLab
-BT.CPP integration (CORBA already removed, `task_planning/`'s screwdriving adapter still
-intact), kept for **private validation during current development only**: it's the one
-proven long-horizon, multi-phase example, useful for proving out changes to
-`GraspSequencePlanner`/lookahead/checkpointing against a real complex mission before the
-generic examples under `script/twin/` catch up to that level of complexity.
+Earlier notes here (and in the vault) claimed `long_tamp`'s GitHub repo carried a
+`spacelab-example` branch with a full working SpaceLab BT.CPP integration, kept private for
+validation. **That was wrong, corrected 2026-09-02.** Verified directly:
+`git ls-remote origin spacelab-example` against `long_tamp`'s actual GitHub remote returns
+nothing — `origin` has only `main`. What existed was a local-only, unpushed branch in one
+working copy, pointing at a commit that's genuinely part of `agimus_spacelab`'s own history
+(where the real `spacelab-example` branch lives). It's been deleted from the `long_tamp`
+working copy; nothing to clean up on GitHub since it was never pushed there.
 
-- It must never be merged into `main`, and never referenced from `main`'s docs as a
-  current example (this is exactly what the docs/tests scrub in this repo's history
-  removed).
-- **It will be deleted, or replaced with a from-scratch generic long-horizon example,
-  at release time** (when `long_tamp` goes public / hits PyPI). Do not build anything on
-  the assumption that this branch survives past that point.
-- The repo itself is currently **private** specifically so this branch can safely exist.
-  If `long_tamp` is made public before the branch is dealt with, delete the branch first.
+The underlying need — a proven long-horizon, multi-phase example for validating
+`GraspSequencePlanner`/lookahead/checkpointing changes before `script/twin/`'s generic
+examples catch up to that complexity — is still real and still unmet in `long_tamp`. See
+Phase 4 in `research-vault/agimus-spacelab/agimus-spacelab-opensource-release.md`: a
+from-scratch generic long-horizon example (fictional mission, no SpaceLab content) is the
+tracked way to close that gap, not porting or referencing anything from `agimus_spacelab`.
 
 ## Release process (PyPI)
 
@@ -146,10 +146,10 @@ Not yet done for `long_tamp` — no release has shipped. When cutting one:
    API token, when this is actually set up).
 6. **GitHub release notes**: summarize what changed since the last tag — this is also
    where a `CHANGELOG.md` would get updated, if/when one exists (doesn't yet).
-7. Before the *first* public release specifically: confirm the `spacelab-example` branch
-   has been handled (see above), and do one more `git log --all --name-only` sweep across
-   `long_tamp`'s history for anything SpaceLab-tagged that a future contributor's branch
-   might have reintroduced since the original scrub.
+7. Before the *first* public release specifically: do one more `git log --all --name-only`
+   sweep across `long_tamp`'s history (all branches, `git branch -a`) for anything
+   SpaceLab-tagged that a future contributor's branch might have reintroduced since the
+   original scrub.
 
 ## Docs maintenance
 
@@ -173,7 +173,7 @@ Not yet done for `long_tamp` — no release has shipped. When cutting one:
 |---|---|
 | "I'll port this to agimus_spacelab later" | Later becomes never once the two trees drift. Port in the same session, or note it explicitly (e.g., a memory/vault entry) if truly deferred. |
 | "This task_planning/ fix is small, agimus_spacelab could use it too" | No — task_planning/ is long_tamp-only, full stop, regardless of size. It supersedes the DBT path there; porting it back reintroduces the coupling the split was for. |
-| "I'll just merge spacelab-example into main to save time" | That reintroduces exactly what the filter-repo history rewrite (and the force-push that corrected it) was done to remove. Never merge that branch into main. |
+| "I'll port `agimus_spacelab`'s `script/spacelab/` (or its `spacelab-example` branch) into `long_tamp`, just scoped to `script/`" | That reintroduces exactly what the filter-repo history rewrite was done to remove — the mission-specific content (real part/gripper/handle names, the actual assembly sequence) isn't confined to config, it's baked into the Python itself. Build a from-scratch generic example instead (see Phase 4 in the vault note); don't port. |
 | "CI is green, so tests pass" | CI is lint-only right now. Green CI says nothing about `pytest tests/` — run it yourself in the HPP environment. |
 | "PyPI release is blocked until we sort out HPP distribution" | It isn't — the PyPI package is pure-Python only; HPP is a runtime dependency the user provides, not a packaging blocker. |
 
