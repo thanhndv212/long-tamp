@@ -144,6 +144,17 @@ COLLISION_EXCLUSIONS: List[Tuple[str, str]] = [
     # still a different joint than the two exclusions above cover.
     ("ur10_left/pedestal", "ur10_left/wrist_1_joint"),
     ("ur10_right/pedestal", "ur10_right/wrist_1_joint"),
+    # One more link down again, same rerun: "pedestal_0 and
+    # wrist_2_link_0" (65/1000). At this point every joint from
+    # shoulder_lift through wrist_1 has independently shown up here one
+    # rerun at a time — a coarse 0.3m box under the shoulder is going to
+    # overlap *something* in most arm poses regardless of which specific
+    # downstream link it is, so this joint-by-joint whack-a-mole will
+    # likely keep finding one more link each run. If wrist_3_joint (the
+    # last one before the gripper) turns up next, consider excluding the
+    # whole pedestal-vs-arm-chain in one shot instead of a 5th entry here.
+    ("ur10_left/pedestal", "ur10_left/wrist_2_joint"),
+    ("ur10_right/pedestal", "ur10_right/wrist_2_joint"),
 ]
 
 # Pick up each leg, let it settle onto a table socket, release; alternating
