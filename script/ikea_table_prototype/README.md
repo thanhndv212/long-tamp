@@ -18,6 +18,14 @@ reference before authoring fresh, safe-to-publish geometry.
 - `assets/reference_table_lack_0825.mjcf.xml` — the original MJCF definition (5 bodies: 4
   legs + tabletop), kept as a reference for connection-site geometry and collision box
   dimensions when authoring the URDF+SRDF version below.
+- `build_assets.py` — the whole asset-generation pipeline (mesh rescaling, xacro
+  expansion, URDF/SRDF authoring, arm assembly), run stage-by-stage or all at once;
+  writes to `generated/`. See its own docstring for the stage list and run order.
+- `config/ikea_table_config.yaml` — the task config (scene, joints, grasps, contacts),
+  loaded via `YamlTaskLoader`.
+- `task_assemble_table.py` — the actual grasp-sequence planning task.
+- `debug_view_frames.py` — viser scene viewer with handle/gripper frames and an
+  FK placement check; run inside the hpp-agimus-arm64 container.
 
 ## Before this ever goes near `main` or a public release
 

@@ -1,0 +1,310 @@
+# IKEA LACK table assembly — local prototype task configuration (YAML)
+# Local prototype only — see ../../README.md (this whole directory only
+# exists on the local/ikea-furniture-prototype branch).
+#
+# Two UR10+Robotiq-2F85 arms (see build_assets.py's merge-arm stage) face
+# each other 1.5m apart across a shared workbench and assemble a 4-legged
+# table: pick each leg up by its handle, mate its "top" contact into one
+# of the table's 4 "socketN" contacts (see build_assets.py's urdf-srdf
+# stage — the leg->table mate is a placement <contact> pair, not a second
+# <handle> pair, so it's expressed here via `contact_surfaces`, not
+# `valid_pairs`). A single generic Robotiq gripper does all the grasping,
+# so both arms are given the same valid_pairs (either arm can pick up
+# either part).
+#
+# Scene layout, joint configs, and object poses below are copied verbatim
+# from script/ikea_table_prototype/debug_view_frames.py's own FK
+# placement check, which verifies every object's actual placement (see
+# its own docstring) — not re-derived / re-guessed here.
+#
+# Every path below is a hpp-agimus-arm64-CONTAINER-absolute path
+# (/home/thanhndv212/devel/hpp/src/long_tamp/...), not this host's path
+# (/Users/thanhndv212/Develop/agimus-ws/long-tamp/...) — pyhpp, and hence
+# any task script consuming this YAML via ManipulationTask/SceneBuilder,
+# only imports inside that container (see debug_view_frames.py's
+# docstring), which bind-mounts this repo at that different path
+# (confirmed via `docker exec hpp-agimus-arm64 ...`), not at the host's
+# own path. Robot URDFs additionally use the `.container.urdf` *variant*
+# because their internal mesh <filename> references also had to be
+# container-absolute (build_assets.py's merge-arm/container-variant
+# stages); table/legN.urdf's internal mesh references turned out to
+# already be container-absolute on disk (verified by grepping their
+# `filename="..."` attributes) — ground/workbench.urdf have no meshes at
+# all (pure primitive-box geometry), so no variant was ever needed there.
+#
+# Consumed by: YamlTaskLoader (src/long_tamp/config/yaml_loader.py)
+
+task: ikea_table_assembly
+
+# ---------------------------------------------------------------------------
+# File paths (used by SceneBuilder) — all absolute, see header note above.
+# ---------------------------------------------------------------------------
+paths:
+  robot:
+    ur10_left:
+      urdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/ur10_robotiq.container.urdf"
+      srdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/ur10_robotiq.srdf"
+      # No `pose` — loaded at world identity, matching
+      # debug_view_frames.py's layout.
+    ur10_right:
+      urdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/ur10_robotiq_right.container.urdf"
+      srdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/ur10_robotiq.srdf"
+      # No `pose` either — ur10_right's 1.5m/180deg world offset is baked
+      # into its own URDF as an outer fixed "world_mount" link (see
+      # build_assets.py's merge-arm stage), NOT applied via this YAML's
+      # robot `pose` key. Setting a pose here too would double-apply the
+      # offset, and a post-load SceneBuilder pose is a documented
+      # pyhpp_viser bug for this exact URDF anyway (confirmed live and
+      # sidestepped this way — see build_assets.py's merge-arm stage
+      # docstring for the bug detail).
+
+  environment:
+    ground: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/ground.urdf"
+    workbench: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/workbench.urdf"
+
+  objects:
+    table:
+      urdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/table.urdf"
+      srdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/table.srdf"
+    leg1:
+      urdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/leg1.urdf"
+      srdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/leg1.srdf"
+    leg2:
+      urdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/leg2.urdf"
+      srdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/leg2.srdf"
+    leg3:
+      urdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/leg3.urdf"
+      srdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/leg3.srdf"
+    leg4:
+      urdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/leg4.urdf"
+      srdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/leg4.srdf"
+
+# ---------------------------------------------------------------------------
+# Scene selection
+# ---------------------------------------------------------------------------
+robots:
+  - ur10_left
+  - ur10_right
+
+environments:
+  - ground
+  - workbench
+
+# ---------------------------------------------------------------------------
+# Robot joint groups
+#
+# 6 arm joints + 6 Robotiq finger/knuckle joints per arm. The Robotiq URDF
+# expresses the 5 coupled fingers via <mimic> tags (see generated
+# ur10_robotiq.container.urdf), but neither pinocchio's nor HPP's URDF
+# parser in this workspace collapses <mimic> — grep confirms no `mimic`
+# handling anywhere in the tracked source (pyhpp backend, hpp-core,
+# hpp-manipulation-corba) — so all 6 are independent DOF here, each needing
+# its own initial + bounds entry, same as twin_lift_ball_config.yaml lists
+# both of Panda's real finger joints. Initial 0.0 = fully open on every one
+# (all lower limits are 0). They stay unconstrained here; freezing them
+# during arm motion is left to FREEZE_JOINT_SUBSTRINGS in
+# task_assemble_table.py (substrings "finger_joint"/"knuckle_joint" cover
+# all 6) — see freeze_joints below and twin/task_lift_ball.py for the
+# precedent.
+#
+# Arm initial values (LEFT/RIGHT_ARM_Q) copied from
+# debug_view_frames.py's layout.
+# Bounds were originally the raw +/-2*pi from
+# assets/ur10/ur10_robot_generated.urdf's own <limit> tags (elbow_joint is
+# +/-pi already) — tightened to +/-pi across the board after the first
+# real planning run: a standalone pinocchio DLS-IK check confirmed
+# leg1's top-down pregrasp pose for ur10_left converges reliably (300/300
+# random restarts within +/-pi), so the target itself was never
+# unreachable, but HPP's own random-restart target generation was still
+# timing out (30s hardcoded cap in ConfigGenerator.generate_via_edge, not
+# exposed through plan_sequence()) at ~70% solver-non-convergence per
+# attempt. With bounds at +/-2*pi, most of that budget is spent on
+# uniform random draws that land in the second, physically-nonsensical
+# revolution a pedestal-mounted arm doing tabletop pick-and-place has no
+# real reason to ever visit (a real installation would software-limit
+# this range the same way, to avoid self-tangling/cable wrap) — halving
+# each joint's sampled range roughly doubles the odds any given draw
+# lands near the solution actually used.
+# ---------------------------------------------------------------------------
+joint_groups:
+  UR10_LEFT:
+    - {joint: ur10_left/shoulder_pan_joint,             initial:  0.00, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_left/shoulder_lift_joint,             initial: -1.20, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_left/elbow_joint,                     initial:  1.60, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_left/wrist_1_joint,                   initial: -1.97, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_left/wrist_2_joint,                   initial: -1.57, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_left/wrist_3_joint,                   initial:  0.00, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_left/finger_joint,                    initial:  0.0,  bounds: [0.0, 0.8]}
+    - {joint: ur10_left/left_inner_knuckle_joint,        initial:  0.0,  bounds: [0.0, 0.8757]}
+    - {joint: ur10_left/left_inner_finger_joint,         initial:  0.0,  bounds: [0.0, 0.8757]}
+    - {joint: ur10_left/right_outer_knuckle_joint,       initial:  0.0,  bounds: [0.0, 0.81]}
+    - {joint: ur10_left/right_inner_knuckle_joint,       initial:  0.0,  bounds: [0.0, 0.8757]}
+    - {joint: ur10_left/right_inner_finger_joint,        initial:  0.0,  bounds: [0.0, 0.8757]}
+  UR10_RIGHT:
+    - {joint: ur10_right/shoulder_pan_joint,             initial:  0.40, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_right/shoulder_lift_joint,            initial: -1.00, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_right/elbow_joint,                    initial:  1.30, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_right/wrist_1_joint,                  initial: -1.80, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_right/wrist_2_joint,                  initial: -1.30, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_right/wrist_3_joint,                  initial:  0.50, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_right/finger_joint,                   initial:  0.0,  bounds: [0.0, 0.8]}
+    - {joint: ur10_right/left_inner_knuckle_joint,       initial:  0.0,  bounds: [0.0, 0.8757]}
+    - {joint: ur10_right/left_inner_finger_joint,        initial:  0.0,  bounds: [0.0, 0.8757]}
+    - {joint: ur10_right/right_outer_knuckle_joint,      initial:  0.0,  bounds: [0.0, 0.81]}
+    - {joint: ur10_right/right_inner_knuckle_joint,      initial:  0.0,  bounds: [0.0, 0.8757]}
+    - {joint: ur10_right/right_inner_finger_joint,       initial:  0.0,  bounds: [0.0, 0.8757]}
+
+# ---------------------------------------------------------------------------
+# Freeflyer bounds — table + 4 legs. Workbench top is z=0.4; parts rest at
+# z=0.415-0.42 at start (their own half-thickness above the surface, see
+# debug_view_frames.py). XY covers the shared workspace between the two arm
+# bases (x=0 and x=1.5) plus the legs' staging row (y down to -0.44); Z
+# keeps a floor just below resting height and enough headroom to lift a
+# leg clear of the table before lowering it into a socket.
+# ---------------------------------------------------------------------------
+freeflyer_bounds:
+  translation: [[0.0, 1.5], [-0.6, 0.6], [0.35, 1.0]]
+  quaternion:  [[-1.0001, 1.0001], [-1.0001, 1.0001],
+                [-1.0001, 1.0001], [-1.0001, 1.0001]]
+
+# ---------------------------------------------------------------------------
+# Arm groups — for GraspSequencePlanner auto-freeze (freeze the arm not
+# active in a given grasp/place phase).
+# ---------------------------------------------------------------------------
+arm_groups:
+  ur10_left:
+    joint_keyword: "ur10_left"
+    grippers:
+      - ur10_left/gripper
+  ur10_right:
+    joint_keyword: "ur10_right"
+    grippers:
+      - ur10_right/gripper
+
+# ---------------------------------------------------------------------------
+# Objects — initial poses (xyzquat, FK-verified in
+# debug_view_frames.py's own placement check), grasp handles, and
+# placement contact surfaces.
+#
+# table/socketN <-> legN/top are NOT paired 1:1 here — ConstraintGraphFactory
+# generates a placement edge for every (object contact, other contact)
+# combination among the surfaces listed, so any leg can mate into any
+# socket; the task script's grasp/place sequence picks the actual pairing.
+#
+# Z values are 0.003m (3mm) higher than a naive "workbench top (z=0.40)
+# + object's own half-thickness" arithmetic would give (which puts every
+# object's resting face EXACTLY flush with the workbench top, zero gap)
+# — found live, first real planning run: with zero gap, phase 1's
+# pregrasp target generation failed 100% of attempts on "Collision between
+# object workbench/workbench_base_0 and table/base_link_0", since a
+# perfectly flush surface-to-surface touch reads as interpenetration to
+# the collision checker regardless of arm pose (table's freeflyer is
+# locked at this exact pose for the whole phase, so with zero gap this
+# collision is constant, not something retries find a way around — same
+# failure mode as the frozen-gripper self-collision fixed earlier in
+# ur10_robotiq.srdf). Only an FK-position printout ever checked object
+# placement before that, never real collision, so this went uncaught
+# until now. A real clearance gap here (vs. excluding the
+# pair) is deliberate: unlike the arm/gripper self-collisions, an object
+# actually hitting the workbench mid-transport is a real event a
+# transport path should be blocked by, not a proxy-geometry false
+# positive to blind the checker to.
+# ---------------------------------------------------------------------------
+objects:
+  table:
+    initial_pose_xyzquat: [0.75, 0.0, 0.423, 0.0, 0.0, 0.0, 1.0]
+    handles:
+      - table/handle
+    contact_surfaces:
+      - table/socket1
+      - table/socket2
+      - table/socket3
+      - table/socket4
+  leg1:
+    initial_pose_xyzquat: [0.75, -0.20, 0.418, 0.0, 0.7071067811865476, 0.0, 0.7071067811865476]
+    handles:
+      - leg1/handle
+    contact_surfaces:
+      - leg1/top
+  leg2:
+    initial_pose_xyzquat: [0.75, -0.28, 0.418, 0.0, 0.7071067811865476, 0.0, 0.7071067811865476]
+    handles:
+      - leg2/handle
+    contact_surfaces:
+      - leg2/top
+  leg3:
+    initial_pose_xyzquat: [0.75, -0.36, 0.418, 0.0, 0.7071067811865476, 0.0, 0.7071067811865476]
+    handles:
+      - leg3/handle
+    contact_surfaces:
+      - leg3/top
+  leg4:
+    initial_pose_xyzquat: [0.75, -0.44, 0.418, 0.0, 0.7071067811865476, 0.0, 0.7071067811865476]
+    handles:
+      - leg4/handle
+    contact_surfaces:
+      - leg4/top
+
+# ---------------------------------------------------------------------------
+# Grippers (flat list of gripper frame names — "gripper" is the <gripper>
+# name declared in ur10_robotiq.srdf, namespaced per robot at load time).
+# ---------------------------------------------------------------------------
+grippers:
+  - ur10_left/gripper
+  - ur10_right/gripper
+
+# ---------------------------------------------------------------------------
+# Valid gripper -> handle pairs — a single generic Robotiq gripper design
+# does all the grasping (see build_assets.py's urdf-srdf stage docstring),
+# so both arms
+# are allowed to grasp any part; the task script's grasp sequence decides
+# which arm actually takes which part.
+# ---------------------------------------------------------------------------
+valid_pairs:
+  ur10_left/gripper:
+    - table/handle
+    - leg1/handle
+    - leg2/handle
+    - leg3/handle
+    - leg4/handle
+  ur10_right/gripper:
+    - table/handle
+    - leg1/handle
+    - leg2/handle
+    - leg3/handle
+    - leg4/handle
+
+# No object-on-environment placement is planned (table/legs' initial poses
+# already rest them on the workbench; only leg-into-table placement, via
+# `contact_surfaces` above, is part of the task) — matches
+# twin_lift_ball_config.yaml's environment_contacts: {}.
+environment_contacts: {}
+
+# ---------------------------------------------------------------------------
+# Freeze joints — left empty here, same as twin_lift_ball_config.yaml.
+# Gripper finger/knuckle joints are cosmetic-only (grasp is a rigid TCP
+# constraint, not simulated finger closing) and should be frozen via
+# FREEZE_JOINT_SUBSTRINGS = ["finger_joint", "knuckle_joint"] in whatever
+# task script (task_assemble_table.py or similar) ends up consuming this
+# config — see script/twin/task_lift_ball.py for the precedent.
+# ---------------------------------------------------------------------------
+freeze_joints: []
+
+# ---------------------------------------------------------------------------
+# Planning parameters — defaults from script/templates/task_config_template.yaml,
+# not yet tuned against a real planning run of this scene.
+# ---------------------------------------------------------------------------
+planning:
+  validation_step: 0.01
+  projector_step: 0.1
+  max_iterations: 1000
+  max_random_attempts: 1000
+
+# ---------------------------------------------------------------------------
+# Path optimiser settings — defaults, not yet tuned.
+# ---------------------------------------------------------------------------
+optimization:
+  random_shortcut_loops: 50
+  spline_zero_derivatives_at_state: false
+  time_param_safety: 0.95
+  time_param_order: 2
