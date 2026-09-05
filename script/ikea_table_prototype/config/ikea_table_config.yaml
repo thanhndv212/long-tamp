@@ -100,8 +100,19 @@ environments:
 # handling anywhere in the tracked source (pyhpp backend, hpp-core,
 # hpp-manipulation-corba) — so all 6 are independent DOF here, each needing
 # its own initial + bounds entry, same as twin_lift_ball_config.yaml lists
-# both of Panda's real finger joints. Initial 0.0 = fully open on every one
-# (all lower limits are 0). They stay unconstrained here; freezing them
+# both of Panda's real finger joints. Initial 0.0 = fully open on every one.
+# Bounds are [0, upper] copied straight from the vendored xacro's own
+# <limit> tags EXCEPT *_inner_finger_joint, which the xacro mimics off
+# finger_joint with multiplier="-1" while still declaring an all-positive
+# [0, 0.8757] <limit> — a bug in that specific xacro fork, confirmed
+# against github.com/PickNikRobotics/ros2_robotiq_gripper's actively-
+# maintained equivalent (its mimic="-1" joints correctly flip their OWN
+# <limit> sign too, e.g. right_knuckle_joint's is [-0.8, 0.0] to match a
+# multiplier=-1 off a [0, 0.8] master). Bounds below are corrected to
+# [-0.8757, 0.0] for both *_inner_finger_joint so a positive slider/drive
+# on finger_joint can actually reach a mechanically-consistent closed
+# pose on those two instead of hitting a bound at 0 immediately. They
+# stay unconstrained here; freezing them
 # during arm motion is left to FREEZE_JOINT_SUBSTRINGS in
 # task_assemble_table.py (substrings "finger_joint"/"knuckle_joint" cover
 # all 6) — see freeze_joints below and twin/task_lift_ball.py for the
@@ -136,10 +147,10 @@ joint_groups:
     - {joint: ur10_left/wrist_3_joint,                   initial:  0.00, bounds: [-3.14159265359, 3.14159265359]}
     - {joint: ur10_left/finger_joint,                    initial:  0.0,  bounds: [0.0, 0.8]}
     - {joint: ur10_left/left_inner_knuckle_joint,        initial:  0.0,  bounds: [0.0, 0.8757]}
-    - {joint: ur10_left/left_inner_finger_joint,         initial:  0.0,  bounds: [0.0, 0.8757]}
+    - {joint: ur10_left/left_inner_finger_joint,         initial:  0.0,  bounds: [-0.8757, 0.0]}
     - {joint: ur10_left/right_outer_knuckle_joint,       initial:  0.0,  bounds: [0.0, 0.81]}
     - {joint: ur10_left/right_inner_knuckle_joint,       initial:  0.0,  bounds: [0.0, 0.8757]}
-    - {joint: ur10_left/right_inner_finger_joint,        initial:  0.0,  bounds: [0.0, 0.8757]}
+    - {joint: ur10_left/right_inner_finger_joint,        initial:  0.0,  bounds: [-0.8757, 0.0]}
   UR10_RIGHT:
     - {joint: ur10_right/shoulder_pan_joint,             initial:  0.40, bounds: [-3.14159265359, 3.14159265359]}
     - {joint: ur10_right/shoulder_lift_joint,            initial: -1.00, bounds: [-3.14159265359, 3.14159265359]}
@@ -149,10 +160,10 @@ joint_groups:
     - {joint: ur10_right/wrist_3_joint,                  initial:  0.50, bounds: [-3.14159265359, 3.14159265359]}
     - {joint: ur10_right/finger_joint,                   initial:  0.0,  bounds: [0.0, 0.8]}
     - {joint: ur10_right/left_inner_knuckle_joint,       initial:  0.0,  bounds: [0.0, 0.8757]}
-    - {joint: ur10_right/left_inner_finger_joint,        initial:  0.0,  bounds: [0.0, 0.8757]}
+    - {joint: ur10_right/left_inner_finger_joint,        initial:  0.0,  bounds: [-0.8757, 0.0]}
     - {joint: ur10_right/right_outer_knuckle_joint,      initial:  0.0,  bounds: [0.0, 0.81]}
     - {joint: ur10_right/right_inner_knuckle_joint,      initial:  0.0,  bounds: [0.0, 0.8757]}
-    - {joint: ur10_right/right_inner_finger_joint,       initial:  0.0,  bounds: [0.0, 0.8757]}
+    - {joint: ur10_right/right_inner_finger_joint,       initial:  0.0,  bounds: [-0.8757, 0.0]}
 
 # ---------------------------------------------------------------------------
 # Freeflyer bounds — table + 4 legs. Workbench top is z=0.4; parts rest at
@@ -170,6 +181,20 @@ freeflyer_bounds:
 # ---------------------------------------------------------------------------
 # Arm groups — for GraspSequencePlanner auto-freeze (freeze the arm not
 # active in a given grasp/place phase).
+#
+# legN/peg (task_assemble_table.py's docking-into-socket phases) is listed
+# under ur10_right, not ur10_left: same pattern as agimus_spacelab's
+# spacelab_config.yaml wiring screw_driver/g_SD_part under vispa_arm
+# ("Screw Driver is carried by the VISPA arm") — a gripper mounted on a
+# carried, non-robot object has no entry in this repo's compute_phase_locked
+# _joints() chain-walk (that walk only follows the *handle* side's holder
+# chain, not the active gripper's own carrier), so which arm actually needs
+# to stay unfrozen during a legN/peg docking phase has to be hand-declared
+# here. Hardcoded coupling, not derived: correct only as long as
+# GRASP_SEQUENCE keeps sending every leg to ur10_right — if a future
+# sequence ever has ur10_left carry a leg instead, that leg's peg entry
+# must move to ur10_left's list below or its docking phase will freeze
+# both arms (nothing left to move it into the socket with).
 # ---------------------------------------------------------------------------
 arm_groups:
   ur10_left:
@@ -180,16 +205,22 @@ arm_groups:
     joint_keyword: "ur10_right"
     grippers:
       - ur10_right/gripper
+      - leg1/peg
+      - leg2/peg
+      - leg3/peg
+      - leg4/peg
 
 # ---------------------------------------------------------------------------
 # Objects — initial poses (xyzquat, FK-verified in
-# debug_view_frames.py's own placement check), grasp handles, and
-# placement contact surfaces.
+# debug_view_frames.py's own placement check) and grasp/docking handles.
 #
-# table/socketN <-> legN/top are NOT paired 1:1 here — ConstraintGraphFactory
-# generates a placement edge for every (object contact, other contact)
-# combination among the surfaces listed, so any leg can mate into any
-# socket; the task script's grasp/place sequence picks the actual pairing.
+# No contact_surfaces here (leg-into-table used to be a placement <contact>
+# pair, table/socketN <-> legN/top, combinatorial and NOT 1:1 — see
+# build_assets.py's urdf-srdf stage docstring for why that was replaced).
+# leg1/peg .. leg4/peg (declared under grippers: below) are each restricted
+# by valid_pairs to their own table/socketN_hole handle, so leg1 -> socket1
+# etc. is a deterministic pairing GRASP_SEQUENCE names directly, not a
+# placement leaf ConfigGenerator picks emergently.
 #
 # Z values are 0.003m (3mm) higher than a naive "workbench top (z=0.40)
 # + object's own half-thickness" arithmetic would give (which puts every
@@ -215,50 +246,57 @@ objects:
     initial_pose_xyzquat: [0.75, 0.0, 0.423, 0.0, 0.0, 0.0, 1.0]
     handles:
       - table/handle
-    contact_surfaces:
-      - table/socket1
-      - table/socket2
-      - table/socket3
-      - table/socket4
+      - table/socket1_hole
+      - table/socket2_hole
+      - table/socket3_hole
+      - table/socket4_hole
   leg1:
     initial_pose_xyzquat: [0.75, -0.20, 0.418, 0.0, 0.7071067811865476, 0.0, 0.7071067811865476]
     handles:
       - leg1/handle
-    contact_surfaces:
-      - leg1/top
   leg2:
     initial_pose_xyzquat: [0.75, -0.28, 0.418, 0.0, 0.7071067811865476, 0.0, 0.7071067811865476]
     handles:
       - leg2/handle
-    contact_surfaces:
-      - leg2/top
   leg3:
     initial_pose_xyzquat: [0.75, -0.36, 0.418, 0.0, 0.7071067811865476, 0.0, 0.7071067811865476]
     handles:
       - leg3/handle
-    contact_surfaces:
-      - leg3/top
   leg4:
     initial_pose_xyzquat: [0.75, -0.44, 0.418, 0.0, 0.7071067811865476, 0.0, 0.7071067811865476]
     handles:
       - leg4/handle
-    contact_surfaces:
-      - leg4/top
 
 # ---------------------------------------------------------------------------
-# Grippers (flat list of gripper frame names — "gripper" is the <gripper>
-# name declared in ur10_robotiq.srdf, namespaced per robot at load time).
+# Grippers (flat list of gripper frame names). ur10_left/gripper and
+# ur10_right/gripper are the <gripper> name declared in ur10_robotiq.srdf,
+# namespaced per robot at load time. legN/peg is legN.srdf's own "peg"
+# <gripper> (the docking mate for table/socketN_hole below) — a gripper
+# role on a carried object, not a robot link; see build_assets.py's
+# urdf-srdf stage docstring for the precedent this follows
+# (screw_driver.srdf's g_SD_part).
 # ---------------------------------------------------------------------------
 grippers:
   - ur10_left/gripper
   - ur10_right/gripper
+  - leg1/peg
+  - leg2/peg
+  - leg3/peg
+  - leg4/peg
 
 # ---------------------------------------------------------------------------
-# Valid gripper -> handle pairs — a single generic Robotiq gripper design
-# does all the grasping (see build_assets.py's urdf-srdf stage docstring),
-# so both arms
-# are allowed to grasp any part; the task script's grasp sequence decides
-# which arm actually takes which part.
+# Valid gripper -> handle pairs.
+#
+# ur10_left/gripper and ur10_right/gripper: a single generic Robotiq
+# gripper design does all the grasping (see build_assets.py's urdf-srdf
+# stage docstring), so both arms are allowed to grasp any part; the task
+# script's grasp sequence decides which arm actually takes which part.
+#
+# legN/peg: restricted to its OWN socket only (not all 4) — this is what
+# makes leg1 -> socket1, leg2 -> socket2, etc. a deterministic assignment
+# rather than a placement leaf ConfigGenerator picks emergently among all
+# 16 leg/socket combinations. See build_assets.py's urdf-srdf stage
+# docstring for why this replaced the earlier placement-<contact> model.
 # ---------------------------------------------------------------------------
 valid_pairs:
   ur10_left/gripper:
@@ -273,11 +311,19 @@ valid_pairs:
     - leg2/handle
     - leg3/handle
     - leg4/handle
+  leg1/peg:
+    - table/socket1_hole
+  leg2/peg:
+    - table/socket2_hole
+  leg3/peg:
+    - table/socket3_hole
+  leg4/peg:
+    - table/socket4_hole
 
 # No object-on-environment placement is planned (table/legs' initial poses
-# already rest them on the workbench; only leg-into-table placement, via
-# `contact_surfaces` above, is part of the task) — matches
-# twin_lift_ball_config.yaml's environment_contacts: {}.
+# already rest them on the workbench; leg-into-table docking is a
+# gripper/handle pair via valid_pairs above, not an environment contact) —
+# matches twin_lift_ball_config.yaml's environment_contacts: {}.
 environment_contacts: {}
 
 # ---------------------------------------------------------------------------

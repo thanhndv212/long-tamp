@@ -11,7 +11,7 @@ exclusions in ur10_robotiq.srdf, a zero-gap resting collision, a wrong
 pregrasp approach-direction sign — see build_assets.py's urdf-srdf stage
 docstring for that one — an unseeded/deterministic RNG, and the arm
 pedestal height). Phase 1's pregrasp target now converges reliably but a
-full 8-phase success hasn't landed yet — see GRASP_SEQUENCE's own comment
+full 12-phase success hasn't landed yet — see GRASP_SEQUENCE's own comment
 below for where that stood.
 
 Copied from script/templates/task_yaml_template.py (the generic YAML-driven
@@ -22,32 +22,32 @@ WHY with_grasp_goals() IS NOT USED HERE
 The template's usual pattern narrows the loaded config to just the active
 grasp pairs via ``_loader.task_config.with_grasp_goals(GRASP_GOALS)``. That
 filter (``yaml_loader._yaml_with_grasp_goals``) keeps only the OBJECTS
-whose *handle* appears in a goal string — but `table` is never grasped in
-this task, only placed onto (see build_assets.py's urdf-srdf stage: the leg->table
-mate is `table/socketN` <-> `legN/top` contact surfaces, not a second
-handle pair). Verified empirically: calling with_grasp_goals() with only
-leg grasp goals silently drops `table` from OBJECTS, taking
-`table/socket1..4` out of CONTACT_SURFACES_PER_OBJECT with it — with no
-table contacts left in the graph, a released leg would have nowhere valid
-to land. So this script uses ``_loader.task_config`` unfiltered instead,
-keeping all 5 objects (table + 4 legs) and every declared contact surface
-present regardless of which handles this run's GRASP_SEQUENCE touches.
+whose *handle* appears in a goal string — but `table` only ever appears as
+the HANDLE side of leg-into-table docking (table/socketN_hole, see build_
+assets.py's urdf-srdf stage), never as a grasp target itself in
+GRASP_SEQUENCE. Verified empirically (back when leg->table was a placement
+<contact> pair rather than today's docking-handle pair, but the mechanism
+is the same shape): calling with_grasp_goals() with only leg grasp goals
+silently drops `table` from OBJECTS, taking its handles/contacts out of
+the graph with it — with nowhere for a leg's peg to dock, the sequence
+would be unsatisfiable. So this script uses ``_loader.task_config``
+unfiltered instead, keeping all 5 objects (table + 4 legs) and every
+declared handle present regardless of which pairs this run's
+GRASP_SEQUENCE touches.
 
 WHAT "PLACE INTO A SOCKET" ACTUALLY MEANS HERE
 ------------------------------------------------
-There is no explicit "place at socket N" call anywhere in this API. Per
-docs/hpp_python_interface/hpp_manipulation_complete_motion_plan.md
-(Appendix A): ConstraintGraphFactory states are indexed ONLY by the
-grasp-assignment vector (which gripper holds which handle) — which of an
-object's several declared contact surfaces it is actually resting on is a
-*continuous leaf* choice within that state, not a separate discrete node.
-So a `(gripper, None)` release phase below doesn't target a specific
-socket; ConfigGenerator.generate_via_edge() projects onto *some* leaf of
-the table/leg placement manifold, most likely (not guaranteed) whichever
-socket geometrically corresponds to wherever the leg already is when
-released. Which socket a given leg actually lands in is therefore an
-emergent property of the transport path, not a value this script sets —
-first thing to inspect once this runs.
+leg1 -> socket1, leg2 -> socket2, etc. is a deterministic gripper/handle
+docking pair now (legN/peg <-> table/socketN_hole, restricted 1:1 by
+ikea_table_config.yaml's valid_pairs) — NOT the placement-<contact>
+mechanism this section used to describe (ConstraintGraphFactory picking an
+emergent leaf of a combinatorial leg/socket placement manifold on a plain
+`(gripper, None)` release). See build_assets.py's urdf-srdf stage
+docstring for why that was replaced: the old mechanism left which socket a
+released leg landed in emergent from the transport path, not a value this
+script set. GRASP_SEQUENCE below now has 3 phases per leg instead of 2 —
+grasp the handle, dock the peg into its named socket, then release the
+handle (the leg stays put, held by the docking grasp alone).
 
 GRASP_SEQUENCE below alternates arms across the 4 legs (mostly to exercise
 both arms of the two-UR10 setup this scene was built for) — an arbitrary
@@ -157,18 +157,55 @@ COLLISION_EXCLUSIONS: List[Tuple[str, str]] = [
     ("ur10_right/pedestal", "ur10_right/wrist_2_joint"),
 ]
 
-# Pick up each leg, let it settle onto a table socket, release; alternating
-# arms. See module docstring for why "which socket" isn't set explicitly.
+# Pick up each leg, dock its peg into the matching table socket, release the
+# arm's grip (the leg stays put, held by the docking grasp) -- 3 phases per
+# leg. leg1 -> socket1, leg2 -> socket2, etc. is now a deterministic
+# gripper/handle pairing (see ikea_table_config.yaml's valid_pairs and
+# build_assets.py's urdf-srdf stage docstring for why/how), not an emergent
+# placement choice -- see the module docstring's old "WHAT 'PLACE INTO A
+# SOCKET' ACTUALLY MEANS HERE" section, superseded by this change.
 GRASP_SEQUENCE: List[Tuple[str, Optional[str]]] = [
-    ("ur10_right/gripper", "leg1/handle"),
-    ("ur10_right/gripper", None),
+    ("ur10_right/gripper", "leg1/handle"),  # arm grasps leg1
+    ("leg1/peg", "table/socket1_hole"),  # dock leg1's peg into socket1
+    ("ur10_right/gripper", None),  # arm releases leg1 (stays docked)
     ("ur10_right/gripper", "leg2/handle"),
+    ("leg2/peg", "table/socket2_hole"),
     ("ur10_right/gripper", None),
     ("ur10_right/gripper", "leg3/handle"),
+    ("leg3/peg", "table/socket3_hole"),
     ("ur10_right/gripper", None),
     ("ur10_right/gripper", "leg4/handle"),
+    ("leg4/peg", "table/socket4_hole"),
     ("ur10_right/gripper", None),
 ]
+
+# Phase 0 (grasp leg1 with ur10_right) reliably fails at path planning, not
+# target generation: ✓ SUCCESS target-config generation on every attempt,
+# immediately followed by "Maximal number of iterations reached" on
+# computePath, repeated across 9 freshly-regenerated targets in one run.
+# That pattern -- reachable endpoint, unreachable path, every time -- points
+# to a static obstacle blocking the corridor rather than sampling bad luck.
+# Prime suspect: ur10_left. Its initial pose (ikea_table_config.yaml's
+# UR10_LEFT joint_groups) was the pose whose reach into leg1's pregrasp spot
+# was actually IK-verified (see that file's comment above joint_groups,
+# 300/300 restarts) -- but GRASP_SEQUENCE above sends ur10_right after leg1
+# instead, while frozen_arms_mode="auto" (the plan_sequence default) locks
+# ur10_left rigidly at that same pose for the whole run. ur10_left never
+# grasps anything in this sequence, so nothing is lost by letting it move
+# out of ur10_right's way for this one phase.
+#
+# Scoped to phase 0 only (dict keys not listed default to frozen-nothing in
+# "manual" mode -- see GraspSequencePlanner.plan_sequence's per_phase_frozen_arms
+# docstring) so every other phase keeps "auto"'s normal freeze-inactive-arm
+# behavior -- including the new legN/peg docking phases (index 1, 4, 7, 10):
+# ikea_table_config.yaml's arm_groups now lists legN/peg under ur10_right
+# (it's the arm actually carrying the leg), so "freeze ur10_left" is the
+# correct auto-equivalent there too, same as the plain grasp/release phases.
+# If leg2-4's grasp phases (index 3, 6, 9) hit the same corridor-blocking
+# failure phase 0 did, unfreeze ur10_left there as well.
+PER_PHASE_FROZEN_ARMS: dict[int, List[str]] = {
+    i: ([] if i == 0 else ["ur10_left"]) for i in range(len(GRASP_SEQUENCE))
+}
 
 
 # ---------------------------------------------------------------------------
@@ -282,6 +319,8 @@ def run_task(backend: str = "pyhpp") -> bool:
             grasp_sequence=GRASP_SEQUENCE,
             q_init=q_init,
             verbose=True,
+            frozen_arms_mode="manual",
+            per_phase_frozen_arms=PER_PHASE_FROZEN_ARMS,
         )
     except Exception as exc:
         import traceback

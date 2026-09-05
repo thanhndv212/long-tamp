@@ -65,6 +65,60 @@ def _target_pose_xyzquat(obj_data: dict) -> list[float]:
     return xyzrpy_to_xyzquat(rpy).tolist()
 
 
+# (joint, mimic multiplier relative to finger_joint) — ground truth from
+# assets/robotiq_2f85/urdf/robotiq_arg2f_85_model_macro.xacro's own
+# <mimic> tags. Both *_inner_finger_joint mimic with multiplier="-1"
+# there, which is why they need the negated bounds in
+# config/ikea_table_config.yaml (that xacro declares them all-positive
+# regardless of multiplier — a bug confirmed against
+# github.com/PickNikRobotics/ros2_robotiq_gripper's actively-maintained
+# equivalent, which correctly flips a mimic="-1" joint's own <limit> sign
+# too). finger_joint itself is the master, multiplier 1 by definition.
+GRIPPER_MIMIC_JOINTS = [
+    ("finger_joint", 1),
+    ("left_inner_knuckle_joint", 1),
+    ("left_inner_finger_joint", -1),
+    ("right_outer_knuckle_joint", 1),
+    ("right_inner_knuckle_joint", 1),
+    ("right_inner_finger_joint", -1),
+]
+
+
+def _add_gripper_sliders(task: _ViewTask, q: np.ndarray) -> None:
+    """Add an open/close slider per arm's gripper to the viser GUI.
+
+    finger_joint is the Robotiq 2F-85's only real actuated DOF; the other
+    5 are <mimic> joints in the vendored xacro (see build_assets.py's
+    merge-arm stage) that this workspace drives as independent DOF — no
+    <mimic> support anywhere in the HPP stack here. GRIPPER_MIMIC_JOINTS'
+    multipliers reproduce that xacro's own mimic relationships, so this
+    slider's "closed" end should curl all 5 in mechanically-consistent
+    directions rather than driving any of them backwards.
+    """
+    gui = task.planner.viewer.viewer.gui
+    rank = task.robot.rankInConfiguration
+
+    for side in ("ur10_left", "ur10_right"):
+        ranks_mults = [
+            (rank[f"{side}/{j}"], mult) for j, mult in GRIPPER_MIMIC_JOINTS
+        ]
+
+        with gui.add_folder(f"{side} gripper"):
+            slider = gui.add_slider(
+                "Open (0) / Close (0.8)",
+                min=0.0,
+                max=0.8,
+                step=0.01,
+                initial_value=0.0,
+            )
+
+            @slider.on_update
+            def _on_update(_, ranks_mults=ranks_mults, slider=slider) -> None:
+                for r, mult in ranks_mults:
+                    q[r] = mult * slider.value
+                task.planner.visualize(q)
+
+
 def _check_object_placement(task: _ViewTask) -> None:
     """FK-verify every object's root_joint against its YAML target pose.
 
@@ -95,7 +149,10 @@ def main() -> None:
 
     q_init = task.q_init
     task.planner.setup_viewer(viewer_type="viser")
-    task.planner.visualize(q_init)
+
+    q = np.array(q_init, dtype=float)
+    task.planner.visualize(q)
+    _add_gripper_sliders(task, q)
 
     _check_object_placement(task)
 

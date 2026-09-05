@@ -8,56 +8,24 @@
     <position xyz="0 0 0" xyzw="0 0 0 1"/>
     <link name="base_link"/>
   </handle>
-  <!-- Socket 1: mates with legN/top, at table-local (-0.305, -0.095) -->
-  <contact name="socket1">
+  <!-- Socket 1: docks with legN/peg, at table-local (-0.305, -0.095) -->
+  <handle name="socket1_hole" clearance="0.01" approaching_direction="0 0 1">
+    <position xyz="-0.305 -0.095 0.005" xyzw="0 0 0 1"/>
     <link name="base_link"/>
-    <point>
-       -0.29 -0.08 0.02
-       -0.29 -0.11 0.02
-       -0.32 -0.08 0.02
-       -0.32 -0.11 0.02
-    </point>
-    <shape>
-      4 0 1 2 3
-    </shape>
-  </contact>
-  <!-- Socket 2: mates with legN/top, at table-local (-0.305, 0.095) -->
-  <contact name="socket2">
+  </handle>
+  <!-- Socket 2: docks with legN/peg, at table-local (-0.305, 0.095) -->
+  <handle name="socket2_hole" clearance="0.01" approaching_direction="0 0 1">
+    <position xyz="-0.305 0.095 0.005" xyzw="0 0 0 1"/>
     <link name="base_link"/>
-    <point>
-       -0.29 0.11 0.02
-       -0.29 0.08 0.02
-       -0.32 0.11 0.02
-       -0.32 0.08 0.02
-    </point>
-    <shape>
-      4 0 1 2 3
-    </shape>
-  </contact>
-  <!-- Socket 3: mates with legN/top, at table-local (0.305, -0.095) -->
-  <contact name="socket3">
+  </handle>
+  <!-- Socket 3: docks with legN/peg, at table-local (0.305, -0.095) -->
+  <handle name="socket3_hole" clearance="0.01" approaching_direction="0 0 1">
+    <position xyz="0.305 -0.095 0.005" xyzw="0 0 0 1"/>
     <link name="base_link"/>
-    <point>
-       0.32 -0.08 0.02
-       0.32 -0.11 0.02
-       0.29 -0.08 0.02
-       0.29 -0.11 0.02
-    </point>
-    <shape>
-      4 0 1 2 3
-    </shape>
-  </contact>
-  <!-- Socket 4: mates with legN/top, at table-local (0.305, 0.095) -->
-  <contact name="socket4">
+  </handle>
+  <!-- Socket 4: docks with legN/peg, at table-local (0.305, 0.095) -->
+  <handle name="socket4_hole" clearance="0.01" approaching_direction="0 0 1">
+    <position xyz="0.305 0.095 0.005" xyzw="0 0 0 1"/>
     <link name="base_link"/>
-    <point>
-       0.32 0.11 0.02
-       0.32 0.08 0.02
-       0.29 0.11 0.02
-       0.29 0.08 0.02
-    </point>
-    <shape>
-      4 0 1 2 3
-    </shape>
-  </contact>
+  </handle>
 </robot>

@@ -23,25 +23,23 @@
     <position xyz="0 0 0" xyzw="0 0 0 1"/>
     <link name="base_link"/>
   </handle>
-  <!-- Placement contact: the leg's top face, mated against the matching
-       socket contact on the table (see table.srdf) — same mechanism as
-       script/twin/assets/pokeball_bimanual.srdf's "bottom" contact.
-       Bare name, like that precedent's "bottom" and this file's own
-       "handle" above — pyhpp's urdf.loadModel(name=...) prefixes every
-       handle/contact with the object's load name itself (confirmed live:
-       a name of "leg4/top" here produced a double-prefixed
-       "leg4/leg4/top" at runtime, "No handle/contact with name
-       leg4/top" from HPP). -->
-  <contact name="top">
+  <!-- Docking gripper: the peg tip (local +Z, 0.15125m — the leg's own
+       top face at 0.13125m plus PEG_HEIGHT), mated against the matching
+       socket *handle* on the table (see table.srdf) — a <gripper>+<handle>
+       docking pair, not a placement <contact>, so the mate is deterministic
+       (this leg's peg is only a valid_pairs match for its own socket) rather
+       than emergent across all 4 sockets. Same mechanism
+       screw_driver.srdf's "g_SD_part" gripper uses to dock into RSx's
+       h_RSx_CONn handles (ros2_ws_agimusxads/.../screw_driver.srdf) — a
+       gripper role declared on a carried object, not a robot link, is
+       already a proven pattern in this codebase.
+       No approaching_direction here: <gripper> doesn't take one (only
+       <handle> computes a pregrasp offset) — confirmed against
+       screw_driver.srdf's own g_SD_part tag. Bare name "peg", like this
+       file's own "handle" above — see that tag's own comment for why (the
+       object-load-name auto-prefix). -->
+  <gripper name="peg" clearance="0.01">
+    <position xyz="0 0 0.15125" xyzw="0 0 0 1"/>
     <link name="base_link"/>
-    <point>
-       0.015 0.015 0.13125
-      -0.015 0.015 0.13125
-      -0.015 -0.015 0.13125
-       0.015 -0.015 0.13125
-    </point>
-    <shape>
-      4 0 1 2 3
-    </shape>
-  </contact>
+  </gripper>
 </robot>

@@ -296,13 +296,25 @@ def generate_hole_peg_meshes() -> None:
 #
 # Each part is a free-flying object (single base_link, no internal
 # joints) — matching script/twin/assets/pokeball_bimanual.urdf's pattern.
-# Assembly (leg-into-table) is modeled as a placement <contact> pair, not
-# a <handle> pair: h_RS1_CON0..3-style paired handles (see
-# agimus_spacelab's RS1.srdf) are for a dedicated screwdriver *tool*
-# docking at a fastener point, which this example doesn't have — a single
-# generic Robotiq gripper does all the grasping, and the leg-into-table
-# mate is a plain placement constraint, the same mechanism the ball uses
-# to rest on the ground.
+#
+# Assembly (leg-into-table) is modeled as a <gripper>+<handle> docking pair
+# (legN.srdf's "peg" gripper / table.srdf's "socketN_hole" handle), NOT a
+# placement <contact> pair — REVERSED from an earlier version of this
+# comment, which reasoned h_RS1_CON0..3-style paired handles (see
+# agimus_spacelab's screw_driver.srdf -> RSx.srdf docking) were only for a
+# dedicated tool docking at a fastener point and used a plain placement
+# <contact> here instead (the same mechanism the ball uses to rest on the
+# ground). That left WHICH socket a released leg lands in emergent/
+# unspecified rather than chosen (ConstraintGraphFactory generates a
+# placement edge for every leg-top x table-socket combination — see
+# task_assemble_table.py's own module docstring, "WHAT 'PLACE INTO A
+# SOCKET' ACTUALLY MEANS HERE", for the gap this caused live). Switched to
+# the docking-pair model so leg1->socket1 etc. is deterministic: each
+# legN/peg gripper is a valid_pairs match for exactly one table/socketN_hole
+# handle (see ikea_table_config.yaml), the same restriction mechanism
+# already used for grasps, so GRASP_SEQUENCE can name the pairing directly
+# instead of leaving ConfigGenerator to pick a leaf of the placement
+# manifold.
 #
 # Visual geometry is stage 3's output (box-with-holes / box-with-peg), NOT
 # the real vendored IKEA STL meshes — those bake in the actual product's
@@ -380,27 +392,25 @@ _SRDF_LEG_TEMPLATE = """<?xml version="1.0"?>
     <position xyz="0 0 0" xyzw="0 0 0 1"/>
     <link name="base_link"/>
   </handle>
-  <!-- Placement contact: the leg's top face, mated against the matching
-       socket contact on the table (see table.srdf) — same mechanism as
-       script/twin/assets/pokeball_bimanual.srdf's "bottom" contact.
-       Bare name, like that precedent's "bottom" and this file's own
-       "handle" above — pyhpp's urdf.loadModel(name=...) prefixes every
-       handle/contact with the object's load name itself (confirmed live:
-       a name of "{name}/top" here produced a double-prefixed
-       "{name}/{name}/top" at runtime, "No handle/contact with name
-       {name}/top" from HPP). -->
-  <contact name="top">
+  <!-- Docking gripper: the peg tip (local +Z, {peg_tip_z}m — the leg's own
+       top face at {top_z}m plus PEG_HEIGHT), mated against the matching
+       socket *handle* on the table (see table.srdf) — a <gripper>+<handle>
+       docking pair, not a placement <contact>, so the mate is deterministic
+       (this leg's peg is only a valid_pairs match for its own socket) rather
+       than emergent across all 4 sockets. Same mechanism
+       screw_driver.srdf's "g_SD_part" gripper uses to dock into RSx's
+       h_RSx_CONn handles (ros2_ws_agimusxads/.../screw_driver.srdf) — a
+       gripper role declared on a carried object, not a robot link, is
+       already a proven pattern in this codebase.
+       No approaching_direction here: <gripper> doesn't take one (only
+       <handle> computes a pregrasp offset) — confirmed against
+       screw_driver.srdf's own g_SD_part tag. Bare name "peg", like this
+       file's own "handle" above — see that tag's own comment for why (the
+       object-load-name auto-prefix). -->
+  <gripper name="peg" clearance="0.01">
+    <position xyz="0 0 {peg_tip_z}" xyzw="0 0 0 1"/>
     <link name="base_link"/>
-    <point>
-       {hx} {hy} {top_z}
-      -{hx} {hy} {top_z}
-      -{hx} -{hy} {top_z}
-       {hx} -{hy} {top_z}
-    </point>
-    <shape>
-      4 0 1 2 3
-    </shape>
-  </contact>
+  </gripper>
 </robot>
 """
 
@@ -414,26 +424,41 @@ _SRDF_TABLE_TEMPLATE = """<?xml version="1.0"?>
     <position xyz="0 0 0" xyzw="0 0 0 1"/>
     <link name="base_link"/>
   </handle>
-{contacts}</robot>
+{socket_handles}</robot>
 """
 
-# Bare names ("handle" above, "socketN" below) — pyhpp's urdf.loadModel
-# prefixes every handle/contact with the object's own load name, so a
+# Bare names ("handle" above, "socketN_hole" below) — pyhpp's urdf.loadModel
+# prefixes every handle/contact/gripper with the object's own load name, so a
 # name already containing that prefix double-prefixes at runtime; see
 # _SRDF_LEG_TEMPLATE's comment for the live error this produced.
-_SOCKET_CONTACT_TEMPLATE = """  <!-- Socket {i}: mates with legN/top, at table-local ({cx}, {cy}) -->
-  <contact name="socket{i}">
+#
+# A <handle>, not a placement <contact>: pairs with legN.srdf's "peg"
+# <gripper> as a deterministic docking mate (see that file's own comment)
+# instead of the table's 4 sockets and 4 legs' top faces being combinatorially
+# interchangeable. approaching_direction "0 0 1" (local +Z, == world +Z here
+# since table.urdf loads at identity orientation, unlike the legs' 90deg
+# lie-flat rotation — see _SRDF_LEG_TEMPLATE's handle comment for the sign
+# derivation this mirrors): the peg is brought down into the hole from
+# above, so the pregrasp waypoint (offset +clearance*approaching_direction
+# from the fully-seated pose) needs to sit above the hole, same "retreat
+# direction" convention as every other handle in this file.
+#
+# Position is the hole's BLIND BOTTOM ({sock_z}m = table top {tz}m minus
+# HOLE_DEPTH), not its mouth — paired with the peg *tip* position in
+# legN.srdf (leg-local {{top_z}}m + PEG_HEIGHT), so a fully-docked grasp
+# (gripper frame == handle frame) seats the peg all the way to the bottom of
+# its hole. Peg length (PEG_HEIGHT=0.020) is deliberately longer than
+# HOLE_DEPTH (0.015): bottoming the peg out this way leaves the leg's own
+# top face ~5mm above the table surface rather than flush against it — the
+# same deliberate non-zero clearance gap already used for every other
+# resting-contact pair in this file's config (ikea_table_config.yaml's
+# objects: comment), avoiding the exact-flush collision false positive
+# documented there.
+_SOCKET_HANDLE_TEMPLATE = """  <!-- Socket {i}: docks with legN/peg, at table-local ({cx}, {cy}) -->
+  <handle name="socket{i}_hole" clearance="0.01" approaching_direction="0 0 1">
+    <position xyz="{cx} {cy} {sock_z}" xyzw="0 0 0 1"/>
     <link name="base_link"/>
-    <point>
-       {p0x} {p0y} {sock_z}
-       {p1x} {p1y} {sock_z}
-       {p2x} {p2y} {sock_z}
-       {p3x} {p3y} {sock_z}
-    </point>
-    <shape>
-      4 0 1 2 3
-    </shape>
-  </contact>
+  </handle>
 """
 
 
@@ -467,7 +492,11 @@ def generate_urdf_srdf() -> None:
         _write(GEN_DIR / f"{name}.urdf", urdf)
 
         srdf = _SRDF_LEG_TEMPLATE.format(
-            name=name, hx=lx, hy=ly, top_z=round(lz, 6)
+            name=name,
+            hx=lx,
+            hy=ly,
+            top_z=round(lz, 6),
+            peg_tip_z=round(lz + PEG_HEIGHT, 6),
         )
         _write(GEN_DIR / f"{name}.srdf", srdf)
 
@@ -482,27 +511,18 @@ def generate_urdf_srdf() -> None:
     )
     _write(GEN_DIR / "table.urdf", table_urdf)
 
-    # Top face (+tz), not bottom (-tz) — matches the hole-peg-meshes
-    # stage's holes, which are on the top surface so they're reachable by
-    # an arm approaching from above (a bottom-face hole is pressed
-    # against the workbench once the table sits flat, inaccessible).
-    sock_z = round(tz, 6)
-    contact_blocks = []
-    for i, (cx, cy) in enumerate(LEG_SOCKET_XY, start=1):
-        corners = [(cx + sx, cy + sy) for sx in (lx, -lx) for sy in (ly, -ly)]
-        contact_blocks.append(
-            _SOCKET_CONTACT_TEMPLATE.format(
-                i=i,
-                cx=cx,
-                cy=cy,
-                sock_z=sock_z,
-                p0x=corners[0][0], p0y=corners[0][1],
-                p1x=corners[1][0], p1y=corners[1][1],
-                p2x=corners[2][0], p2y=corners[2][1],
-                p3x=corners[3][0], p3y=corners[3][1],
-            )
-        )
-    table_srdf = _SRDF_TABLE_TEMPLATE.format(contacts="".join(contact_blocks))
+    # Hole BLIND BOTTOM (tz - HOLE_DEPTH), not the top-face mouth (+tz) —
+    # see _SOCKET_HANDLE_TEMPLATE's own comment for why the docking handle
+    # sits at the bottom of the hole, paired with legN.srdf's peg-tip
+    # gripper position.
+    sock_z = round(tz - HOLE_DEPTH, 6)
+    socket_handle_blocks = [
+        _SOCKET_HANDLE_TEMPLATE.format(i=i, cx=cx, cy=cy, sock_z=sock_z)
+        for i, (cx, cy) in enumerate(LEG_SOCKET_XY, start=1)
+    ]
+    table_srdf = _SRDF_TABLE_TEMPLATE.format(
+        socket_handles="".join(socket_handle_blocks)
+    )
     _write(GEN_DIR / "table.srdf", table_srdf)
 
 
@@ -560,7 +580,16 @@ ARM_MOUNT_FRAME = "tool0"
 # already-fixed issue — see the urdf-srdf stage's approaching_direction
 # comment).
 PEDESTAL_LINK = "pedestal"
-PEDESTAL_HEIGHT = 0.5
+# 0.5 -> 0.6: a standalone pinocchio+hpp-fcl reachability sweep (grid of
+# top-down grasp points across the workbench, random-restart IK +
+# collision) found current height already near a local optimum for mean
+# reach margin, with 0.6 giving a slightly better worst-case (min success
+# rate 0.075 vs 0.05, no dead zones) than 0.5 -- raising it further (tried
+# up to 1.2) makes things WORSE, not better, since the pedestal itself
+# becomes a bigger obstacle for the opposite arm reaching the far side of
+# the table. See research-vault for the fuller writeup if this needs
+# revisiting.
+PEDESTAL_HEIGHT = 0.6
 UR10_ROOT_LINK = "world"
 
 # Mount transform — identity, visually verified in viser. See docstring.

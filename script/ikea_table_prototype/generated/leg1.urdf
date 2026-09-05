@@ -24,7 +24,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/assets/meshes_generated/leg_with_peg.stl"/>
+        <mesh filename="/Users/thanhndv212/Develop/agimus-ws/long-tamp/script/ikea_table_prototype/assets/meshes_generated/leg_with_peg.stl"/>
       </geometry>
       <material name="light_wood">
         <color rgba="0.82 0.71 0.55 1.0"/>

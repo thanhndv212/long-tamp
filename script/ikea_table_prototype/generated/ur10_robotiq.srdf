@@ -13,10 +13,21 @@
   the fingers' approach direction; the 0.15m distance itself is a
   published-typical estimate — visually verified in viser, arm+gripper
   render correctly, but not measured against this exact mesh).
-  Identity local pose here, matching panda_hand_tcp's pattern — assumes
-  gripper_tcp's own +Z already points in the approach direction (true by
-  construction, since it's rigidly offset along robotiq_arg2f_base_link's
-  +Z with zero rotation).
+
+  NOT an identity local pose (unlike panda_hand_tcp's pattern): every
+  <handle> in this workspace expresses approaching_direction along its
+  own local +/-X (see e.g. generated/leg1.srdf's "-1 0 0"), and
+  long_tamp.visualization.viz.displayGripperApproach's own
+  approach_direction defaults to local +X too — X, not Z, is this
+  codebase's approach-axis convention on the GRIPPER side as well. But
+  gripper_tcp's own +X does not point in its approach direction (only
+  its +Z does, by construction above), so a grasp constraint aligning
+  this frame straight onto a handle frame would twist the fingers 90°
+  off the intended approach. The quaternion below is a -90° rotation
+  about local Y (w,x,y,z = 0.7071068, 0, -0.7071068, 0), remapping
+  gripper_tcp's own +Z onto this <gripper> frame's +X (Y unchanged,
+  +Z becomes -gripper_tcp's own +X) so the grasp frame's approach axis
+  is X, matching every handle in this workspace.
 
   disable_collisions: the gripper linkage pairs below are the original
   visual estimate from the joint chain — NOT a self-collision-checked
@@ -87,7 +98,7 @@
   <disable_collisions link1="wrist_2_link" link2="robotiq_arg2f_base_link" reason="Never"/>
 
   <gripper name="gripper" clearance="0.03">
-    <position> 0 0 0  1 0 0 0 </position>
+    <position> 0 0 0  0.7071068 0 -0.7071068 0 </position>
     <link name="gripper_tcp" />
   </gripper>
 </robot>
