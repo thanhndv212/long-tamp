@@ -373,22 +373,20 @@ _SRDF_LEG_TEMPLATE = """<?xml version="1.0"?>
   <!-- Grasp point: leg center, gripper approaches from the side — a
        parallel jaw closing across the leg's 0.03x0.03 cross-section.
 
-       approaching_direction is "-1 0 0", not "+1 0 0": HPP's
-       Handle::createPreGrasp offsets the pregrasp target by
-       +clearance*approaching_direction (in the handle's own, i.e. this
-       link's, local frame). With the legs lying flat on the workbench
-       (LEG_LIE_FLAT_QUAT in debug_view_frames.py, a 90deg rotation about
-       world Y), local +X maps to world -Z — so a "+1 0 0" direction here
-       computed a pregrasp target 2mm *below* the workbench surface,
-       confirmed empirically (query the loaded Device: handle world
-       z=0.418, computed pregrasp z=0.398 vs. workbench top z=0.400) — a
-       permanently unreachable, always-in-collision target no amount of
-       retrying could ever satisfy, which is exactly what
-       task_assemble_table.py's first real planning run hit (100% failure
-       across every attempt/rerun, always workbench- or ground-collision).
-       "-1 0 0" gives world +Z (pregrasp z=0.438, above the leg) instead —
-       verified the same way. -->
-  <handle name="handle" clearance="0.02" approaching_direction="-1 0 0">
+       approaching_direction is "1 0 0", not "-1 0 0": an earlier version
+       of this comment derived "-1 0 0" from the LEG_LIE_FLAT_QUAT
+       rotation (local +X -> world -Z, so -X -> world +Z, "above the
+       leg") and claimed that was confirmed empirically — live testing
+       against the actual running task_assemble_table.py/debug_view_frames.py
+       scene showed that derivation was wrong and "1 0 0" is the direction
+       that actually produces a valid, reachable pregrasp. Left this note
+       instead of re-deriving the sign from the rotation math again: that
+       math already looked internally consistent once and still produced
+       the wrong answer, so treat any future re-derivation attempt with
+       suspicion and re-verify empirically (query the loaded Device's
+       actual pregrasp target, as before) rather than trusting the algebra
+       alone. -->
+  <handle name="handle" clearance="0.02" approaching_direction="1 0 0">
     <position xyz="0 0 0" xyzw="0 0 0 1"/>
     <link name="base_link"/>
   </handle>

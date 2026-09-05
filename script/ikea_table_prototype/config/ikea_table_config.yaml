@@ -139,12 +139,12 @@ environments:
 # ---------------------------------------------------------------------------
 joint_groups:
   UR10_LEFT:
-    - {joint: ur10_left/shoulder_pan_joint,             initial:  0.00, bounds: [-3.14159265359, 3.14159265359]}
-    - {joint: ur10_left/shoulder_lift_joint,             initial: -1.20, bounds: [-3.14159265359, 3.14159265359]}
-    - {joint: ur10_left/elbow_joint,                     initial:  1.60, bounds: [-3.14159265359, 3.14159265359]}
-    - {joint: ur10_left/wrist_1_joint,                   initial: -1.97, bounds: [-3.14159265359, 3.14159265359]}
-    - {joint: ur10_left/wrist_2_joint,                   initial: -1.57, bounds: [-3.14159265359, 3.14159265359]}
-    - {joint: ur10_left/wrist_3_joint,                   initial:  0.00, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_left/shoulder_pan_joint,             initial:  1.5700, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_left/shoulder_lift_joint,             initial: -1.5700, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_left/elbow_joint,                     initial:  -2.7500, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_left/wrist_1_joint,                   initial: 1.9757, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_left/wrist_2_joint,                   initial: 0.1029, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_left/wrist_3_joint,                   initial:  -2.7954, bounds: [-3.14159265359, 3.14159265359]}
     - {joint: ur10_left/finger_joint,                    initial:  0.0,  bounds: [0.0, 0.8]}
     - {joint: ur10_left/left_inner_knuckle_joint,        initial:  0.0,  bounds: [0.0, 0.8757]}
     - {joint: ur10_left/left_inner_finger_joint,         initial:  0.0,  bounds: [-0.8757, 0.0]}
@@ -152,12 +152,12 @@ joint_groups:
     - {joint: ur10_left/right_inner_knuckle_joint,       initial:  0.0,  bounds: [0.0, 0.8757]}
     - {joint: ur10_left/right_inner_finger_joint,        initial:  0.0,  bounds: [-0.8757, 0.0]}
   UR10_RIGHT:
-    - {joint: ur10_right/shoulder_pan_joint,             initial:  0.40, bounds: [-3.14159265359, 3.14159265359]}
-    - {joint: ur10_right/shoulder_lift_joint,            initial: -1.00, bounds: [-3.14159265359, 3.14159265359]}
-    - {joint: ur10_right/elbow_joint,                    initial:  1.30, bounds: [-3.14159265359, 3.14159265359]}
-    - {joint: ur10_right/wrist_1_joint,                  initial: -1.80, bounds: [-3.14159265359, 3.14159265359]}
-    - {joint: ur10_right/wrist_2_joint,                  initial: -1.30, bounds: [-3.14159265359, 3.14159265359]}
-    - {joint: ur10_right/wrist_3_joint,                  initial:  0.50, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_right/shoulder_pan_joint,             initial:  1.5700, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_right/shoulder_lift_joint,            initial: -1.5700, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_right/elbow_joint,                    initial:  -2.7500, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_right/wrist_1_joint,                  initial: -1.8000, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_right/wrist_2_joint,                  initial: -1.3000, bounds: [-3.14159265359, 3.14159265359]}
+    - {joint: ur10_right/wrist_3_joint,                  initial:  0.5000, bounds: [-3.14159265359, 3.14159265359]}
     - {joint: ur10_right/finger_joint,                   initial:  0.0,  bounds: [0.0, 0.8]}
     - {joint: ur10_right/left_inner_knuckle_joint,       initial:  0.0,  bounds: [0.0, 0.8757]}
     - {joint: ur10_right/left_inner_finger_joint,        initial:  0.0,  bounds: [-0.8757, 0.0]}
