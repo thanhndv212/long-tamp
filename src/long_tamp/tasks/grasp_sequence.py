@@ -1571,6 +1571,13 @@ class GraspSequencePlanner:
 
         # Compute phase-specific locked joint constraints
         phase_graph_constraints = None
+        # Mirrors phase_graph_constraints, but as joint names -- passed to
+        # ConfigGenerator.set_frozen_joints() below so the random-restart
+        # seed itself keeps these joints at q_current, not just the graph's
+        # LockedJoint constraint (which the raw configurationShooter used
+        # for that seed doesn't respect -- see set_frozen_joints()'s
+        # docstring for why the constraint alone wasn't enough).
+        phase_frozen_joint_names: list[str] = []
 
         if frozen_arms_mode == "global":
             # Use global constraints from task.setup()
@@ -1639,6 +1646,7 @@ class GraspSequencePlanner:
 
                 if constraint_names:
                     phase_graph_constraints = constraint_names
+                    phase_frozen_joint_names = list(joint_names)
                     if verbose:
                         joint_list = ", ".join(sorted(joint_names))
                         logger.debug(
@@ -1701,6 +1709,9 @@ class GraspSequencePlanner:
                 self.config_gen.update_graph(new_graph)
                 if emit_logs and verbose:
                     logger.debug("\u2713 Updated ConfigGenerator graph reference")
+
+            if hasattr(self.config_gen, "set_frozen_joints"):
+                self.config_gen.set_frozen_joints(phase_frozen_joint_names)
 
         except Exception as e:
             raise RuntimeError(

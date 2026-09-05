@@ -129,10 +129,37 @@ class ConfigGenerator:
         self.backend = backend.lower()
         self.max_attempts = max_attempts
         self.configs = {}
+        # Joints a caller (GraspSequencePlanner, per-phase "frozen arms")
+        # wants held at their q_from value across every random-restart
+        # attempt -- see set_frozen_joints().
+        self.frozen_joint_names: List[str] = []
         # PyHPP shooter for random configurations
         self._shooter = None
         if self.backend == "pyhpp":
             self._shooter = self.ps.configurationShooter()
+
+    def set_frozen_joints(self, joint_names: Optional[List[str]]) -> None:
+        """Set which joints' q_from value should survive into every
+        random-restart seed during generate_via_edge().
+
+        Needed because "frozen" here is enforced only as a graph-level
+        LockedJoint numerical constraint (see ConstraintBuilder /
+        GraspSequencePlanner's per-phase arm freezing) -- and the random
+        seed itself (``self.planner.random_config()``) comes from HPP's
+        raw ``configurationShooter()``, which respects joint BOUNDS only,
+        not graph constraints (see backends/pyhpp.py's random_config()
+        docstring). Found live: with an idle arm's 6 joints "frozen" via
+        LockedJoint for a phase, generate_via_edge still failed 1000/1000
+        on a target a standalone single-arm reachability check put at
+        ~8% per-attempt success -- 1000 attempts at a true 8% rate would
+        essentially never all fail, so the lock wasn't actually reducing
+        the search to single-arm difficulty in practice. Copying the
+        frozen arm's values into the seed directly (same mechanism
+        _generate_candidate_config already uses for un-held object
+        freeflyer DOF, just applied to named joints too) sidesteps
+        whatever gap exists deeper in the graph-constraint plumbing.
+        """
+        self.frozen_joint_names = list(joint_names) if joint_names else []
 
     def update_graph(self, new_graph) -> None:
         """Update the constraint graph reference.
@@ -390,6 +417,14 @@ class ConfigGenerator:
                     if joint_name.endswith("/root_joint"):
                         if rank + 7 <= len(q_rand_arr) and rank + 7 <= len(q_from_arr):
                             q_rand_arr[rank : rank + 7] = q_from_arr[rank : rank + 7]
+                # Same idea for explicitly frozen (single-DOF) joints, e.g.
+                # a per-phase idle arm -- see set_frozen_joints() docstring
+                # for why the graph-level LockedJoint constraint alone
+                # isn't enough to keep these out of the random seed.
+                for joint_name in self.frozen_joint_names:
+                    rank = rank_map.get(joint_name)
+                    if rank is not None and rank < len(q_rand_arr) and rank < len(q_from_arr):
+                        q_rand_arr[rank] = q_from_arr[rank]
                 q_rand = q_rand_arr
             except Exception:
                 pass  # rankInConfiguration not available — fall back to fully random
