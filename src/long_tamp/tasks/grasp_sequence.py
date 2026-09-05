@@ -136,6 +136,7 @@ class GraspSequencePlanner:
         task_config: Any,
         backend: str = "pyhpp",
         graph_constraints: list[str] | None = None,
+        freeze_joint_substrings: list[str] | None = None,
         auto_save_dir: str | None = None,
         run_logger: Any | None = None,
     ):
@@ -148,6 +149,9 @@ class GraspSequencePlanner:
             task_config: Task configuration with GRIPPERS, OBJECTS, etc.
             backend: "pyhpp"
             graph_constraints: Optional list of global constraints
+            freeze_joint_substrings: Joint-name substrings locked at q_init on
+                every phase, regardless of frozen_arms_mode. See
+                _execute_phase.
             auto_save_dir: If set, automatically save paths to this directory
                           after each successful phase. Files are named
                           phase_NN_edge_MM.path (binary format).
@@ -158,6 +162,9 @@ class GraspSequencePlanner:
         self.task_config = task_config
         self.backend = backend.lower()
         self.graph_constraints = graph_constraints
+        self.freeze_joint_substrings = (
+            list(freeze_joint_substrings) if freeze_joint_substrings else []
+        )
         self._MAX_COLLISION_RETRIES = 10
 
         # Auto-save configuration
@@ -1666,6 +1673,43 @@ class GraspSequencePlanner:
                             "TOPPRA active joints: %d joints from unfrozen arms",
                             len(active_joints),
                         )
+
+        # Freeze cosmetic joints on every phase, independent of
+        # frozen_arms_mode. "global" already has them via
+        # self.graph_constraints; the other modes rebuild
+        # phase_graph_constraints from frozen_arms alone above and would
+        # otherwise drop them for any joint outside a frozen arm.
+        if frozen_arms_mode != "global" and self.freeze_joint_substrings:
+            from long_tamp.planning.constraints import ConstraintBuilder
+
+            cosmetic_names, cosmetic_joints = (
+                ConstraintBuilder.create_locked_joint_constraints(
+                    self.graph_builder.ps,
+                    self.graph_builder.robot,
+                    q_current,
+                    self.freeze_joint_substrings,
+                    backend=self.graph_builder.backend,
+                )
+            )
+            # Skip joints already locked above (e.g. an idle arm's own
+            # gripper) -- avoid a duplicate LockedJoint on the same joint.
+            new_idx = [
+                i
+                for i, jn in enumerate(cosmetic_joints)
+                if jn not in phase_frozen_joint_names
+            ]
+            if new_idx:
+                phase_graph_constraints = list(phase_graph_constraints or []) + [
+                    cosmetic_names[i] for i in new_idx
+                ]
+                phase_frozen_joint_names = phase_frozen_joint_names + [
+                    cosmetic_joints[i] for i in new_idx
+                ]
+                if verbose:
+                    logger.debug(
+                        "✓ Locked cosmetic joints: %s",
+                        ", ".join(sorted(cosmetic_joints[i] for i in new_idx)),
+                    )
 
         try:
             self.graph_builder.build_phase_graph(
