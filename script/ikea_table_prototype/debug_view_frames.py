@@ -27,8 +27,10 @@ implies for every generated URDF/SRDF this loads).
 
 from __future__ import annotations
 
+import re
 import time
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pinocchio as pin
@@ -63,6 +65,184 @@ def _target_pose_xyzquat(obj_data: dict) -> list[float]:
 
     rpy = [float(v) for v in obj_data["initial_pose_xyzrpy"]]
     return xyzrpy_to_xyzquat(rpy).tolist()
+
+
+ARM_JOINTS = [
+    "shoulder_pan_joint",
+    "shoulder_lift_joint",
+    "elbow_joint",
+    "wrist_1_joint",
+    "wrist_2_joint",
+    "wrist_3_joint",
+]
+
+
+def _write_idle_pose_to_yaml(
+    side: str, joint_ranks: list[tuple[str, int]], q: np.ndarray
+) -> None:
+    """Patch joint_groups' `initial:` field for `side`'s 6 arm joints.
+
+    Regex substitution on the raw text rather than a yaml load+dump round
+    trip, since the latter would strip this file's hand-written comments.
+    Only touches the file on disk -- takes effect on the next run, not
+    this one (the in-memory _loader/task_config were already parsed).
+    """
+    text = _YAML_PATH.read_text()
+    for j, r in joint_ranks:
+        pattern = re.compile(
+            rf"(joint:\s*{re.escape(side)}/{re.escape(j)},\s*initial:\s*)"
+            rf"[-+]?\d+\.?\d*"
+        )
+        value = float(q[r])
+        new_text, n = pattern.subn(
+            lambda m, v=value: f"{m.group(1)}{v:.4f}", text
+        )
+        if n != 1:
+            print(
+                f"✗ Aborting: expected exactly 1 match for {side}/{j}'s "
+                f"initial: field, found {n}. YAML left unmodified."
+            )
+            return
+        text = new_text
+    _YAML_PATH.write_text(text)
+    print(
+        f"✓ Wrote {side}'s current pose as the new idle pose into "
+        f"{_YAML_PATH.name} (takes effect on the next run)"
+    )
+
+
+def _add_arm_sliders(task: _ViewTask, q: np.ndarray) -> None:
+    """Add a per-joint slider for each arm's 6 UR10 joints to the viser GUI.
+
+    For manually hunting a better idle pose (see task_assemble_table.py's
+    PER_PHASE_FROZEN_ARMS comment on why ur10_left's default pose needs
+    one). Slider range comes from the YAML's own joint_groups bounds, so a
+    slider can't drive a joint past what the scene allows.
+    """
+    import yaml
+
+    gui = task.planner.viewer.viewer.gui
+    rank = task.robot.rankInConfiguration
+    raw_groups = yaml.safe_load(_YAML_PATH.read_text())["joint_groups"]
+
+    bounds_by_joint = {
+        entry["joint"]: entry["bounds"]
+        for entries in raw_groups.values()
+        for entry in entries
+    }
+
+    for side in ("ur10_left", "ur10_right"):
+        joint_ranks = [(j, rank[f"{side}/{j}"]) for j in ARM_JOINTS]
+        sliders: dict[str, Any] = {}
+
+        with gui.add_folder(f"{side} arm"):
+            for j, r in joint_ranks:
+                lo, hi = bounds_by_joint[f"{side}/{j}"]
+                slider = gui.add_slider(
+                    j, min=lo, max=hi, step=0.01, initial_value=float(q[r])
+                )
+                sliders[j] = slider
+
+                @slider.on_update
+                def _on_update(_, r=r, slider=slider) -> None:
+                    q[r] = slider.value
+                    task.planner.visualize(q)
+
+            print_btn = gui.add_button("Print pose")
+
+            @print_btn.on_click
+            def _on_click(_, side=side, joint_ranks=joint_ranks) -> None:
+                lines = ", ".join(
+                    f"{{joint: {side}/{j}, initial: {q[r]: .2f}}}"
+                    for j, r in joint_ranks
+                )
+                print(f"{side} pose:\n  {lines}")
+
+            set_idle_btn = gui.add_button("Set as idle pose")
+
+            @set_idle_btn.on_click
+            def _on_set_idle(_, side=side, joint_ranks=joint_ranks) -> None:
+                _write_idle_pose_to_yaml(side, joint_ranks, q)
+
+            plan_btn = gui.add_button("Plan to random config")
+
+            @plan_btn.on_click
+            def _on_plan(
+                _, side=side, joint_ranks=joint_ranks, sliders=sliders
+            ) -> None:
+                _plan_random_arm_config(
+                    task, q, side, joint_ranks, bounds_by_joint, sliders
+                )
+
+
+def _ensure_collision_validation(ps: Any) -> None:
+    """Idempotently register collision + joint-bound config validation.
+
+    ``Problem.isConfigValid()`` starts with zero registered validators and
+    trivially returns ``(True, "")`` for anything, collisions included --
+    see ``PyHPPBackend.random_config()``, which has the same guard. Path
+    validation (set up during scene setup) is a separate registry and
+    doesn't cover this.
+    """
+    cv = ps.configValidation()
+    if (
+        hasattr(cv, "numberConfigValidations")
+        and cv.numberConfigValidations() == 0
+    ):
+        ps.addConfigValidation("CollisionValidation")
+        ps.addConfigValidation("JointBoundValidation")
+
+
+def _plan_random_arm_config(
+    task: _ViewTask,
+    q: np.ndarray,
+    side: str,
+    joint_ranks: list[tuple[str, int]],
+    bounds_by_joint: dict[str, list[float]],
+    sliders: dict[str, Any],
+    n_steps: int = 60,
+    max_attempts: int = 30,
+) -> None:
+    """Animate `side`'s 6 arm joints moving to a random valid configuration.
+
+    Not a graph-based RRT plan -- this script runs with skip_graph=True,
+    and every real planner entry point here is scoped to a manipulation-
+    graph transition. Instead: draws a random target for just this arm
+    (every other entry of q left untouched), validates a straight-line
+    interpolation to it step-by-step via Problem.isConfigValid(), and
+    redraws on failure. Finds a valid taut string through open space; does
+    not route around an obstacle.
+    """
+    _ensure_collision_validation(task.ps)
+    q_start = q.copy()
+
+    for attempt in range(1, max_attempts + 1):
+        q_goal = q_start.copy()
+        for j, r in joint_ranks:
+            lo, hi = bounds_by_joint[f"{side}/{j}"]
+            q_goal[r] = np.random.uniform(lo, hi)
+
+        steps = [
+            q_start + (q_goal - q_start) * (i / n_steps)
+            for i in range(n_steps + 1)
+        ]
+        if all(task.ps.isConfigValid(s)[0] for s in steps):
+            for s in steps:
+                q[:] = s
+                task.planner.visualize(q)
+                time.sleep(0.02)
+            for j, r in joint_ranks:
+                slider = sliders.get(j)
+                if slider is not None:
+                    slider.value = float(q[r])
+            print(f"{side}: reached random config in {attempt} attempt(s)")
+            return
+
+    print(
+        f"{side}: no collision-free straight-line target found in "
+        f"{max_attempts} attempts (scene may be too cluttered for a "
+        "straight-line move — this button doesn't route around obstacles)"
+    )
 
 
 # (joint, mimic multiplier relative to finger_joint) — ground truth from
@@ -152,6 +332,7 @@ def main() -> None:
 
     q = np.array(q_init, dtype=float)
     task.planner.visualize(q)
+    _add_arm_sliders(task, q)
     _add_gripper_sliders(task, q)
 
     _check_object_placement(task)
