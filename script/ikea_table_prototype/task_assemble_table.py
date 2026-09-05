@@ -87,6 +87,7 @@ import time
 from pathlib import Path
 from typing import List, Tuple, Optional
 
+import numpy as np
 import pinocchio as pin
 
 from long_tamp.tasks.grasp_sequence import GraspSequencePlanner
@@ -112,6 +113,27 @@ _YAML_PATH = Path(__file__).parent / "config" / "ikea_table_config.yaml"
 # closing. Frozen the same way twin/task_lift_ball.py freezes Panda's
 # finger joints, via substring match on the joint name.
 FREEZE_JOINT_SUBSTRINGS: List[str] = ["finger_joint", "knuckle_joint"]
+
+# Cosmetic replay-only overlay (_replay_sequence_with_grasp_visuals):
+# these joints stay frozen open per FREEZE_JOINT_SUBSTRINGS during actual
+# planning, so nothing closes them for real. Mimic multipliers from
+# robotiq_arg2f_85_model_macro.xacro's <mimic> tags, duplicated from
+# debug_view_frames.py's GRIPPER_MIMIC_JOINTS since this pairing is
+# specific to this demo's gripper + leg geometry.
+GRIPPER_MIMIC_JOINTS: List[Tuple[str, int]] = [
+    ("finger_joint", 1),
+    ("left_inner_knuckle_joint", 1),
+    ("left_inner_finger_joint", -1),
+    ("right_outer_knuckle_joint", 1),
+    ("right_inner_knuckle_joint", 1),
+    ("right_inner_finger_joint", -1),
+]
+
+# finger_joint value that closes the inner-finger pads to ~30mm apart,
+# matching the leg's 0.03x0.03 cross-section (LEG_HALF_EXTENT in
+# build_assets.py). Found via an FK sweep: 0 rad -> 0.0924m open, 0.8 rad
+# -> 0.0079m (pads touching), 0.6 rad -> 0.0307m (closest to 0.03m).
+GRIPPER_CLOSED_VALUE: float = 0.60
 
 # Found live, first run: IK for leg1's pregrasp kept landing in
 # "Collision between object ur10_left/pedestal_0 and
@@ -166,17 +188,17 @@ COLLISION_EXCLUSIONS: List[Tuple[str, str]] = [
 # SOCKET' ACTUALLY MEANS HERE" section, superseded by this change.
 GRASP_SEQUENCE: List[Tuple[str, Optional[str]]] = [
     ("ur10_right/gripper", "leg1/handle"),  # arm grasps leg1
-    ("leg1/peg", "table/socket1_hole"),  # dock leg1's peg into socket1
-    ("ur10_right/gripper", None),  # arm releases leg1 (stays docked)
-    ("ur10_right/gripper", "leg2/handle"),
-    ("leg2/peg", "table/socket2_hole"),
-    ("ur10_right/gripper", None),
-    ("ur10_right/gripper", "leg3/handle"),
-    ("leg3/peg", "table/socket3_hole"),
-    ("ur10_right/gripper", None),
-    ("ur10_right/gripper", "leg4/handle"),
-    ("leg4/peg", "table/socket4_hole"),
-    ("ur10_right/gripper", None),
+    # ("leg1/peg", "table/socket1_hole"),  # dock leg1's peg into socket1
+    # ("ur10_right/gripper", None),  # arm releases leg1 (stays docked)
+    # ("ur10_right/gripper", "leg2/handle"),
+    # ("leg2/peg", "table/socket2_hole"),
+    # ("ur10_right/gripper", None),
+    # ("ur10_right/gripper", "leg3/handle"),
+    # ("leg3/peg", "table/socket3_hole"),
+    # ("ur10_right/gripper", None),
+    # ("ur10_right/gripper", "leg4/handle"),
+    # ("leg4/peg", "table/socket4_hole"),
+    # ("ur10_right/gripper", None),
 ]
 
 # Phase 0 (grasp leg1 with ur10_right) reliably fails at path planning, not
@@ -204,7 +226,8 @@ GRASP_SEQUENCE: List[Tuple[str, Optional[str]]] = [
 # If leg2-4's grasp phases (index 3, 6, 9) hit the same corridor-blocking
 # failure phase 0 did, unfreeze ur10_left there as well.
 PER_PHASE_FROZEN_ARMS: dict[int, List[str]] = {
-    i: ([] if i == 0 else ["ur10_left"]) for i in range(len(GRASP_SEQUENCE))
+    i: (["ur10_left"])
+    for i in range(len(GRASP_SEQUENCE))
 }
 
 
@@ -309,6 +332,7 @@ def run_task(backend: str = "pyhpp") -> bool:
         task_config=task.task_config,
         backend=task.backend,
         graph_constraints=getattr(task, "_graph_constraints", None),
+        freeze_joint_substrings=task.FREEZE_JOINT_SUBSTRINGS,
         auto_save_dir=None,
         run_logger=getattr(task, "run_logger", None),
     )
@@ -356,6 +380,117 @@ def run_task(backend: str = "pyhpp") -> bool:
 # Interactive replay helpers
 # ---------------------------------------------------------------------------
 
+# gripper name -> arm side, for real UR10 grippers only -- excludes a
+# carried object's own pseudo-gripper (e.g. "leg1/peg"), which has no
+# fingers to animate.
+_REAL_GRIPPER_SIDE = {
+    "ur10_left/gripper": "ur10_left",
+    "ur10_right/gripper": "ur10_right",
+}
+
+
+def _gripper_override(
+    q: np.ndarray, rank: dict, side: str, closedness: float
+) -> np.ndarray:
+    """Return a copy of `q` with `side`'s 6 gripper joints set to a given
+    closedness (0.0 = open, 1.0 = GRIPPER_CLOSED_VALUE), mimic-consistent
+    across all 6 via GRIPPER_MIMIC_JOINTS' multipliers.
+    """
+    q = q.copy()
+    for j, mult in GRIPPER_MIMIC_JOINTS:
+        q[rank[f"{side}/{j}"]] = mult * (closedness * GRIPPER_CLOSED_VALUE)
+    return q
+
+
+def _animate_gripper(
+    task: TableAssemblyTask,
+    q: np.ndarray,
+    rank: dict,
+    side: str,
+    from_closedness: float,
+    to_closedness: float,
+    steps: int = 20,
+    dt: float = 0.02,
+) -> np.ndarray:
+    """Animate `side`'s gripper between two closedness values.
+
+    Visualization only. Returns the final full q for the caller to track.
+    """
+    for i in range(steps + 1):
+        frac = from_closedness + (to_closedness - from_closedness) * i / steps
+        q = _gripper_override(q, rank, side, frac)
+        task.planner.visualize(q)
+        time.sleep(dt)
+    return q
+
+
+def _replay_sequence_with_grasp_visuals(
+    task: TableAssemblyTask,
+    seq_planner: GraspSequencePlanner,
+    n_samples: int = 60,
+    dt: float = 0.02,
+) -> None:
+    """Replay phase_results with a cosmetic gripper close/open overlay.
+
+    HPP's planned paths keep gripper joints frozen open throughout (the
+    grasp is a rigid TCP constraint, not simulated finger closing), so
+    played as-is every leg would float in an open gripper. This closes a
+    side's fingers after it grasps a real handle, opens them before it
+    releases, and re-applies the closed pose over every frame in between
+    (including non-gripper phases like peg->socket docking) since the raw
+    path always carries the open value.
+    """
+    rank = task.robot.rankInConfiguration
+    held: dict[str, float] = {"ur10_left": 0.0, "ur10_right": 0.0}
+
+    q = np.array(task.q_init, dtype=float)
+    task.planner.visualize(q)
+
+    for phase in seq_planner.phase_results:
+        if phase.get("skipped") or not phase.get("paths"):
+            continue
+
+        gripper = phase.get("gripper")
+        handle = phase.get("handle")
+        side = _REAL_GRIPPER_SIDE.get(gripper)
+
+        print(f"\nPhase {phase['phase']}: {gripper} -> {handle}")
+
+        if side is not None and handle is None and held.get(side, 0.0) > 0.0:
+            print(f"  opening {side}'s gripper")
+            q = _animate_gripper(task, q, rank, side, held[side], 0.0, dt=dt)
+            held[side] = 0.0
+
+        for path_obj in phase.get("paths", []):
+            if path_obj is None:
+                continue
+            path = (
+                task.planner.get_path(path_obj)
+                if isinstance(path_obj, int)
+                else path_obj
+            )
+            length = path.length()
+            for i in range(n_samples + 1):
+                q_path, ok = path.call(length * i / n_samples)
+                if not ok:
+                    continue
+                q = np.array(q_path, dtype=float)
+                # The raw path always carries open (0) fingers -- redraw
+                # any still-held side's closed pose over it every frame.
+                for held_side, closedness in held.items():
+                    if closedness > 0.0:
+                        q = _gripper_override(q, rank, held_side, closedness)
+                task.planner.visualize(q)
+                time.sleep(dt)
+
+        if side is not None and handle is not None:
+            print(f"  closing {side}'s gripper")
+            q = _animate_gripper(task, q, rank, side, 0.0, 1.0, dt=dt)
+            held[side] = 1.0
+
+    print("\n✓ Replay complete")
+
+
 def _interactive_replay(
     task: TableAssemblyTask, seq_planner: GraspSequencePlanner
 ) -> None:
@@ -392,12 +527,11 @@ def _interactive_replay(
             break
 
         if raw in ("a", "all"):
-            print("\nReplaying full sequence...")
+            print("\nReplaying full sequence (with gripper open/close overlay)...")
             try:
-                seq_planner.replay_sequence(speed=1.0)
-                print("✓ Done")
+                _replay_sequence_with_grasp_visuals(task, seq_planner)
             except Exception as exc:
-                print(f"  ⚠ replay_sequence failed: {exc}")
+                print(f"  ⚠ replay with grasp visuals failed: {exc}")
                 _replay_fallback(task, path_items)
             continue
 
