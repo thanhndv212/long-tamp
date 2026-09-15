@@ -31,40 +31,44 @@ classifiers = [
 # Hard runtime deps.
 #   numpy / pyyaml — imported unguarded in core modules (numpy, yaml_loader,
 #                    utils/transforms).
+#   pin (pinocchio) — imported unguarded at module scope in utils/transforms.py
+#                    (SE3, Quaternion, rpyToMatrix are used directly by its
+#                    functions, not just for type hints), which every task
+#                    config transitively imports. `import long_tamp` does not
+#                    work without it — it is not actually optional.
 #   viser / trimesh / pycollada — the browser viewer (pyhpp_viser) is the
 #                    default viewer, so its PyPI-side deps ship by default. The
 #                    pyhpp_viser bindings themselves come from hpp-gepetto-viewer
-#                    (robotpkg/conda, not PyPI).
-# pinocchio is intentionally NOT a hard dep: in every supported environment it
-# is provided by the HPP stack (robotpkg /opt/openrobots, built against NumPy
-# 1.x). Pulling `pin` from PyPI here dragged in NumPy 2.x and segfaulted the
-# native pinocchio. Standalone-without-HPP users get it via the [standalone]
-# extra (which pins compatible numpy).
+#                    (see the [hpp] extra below).
 dependencies = [
-    # numpy capped <2: the HPP/pinocchio native bindings (robotpkg, /opt/openrobots)
-    # are compiled against NumPy 1.x. A NumPy 2.x in the user/site path shadows the
-    # system numpy and segfaults the pinocchio C-extension (ABI mismatch).
-    "numpy>=1.19.0,<2",
+    # No upper bound: the PyPI-native HPP stack (see [hpp] extra) is a cmeel
+    # build — cmeel-boost (a transitive dep of hpp-python) requires numpy>=2.
+    # A robotpkg/source-built HPP environment (see docs/INSTALL.md) is instead
+    # compiled against NumPy 1.x — install there with `pip install --no-deps
+    # -e .` so this constraint (and the `pin` one below) never gets a chance
+    # to pull in a PyPI NumPy 2.x / pinocchio that collides with it.
+    "numpy>=1.26",
     "pyyaml>=5.1",
+    "pin>=2.6",
     "viser",
     "trimesh",
     "pycollada",
 ]
 
 [project.optional-dependencies]
-# Standalone (no HPP stack present): pull pinocchio from PyPI. Only use this in
-# an environment WITHOUT robotpkg/system pinocchio — mixing the two causes the
-# NumPy-ABI segfault described above.
-standalone = ["pin>=2.6,<3", "numpy>=1.19.0,<2"]
+# The full native HPP stack, prebuilt (cmeel) wheels from PyPI — no robotpkg,
+# no source build, no Docker. Linux only today (manylinux_2_28, x86_64/aarch64),
+# Python 3.10-3.14 — see docs/INSTALL.md for the current platform matrix and
+# the robotpkg/source-build fallback for unsupported platforms.
+hpp = [
+    "hpp-python>=9.0.2",
+    "hpp-gepetto-viewer>=9.0.2",
+]
 
-# --- Optional native HPP stacks (NOT on PyPI; robotpkg / conda-forge only) ---
-# These extras carry no PyPI packages; they exist as valid, documented install
-# targets and as a place to record what the system-package prerequisites are.
-
-# TOPPRA time-parameterization (optional optimizer). The pyhpp_toppra binding
-# ships in `hpp-toppra`, which requires the `toppra` C++ lib (>=0.6.2).
+# TOPPRA time-parameterization (optional optimizer). Also a real PyPI (cmeel)
+# wheel now — see docs/INSTALL.md.
 toppra = [
-    # System packages only: hpp-toppra, toppra.
+    "hpp-toppra>=9.0.2",
 ]
 
 dev = [

@@ -14,22 +14,21 @@ Long-horizon, multi-arm task-and-motion planning (TAMP) for manipulation, built 
 
 ## Installation
 
-`long_tamp` has two dependency tiers: a pure-Python tier installable from PyPI, and the HPP
-native bindings (`hpp-python`, `hpp-toppra`, `hpp-gepetto-viewer`), which are C++ extension
-modules **not on PyPI** and must come from robotpkg, conda-forge, or a source build/container.
-Install the native bindings first, then the package:
+`long_tamp` has two dependency tiers: a pure-Python tier, and the HPP native bindings
+(`hpp-python`, `hpp-toppra`, `hpp-gepetto-viewer`) — C++ extension modules.
 
-```bash
-# Step 1: HPP native bindings — robotpkg or the hpp-agimus source-built container
-# (the default PyHPP backend needs the source build today; see docs/INSTALL.md)
+| Platform | Pure-Python tier (`pip install -e .`) | HPP native bindings |
+|---|---|---|
+| Linux x86_64/aarch64 | ✅ PyPI | ✅ PyPI — `pip install -e ".[hpp,toppra]"` |
+| macOS | ✅ PyPI | ❌ no wheels (PyPI, conda-forge, robotpkg) — needs Docker/Linux |
+| Windows | untested | untested — likely needs Docker/WSL2 |
 
-# Step 2: the long_tamp package
-pip install -e .
-```
-
-Full instructions — robotpkg vs. source build, the CMake install path, optional extras
-(`toppra`), the NumPy/pinocchio ABI pitfall, and runtime backend detection — are in
-[`docs/INSTALL.md`](docs/INSTALL.md).
+On Linux, everything installs from PyPI in one command, no system packages or Docker
+required. Elsewhere, the pure-Python tier still installs natively via pip, but the planner
+itself needs a Linux environment for the native bindings — see
+[`docs/INSTALL.md`](docs/INSTALL.md) for the robotpkg/source-build/Docker fallback, the
+CMake install path, the NumPy ABI pitfall (robotpkg wants NumPy 1.x, the PyPI wheels want
+NumPy 2.x — don't mix them), and runtime backend detection.
 
 ## Usage
 
@@ -160,7 +159,7 @@ Python `logging` hierarchy — see [`docs/usage/standalone-usage.md`](docs/usage
 
 ## Documentation
 
-- **Installation**: [`docs/INSTALL.md`](docs/INSTALL.md) — robotpkg vs. source build, pip/CMake install paths, optional extras, backend detection.
+- **Installation**: [`docs/INSTALL.md`](docs/INSTALL.md) — pip (primary), robotpkg/source-build fallback, CMake install path, optional extras, backend detection.
 - **Architecture**: [`ARCHITECTURE.md`](ARCHITECTURE.md) — module layering, dependency direction, data flow. Dated at the top; check it before trusting a claim about what exists.
 - **Usage guide (living reference)**: [`docs/usage/standalone-usage.md`](docs/usage/standalone-usage.md) — writing a task, multi-phase sequences, resume/replay/checkpoints, backends, example scripts.
 - **Development report**: [`docs/legacy/report/development-report.md`](docs/legacy/report/development-report.md) — *why* the framework is built this way: architecture decisions vs. bare HPP, measured before/after numbers, project timeline, and a bugs-found appendix. A point-in-time report, not a living reference.

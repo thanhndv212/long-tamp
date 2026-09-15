@@ -73,7 +73,13 @@ except ImportError:
     HAS_TOPPRA = False
 
 try:
-    from pyhpp.gepetto.viewer import Viewer as _GepettoViewer
+    # Two module layouts exist depending on how hpp-gepetto-viewer was
+    # installed: robotpkg/source builds nest it under `pyhpp.gepetto.viewer`;
+    # the PyPI (cmeel) wheel ships it as the flat top-level `pyhpp_gepetto`.
+    try:
+        from pyhpp.gepetto.viewer import Viewer as _GepettoViewer
+    except ImportError:
+        from pyhpp_gepetto.viewer import Viewer as _GepettoViewer
 
     HAS_GEPETTO_VIEWER = True
 except ImportError:
