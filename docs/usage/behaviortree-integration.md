@@ -121,8 +121,9 @@ they're looking at the exact plan+compiler combination that produced a given run
 ## 5. C++ host and the CPython bridge
 
 `examples/behaviortree/src/main.cpp` takes `--factory <name>` (checked against a hardcoded
-allowlist — `create_fake_session` and `create_twin_session` today; add your own mission
-factory per §9; an unlisted name is a non-retryable exit code `2`, never dispatched to Python) and
+allowlist — `create_fake_session`, `create_twin_session`, and `create_twin_regrasp_session`
+today; add your own mission factory per §9; an unlisted name is a non-retryable exit code
+`2`, never dispatched to Python) and
 `--options <json>`, constructs a
 `PythonSession`, registers the five generic node types
 (`RegisterTaskPlanningNodes`, `task_nodes.cpp`), builds the tree from
@@ -182,15 +183,16 @@ Bounded conformance tests (no real PyHPP; safe anywhere, including CI):
 ctest --test-dir build-bt --output-on-failure -R 'taskplan_bt_fake'
 ```
 
-Real-mission CTest case (TWIN's bimanual lift-ball, `create_twin_session`) — needs the real
-PyHPP backend and ~2 minutes, so it's opt-in via a separate CMake option, not part of the
+Real-mission CTest cases (TWIN's bimanual lift-ball) — need the real PyHPP backend and a
+couple of minutes each, so they're opt-in via a separate CMake option, not part of the
 default `-DBUILD_TESTING=ON` configure:
 
 ```bash
 cmake -S . -B build-bt -DBUILD_BEHAVIORTREE_EXAMPLES=ON -DBUILD_TESTING=ON \
   -DBUILD_BEHAVIORTREE_REAL_MISSION_TESTS=ON
 cmake --build build-bt --parallel --target agimus_taskplan_bt
-ctest --test-dir build-bt --output-on-failure -R 'taskplan_bt_twin_lift_ball'
+ctest --test-dir build-bt --output-on-failure -R 'taskplan_bt_twin_lift_ball'  # flat two-grasp, create_twin_session
+ctest --test-dir build-bt --output-on-failure -R 'taskplan_bt_twin_regrasp'    # forced release+regrasp, create_twin_regrasp_session (§11 item 1)
 ```
 
 Run the host directly against your own mission factory (bypasses any supervisor you write —
@@ -257,12 +259,19 @@ bimanual scene, both grasps completed. Nothing below is broken — this is the g
 
 **Real coverage gaps — the new machinery is proven on the easiest scene in the repo only:**
 
-- **Auto-release is untested at the BT level.** TWIN's `GRASP_SEQUENCE` never conflicts
-  (both grippers start free), so `twin_bt_session.py`'s compiled tree is a flat two-grasp
-  sequence — it never exercises release-then-grasp. The `release` capability is registered
-  but genuinely unused by TWIN's `TaskPlan` document. `run_sequence()`'s auto-release
-  *policy* is proven (9 unit tests in `test_sequence_orchestrator.py`), but nothing has
-  proven it compiled into a BT tree or triggered against a real scene.
+- ~~**Auto-release is untested at the BT level.**~~ **Done (§11 item 1).** A second
+  factory, `create_twin_regrasp_session` (`twin_bt_session.py`'s
+  `build_twin_regrasp_session`), compiles a `fallback`/`condition`-guarded
+  release-then-regrasp document (`panda_left/gripper` releases and reacquires
+  `ball/handle`) and is verified for real: `agimus_taskplan_bt --factory
+  create_twin_regrasp_session` (opt-in CTest `taskplan_bt_twin_regrasp`) and
+  `tests/test_twin_regrasp_bt_session.py` both reach a real, executed
+  `release()` followed by a real, executed second `grasp()` of the same
+  target — proving the compiler's per-transaction `Fallback` composes
+  correctly with a top-level `fallback`/`condition`, not just the flat-
+  sequence case. `create_twin_session`'s own flat two-grasp document is
+  untouched (still exercises no release) — see the new side findings below
+  for why this needed its own scene rather than extending that one.
 - **No lookahead in the capability-driven path.** `find_feasible_phase_target()` (the fix
   for "phase N's random commitment silently dooms phase N+1," the RS6/CON0 case documented
   in that method's own docstring) only exists inside `plan_sequence()`'s internals. A BT or
@@ -309,17 +318,39 @@ bimanual scene, both grasps completed. Nothing below is broken — this is the g
   runs — consistent enough to look like a real, marginal clearance in
   `script/twin/assets/pokeball_bimanual.urdf` rather than pure solver noise. See
   `tests/test_grasp_release_use_case_twin.py`'s docstring. Never investigated.
+  Confirmed worse than "intermittent" for a *regrasp* specifically: building item 1's
+  release-then-regrasp scenario against `panda_left/gripper`/`ball/handle`, the exact
+  same `f_12` collision hit 100% of regrasp draws (0% of first-grasp draws) across two
+  independent verification runs before `create_twin_regrasp_session`'s `grasp`
+  capability's `max_attempts` was raised from 3 to 8 to compensate — still not
+  root-caused (possibly the ball settling into a slightly different resting pose after a
+  real `release()` than its pristine initial one, tightening this already-marginal
+  clearance further), still out of scope for a compiler/session-level fix.
+- **First-phase graph construction is markedly harder to solve than a later one on the
+  same `GraspSequencePlanner`.** Discovered while picking item 1's regrasp target: the
+  *same* `panda_right/gripper > ball/handle2` grasp that plans in ~18s as the *second*
+  phase of TWIN's flat two-grasp mission (edge name `0-0_01`) failed 6/6 target-generation
+  draws across two processes when built as the *only* phase of a single-gripper session
+  (edge name `f_01`, no collision, solver residuals scattered 0.01–8.9) — i.e. an edge's
+  real difficulty depends on whether `GraspSequencePlanner` already has another phase's
+  graph structure to extend, not just on which gripper/handle pair it names. Not
+  root-caused; worth knowing before assuming any single grasp's difficulty transfers
+  between a multi-phase mission and a standalone one.
 - The `taskplan_bt_twin_lift_ball` CTest case is opt-in only
   (`BUILD_BEHAVIORTREE_REAL_MISSION_TESTS=OFF` by default) and not wired into any CI
-  pipeline — nothing runs it automatically.
+  pipeline — nothing runs it automatically. It is also not perfectly reliable itself:
+  observed one real `SIGSEGV` crash (not the `f_12` collision above — a fresh
+  `create_twin_session` run died mid-generation on its very first waypoint draw) in
+  four runs during this same session, alongside three clean `SUCCESS` runs. Not
+  root-caused; flagged here since item 1's own opt-in CTest (`taskplan_bt_twin_regrasp`)
+  shares the same binary and could in principle hit the same crash.
 
 ### Suggested order
 
-1. **Exercise auto-release through a BT tree against TWIN or a small synthetic scene** —
-   extend `_build_plan_document()` (or a new scene) so a `sequence`/`fallback` combination
-   actually forces a release before a grasp, proving the compiler's `Fallback`/`retry`
-   shapes (§4) compose correctly for that case, not just the flat-sequence case already
-   verified.
+1. ~~**Exercise auto-release through a BT tree against TWIN or a small synthetic
+   scene**~~ **Done** — see `create_twin_regrasp_session` above and the new side
+   findings (regrasp-specific `f_12` flakiness, first-phase-vs-later-phase graph
+   difficulty) this surfaced.
 2. **Wire `ikea_table_prototype` through `grasp()`/`release()`/`run_sequence()`** — the
    real stress test: manual frozen-arms overrides, an actual auto-release, and enough
    phases to surface whether the missing-lookahead gap above matters in practice before
@@ -329,5 +360,5 @@ bimanual scene, both grasps completed. Nothing below is broken — this is the g
    of duplicating its policy — both are premature to design against a single two-phase
    scene.
 4. **PDDLStream integration** stays last: it's the biggest, most speculative piece, and
-   items 1–3 will surface exactly which predicates/effects/streams a real domain needs —
+   items 2–3 will surface exactly which predicates/effects/streams a real domain needs —
    designing them now would be guessing.

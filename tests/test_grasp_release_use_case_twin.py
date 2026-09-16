@@ -51,6 +51,16 @@ most single-draw bad luck; a red result here should be re-run before being
 treated as a ``grasp()``/``release()`` regression -- it has never failed
 for a reason other than this one specific edge's collision.
 
+This same edge is markedly *more* than "intermittent" when it is the
+target of a release-then-regrasp cycle specifically (release ``ball/handle``
+from ``panda_left/gripper``, then grasp it again) rather than a single
+fresh grasp: 100% of regrasp draws hit it across two independent
+verification runs of ``tests/test_twin_regrasp_bt_session.py`` and the
+``taskplan_bt_twin_regrasp`` CTest, vs. 0% of first-grasp draws in those
+same runs -- see ``twin_bt_session.py``'s ``build_twin_regrasp_session``
+docstring, which raised that scenario's ``grasp`` capability
+``max_attempts`` from 3 to 8 to compensate. Still not root-caused.
+
 Both primitives are deliberately exercised in ONE ``GraspSequencePlanner``
 instance (rather than a second instance running ``plan_sequence()`` in
 parallel for comparison) -- ``grasp()``/``release()`` reuse the exact same

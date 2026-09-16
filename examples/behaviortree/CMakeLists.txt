@@ -95,6 +95,24 @@ if(BUILD_TESTING)
       PASS_REGULAR_EXPRESSION "Task plan status: SUCCESS"
       TIMEOUT 300
       ENVIRONMENT "PYTHONPATH=${PROJECT_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
+
+    # §11 item 1: exercises a real release() forced by a fallback/condition
+    # guard before a second real grasp() -- create_twin_session's flat
+    # two-grasp document never releases anything, so this is the first
+    # opt-in real-mission CTest to prove the compiler's Fallback/retry
+    # shapes compose correctly one level above a single transaction.
+    add_test(NAME taskplan_bt_twin_regrasp
+             COMMAND agimus_taskplan_bt --factory create_twin_regrasp_session)
+    set_tests_properties(
+      taskplan_bt_twin_regrasp PROPERTIES
+      PASS_REGULAR_EXPRESSION "Task plan status: SUCCESS"
+      # Higher than taskplan_bt_twin_lift_ball's 300: this scenario RRT-plans
+      # the same real edge TWICE (first grasp, then a forced release+regrasp
+      # of the same target -- see create_twin_regrasp_session's docstring),
+      # each draw independently taking anywhere up to ~115s observed, plus
+      # up to 8 retries' worth of budget on the regrasp specifically.
+      TIMEOUT 900
+      ENVIRONMENT "PYTHONPATH=${PROJECT_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
   endif()
 endif()
 

@@ -113,3 +113,23 @@ def create_twin_session(options_json: str = "{}") -> HostSession:
     from twin_bt_session import build_twin_session
 
     return build_twin_session(options_json)
+
+
+def create_twin_regrasp_session(options_json: str = "{}") -> HostSession:
+    """Real-mission factory: TWIN scene, forced release before regrasp (§11 item 1).
+
+    Same lazy-import rationale as ``create_twin_session`` above. See
+    ``script/twin/twin_bt_session.py``'s ``build_twin_regrasp_session()``
+    docstring for what this plan document exercises that the flat
+    ``create_twin_session`` one does not: a real ``release()`` forced by a
+    ``fallback``/``condition`` guard before a second real ``grasp()``.
+    """
+    import sys
+    from pathlib import Path
+
+    twin_dir = Path(__file__).resolve().parents[4] / "script" / "twin"
+    if str(twin_dir) not in sys.path:
+        sys.path.insert(0, str(twin_dir))
+    from twin_bt_session import build_twin_regrasp_session
+
+    return build_twin_regrasp_session(options_json)
