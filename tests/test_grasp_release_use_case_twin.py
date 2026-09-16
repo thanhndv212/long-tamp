@@ -24,16 +24,32 @@ the WHOLE test, exercising grasp -> grasp -> failed-grasp -> release ->
 release sequentially in one flow -- matching how every real caller (a
 script, a mission) actually uses this: one process, one scene. An earlier
 version of this file built a fresh scene per test function; that surfaced
-a large, unexplained reliability gap between the first scene built in a
-process (100% pass across every run observed) and a second/third one built
-right after it in the same process (far more failures, yet the same test
-run completely alone in its own process passed reliably) -- a strong
-signature of state not being fully independent between successive HPP
-scene constructions in one process, not genuine per-edge solver
-randomness. Investigating that further is a separate, non-trivial
-question (HPP/pinocchio's own global/random state across repeated scene
-construction) outside this test's scope; sidestepping it by matching
-real usage (one construction) is the correct fix here, not a workaround.
+a reliability gap between the first scene built in a process and a
+second/third one built right after it in the same process (the second/
+third failed far more often, yet the same test run completely alone in
+its own process passed reliably) -- a signature of state not being fully
+independent between successive HPP scene constructions in one process.
+Consolidating to one construction was the correct fix for THAT gap (not a
+workaround -- it also matches real usage), and did make this test
+noticeably more reliable.
+
+It does not make this test deterministic, though. Residual flakiness
+remains, tied to one specific edge:
+``panda_left/gripper > ball/handle | f_12`` (pregrasp -> grasp waypoint),
+which has intermittently failed with the identical collision --
+``panda_left/panda_leftfinger_2`` vs ``ball/base_link_0`` -- across
+several observed runs, including as the very first real-scene test in a
+run (not just a later one). The consistency of the collision pair across
+failures suggests a real, marginal clearance in the TWIN scene's own
+finger/ball geometry for this grasp approach (possibly worth a look at
+``script/twin/assets/pokeball_bimanual.urdf`` someday), not pure solver
+noise -- but that is a scene-asset question, separate from and outside the
+scope of validating ``grasp()``/``release()`` themselves, which is what
+this test exists to do. ``_plan_phase_edges``'s own small retry budget
+(``_MAX_GENERATION_RETRIES``, see ``grasp_sequence.py``) already absorbs
+most single-draw bad luck; a red result here should be re-run before being
+treated as a ``grasp()``/``release()`` regression -- it has never failed
+for a reason other than this one specific edge's collision.
 
 Both primitives are deliberately exercised in ONE ``GraspSequencePlanner``
 instance (rather than a second instance running ``plan_sequence()`` in
