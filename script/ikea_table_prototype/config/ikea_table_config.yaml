@@ -1,6 +1,5 @@
-# IKEA LACK table assembly — local prototype task configuration (YAML)
-# Local prototype only — see ../../README.md (this whole directory only
-# exists on the local/ikea-furniture-prototype branch).
+# IKEA LACK table assembly — task configuration (YAML)
+# See ../README.md for the scene overview and asset provenance.
 #
 # Two UR10+Robotiq-2F85 arms (see build_assets.py's merge-arm stage) face
 # each other 1.5m apart across a shared workbench and assemble a 4-legged

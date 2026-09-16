@@ -1,19 +1,17 @@
-# IKEA table assembly — local prototype (NOT for public release)
+# IKEA table assembly — long-horizon example
 
-**This directory exists only on the `local/ikea-furniture-prototype` branch, which must
-never be pushed to `origin` or merged into `main`.** It vendors real mesh assets derived
-from IKEA's LACK table product line, sourced from
-[clvrai/furniture](https://github.com/clvrai/furniture) (MIT-licensed code; the 3D assets
-themselves are real product replicas, not covered by that license in the same way — see
+A long-horizon, multi-arm assembly example: two UR10+Robotiq-2F85 arms picking up and
+docking four IKEA LACK table legs into their sockets on the tabletop. This is the
+proven, multi-phase example `long_tamp` needs (see `docs/usage/behaviortree-integration.md`
+§11) — built with real mesh geometry rather than placeholder primitives, sourced from
+[clvrai/furniture](https://github.com/clvrai/furniture) (MIT-licensed; see
 `research-vault/agimus-spacelab/long-tamp-example-assets-and-vlm-tamp-research.md` for the
-full reasoning). Using them here is a deliberate, scoped exception for private local
-prototyping only, to validate the new long-horizon example's task structure against a real
-reference before authoring fresh, safe-to-publish geometry.
+full sourcing/licensing reasoning).
 
 ## What's here
 
-- `assets/meshes/{leg1,leg2,leg3,leg4,table}.stl` — the actual LACK table meshes, vendored
-  as-is from `clvrai/furniture`'s `furniture/env/models/assets/objects/table_lack_0825/`.
+- `assets/meshes/{leg1,leg2,leg3,leg4,table}.stl` — the LACK table meshes, vendored as-is
+  from `clvrai/furniture`'s `furniture/env/models/assets/objects/table_lack_0825/`.
 - `assets/textures/light-wood.png` — matching texture.
 - `assets/reference_table_lack_0825.mjcf.xml` — the original MJCF definition (5 bodies: 4
   legs + tabletop), kept as a reference for connection-site geometry and collision box
@@ -27,10 +25,9 @@ reference before authoring fresh, safe-to-publish geometry.
 - `debug_view_frames.py` — viser scene viewer with handle/gripper frames and an
   FK placement check; run inside the hpp-agimus-arm64 container.
 
-## Before this ever goes near `main` or a public release
+## Status
 
-Do not merge this branch. The path to a publishable version is a **separate**, freshly
-authored box-primitive table (same part count and connection topology — 4 legs + 1
-tabletop, same collision-box dimensions already extracted from the MJCF above) with no
-IKEA mesh files and no IKEA product naming — see the vault note for the box-primitive
-option that was the alternative to this branch.
+Phase 1's pregrasp target (`ur10_right/gripper > leg1/handle`) converges reliably; the
+remaining 11 phases (dock leg1's peg, release, then legs 2-4) are still being worked
+through — see `task_assemble_table.py`'s module docstring for current status and
+`docs/usage/behaviortree-integration.md` §11 for how this fits the broader roadmap.

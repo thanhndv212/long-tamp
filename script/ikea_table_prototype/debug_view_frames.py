@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Load the ikea_table_config scene: viser view, FK check.
 
-Local prototype only — see README.md. Debug helper, not part of the task
+See README.md. Debug helper, not part of the task
 pipeline. The only viewer script in this directory — it used to be three
 (view_full_scene.py, view_arm_gripper.py, this file), all loading
 overlapping scenes; consolidated here since debug_view_frames.py already

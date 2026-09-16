@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Build every generated asset for the IKEA LACK table prototype.
 
-Local prototype only — see README.md (this whole directory only exists on
-the local/ikea-furniture-prototype branch). Consolidates what used to be
+See README.md for the scene overview. Consolidates what used to be
 five separate scripts (rescale_robotiq_meshes.py, generate_robotiq_urdf.sh,
 generate_hole_peg_meshes.py, generate_urdf_srdf.py, merge_ur10_robotiq.py —
 removed) into one, since they form a single linear pipeline with no
@@ -368,7 +367,7 @@ _URDF_TEMPLATE = """<?xml version="1.0"?>
 """
 
 _SRDF_LEG_TEMPLATE = """<?xml version="1.0"?>
-<!-- GENERATED — see build_assets.py. Local prototype only. -->
+<!-- GENERATED — see build_assets.py. -->
 <robot name="{name}">
   <!-- Grasp point: leg center, gripper approaches from the side — a
        parallel jaw closing across the leg's 0.03x0.03 cross-section.
@@ -413,7 +412,7 @@ _SRDF_LEG_TEMPLATE = """<?xml version="1.0"?>
 """
 
 _SRDF_TABLE_TEMPLATE = """<?xml version="1.0"?>
-<!-- GENERATED — see build_assets.py. Local prototype only. -->
+<!-- GENERATED — see build_assets.py. -->
 <robot name="table">
   <!-- Grasp point: top face center, in case a phase needs to hold the
        table steady while a leg is attached. Tentative, same caveat as
