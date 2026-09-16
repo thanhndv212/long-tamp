@@ -15,10 +15,8 @@ Usage:
 """
 
 from .base import ManipulationTask
-from .grasp_sequence import (
-    GraspSequencePlanner,
-    InteractiveGraspSequenceBuilder,
-)
+from .grasp_sequence import GraspSequencePlanner
+from .interactive_grasp_sequence_builder import InteractiveGraspSequenceBuilder
 
 __all__ = [
     # Grasp sequence

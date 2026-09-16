@@ -241,9 +241,10 @@ Each class here does one job and is usable on its own, independent of the
   is replayed into the real `plan_sequence()`/`resume_sequence()` call as
   a per-edge warm-start hint chain (`phase_q_hints`). See
   `docs/features/phase-target-lookahead.md`.
-- **`InteractiveGraspSequenceBuilder`** — terminal menu-driven wrapper
-  around `GraspSequencePlanner` for exploratory/interactive planning
-  sessions (used by `script/*/interactive_planning.py`).
+- **`InteractiveGraspSequenceBuilder`** (`tasks/interactive_grasp_sequence_builder.py`)
+  — terminal menu-driven wrapper around `GraspSequencePlanner` for
+  exploratory/interactive planning sessions (used by
+  `script/*/interactive_planning.py`).
 
 ## Configuration (`config/`)
 
