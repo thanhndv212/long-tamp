@@ -3447,6 +3447,227 @@ class GraspSequencePlanner:
             "final_config": q_target,
         }
 
+    def grasp(
+        self,
+        gripper: str,
+        handle: str,
+        q_current: list[float],
+        frozen_arms_mode: str = "auto",
+        per_phase_frozen_arms: dict[int, list[str]] | None = None,
+        q_scene_init: list[float] | None = None,
+        timeout_per_edge: float = 60.0,
+        max_iterations_per_edge: int = 10000,
+        verbose: bool = True,
+    ) -> dict[str, Any]:
+        """Plan and commit a single grasp: ``gripper`` takes ``handle``.
+
+        A standalone, capability-shaped primitive -- the single-phase
+        counterpart of ``plan_sequence()``, for a caller (an external
+        orchestrator, a ``task_planning/`` capability, a BT node) that
+        decides the sequence itself and wants one grasp planned and
+        committed at a time rather than driving a whole multi-phase run.
+
+        Unlike a ``plan_sequence()`` grasp phase, this does **not**
+        auto-insert a release if ``gripper`` currently holds a different
+        object (see ``_plan_auto_release_if_needed`` -- that insertion is
+        an orchestration decision, not this primitive's job). If the
+        precondition isn't met, this fails loudly rather than silently
+        fixing it up: call ``release()`` first. Idempotent no-op
+        (``success=True``, ``skipped=True``) if ``gripper`` already holds
+        ``handle``.
+
+        Reuses the exact per-phase helpers ``plan_sequence()`` drives
+        internally via ``_run_phase_loop`` -- ``_build_phase_graph_and_constraints``,
+        ``_compute_and_project_edge_sequence``, ``_plan_phase_edges``,
+        ``_finalize_phase_result`` -- with ``phase_idx=0``, the same
+        placeholder ``plan_pregrasp()``/``plan_loop()`` already use for
+        their own standalone calls.
+
+        Returns a dict shaped like ``plan_sequence()``'s (``success``,
+        ``message``, ``phase_results``, ``final_config``); never raises.
+        """
+        currently_held = self.grasp_tracker.current_grasps.get(gripper)
+        if currently_held == handle:
+            return {
+                "success": True,
+                "message": f"'{gripper}' already holds '{handle}'",
+                "phase_results": [],
+                "final_config": q_current,
+                "skipped": True,
+            }
+        if currently_held is not None:
+            return {
+                "success": False,
+                "message": (
+                    f"grasp('{gripper}', '{handle}') failed: '{gripper}' holds "
+                    f"'{currently_held}', not free -- call release('{gripper}', ...) "
+                    "first"
+                ),
+                "phase_results": [],
+                "final_config": q_current,
+            }
+
+        if hasattr(self.planner, "configure_transition_planner"):
+            self.planner.configure_transition_planner(
+                time_out=timeout_per_edge,
+                max_iterations=max_iterations_per_edge,
+            )
+
+        q_scene_init = q_scene_init if q_scene_init is not None else q_current
+
+        try:
+            self._build_phase_graph_and_constraints(
+                phase_idx=0,
+                gripper=gripper,
+                handle=handle,
+                q_current=q_current,
+                frozen_arms_mode=frozen_arms_mode,
+                per_phase_frozen_arms=per_phase_frozen_arms,
+                q_scene_init=q_scene_init,
+                verbose=verbose,
+                emit_logs=verbose,
+            )
+            edge_sequence, q_current = self._compute_and_project_edge_sequence(
+                phase_idx=0,
+                gripper=gripper,
+                handle=handle,
+                q_current=q_current,
+                verbose=verbose,
+                emit_logs=verbose,
+            )
+            edge_result = self._plan_phase_edges(
+                phase_idx=0,
+                gripper=gripper,
+                handle=handle,
+                edge_sequence=edge_sequence,
+                q_current=q_current,
+                skip_phases=None,
+                start_edge_idx=0,
+                is_resume=False,
+                verbose=verbose,
+            )
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"grasp('{gripper}', '{handle}') failed: {e}",
+                "phase_results": [],
+                "final_config": q_current,
+            }
+
+        q_current = self._finalize_phase_result(
+            phase_idx=0,
+            gripper=gripper,
+            handle=handle,
+            edge_sequence=edge_sequence,
+            phase_paths=edge_result["phase_paths"],
+            phase_geometric_paths=edge_result["phase_geometric_paths"],
+            edge_stats_list=edge_result["edge_stats_list"],
+            q_start=edge_result["q_start"],
+            q_pregrasp_for_cache=edge_result["q_pregrasp_for_cache"],
+            skip_phases=None,
+            verbose=verbose,
+            is_resume=False,
+        )
+
+        return {
+            "success": True,
+            "message": f"Grasp completed: '{gripper}' now holds '{handle}'",
+            "phase_results": [self.phase_results[-1]],
+            "final_config": q_current,
+        }
+
+    def release(
+        self,
+        gripper: str,
+        q_current: list[float],
+        frozen_arms_mode: str = "auto",
+        per_phase_frozen_arms: dict[int, list[str]] | None = None,
+        verbose: bool = True,
+    ) -> dict[str, Any]:
+        """Release whatever ``gripper`` currently holds, if anything.
+
+        Standalone, capability-shaped primitive -- the single-call
+        counterpart of ``plan_sequence()``'s explicit ``(gripper, None)``
+        release phase (``_plan_release_entry_phase``), for a caller that
+        decides the sequence itself. Idempotent no-op (``success=True``,
+        ``skipped=True``) if ``gripper`` is already free.
+
+        Frozen-arm computation is delegated to ``_release_frozen_arms``
+        exactly as ``_plan_release_entry_phase`` does: an arm that holds
+        the object being released must never be frozen, or the pregrasp
+        retreat becomes unreachable (see that method's docstring for the
+        RS3 case this rule was learned from).
+
+        Returns a dict shaped like ``plan_sequence()``'s (``success``,
+        ``message``, ``phase_results``, ``final_config``); never raises.
+        """
+        currently_held = self.grasp_tracker.current_grasps.get(gripper)
+        if currently_held is None:
+            return {
+                "success": True,
+                "message": f"'{gripper}' already free",
+                "phase_results": [],
+                "final_config": q_current,
+                "skipped": True,
+            }
+
+        release_constraints = None
+        if frozen_arms_mode == "global":
+            release_constraints = self.graph_constraints
+        elif frozen_arms_mode != "none":
+            release_frozen = self._release_frozen_arms(
+                gripper, currently_held, frozen_arms_mode, per_phase_frozen_arms, 0,
+            )
+            if release_frozen:
+                from long_tamp.planning.constraints import ConstraintBuilder
+
+                cn, _ = ConstraintBuilder.create_locked_joint_constraints(
+                    self.graph_builder.ps,
+                    self.graph_builder.robot,
+                    q_current,
+                    release_frozen,
+                    backend=self.graph_builder.backend,
+                )
+                if cn:
+                    release_constraints = cn
+
+        try:
+            q_final, release_info = self._plan_release_subphase(
+                gripper=gripper,
+                q_current=q_current,
+                phase_graph_constraints=release_constraints,
+                verbose=verbose,
+            )
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"release('{gripper}') failed: {e}",
+                "phase_results": [],
+                "final_config": q_current,
+            }
+
+        phase_result = {
+            "phase": 1,
+            "gripper": gripper,
+            "handle": None,
+            "released": currently_held,
+            **release_info,
+            "complete": True,
+        }
+        self.phase_results.append(phase_result)
+
+        if verbose:
+            logger.info(
+                "✓ release('%s') succeeded: released '%s'", gripper, currently_held
+            )
+
+        return {
+            "success": True,
+            "message": f"Released '{currently_held}' from '{gripper}'",
+            "phase_results": [phase_result],
+            "final_config": q_final,
+        }
+
     def plan_sequence(
         self,
         grasp_sequence: Sequence[tuple[str, str]],
