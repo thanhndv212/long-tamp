@@ -17,7 +17,7 @@ PythonSession::PythonSession(const std::string& factory, const std::string& opti
 {
   std::call_once(python_init_flag, initializePython);
   const PyGILState_STATE gil = PyGILState_Ensure();
-  PyObject* module = PyImport_ImportModule("agimus_spacelab.tasks.task_planning.host");
+  PyObject* module = PyImport_ImportModule("long_tamp.tasks.task_planning.host");
   if(!module)
   {
     const auto error = pythonError();
