@@ -81,6 +81,9 @@ def _make_planner(plan_transition_edge, max_collision_retries=1):
     planner = object.__new__(GraspSequencePlanner)
     planner.run_logger = _FakeRunLogger()
     planner._MAX_COLLISION_RETRIES = max_collision_retries
+    # _RecordingConfigGen always succeeds on the first call, so this loop
+    # never actually retries -- any positive value satisfies it.
+    planner._MAX_GENERATION_RETRIES = 2
     planner.total_planning_time = 0.0
     planner.edge_stats = {}
     planner.auto_save_dir = None

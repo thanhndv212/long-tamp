@@ -166,6 +166,17 @@ class GraspSequencePlanner:
             list(freeze_joint_substrings) if freeze_joint_substrings else []
         )
         self._MAX_COLLISION_RETRIES = 10
+        # A single generate_via_edge() call already does up to
+        # ConfigGenerator's own max_attempts (1000) internal random
+        # restarts before giving up -- reusing _MAX_COLLISION_RETRIES here
+        # would let one edge's initial target-generation retry compound to
+        # 10x an already-expensive worst case, with no better odds if the
+        # edge is genuinely hard (not just unlucky) from this q_from.
+        # Small and separate: enough to catch one-off unlucky draws
+        # (observed empirically: a single retry recovered 4 of 5 real
+        # failures against TWIN's scene) without multiplying a possibly
+        # near-infeasible search.
+        self._MAX_GENERATION_RETRIES = 2
 
         # Auto-save configuration
         self.auto_save_dir = auto_save_dir
@@ -2158,45 +2169,93 @@ class GraspSequencePlanner:
                     attempt_str,
                 )
 
-            # Generate target configuration via this edge
+            # Generate target configuration via this edge. Retried up to
+            # _MAX_GENERATION_RETRIES times, drawing a fresh (unhinted)
+            # candidate on each retry -- previously a single failed
+            # random-restart IK draw here aborted the whole phase
+            # immediately, unlike the RRT-planning step below (which
+            # already retries+regenerates on failure). Found live: TWIN's
+            # 'panda_left/gripper > ball/handle | f_12' edge failing here
+            # on an unlucky draw, without ever reaching the planning retry
+            # loop at all -- see test_plan_phase_edges_generation_retry.py.
+            #
+            # Deliberately a SMALLER budget than _MAX_COLLISION_RETRIES:
+            # generate_via_edge() already does up to its own max_attempts
+            # (1000) internal random restarts before returning failure, so
+            # reusing _MAX_COLLISION_RETRIES (10) here would let one edge
+            # compound to 10x an already-expensive worst case -- confirmed
+            # live as a 20+ minute hang on a scene where the edge was
+            # genuinely hard (not just unlucky) from this particular
+            # q_from, no better odds on repeated full re-searches.
             gen_start = time.time()
             q_target = None
             try:
-                config_label = f"q_phase{phase_idx}_edge{edge_idx}"
-                if is_resume:
-                    config_label += "_resume"
-                q_hint = edge_hints[edge_idx]
-                ok, q_target = self.config_gen.generate_via_edge(
-                    edge_name=edge_name,
-                    q_from=q_start,
-                    config_label=config_label,
-                    q_hint=q_hint,
-                )
+                import numpy as np
 
-                if is_resume:
-                    if not ok or q_target is None:
-                        raise RuntimeError(
-                            f"Failed to generate target via edge '{edge_name}'"
-                        )
-                    edge_stat["gen_time"] = time.time() - gen_start
-                else:
-                    # Print and check the generated configuration
-                    import numpy as np
+                last_gen_exc: Exception | None = None
+                for _gen_attempt in range(self._MAX_GENERATION_RETRIES):
+                    config_label = f"q_phase{phase_idx}_edge{edge_idx}"
+                    if is_resume:
+                        config_label += "_resume"
+                    # Only the first attempt gets the caller's warm-start
+                    # hint -- a hint that already failed to converge isn't
+                    # worth re-feeding (mirrors the plan_transition_edge
+                    # retry loop below, whose own regeneration call is also
+                    # always unhinted).
+                    q_hint = edge_hints[edge_idx] if _gen_attempt == 0 else None
+                    ok, q_target = self.config_gen.generate_via_edge(
+                        edge_name=edge_name,
+                        q_from=q_start,
+                        config_label=config_label,
+                        q_hint=q_hint,
+                    )
 
-                    edge_stat["gen_time"] = time.time() - gen_start
-
-                    # Check for NaN/inf or None
-                    if not ok or q_target is None or not np.all(np.isfinite(q_target)):
-                        raise RuntimeError(
-                            f"Failed to generate valid target via edge '{edge_name}': q_target={q_target}"
-                        )
-                    else:
-                        if verbose:
-                            logger.info(
-                                "✓ Generated target config (%.2fs)",
-                                edge_stat["gen_time"],
+                    try:
+                        if is_resume:
+                            if not ok or q_target is None:
+                                raise RuntimeError(
+                                    f"Failed to generate target via edge '{edge_name}'"
+                                )
+                        elif (
+                            not ok
+                            or q_target is None
+                            or not np.all(np.isfinite(q_target))
+                        ):
+                            raise RuntimeError(
+                                f"Failed to generate valid target via edge "
+                                f"'{edge_name}': q_target={q_target}"
                             )
-                            logger.debug("q_target: %s", q_target)
+                        last_gen_exc = None
+                        break
+                    except Exception as gen_exc:
+                        last_gen_exc = gen_exc
+                        if q_hint is not None:
+                            # A hinted attempt failed and is about to be
+                            # discarded in favor of an unhinted redraw --
+                            # the phase's hint chain (the guarantee
+                            # find_feasible_phase_target() gave about the
+                            # NEXT phase staying reachable) no longer holds.
+                            self.invalidated_phase_hints.add(phase_idx)
+                        if verbose and _gen_attempt < self._MAX_GENERATION_RETRIES - 1:
+                            logger.warning(
+                                "Target generation for '%s' failed (attempt "
+                                "%d), retrying...",
+                                edge_name,
+                                _gen_attempt + 1,
+                            )
+
+                edge_stat["gen_time"] = time.time() - gen_start
+
+                if last_gen_exc is not None:
+                    raise last_gen_exc
+
+                if not is_resume:
+                    if verbose:
+                        logger.info(
+                            "✓ Generated target config (%.2fs)",
+                            edge_stat["gen_time"],
+                        )
+                        logger.debug("q_target: %s", q_target)
 
                     # Visualize the configuration before planning.
                     # Only attempted if the backend viewer has been explicitly

@@ -188,6 +188,9 @@ class TestPlanPhaseEdgesLogging:
         planner = _make_planner()
         planner.run_logger = _FakeRunLogger()
         planner._MAX_COLLISION_RETRIES = 1
+        # _FakeConfigGen always succeeds on the first call, so this loop
+        # never actually retries -- any positive value satisfies it.
+        planner._MAX_GENERATION_RETRIES = 1
         planner.total_planning_time = 0.0
         planner.edge_stats = {}
         planner.auto_save_dir = None
