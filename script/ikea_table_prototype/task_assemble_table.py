@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """IKEA LACK table assembly — 2x UR10+Robotiq, YAML-driven task script.
 
-Local prototype only — see README.md (this whole directory only exists on
-the local/ikea-furniture-prototype branch). pyhpp only imports inside the
+See README.md for the scene overview. pyhpp only imports inside the
 hpp-agimus-arm64 container (see debug_view_frames.py's docstring), which
 this host shell doesn't have — every actual run of this script happens
 there. Has been run repeatedly there: fixed several real bugs live
@@ -10,9 +9,8 @@ there. Has been run repeatedly there: fixed several real bugs live
 exclusions in ur10_robotiq.srdf, a zero-gap resting collision, a wrong
 pregrasp approach-direction sign — see build_assets.py's urdf-srdf stage
 docstring for that one — an unseeded/deterministic RNG, and the arm
-pedestal height). Phase 1's pregrasp target now converges reliably but a
-full 12-phase success hasn't landed yet — see GRASP_SEQUENCE's own comment
-below for where that stood.
+pedestal height). See STATUS below for where the full 12-phase sequence
+currently stands.
 
 Copied from script/templates/task_yaml_template.py (the generic YAML-driven
 task template) with one deliberate structural deviation, explained below.
@@ -49,22 +47,61 @@ script set. GRASP_SEQUENCE below now has 3 phases per leg instead of 2 —
 grasp the handle, dock the peg into its named socket, then release the
 handle (the leg stays put, held by the docking grasp alone).
 
-GRASP_SEQUENCE below alternates arms across the 4 legs (mostly to exercise
-both arms of the two-UR10 setup this scene was built for) — an arbitrary
-first-draft ordering, not derived from any reachability or collision
-analysis. Likely the first thing to change if planning stalls.
+GRASP_SEQUENCE below uses ur10_right for all 4 legs, not alternating arms
+(an earlier draft of this comment claimed it alternated -- it never did;
+ur10_left stays idle the whole sequence, only ever freed to move out of
+ur10_right's way per PER_PHASE_FROZEN_ARMS). An arbitrary first-draft
+choice, not derived from any reachability or collision analysis -- likely
+the first thing to change if planning stalls on a later leg.
 
-STATUS: after the fixes listed above, phase 1's pregrasp target
-(ur10_left/gripper > leg1/handle) converges reliably (residual ~1e-10 on
-many attempts) but hasn't yet landed a fully collision-free candidate
-within the ~30s/attempt-batch budget ConfigGenerator.generate_via_edge
-hardcodes (not exposed through plan_sequence() to override). Dominant
-remaining failures: ur10_left/upper_arm_link vs ground, and
-ur10_left/wrist_2_link or forearm_link vs workbench — genuine geometric
-tightness given this arm's reach into this specific spot on the
-workbench, not a further bug found so far. Paused here to let a human
-look at the scene directly (debug_view_frames.py) rather than keep
-burning compute on blind retries.
+STATUS (updated by the session that wired this script through
+run_sequence()/lookahead -- see long-tamp docs/usage/behaviortree-
+integration.md §11 item 2 for the roadmap context): the full 12-phase
+GRASP_SEQUENCE below is now written out (previously only phase 0 was
+uncommented) and driven through run_sequence() with lookahead_pairs
+protection on every legN grasp->dock pair, but has not yet landed a
+complete run. What's been fixed and verified real, in order:
+
+1. PER_PHASE_FROZEN_ARMS had a real bug -- it froze ur10_left for phase 0
+   despite its own comment explaining why that phase specifically needs
+   ur10_left free (the corridor-blocking failure below). Fixed; phase 0
+   now grasps leg1 reliably (~20-40s, both fresh runs since the fix).
+2. A real, separate native SIGSEGV: this script started the viewer
+   (task.planner.visualize()) before planning, the exact concurrency bug
+   script/twin/task_lift_ball.py's own run_task() already documents and
+   avoids (the viser server's background thread racing the native
+   RRT/collision-check step). Fixed the same way -- viewer now starts only
+   after all planning is done. A second, distinct SIGSEGV was still
+   observed even after that fix (deterministic, 3/3, at the exact
+   "target generated -> path planning begins" transition) -- classic race-
+   condition signature (avoided when run under gdb, which changes thread
+   timing; not root-caused). Real HPP runs of this script should go
+   through gdb until that's fixed:
+     gdb -batch -ex run -ex quit --args python3 task_assemble_table.py --backend pyhpp
+3. Phase 1 (dock leg1's peg into socket1) then failed completely --
+   1848/1848 solver draws, residual never below ~1.6, no collision. Root
+   cause: GraspSequencePlanner.plan_sequence() has no automatic lookahead,
+   so phase 0's randomly-drawn grasp orientation can (and did) leave
+   phase 1 geometrically unreachable -- exactly the failure class
+   find_feasible_phase_target() exists to fix (previously only wired into
+   SpaceLab's run_block_nonstop(), never into this script or
+   run_sequence()). Fixed generally: grasp() now takes an optional
+   q_hint, and run_sequence() (sequence_orchestrator.py) takes
+   per_phase_frozen_arms and lookahead_pairs, threading a
+   find_feasible_phase_target() candidate through as that hint. Verified
+   the mechanism works: an unprotected draw got nowhere near convergence
+   (residual 1.6-3.9); a lookahead-protected candidate reached residual
+   0.049 before its probe timeout -- the docking constraint IS
+   achievable, this isn't a scene-asset geometry bug.
+4. Still open: phase 0's actual committed grasp can still need a
+   collision-retry regeneration during path planning (independent of
+   target generation), which drifts the final config away from the exact
+   candidate the lookahead probe validated -- GraspSequencePlanner already
+   tracks this (self.invalidated_phase_hints) and documents the intended
+   recovery ("re-run find_feasible_phase_target() and re-plan the block
+   from its start" -- see plan_sequence()'s phase_q_hints docstring), but
+   run_sequence() does not yet implement that retry/re-roll loop. This is
+   what the next attempt at a full 12-phase run needs.
 
 RNG SEEDING — load-bearing, not cosmetic
 ------------------------------------------
@@ -91,6 +128,7 @@ import numpy as np
 import pinocchio as pin
 
 from long_tamp.tasks.grasp_sequence import GraspSequencePlanner
+from long_tamp.tasks.sequence_orchestrator import run_sequence
 from long_tamp.tasks import ManipulationTask
 from long_tamp.config.yaml_loader import YamlTaskLoader
 
@@ -187,18 +225,18 @@ COLLISION_EXCLUSIONS: List[Tuple[str, str]] = [
 # placement choice -- see the module docstring's old "WHAT 'PLACE INTO A
 # SOCKET' ACTUALLY MEANS HERE" section, superseded by this change.
 GRASP_SEQUENCE: List[Tuple[str, Optional[str]]] = [
-    ("ur10_right/gripper", "leg1/handle"),  # arm grasps leg1
-    # ("leg1/peg", "table/socket1_hole"),  # dock leg1's peg into socket1
-    # ("ur10_right/gripper", None),  # arm releases leg1 (stays docked)
-    # ("ur10_right/gripper", "leg2/handle"),
-    # ("leg2/peg", "table/socket2_hole"),
-    # ("ur10_right/gripper", None),
-    # ("ur10_right/gripper", "leg3/handle"),
-    # ("leg3/peg", "table/socket3_hole"),
-    # ("ur10_right/gripper", None),
-    # ("ur10_right/gripper", "leg4/handle"),
-    # ("leg4/peg", "table/socket4_hole"),
-    # ("ur10_right/gripper", None),
+    ("ur10_right/gripper", "leg1/handle"),  # 0: arm grasps leg1
+    ("leg1/peg", "table/socket1_hole"),  # 1: dock leg1's peg into socket1
+    ("ur10_right/gripper", None),  # 2: arm releases leg1 (stays docked)
+    ("ur10_right/gripper", "leg2/handle"),  # 3
+    ("leg2/peg", "table/socket2_hole"),  # 4
+    ("ur10_right/gripper", None),  # 5
+    ("ur10_right/gripper", "leg3/handle"),  # 6
+    ("leg3/peg", "table/socket3_hole"),  # 7
+    ("ur10_right/gripper", None),  # 8
+    ("ur10_right/gripper", "leg4/handle"),  # 9
+    ("leg4/peg", "table/socket4_hole"),  # 10
+    ("ur10_right/gripper", None),  # 11
 ]
 
 # Phase 0 (grasp leg1 with ur10_right) reliably fails at path planning, not
@@ -225,10 +263,29 @@ GRASP_SEQUENCE: List[Tuple[str, Optional[str]]] = [
 # correct auto-equivalent there too, same as the plain grasp/release phases.
 # If leg2-4's grasp phases (index 3, 6, 9) hit the same corridor-blocking
 # failure phase 0 did, unfreeze ur10_left there as well.
+#
+# BUG FIXED: this dict previously froze ur10_left for phase 0 too (a plain
+# `{i: ["ur10_left"] for i in range(len(GRASP_SEQUENCE))}` comprehension
+# covers every phase, including 0), directly contradicting the "let it
+# move out of the way" reasoning above -- the freeze was never actually
+# lifted for the one phase that needed it lifted. Phase 0 is now the one
+# exception (frozen-nothing, `[]`); every other phase keeps ur10_left
+# frozen as reasoned above.
 PER_PHASE_FROZEN_ARMS: dict[int, List[str]] = {
-    i: (["ur10_left"])
+    i: ([] if i == 0 else ["ur10_left"])
     for i in range(len(GRASP_SEQUENCE))
 }
+
+# Each legN grasp phase (0, 3, 6, 9) is immediately followed by that same
+# leg's peg->socket docking phase (1, 4, 7, 10) -- exactly the failure class
+# GraspSequencePlanner.find_feasible_phase_target() exists to fix: a plain
+# random grasp draw for phase N can leave phase N+1 geometrically
+# unreachable, with no way back short of re-rolling phase N. Confirmed live
+# for leg1: an unprotected phase-0 grasp landed a candidate that left
+# phase-1 docking at 1848/1848 solver failures (residual 1.6-3.9, never a
+# collision) -- see run_sequence()'s ``lookahead_pairs`` (sequence_orchestrator.py)
+# for the mechanism this wires in below.
+LOOKAHEAD_PAIRS: List[int] = [0, 3, 6, 9]
 
 
 # ---------------------------------------------------------------------------
@@ -318,11 +375,15 @@ def run_task(backend: str = "pyhpp") -> bool:
         return False
     print(f"\n✓ Initial config: {len(q_init)} DOF")
 
-    try:
-        task.planner.visualize(q_init)
-        print("✓ Initial scene displayed")
-    except Exception as exc:
-        print(f"⚠ Visualization skipped: {exc}")
+    # Viewer is started AFTER all planning below, not here: the viser
+    # server's background thread segfaulted the native RRT/collision-check
+    # step deterministically when live at solve time (reproduced twice in a
+    # row on this scene, same "Generated target config" -> SIGSEGV
+    # transition, matching the exact concurrency issue
+    # script/twin/task_lift_ball.py's own run_task() already documents and
+    # avoids the same way -- this script just hadn't applied that fix yet).
+    # Planning headless first, then visualizing the already-computed paths,
+    # sidesteps it entirely.
 
     print("\nCreating GraspSequencePlanner...")
     seq_planner = GraspSequencePlanner(
@@ -338,13 +399,16 @@ def run_task(backend: str = "pyhpp") -> bool:
     )
 
     print(f"\nPlanning sequence: {GRASP_SEQUENCE}")
+    print(f"  Lookahead-protected phases: {LOOKAHEAD_PAIRS}")
     try:
-        result = seq_planner.plan_sequence(
+        result = run_sequence(
+            seq_planner=seq_planner,
             grasp_sequence=GRASP_SEQUENCE,
             q_init=q_init,
             verbose=True,
-            frozen_arms_mode="manual",
             per_phase_frozen_arms=PER_PHASE_FROZEN_ARMS,
+            lookahead_pairs=LOOKAHEAD_PAIRS,
+            q_scene_init=q_init,
         )
     except Exception as exc:
         import traceback
@@ -356,7 +420,7 @@ def run_task(backend: str = "pyhpp") -> bool:
         print("\n" + "=" * 70)
         print("✗ PLANNING FAILED")
         print("=" * 70)
-        print(f"  Reason: {result.get('error', 'Unknown')}")
+        print(f"  Reason: {result.get('message', 'Unknown')}")
         return False
 
     print("\n" + "=" * 70)
@@ -372,6 +436,12 @@ def run_task(backend: str = "pyhpp") -> bool:
     ]
     if all_paths:
         print(f"\n✓ {len(all_paths)} path(s) generated")
+        print("\nStarting viewer (all planning is done — nothing solves live)...")
+        try:
+            task.planner.visualize(q_init)
+        except Exception as exc:
+            print(f"⚠ Visualization unavailable: {exc}")
+            return True
         _interactive_replay(task, seq_planner)
     return True
 
