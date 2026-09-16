@@ -15,10 +15,13 @@ registry, validator, and compiler are the extension points a model would target.
 integration does not exist yet — model output would be untrusted proposal data, never
 executed as generated code.
 
-For full status, verification results, and the current real-mission gap, see
-[`../report/behaviortree-screwdriving-report.md`](../report/behaviortree-screwdriving-report.md)
-and [`../plans/behaviortree-screwdriving-taskplan.md`](../plans/behaviortree-screwdriving-taskplan.md)
-— this page only covers how to build, run, and extend it.
+For current status, what's been verified against a real mission, and what's still
+open, see [§11](#11-known-gaps-and-roadmap) — this page otherwise only covers how to
+build, run, and extend the pipeline itself. (Earlier revisions of this page linked to
+`../report/behaviortree-screwdriving-report.md` and
+`../plans/behaviortree-screwdriving-taskplan.md`; those were SpaceLab-mission-specific
+docs that never made it into this repo's split from `agimus_spacelab` — the links were
+dead from the split onward.)
 
 ## 1. The big picture
 
@@ -48,9 +51,8 @@ subclass) is meant to live in your own module and register its own factory in `h
 (see §9); the generic layer itself knows nothing about any specific robot, mission, or
 gripper. This repo previously shipped a SpaceLab screwdriving adapter under
 `script/spacelab/` as the reference example; it has been removed as SpaceLab-mission-
-specific content (not part of the open-source release) — see
-[`../plans/behaviortree-screwdriving-taskplan.md`](../plans/behaviortree-screwdriving-taskplan.md)
-for the historical design record.
+specific content (not part of the open-source release), and its design record never made
+it into this repo either (see the note above).
 
 A real, from-scratch (no SpaceLab content) mission adapter now lives under
 `script/twin/twin_bt_session.py`, driving TWIN's bimanual lift-ball scene
@@ -72,6 +74,8 @@ running it.
 | `src/long_tamp/tasks/task_planning/host.py` | Allowlisted session factories the C++ host is permitted to call: `create_fake_session`, plus one per mission you add (§9) |
 | `examples/behaviortree/` | C++ host: `main.cpp` (CLI + allowlist), `python_session.{hpp,cpp}` (CPython bridge), `task_nodes.{hpp,cpp}` (generic BT node types) |
 | `src/long_tamp/planning/path_recorder.py`, `path_io.py` | `PathRecorder` capture and `replay`/validation helpers a mission-specific session can reuse for checkpointing |
+| `src/long_tamp/tasks/grasp_sequence.py` — `GraspSequencePlanner.grasp()`/`.release()` | Standalone, precondition-checked, `dict -> dict` capability primitives (never raise) — the natural implementation for a mission's `grasp`/`release` capabilities; see the module docstring for why they exist and how they differ from `plan_sequence()`'s internal per-phase calls |
+| `src/long_tamp/tasks/sequence_orchestrator.py` — `run_sequence()` | Reference orchestrator built purely on `grasp()`/`release()`, reproducing `plan_sequence()`'s auto-release sequencing policy as external, swappable code — a worked example of what a BT tree or a symbolic planner needs to reproduce, not something the BT path itself calls |
 
 ## 3. Task Plan IR contract
 
@@ -143,17 +147,32 @@ cross-thread GIL/HPP-state violation; there is no thread pool in the current des
 ## 6. Building
 
 ```bash
+git submodule update --init cmake   # jrl-cmakemodules -- see below
 cmake -S . -B build-bt \
   -DBUILD_BEHAVIORTREE_EXAMPLES=ON \
   -DBUILD_TESTING=ON
 cmake --build build-bt --parallel --target agimus_taskplan_bt
 ```
 
+The top-level `CMakeLists.txt` requires `jrl-cmakemodules` to configure *any* C++ build of
+this repo, including just this standalone example — `cmake/` vendors it as a git submodule
+(pinned to v2.1.0, the same version the sibling `agimus_spacelab` repo vendors). A checkout
+that skips `git submodule update --init` fails at the very first `cmake -S` with
+`Could not find a package configuration file provided by "jrl-cmakemodules"`.
+
 `BUILD_BEHAVIORTREE_EXAMPLES` (default `OFF`) gates `add_subdirectory(examples/behaviortree)`
 in the top-level `CMakeLists.txt`, so it never affects a normal library build.
 `examples/behaviortree/CMakeLists.txt` fetches BehaviorTree.CPP via `FetchContent` pinned to a
 known commit unless `BEHAVIORTREE_CPP_SOURCE_DIR` is already defined (vendored/cached
 checkout), and always builds it with its own examples/tools/Groot/SQLite logging disabled.
+
+Inside the dev container (`dockers/hpp-arm64/`), source both `config.sh` (`PATH`,
+`PYTHONPATH`, `LD_LIBRARY_PATH`) and the `hpp` conda env before configuring — the container's
+default shell has neither `cmake` nor a C++ compiler on `PATH` until both are sourced:
+
+```bash
+source ~/devel/hpp/dockers/hpp-arm64/config.sh
+```
 
 ## 7. Running
 
@@ -224,3 +243,91 @@ without touching HPP at all.
   a separate package outside this library's planning-only scope.
 - **Model/LLM extension point**: yes (deferred) — the IR/registry/validator are the
   intended target for a future model-proposed mission.
+
+## 11. Known gaps and roadmap
+
+Status as of the session that fixed this pipeline's two blocking infra bugs (the C++ host's
+stale `agimus_spacelab.tasks.task_planning.host` import and the missing `jrl-cmakemodules`
+submodule — neither of which is `long_tamp`-specific new work, just leftovers from the
+`agimus_spacelab` split that had never been exercised since) and added the first real,
+from-scratch mission (`create_twin_session`, §1). Verified for real: `agimus_taskplan_bt
+--factory create_twin_session` reaches `Task plan status: SUCCESS` against TWIN's actual
+bimanual scene, both grasps completed. Nothing below is broken — this is the gap between
+"works" and "production-grade / proven on a harder scene."
+
+**Real coverage gaps — the new machinery is proven on the easiest scene in the repo only:**
+
+- **Auto-release is untested at the BT level.** TWIN's `GRASP_SEQUENCE` never conflicts
+  (both grippers start free), so `twin_bt_session.py`'s compiled tree is a flat two-grasp
+  sequence — it never exercises release-then-grasp. The `release` capability is registered
+  but genuinely unused by TWIN's `TaskPlan` document. `run_sequence()`'s auto-release
+  *policy* is proven (9 unit tests in `test_sequence_orchestrator.py`), but nothing has
+  proven it compiled into a BT tree or triggered against a real scene.
+- **No lookahead in the capability-driven path.** `find_feasible_phase_target()` (the fix
+  for "phase N's random commitment silently dooms phase N+1," the RS6/CON0 case documented
+  in that method's own docstring) only exists inside `plan_sequence()`'s internals. A BT or
+  symbolic-planner orchestrator built on `grasp()`/`release()` today has no equivalent
+  protection — harmless for TWIN's independent bimanual grasps, but would resurface on any
+  scene with that kind of grasp-to-grasp coupling.
+- **`ikea_table_prototype` was never touched.** Every piece added this session (`grasp()`/
+  `release()`, `run_sequence()`, the BT adapter) was built and proven against TWIN only —
+  the simplest real scene in the repo (two independent grasps, no conflicts, no manual
+  frozen-arms overrides). `ikea_table_prototype`'s harder shape (up to 12 phases,
+  `frozen_arms_mode="manual"` overrides, auto-release actually firing) remains unvalidated
+  through any of this new machinery.
+- **Only `grasp`/`release` were promoted to capabilities.** `GraspSequencePlanner`'s other
+  standalone primitives — `plan_pregrasp()`, `plan_transition()`, `plan_loop()` — have no
+  capability/BT wrapper.
+
+**Deferred by explicit choice — not started:**
+
+- **PDDLStream-style symbolic search.** `task_planning/` only *executes* a hand-authored (or
+  future model-proposed) plan; nothing in this repo *searches* for one. Real TAMP
+  integration needs a predicate/effects layer a symbolic planner reads and writes, plus
+  "stream" functions bridging PDDLStream-style continuous sampling requests to
+  `ConfigGenerator`/`grasp()`. `CapabilityDescriptor.effects` is still just documentation —
+  unused by anything beyond `snapshot()`'s JSON output.
+
+**Not done by design — the risk/reward didn't justify it yet:**
+
+- **`plan_sequence()`/`resume_sequence()`/`_run_phase_loop` are completely untouched.**
+  `run_sequence()` is a parallel, additive alternative, not a replacement — nothing was
+  deduplicated. If the eventual goal is "`plan_sequence()` becomes a thin wrapper over the
+  same primitives `run_sequence()` uses," that refactor never happened; the two currently
+  duplicate the auto-release policy independently.
+- **No checkpoint/resume/process-supervisor wiring for the real BT mission.** §8's
+  `checkpoint_dir`/`PathRecorder` capture exists generically, but `twin_bt_session.py`
+  doesn't use it — a killed/crashed run has no resume path. §7 already documents that a real
+  long-running mission needs a process supervisor (attempt/total timeouts, bounded restart
+  backoff); no such supervisor exists anywhere in `long_tamp` (the SpaceLab one wasn't part
+  of the open-source release).
+
+**Known, unfixed side findings from building the TWIN adapter:**
+
+- TWIN's `panda_left/gripper > ball/handle | f_12` edge intermittently fails with the same
+  collision (`panda_left/panda_leftfinger_2` vs `ball/base_link_0`) across otherwise-clean
+  runs — consistent enough to look like a real, marginal clearance in
+  `script/twin/assets/pokeball_bimanual.urdf` rather than pure solver noise. See
+  `tests/test_grasp_release_use_case_twin.py`'s docstring. Never investigated.
+- The `taskplan_bt_twin_lift_ball` CTest case is opt-in only
+  (`BUILD_BEHAVIORTREE_REAL_MISSION_TESTS=OFF` by default) and not wired into any CI
+  pipeline — nothing runs it automatically.
+
+### Suggested order
+
+1. **Exercise auto-release through a BT tree against TWIN or a small synthetic scene** —
+   extend `_build_plan_document()` (or a new scene) so a `sequence`/`fallback` combination
+   actually forces a release before a grasp, proving the compiler's `Fallback`/`retry`
+   shapes (§4) compose correctly for that case, not just the flat-sequence case already
+   verified.
+2. **Wire `ikea_table_prototype` through `grasp()`/`release()`/`run_sequence()`** — the
+   real stress test: manual frozen-arms overrides, an actual auto-release, and enough
+   phases to surface whether the missing-lookahead gap above matters in practice before
+   investing in fixing it.
+3. **Only then** decide whether the lookahead gap needs a capability-layer equivalent, and
+   whether `plan_sequence()` should be refactored to route through `run_sequence()` instead
+   of duplicating its policy — both are premature to design against a single two-phase
+   scene.
+4. **PDDLStream integration** stays last: it's the biggest, most speculative piece, and
+   items 1–3 will surface exactly which predicates/effects/streams a real domain needs —
+   designing them now would be guessing.
