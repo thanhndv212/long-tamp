@@ -52,6 +52,15 @@ specific content (not part of the open-source release) — see
 [`../plans/behaviortree-screwdriving-taskplan.md`](../plans/behaviortree-screwdriving-taskplan.md)
 for the historical design record.
 
+A real, from-scratch (no SpaceLab content) mission adapter now lives under
+`script/twin/twin_bt_session.py`, driving TWIN's bimanual lift-ball scene
+(`script/twin/task_lift_ball.py`) through this exact pipeline — its `grasp`/`release`
+capabilities wrap `GraspSequencePlanner.grasp()`/`.release()` (see `grasp_sequence.py`'s
+module docstring), not mission-specific planning code. Factory: `create_twin_session`.
+It's a small reference example (two grasps, no release), not the proven long-horizon
+multi-phase mission this project still wants eventually — see §7 and §6 for building and
+running it.
+
 ## 2. Component map
 
 | File | Role |
@@ -108,8 +117,8 @@ they're looking at the exact plan+compiler combination that produced a given run
 ## 5. C++ host and the CPython bridge
 
 `examples/behaviortree/src/main.cpp` takes `--factory <name>` (checked against a hardcoded
-allowlist — currently just `create_fake_session` until you add your own mission factory,
-§9; an unlisted name is a non-retryable exit code `2`, never dispatched to Python) and
+allowlist — `create_fake_session` and `create_twin_session` today; add your own mission
+factory per §9; an unlisted name is a non-retryable exit code `2`, never dispatched to Python) and
 `--options <json>`, constructs a
 `PythonSession`, registers the five generic node types
 (`RegisterTaskPlanningNodes`, `task_nodes.cpp`), builds the tree from
@@ -154,13 +163,22 @@ Bounded conformance tests (no real PyHPP; safe anywhere, including CI):
 ctest --test-dir build-bt --output-on-failure -R 'taskplan_bt_fake'
 ```
 
+Real-mission CTest case (TWIN's bimanual lift-ball, `create_twin_session`) — needs the real
+PyHPP backend and ~2 minutes, so it's opt-in via a separate CMake option, not part of the
+default `-DBUILD_TESTING=ON` configure:
+
+```bash
+cmake -S . -B build-bt -DBUILD_BEHAVIORTREE_EXAMPLES=ON -DBUILD_TESTING=ON \
+  -DBUILD_BEHAVIORTREE_REAL_MISSION_TESTS=ON
+cmake --build build-bt --parallel --target agimus_taskplan_bt
+ctest --test-dir build-bt --output-on-failure -R 'taskplan_bt_twin_lift_ball'
+```
+
 Run the host directly against your own mission factory (bypasses any supervisor you write —
 useful for a single attempt or debugging a specific `--options` payload):
 
 ```bash
-./build-bt/examples/behaviortree/agimus_taskplan_bt \
-  --factory <your_factory_name> \
-  --options '{"backend":"pyhpp","no_viz":true}'
+./build-bt/examples/behaviortree/agimus_taskplan_bt --factory create_twin_session
 ```
 
 For a real, long-running PyHPP mission you'll typically also want a process supervisor

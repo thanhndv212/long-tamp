@@ -84,3 +84,32 @@ def create_fake_session(options_json: str = "{}") -> HostSession:
     elif fault == "missing_method":
         session.get_report = None  # type: ignore[method-assign]
     return session
+
+
+def create_twin_session(options_json: str = "{}") -> HostSession:
+    """Real-mission factory: TWIN's bimanual lift-ball scene (§9).
+
+    The adapter itself -- capability registry, ``TaskPlan`` document,
+    session construction against a real PyHPP scene -- lives outside this
+    generic layer, in ``script/twin/twin_bt_session.py``, per this file's
+    own module docstring ("the generic layer knows nothing about any
+    specific robot, mission, or gripper"). This factory only imports it,
+    lazily: ``script/`` is a dev-checkout path (example/demo code), not
+    part of the installed package, so importing it eagerly at module load
+    time would break importing ``host.py`` itself in any environment
+    that's ``pip install``-only.
+
+    Requires running from a repo checkout with ``script/twin/`` present
+    (true of every environment this C++ host is built and run from today
+    -- see ``docs/usage/behaviortree-integration.md``); raises ImportError
+    otherwise, same as any other missing optional dependency.
+    """
+    import sys
+    from pathlib import Path
+
+    twin_dir = Path(__file__).resolve().parents[4] / "script" / "twin"
+    if str(twin_dir) not in sys.path:
+        sys.path.insert(0, str(twin_dir))
+    from twin_bt_session import build_twin_session
+
+    return build_twin_session(options_json)

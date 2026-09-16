@@ -75,6 +75,27 @@ if(BUILD_TESTING)
     taskplan_bt_fault_missing_method
     taskplan_bt_unknown_factory
     PROPERTIES ENVIRONMENT "PYTHONPATH=${PROJECT_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
+
+  # Opt-in only: unlike the fake-session cases above, this drives a real
+  # PyHPP scene (TWIN's bimanual lift-ball, script/twin/twin_bt_session.py)
+  # through real RRT/IK planning -- ~2 minutes, and fails outright in any
+  # environment without the PyHPP backend built (see docs/INSTALL.md).
+  # Default OFF so a plain `-DBUILD_TESTING=ON` configure (e.g. CI without
+  # PyHPP) never has to build or run it; enable explicitly in an
+  # environment that has the real backend, same one create_twin_session
+  # itself needs.
+  option(BUILD_BEHAVIORTREE_REAL_MISSION_TESTS
+         "Also run BT.CPP CTest cases against real PyHPP missions (needs the PyHPP backend)"
+         OFF)
+  if(BUILD_BEHAVIORTREE_REAL_MISSION_TESTS)
+    add_test(NAME taskplan_bt_twin_lift_ball
+             COMMAND agimus_taskplan_bt --factory create_twin_session)
+    set_tests_properties(
+      taskplan_bt_twin_lift_ball PROPERTIES
+      PASS_REGULAR_EXPRESSION "Task plan status: SUCCESS"
+      TIMEOUT 300
+      ENVIRONMENT "PYTHONPATH=${PROJECT_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
+  endif()
 endif()
 
 install(TARGETS agimus_taskplan_bt RUNTIME DESTINATION bin)

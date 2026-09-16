@@ -27,7 +27,9 @@ int main(int argc, char** argv)
 
   try
   {
-    const std::set<std::string> allowed_factories = { "create_fake_session" };
+    const std::set<std::string> allowed_factories = {
+      "create_fake_session", "create_twin_session"
+    };
     if(allowed_factories.count(factory_name) == 0)
     {
       throw std::runtime_error("session factory is not allowlisted: " + factory_name);
