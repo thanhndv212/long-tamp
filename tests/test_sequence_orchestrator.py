@@ -9,6 +9,8 @@ real scene in ``tests/test_grasp_release_use_case_twin.py``; this file is
 only about the control flow ``run_sequence()`` adds on top of them.
 """
 
+import pytest
+
 from long_tamp.tasks.sequence_orchestrator import run_sequence
 
 
@@ -18,27 +20,42 @@ class _FakeGraspTracker:
 
 
 class _FakePlanner:
-    """Records every grasp()/release() call, in order, and returns
-    caller-scripted results keyed by (kind, gripper, handle)."""
+    """Records every grasp()/release()/find_feasible_phase_target() call, in
+    order, and returns caller-scripted results keyed by (kind, gripper,
+    handle)."""
 
-    def __init__(self, current_grasps, responses):
+    def __init__(self, current_grasps, responses, lookahead_responses=None):
         self.grasp_tracker = _FakeGraspTracker(current_grasps)
         self._responses = responses
+        self._lookahead_responses = lookahead_responses or {}
         self.calls: list[tuple[str, str, str | None]] = []
+        # (kind, gripper, handle) -> kwargs run_sequence() passed through,
+        # for tests asserting on frozen-arms/q_hint plumbing specifically.
+        self.call_kwargs: dict[tuple[str, str, str | None], dict] = {}
 
-    def grasp(self, gripper, handle, q_current):
+    def grasp(self, gripper, handle, q_current, **kwargs):
         self.calls.append(("grasp", gripper, handle))
+        self.call_kwargs[("grasp", gripper, handle)] = kwargs
         result = self._responses[("grasp", gripper, handle)]
         if result["success"]:
             self.grasp_tracker.current_grasps[gripper] = handle
         return result
 
-    def release(self, gripper, q_current):
+    def release(self, gripper, q_current, **kwargs):
         self.calls.append(("release", gripper, None))
+        self.call_kwargs[("release", gripper, None)] = kwargs
         result = self._responses[("release", gripper, None)]
         if result["success"]:
             self.grasp_tracker.current_grasps[gripper] = None
         return result
+
+    def find_feasible_phase_target(self, phase_n, phase_n1, **kwargs):
+        self.calls.append(("lookahead", phase_n[0], phase_n[1]))
+        self.call_kwargs[("lookahead", phase_n[0], phase_n[1])] = {
+            "phase_n1": phase_n1,
+            **kwargs,
+        }
+        return self._lookahead_responses.get((phase_n, phase_n1))
 
 
 def _ok(final_config, phase_results=None):
@@ -51,7 +68,12 @@ def _ok(final_config, phase_results=None):
 
 
 def _fail(message):
-    return {"success": False, "message": message, "phase_results": [], "final_config": None}
+    return {
+        "success": False,
+        "message": message,
+        "phase_results": [],
+        "final_config": None,
+    }
 
 
 class TestNoAutoReleaseNeeded:
@@ -188,3 +210,111 @@ class TestPhaseResultsConcatenation:
         result = run_sequence(planner, [("g1", "h_new")], q_init=[0.0], verbose=False)
 
         assert [pr["tag"] for pr in result["phase_results"]] == ["release", "grasp"]
+
+
+class TestPerPhaseFrozenArms:
+    def test_frozen_arms_remapped_to_phase_idx_zero_per_call(self):
+        # per_phase_frozen_arms is keyed by run_sequence()'s own phase_idx,
+        # but grasp()/release() each build their own graph at their
+        # internal phase_idx=0 -- run_sequence() must remap.
+        planner = _FakePlanner(
+            current_grasps={"g1": None, "g2": None},
+            responses={
+                ("grasp", "g1", "h1"): _ok([1.0]),
+                ("grasp", "g2", "h2"): _ok([2.0]),
+            },
+        )
+
+        run_sequence(
+            planner,
+            [("g1", "h1"), ("g2", "h2")],
+            q_init=[0.0],
+            verbose=False,
+            per_phase_frozen_arms={0: [], 1: ["g1"]},
+        )
+
+        assert (
+            planner.call_kwargs[("grasp", "g1", "h1")]["frozen_arms_mode"] == "manual"
+        )
+        assert planner.call_kwargs[("grasp", "g1", "h1")]["per_phase_frozen_arms"] == {
+            0: []
+        }
+        assert planner.call_kwargs[("grasp", "g2", "h2")]["per_phase_frozen_arms"] == {
+            0: ["g1"]
+        }
+
+    def test_omitted_per_phase_frozen_arms_leaves_grasp_on_its_own_default(self):
+        planner = _FakePlanner(
+            current_grasps={"g1": None},
+            responses={("grasp", "g1", "h1"): _ok([1.0])},
+        )
+
+        run_sequence(planner, [("g1", "h1")], q_init=[0.0], verbose=False)
+
+        assert planner.call_kwargs[("grasp", "g1", "h1")]["frozen_arms_mode"] == "auto"
+        assert (
+            planner.call_kwargs[("grasp", "g1", "h1")]["per_phase_frozen_arms"] is None
+        )
+
+
+class TestLookahead:
+    def test_lookahead_probes_next_phase_and_threads_the_candidate_as_q_hint(self):
+        planner = _FakePlanner(
+            current_grasps={"g1": None},
+            responses={
+                ("grasp", "g1", "h1"): _ok([1.0]),
+                ("release", "g1", None): _ok([1.5]),
+                ("grasp", "g1", "h2"): _ok([2.0]),
+            },
+            lookahead_responses={(("g1", "h1"), ("g1", "h2")): [[9.0], [9.5]]},
+        )
+
+        run_sequence(
+            planner,
+            [("g1", "h1"), ("g1", "h2")],
+            q_init=[0.0],
+            verbose=False,
+            lookahead_pairs=[0],
+        )
+
+        assert planner.calls[0] == ("lookahead", "g1", "h1")
+        assert planner.call_kwargs[("lookahead", "g1", "h1")]["phase_n1"] == (
+            "g1",
+            "h2",
+        )
+        assert planner.calls[1] == ("grasp", "g1", "h1")
+        assert planner.call_kwargs[("grasp", "g1", "h1")]["q_hint"] == [[9.0], [9.5]]
+
+    def test_no_candidate_found_falls_back_to_unprotected_grasp(self):
+        planner = _FakePlanner(
+            current_grasps={"g1": None},
+            responses={
+                ("grasp", "g1", "h1"): _ok([1.0]),
+                ("release", "g1", None): _ok([1.5]),
+                ("grasp", "g1", "h2"): _ok([2.0]),
+            },
+            lookahead_responses={(("g1", "h1"), ("g1", "h2")): None},
+        )
+
+        result = run_sequence(
+            planner,
+            [("g1", "h1"), ("g1", "h2")],
+            q_init=[0.0],
+            verbose=False,
+            lookahead_pairs=[0],
+        )
+
+        assert planner.call_kwargs[("grasp", "g1", "h1")]["q_hint"] is None
+        assert result["success"] is True
+
+    def test_lookahead_pairs_rejects_a_release_as_the_next_phase(self):
+        planner = _FakePlanner(current_grasps={"g1": None}, responses={})
+
+        with pytest.raises(ValueError, match="find_feasible_phase_target"):
+            run_sequence(
+                planner,
+                [("g1", "h1"), ("g1", None)],
+                q_init=[0.0],
+                verbose=False,
+                lookahead_pairs=[0],
+            )

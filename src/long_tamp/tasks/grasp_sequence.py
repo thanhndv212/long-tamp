@@ -3517,6 +3517,7 @@ class GraspSequencePlanner:
         timeout_per_edge: float = 60.0,
         max_iterations_per_edge: int = 10000,
         verbose: bool = True,
+        q_hint: list[list[float]] | list[float] | None = None,
     ) -> dict[str, Any]:
         """Plan and commit a single grasp: ``gripper`` takes ``handle``.
 
@@ -3541,6 +3542,17 @@ class GraspSequencePlanner:
         ``_finalize_phase_result`` -- with ``phase_idx=0``, the same
         placeholder ``plan_pregrasp()``/``plan_loop()`` already use for
         their own standalone calls.
+
+        Args:
+            q_hint: Optional warm-start, same shape ``plan_sequence()``'s
+                ``phase_q_hints[phase_idx]`` accepts (a per-edge config
+                chain from ``find_feasible_phase_target()``, or a single
+                terminal config) -- see ``_edge_hints_for_phase()``'s
+                docstring for the two shapes and why the chain form exists.
+                Lets a caller that already probed this grasp for lookahead
+                (checking the *next* phase stays reachable) commit exactly
+                the candidate it validated, instead of ``_plan_phase_edges``
+                drawing a fresh, unvalidated random one.
 
         Returns a dict shaped like ``plan_sequence()``'s (``success``,
         ``message``, ``phase_results``, ``final_config``); never raises.
@@ -3604,6 +3616,7 @@ class GraspSequencePlanner:
                 start_edge_idx=0,
                 is_resume=False,
                 verbose=verbose,
+                phase_q_hints={0: q_hint} if q_hint is not None else None,
             )
         except Exception as e:
             return {
