@@ -133,6 +133,12 @@ class ConfigGenerator:
         # wants held at their q_from value across every random-restart
         # attempt -- see set_frozen_joints().
         self.frozen_joint_names: List[str] = []
+        # Attempt breakdown of the most recent failed generate_via_edge()
+        # call: {"edge_name", "attempts", "solver_failed",
+        # "collision_invalid"}. Zero collision_invalid means no attempt even
+        # satisfied the constraints -- the target is unreachable from this
+        # commitment, not merely obstructed.
+        self.last_edge_failure: Optional[Dict[str, Any]] = None
         # PyHPP shooter for random configurations
         self._shooter = None
         if self.backend == "pyhpp":
@@ -310,6 +316,7 @@ class ConfigGenerator:
         last_valid_err = None
         n_solver_fail = 0
         n_collision_invalid = 0
+        self.last_edge_failure = None
         _t_start = time.time()
         for i in range(self.max_attempts):
             if timeout is not None and (time.time() - _t_start) > timeout:
@@ -336,6 +343,12 @@ class ConfigGenerator:
                     self._log_edge_failure_diagnostics(
                         edge_name, q_from, q_hint, last_err, last_valid_err
                     )
+                self.last_edge_failure = {
+                    "edge_name": edge_name,
+                    "attempts": i,
+                    "solver_failed": n_solver_fail,
+                    "collision_invalid": n_collision_invalid,
+                }
                 return False, None
             use_hint = i == 0 and q_hint is not None
             success, config, last_err = self._generate_candidate_config(
@@ -375,6 +388,12 @@ class ConfigGenerator:
             self._log_edge_failure_diagnostics(
                 edge_name, q_from, q_hint, last_err, last_valid_err
             )
+        self.last_edge_failure = {
+            "edge_name": edge_name,
+            "attempts": self.max_attempts,
+            "solver_failed": n_solver_fail,
+            "collision_invalid": n_collision_invalid,
+        }
         return False, None
 
     def _generate_candidate_config(
