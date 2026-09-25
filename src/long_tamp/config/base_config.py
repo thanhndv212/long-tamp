@@ -7,7 +7,7 @@ by specific task configurations.
 
 from abc import ABC
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -190,10 +190,10 @@ class BaseTaskConfig(ABC):
 
     # Arm groups for auto-freeze (populated from YAML arm_groups section)
     # ARM_GROUPS: raw arm group data {arm_name: {joint_keyword, grippers}}
-    # GRIPPER_TO_ARM_KEYWORD: {full_gripper_name: joint_keyword}
+    # GRIPPER_TO_ARM_KEYWORD: {full_gripper_name: joint_keyword | [joint_keyword, ...]}
     # ALL_ARM_KEYWORDS: ordered list of joint keywords
     ARM_GROUPS: Dict = {}
-    GRIPPER_TO_ARM_KEYWORD: Dict[str, str] = {}
+    GRIPPER_TO_ARM_KEYWORD: Dict[str, Union[str, List[str]]] = {}
     ALL_ARM_KEYWORDS: List[str] = []
 
     # ==========================================================================

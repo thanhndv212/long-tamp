@@ -1013,25 +1013,15 @@ class GraspSequencePlanner:
         # any arm in the held-object chain that ultimately carries the
         # target handle's owning object.
 
-        # Find which arm the active gripper belongs to.
-        # Exact-match first (config stores full gripper frame names),
-        # then substring fallback for any legacy prefix-style mappings.
-        active_arm = self.GRIPPER_TO_ARM_MAP.get(active_gripper)
-        if active_arm is None:
-            gripper_lower = active_gripper.lower()
-            for (
-                gripper_pattern,
-                arm_keyword,
-            ) in self.GRIPPER_TO_ARM_MAP.items():
-                if gripper_pattern.lower() in gripper_lower:
-                    active_arm = arm_keyword
-                    break
-
-        unfrozen_arms: set[str] = {active_arm} if active_arm is not None else set()
+        # Find which arm(s) move the active gripper: the carrier of its
+        # tool when held, else every arm the config allows.
+        unfrozen_arms: set[str] = self._get_arms_for_gripper(active_gripper)
 
         if verbose:
             logger.debug(
-                "Active gripper '%s' uses arm '%s'", active_gripper, active_arm
+                "Active gripper '%s' uses arm(s) %s",
+                active_gripper,
+                sorted(unfrozen_arms),
             )
 
         # Walk the held-object chain: if the target is held (directly or
@@ -1056,17 +1046,16 @@ class GraspSequencePlanner:
                         break
                 if holder_gripper is None:
                     break
-                holding_arm = self._get_arm_for_gripper(holder_gripper)
-                if holding_arm:
-                    unfrozen_arms.add(holding_arm)
+                holding_arms = self._get_arms_for_gripper(holder_gripper)
+                if holding_arms:
+                    unfrozen_arms |= holding_arms
                     if verbose:
                         logger.debug(
-                            "Chain trace: '%s' (arm '%s') holds object '%s' — "
-                            "keeping '%s' unfrozen",
+                            "Chain trace: '%s' (arm(s) %s) holds object '%s' — "
+                            "keeping them unfrozen",
                             holder_gripper,
-                            holding_arm,
+                            sorted(holding_arms),
                             target_obj,
-                            holding_arm,
                         )
                 # Walk up: the holder gripper itself is mounted on some
                 # parent object (e.g. 'g_FG_part' → 'frame_gripper',
@@ -1082,16 +1071,43 @@ class GraspSequencePlanner:
 
         return frozen_arms
 
-    def _get_arm_for_gripper(self, gripper_name: str) -> str | None:
-        """Return the arm keyword for a gripper name, or None."""
-        arm = self.GRIPPER_TO_ARM_MAP.get(gripper_name)
-        if arm is not None:
-            return arm
-        gl = gripper_name.lower()
-        for pattern, arm in self.GRIPPER_TO_ARM_MAP.items():
-            if pattern.lower() in gl:
-                return arm
-        return None
+    def _get_arms_for_gripper(
+        self, gripper_name: str, _visited: set[str] | None = None
+    ) -> set[str]:
+        """Return the arm keywords that move ``gripper_name``.
+
+        A gripper mounted on a free-flying tool (e.g.
+        ``frame_gripper/g_FG_part``) belongs to whichever arm currently holds
+        that tool, so the live grasp state is consulted first: if another
+        gripper holds a handle on the gripper's owning object, the carrier's
+        arms are returned (recursively).  Otherwise the static map is used;
+        its value may be a single keyword or a list, since a tool can be
+        carried by several arms and pinning it to one makes some scenarios
+        infeasible.
+        """
+        visited = _visited if _visited is not None else set()
+        visited.add(gripper_name)
+
+        tracker = getattr(self, "grasp_tracker", None)
+        if tracker is not None:
+            owner = gripper_name.split("/")[0]
+            for g, h in tracker.current_grasps.items():
+                if h is None or g in visited or h.split("/")[0] != owner:
+                    continue
+                carrier_arms = self._get_arms_for_gripper(g, visited)
+                if carrier_arms:
+                    return carrier_arms
+
+        arms = self.GRIPPER_TO_ARM_MAP.get(gripper_name)
+        if arms is None:
+            gl = gripper_name.lower()
+            for pattern, candidate in self.GRIPPER_TO_ARM_MAP.items():
+                if pattern.lower() in gl:
+                    arms = candidate
+                    break
+        if arms is None:
+            return set()
+        return {arms} if isinstance(arms, str) else set(arms)
 
     # Arm keyword → JOINT_GROUPS key mapping (case-insensitive substring)
     _ARM_KEYWORD_TO_GROUP = {
@@ -1439,16 +1455,15 @@ class GraspSequencePlanner:
             # original 1-link approximation so we never get a
             # worse result than the pre-fix behaviour.
             released_obj = currently_held.split("/")[0]
-            direct_holder_arm: str | None = None
+            direct_holder_arms: set[str] = set()
             for g, h in self.grasp_tracker.current_grasps.items():
                 if g == gripper or h is None:
                     continue
                 if h.split("/")[0] == released_obj:
-                    arm = self._get_arm_for_gripper(g)
-                    if arm:
-                        direct_holder_arm = arm
+                    direct_holder_arms = self._get_arms_for_gripper(g)
+                    if direct_holder_arms:
                         break
-            if direct_holder_arm and direct_holder_arm in release_frozen:
+            for direct_holder_arm in direct_holder_arms & set(release_frozen):
                 if verbose:
                     logger.warning(
                         "\u26a0 compute_phase_locked_joints did not "

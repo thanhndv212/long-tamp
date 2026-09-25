@@ -343,11 +343,20 @@ class YamlTaskLoader:
         # Arm groups (optional) — derive GRIPPER_TO_ARM_KEYWORD and ALL_ARM_KEYWORDS
         # so GraspSequencePlanner auto-freeze works without any hard-coded robot names.
         arm_groups_raw: dict[str, Any] = data.get("arm_groups", {})
-        gripper_to_arm_keyword: dict[str, str] = {}
+        # A gripper on a free-flying tool may be listed under several arm
+        # groups (any arm that can carry the tool); it then maps to a list.
+        gripper_to_arm_keyword: dict[str, str | list[str]] = {}
         for arm_name, arm_cfg in arm_groups_raw.items():
             keyword = arm_cfg.get("joint_keyword", arm_name)
             for gripper in arm_cfg.get("grippers", []):
-                gripper_to_arm_keyword[gripper] = keyword
+                existing = gripper_to_arm_keyword.get(gripper)
+                if existing is None:
+                    gripper_to_arm_keyword[gripper] = keyword
+                elif isinstance(existing, list):
+                    if keyword not in existing:
+                        existing.append(keyword)
+                elif existing != keyword:
+                    gripper_to_arm_keyword[gripper] = [existing, keyword]
         all_arm_keywords: list[str] = [
             arm_cfg.get("joint_keyword", arm_name)
             for arm_name, arm_cfg in arm_groups_raw.items()

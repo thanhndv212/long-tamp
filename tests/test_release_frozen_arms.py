@@ -27,14 +27,14 @@ import logging
 
 from long_tamp.tasks.grasp_sequence import GraspSequencePlanner
 
-# The frame gripper rides on the first arm and the screwdriver on the
-# second, which is what makes the chain walk transitive rather than a
-# single hop.
+# The tool-mounted grippers can be carried by either tool arm, and the
+# actual carrier is resolved from the grasp state, which is what makes the
+# chain walk transitive rather than a single hop.
 GRIPPER_TO_ARM = {
     "arm1/g_tool": "ur10",
-    "frame_gripper/g_FG_part": "ur10",
+    "frame_gripper/g_FG_part": ["ur10", "arm2"],
     "arm2/g_tool": "arm2",
-    "screw_driver/g_SD_part": "arm2",
+    "screw_driver/g_SD_part": ["ur10", "arm2"],
     **{f"arm3/g_wb{i}": "arm3" for i in range(1, 7)},
 }
 ALL_ARMS = ["ur10", "arm2", "arm3"]
@@ -196,3 +196,35 @@ class TestNoHolder:
             "manual", {0: ["arm3", "arm2"]}, 0,
         )
         assert frozen == ["arm3", "arm2"]
+
+
+class TestToolCarrierResolution:
+    """Tool-mounted grippers belong to whichever arm holds the tool."""
+
+    def test_screwdriver_held_by_arm2(self):
+        p = _planner({"arm2/g_tool": "screw_driver/h_SD_tool"})
+        assert p._get_arms_for_gripper("screw_driver/g_SD_part") == {"arm2"}
+        assert p.compute_phase_locked_joints(
+            "screw_driver/g_SD_part", "auto", verbose=False
+        ) == ["ur10", "arm3"]
+
+    def test_screwdriver_held_by_ur10(self):
+        p = _planner({"arm1/g_tool": "screw_driver/h_SD_tool"})
+        assert p._get_arms_for_gripper("screw_driver/g_SD_part") == {"ur10"}
+        assert p.compute_phase_locked_joints(
+            "screw_driver/g_SD_part", "auto", verbose=False
+        ) == ["arm2", "arm3"]
+
+    def test_frame_gripper_held_by_arm2(self):
+        p = _planner({"arm2/g_tool": "frame_gripper/h_FG_tool"})
+        assert p._get_arms_for_gripper("frame_gripper/g_FG_part") == {"arm2"}
+
+    def test_unheld_tool_falls_back_to_every_candidate_arm(self):
+        p = _planner({})
+        assert p._get_arms_for_gripper("screw_driver/g_SD_part") == {
+            "ur10",
+            "arm2",
+        }
+        assert p.compute_phase_locked_joints(
+            "screw_driver/g_SD_part", "auto", verbose=False
+        ) == ["arm3"]
