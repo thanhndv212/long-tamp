@@ -109,6 +109,13 @@ class PrunedRecursionMixin:
 
     _target_grasps: Tuple[GraspsT, ...] = ()
 
+    def __init__(self, *args, **kwargs):
+        # Memoizes partial grasp assignments already walked by `_recurse`,
+        # replacing upstream's `_existState` check (which only tracks
+        # assignments that became states, not every visited assignment).
+        self._visitedGrasps = set()
+        super().__init__(*args, **kwargs)
+
     def set_target_grasps(self, targets: Iterable[Sequence[Optional[int]]]) -> None:
         """Register the only grasp tuples worth walking toward.
 
