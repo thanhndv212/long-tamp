@@ -29,6 +29,16 @@ entries accumulate under **Unreleased** until the first tagged release.
   the next phase before committing a grasp -- reproducing, for the capability-driven path,
   the same failure-class fix `find_feasible_phase_target()` already gave `plan_sequence()`
   callers (previously wired into SpaceLab's `run_block_nonstop()` only).
+- `find_feasible_phase_target()` takes `also_reachable`: further grasps a phase-N candidate
+  must also leave reachable, beyond phase N+1. A grasp that fixes a part's orientation
+  fixes it for every later contact on that part, so a candidate can pass the N+1 probe and
+  still strand a later grasp (solver failures only, never a collision) that no retry can
+  recover. `run_sequence()` exposes it as `lookahead_also_protect` (`{i: [j, ...]}` for
+  entries of `lookahead_pairs`). Ported from `agimus_spacelab`, where checking the later
+  grasp took a multi-arm assembly mission from stalling in 3 of 4 runs to 10/10 completions.
+- `ConfigGenerator.last_edge_failure`: the most recent failed `generate_via_edge()` call's
+  attempt breakdown (`solver_failed` vs `collision_invalid`), so a caller can tell a target
+  that is unreachable from the current commitment from one that is merely obstructed.
 
 ### Fixed
 
@@ -40,6 +50,18 @@ entries accumulate under **Unreleased** until the first tagged release.
   (`task.planner.visualize(q_init)` right after setup), the same viser-thread-vs-native-RRT
   concurrency bug `script/twin/task_lift_ball.py`'s `run_task()` already documented and
   avoided. Fixed the same way (viewer now starts only after planning completes).
+- Phase-graph builds raised `AttributeError` on stock `hpp-python`: `PrunedRecursionMixin`
+  used `_visitedGrasps` without creating it, relying on a patched `hpp-python` fork's
+  `ConstraintGraphFactory` to. The mixin now creates it itself.
+- `from long_tamp import *` raised `AttributeError`: `__all__` listed `PlanningBridge`,
+  `TaskBuilder` and `TaskOrchestrator`, which don't exist.
+- A gripper on a free-flying tool is now resolved to whichever arm currently holds the
+  tool (recursively, via the live grasp state), and arm groups may list it under several
+  arms. Auto frozen-arms mode previously froze the actual carrier whenever the "other" arm
+  held the tool.
+- `plan_loop()` now projects a live start configuration onto the held-grasp state, as
+  `plan_sequence()` already did. A start from another stack's state estimate misses the
+  grasp constraint by millimetres and was rejected by the loop edge.
 
 ### Changed
 
@@ -65,6 +87,10 @@ entries accumulate under **Unreleased** until the first tagged release.
   signature -- avoided when run under `gdb` (changes thread timing), not root-caused. Real
   runs of `task_assemble_table.py` should go through
   `gdb -batch -ex run -ex quit --args python3 ...` until this is fixed.
+  The `computePath` vs `planPath` binding choice is not the cause: `agimus_spacelab`
+  switched waypoint edges to `planPath` specifically to avoid it, and all 6 crashes in a
+  14-run batch there still hit this transition, at the `planPath` call. Contention makes it
+  far more likely (0/5 launches crashed run alone, 5/10 with several running at once).
 - The `f_12` pregrasp -> grasp waypoint collision documented in
   `tests/test_grasp_release_use_case_twin.py` is markedly worse than "intermittent" when it
   is the target of a release-then-regrasp cycle specifically: 100% of regrasp draws hit it
