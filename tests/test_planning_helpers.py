@@ -157,9 +157,12 @@ class TestBuildPhaseValidPairs:
         )
         assert result == {"g1": ["h1"]}
 
-    def test_release_with_nothing_held_omits_gripper(self):
+    def test_release_with_nothing_held_registers_gripper_with_no_handles(self):
+        # The gripper must still be present (with an empty handle list) so
+        # `_apply_sequential_filter`'s `next_grasp_to_indices()` can find it
+        # in the phase graph, even though there's nothing to release.
         result = GraphBuilder._build_phase_valid_pairs({}, ("g1", None))
-        assert result == {}
+        assert result == {"g1": []}
 
     def test_duplicate_handle_not_added_twice(self):
         result = GraphBuilder._build_phase_valid_pairs(
