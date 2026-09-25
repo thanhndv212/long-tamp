@@ -3456,6 +3456,29 @@ class GraspSequencePlanner:
 
         loop_edge = self.grasp_tracker.get_loop_edge()
 
+        # A live q_current holding an object (Gazebo attach offset, TF pose)
+        # misses the graph's grasp constraints by a few mm; the loop edge
+        # rejects such a start.  Project it onto the held-grasp state, as
+        # plan_sequence() does for its source state.
+        source_state = self.grasp_tracker.get_current_state_name()
+        success, q_projected, error = self.graph_builder.apply_state_constraints(
+            state_name=source_state,
+            q=q_current,
+            max_iterations=10000,
+            error_threshold=1e-4,
+        )
+        if not success:
+            return {
+                "success": False,
+                "message": (
+                    f"plan_loop('{gripper}'): failed to project q_current onto "
+                    f"state '{source_state}' (error={error:.6f})"
+                ),
+                "phase_results": [],
+                "final_config": q_current,
+            }
+        q_current = list(q_projected)
+
         edge_start_time = time.time()
         last_err: Exception | None = None
         path = None
