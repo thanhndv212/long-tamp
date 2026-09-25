@@ -24,7 +24,7 @@ Basic Usage:
 Advanced Usage:
     from long_tamp.backends import PyHPPBackend
     from long_tamp.planning import SceneBuilder, GraphBuilder
-    from long_tamp.tasks import TaskOrchestrator, ManipulationTask
+    from long_tamp.tasks import ManipulationTask
     from long_tamp.visualization import visualize_constraint_graph
 """
 
@@ -100,13 +100,10 @@ __all__ = [
     "GraphBuilder",
     # Tasks
     "ManipulationTask",
-    "PlanningBridge",
     "PyHPPBackend",
     # Run logging
     "RunLogger",
     "SceneBuilder",
-    "TaskBuilder",
-    "TaskOrchestrator",
     # Version
     "__version__",
     "check_backend",
