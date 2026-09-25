@@ -44,7 +44,7 @@ an unvalidated random one.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from long_tamp.logging import get_logger
 
@@ -64,6 +64,7 @@ def run_sequence(
     q_scene_init: Sequence[float] | None = None,
     lookahead_probe_timeout: float = 5.0,
     lookahead_max_candidates: int = 100,
+    lookahead_also_protect: Mapping[int, Sequence[int]] | None = None,
 ) -> dict[str, Any]:
     """Drive ``grasp_sequence`` to completion via ``grasp()``/``release()``.
 
@@ -113,6 +114,16 @@ def run_sequence(
             ``find_feasible_phase_target()``.
         lookahead_max_candidates: Forwarded to
             ``find_feasible_phase_target()``.
+        lookahead_also_protect: Optional ``{i: [j, ...]}`` for entries
+            ``i`` of ``lookahead_pairs``: later grasp phases ``j`` the
+            phase-``i`` candidate must ALSO leave reachable, forwarded as
+            ``find_feasible_phase_target()``'s ``also_reachable``. For when
+            phase ``i`` pins more than phase ``i + 1`` depends on -- e.g. a
+            grasp fixing a part's orientation for a tool's first AND
+            second contact on it. Each ``j`` must be a grasp after
+            ``i + 1``, and the phases between must leave the held set as
+            phase ``i`` left it (grasp/release pairs); see
+            ``find_feasible_phase_target()``.
 
     Returns:
         ``success``, ``message``, ``phase_results`` (concatenated from
@@ -123,6 +134,18 @@ def run_sequence(
     q_current = list(q_init)
     q_scene_init = list(q_scene_init) if q_scene_init is not None else list(q_init)
     lookahead_pairs = set(lookahead_pairs)
+    lookahead_also_protect = dict(lookahead_also_protect or {})
+    for i, later in lookahead_also_protect.items():
+        if i not in lookahead_pairs:
+            raise ValueError(
+                f"lookahead_also_protect entry {i} is not in lookahead_pairs"
+            )
+        for j in later:
+            if j <= i + 1 or j >= len(grasp_sequence) or grasp_sequence[j][1] is None:
+                raise ValueError(
+                    f"lookahead_also_protect[{i}] entry {j} must be a grasp "
+                    f"phase after phase {i + 1}"
+                )
     phase_results: list[dict[str, Any]] = []
 
     def _frozen_for(phase_idx: int) -> dict[int, list[str]] | None:
@@ -214,6 +237,13 @@ def run_sequence(
                 probe_timeout=lookahead_probe_timeout,
                 max_candidates=lookahead_max_candidates,
                 verbose=verbose,
+                also_reachable=[
+                    (
+                        grasp_sequence[j],
+                        (per_phase_frozen_arms or {}).get(j, []),
+                    )
+                    for j in lookahead_also_protect.get(phase_idx, ())
+                ],
             )
             if q_hint is None and verbose:
                 logger.warning(

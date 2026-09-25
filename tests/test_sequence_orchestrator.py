@@ -318,3 +318,67 @@ class TestLookahead:
                 verbose=False,
                 lookahead_pairs=[0],
             )
+
+
+class TestLookaheadAlsoProtect:
+    SEQ = (("g1", "h1"), ("g2", "c1"), ("g2", None), ("g2", "c2"))
+
+    def _planner(self):
+        return _FakePlanner(
+            current_grasps={"g1": None, "g2": None},
+            responses={
+                ("grasp", "g1", "h1"): _ok([1.0]),
+                ("grasp", "g2", "c1"): _ok([2.0]),
+                ("release", "g2", None): _ok([3.0]),
+                ("grasp", "g2", "c2"): _ok([4.0]),
+            },
+        )
+
+    def test_later_phases_are_forwarded_as_also_reachable(self):
+        planner = self._planner()
+
+        run_sequence(
+            planner,
+            self.SEQ,
+            q_init=[0.0],
+            verbose=False,
+            per_phase_frozen_arms={0: ["a"], 1: ["b"], 3: ["c"]},
+            lookahead_pairs=[0],
+            lookahead_also_protect={0: [3]},
+        )
+
+        kwargs = planner.call_kwargs[("lookahead", "g1", "h1")]
+        assert kwargs["also_reachable"] == [(("g2", "c2"), ["c"])]
+
+    def test_nothing_extra_is_forwarded_by_default(self):
+        planner = self._planner()
+
+        run_sequence(
+            planner, self.SEQ, q_init=[0.0], verbose=False, lookahead_pairs=[0]
+        )
+
+        assert planner.call_kwargs[("lookahead", "g1", "h1")]["also_reachable"] == []
+
+    def test_rejects_an_entry_not_in_lookahead_pairs(self):
+        with pytest.raises(ValueError, match="not in lookahead_pairs"):
+            run_sequence(
+                self._planner(),
+                self.SEQ,
+                q_init=[0.0],
+                verbose=False,
+                lookahead_pairs=[],
+                lookahead_also_protect={0: [3]},
+            )
+
+    @pytest.mark.parametrize("later", [1, 2, 9])
+    def test_rejects_a_phase_that_is_not_a_later_grasp(self, later):
+        """1 is already the N+1 probe, 2 is a release, 9 is out of range."""
+        with pytest.raises(ValueError, match="must be a grasp phase"):
+            run_sequence(
+                self._planner(),
+                self.SEQ,
+                q_init=[0.0],
+                verbose=False,
+                lookahead_pairs=[0],
+                lookahead_also_protect={0: [later]},
+            )

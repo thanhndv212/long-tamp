@@ -2933,6 +2933,7 @@ class GraspSequencePlanner:
         probe_timeout: float = 5.0,
         max_candidates: int = 100,
         verbose: bool = True,
+        also_reachable: Sequence[tuple[tuple[str, str], list[str]]] = (),
     ) -> list[list[float]] | None:
         """Search for a phase-N grasp target that leaves phase N+1 reachable.
 
@@ -3018,6 +3019,20 @@ class GraspSequencePlanner:
                 its whole budget in ~22s and never found a candidate that a
                 slightly luckier draw found on attempt #2).
             verbose: Log progress/outcome.
+            also_reachable: Further ``((gripper, handle), frozen_arms)``
+                grasp phases the candidate must ALSO leave reachable, each
+                probed from phase N's committed config with only phase N
+                added to the held set. Only valid for phases whose
+                predecessors after N are grasp/release pairs that restore
+                the same held set and don't move the objects involved --
+                e.g. a tool's second contact on a part, after its first
+                contact's grasp+release. Needed because phase N can pin
+                more than phase N+1 depends on: a grasp that fixes a
+                part's orientation fixes it for every later contact on
+                that part, and a candidate that passes the N+1 probe can
+                still leave a later one unreachable (solver failures only,
+                never a collision), which no retry of that later phase can
+                undo.
 
         Returns:
             The full per-edge config **chain** the winning candidate was
@@ -3042,7 +3057,6 @@ class GraspSequencePlanner:
         from long_tamp.planning.constraints import ConstraintBuilder
 
         gripper_n, handle_n = phase_n
-        gripper_n1, handle_n1 = phase_n1
 
         def _sync_graph_refs(new_graph) -> None:
             if hasattr(self.planner, "graph"):
@@ -3122,19 +3136,26 @@ class GraspSequencePlanner:
             q_candidate = chain[-1]
 
             probe_tracker.update_grasp(gripper_n, handle_n)
-            _build_and_sync(probe_tracker, phase_n1, frozen_arms_n1, q_candidate)
-
-            probe_chain_n1 = _probe_chained(
-                probe_tracker, gripper_n1, handle_n1, q_candidate
-            )
-            if probe_chain_n1 is not None:
+            reachable = True
+            for (gripper_k, handle_k), frozen_k in (
+                (phase_n1, frozen_arms_n1),
+                *also_reachable,
+            ):
+                # Each probe gets its own tracker copy with only phase N
+                # committed, matching the held set when that phase runs.
+                tracker_k = probe_tracker.copy()
+                _build_and_sync(tracker_k, (gripper_k, handle_k), frozen_k, q_candidate)
+                if _probe_chained(tracker_k, gripper_k, handle_k, q_candidate) is None:
+                    reachable = False
+                    break
+            if reachable:
                 if verbose:
                     logger.info(
                         "find_feasible_phase_target: found a %s candidate "
                         "after %d rejected draw(s) that leaves %s reachable",
                         phase_n,
                         candidate_idx,
-                        phase_n1,
+                        [phase_n1, *(p for p, _ in also_reachable)],
                     )
                 return chain
 
