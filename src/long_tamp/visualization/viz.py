@@ -18,10 +18,11 @@ logger = get_logger("visualization.viz")
 def print_joint_info(robot):
     """Print all joints with their configuration ranks."""
     print("\nJoint Information:")
-    joints = robot.getJointNames()
+    ranks = robot.rankInConfiguration
+    # getJointNames() can include "universe", which has no configuration rank.
+    joints = [j for j in robot.getJointNames() if j in ranks]
     for i, joint in enumerate(joints):
-        rank = robot.rankInConfiguration[joint]
-        print(f"  {i:3d}. {joint} (config rank: {rank})")
+        print(f"  {i:3d}. {joint} (config rank: {ranks[joint]})")
 
 
 import numpy as np
