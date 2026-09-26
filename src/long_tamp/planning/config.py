@@ -396,6 +396,18 @@ class ConfigGenerator:
         }
         return False, None
 
+    def _random_seed(self) -> Any:
+        """A random IK seed for target generation.
+
+        Projection moves the seed and the result is validity-checked, so
+        the seed itself need not be collision-free. Backends that support
+        it skip seed validation (see ``PyHPPBackend.random_config``).
+        """
+        try:
+            return self.planner.random_config(validate=False)
+        except TypeError:  # backend without the flag
+            return self.planner.random_config()
+
     def _generate_candidate_config(
         self,
         edge_name: str,
@@ -411,9 +423,7 @@ class ConfigGenerator:
         object (used for diagnostics on total failure), regardless of
         `success`.
         """
-        q_rand = (
-            np.array(q_hint, dtype=float) if use_hint else self.planner.random_config()
-        )
+        q_rand = np.array(q_hint, dtype=float) if use_hint else self._random_seed()
         q_from_arr = np.array(q_from) if not isinstance(q_from, np.ndarray) else q_from
 
         # Keep all object freeflyer DOF from q_from in q_rand.

@@ -248,8 +248,17 @@ class PyHPPBackend(BackendBase):
             raise RuntimeError("Robot not loaded yet")
         return np.array(self.device.neutralConfiguration())
 
-    def random_config(self, max_attempts: int = 1000) -> np.ndarray:
+    def random_config(
+        self, max_attempts: int = 1000, validate: bool = True
+    ) -> np.ndarray:
         """Generate a random configuration.
+
+        ``validate=False`` returns one raw shooter draw, for callers that only
+        need a seed and check their own result -- e.g. target generation,
+        whose projection moves the seed anyway and whose output is
+        collision-checked. Validating a seed there only wastes draws: the
+        caller also overwrites every object's pose, so draws rejected for
+        object collisions were pure cost (millions per mission, measured).
 
         The abstract interface documents this as returning a *valid*
         configuration, but the shooter itself only respects joint bounds --
@@ -279,6 +288,9 @@ class PyHPPBackend(BackendBase):
         """
         if self.problem is None:
             raise RuntimeError("Problem not created yet")
+        if not validate:
+            self._shooter = self.problem.configurationShooter()
+            return np.array(self._shooter.shoot())
         config_validations = self.problem.configValidation()
         if (
             hasattr(config_validations, "numberConfigValidations")
