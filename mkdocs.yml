@@ -64,6 +64,8 @@ nav:
       - Phase-target lookahead: features/phase-target-lookahead.md
       - Transit edge robustness: features/transit-edge-robustness.md
       - Logging verbosity: features/logging-verbosity.md
+  - Plans:
+      - "Roadmap: PyPI as the default install": plans/pypi-install-roadmap.md
   - Bugs (upstream HPP):
       - Constraint-graph factory combinatorial blowup: bugs/constraint-graph-factory-combinatorial-blowup.md
       - hpp-core unbounded planning loops: bugs/hpp-core-unbounded-planning-loops.md
