@@ -26,6 +26,10 @@ problem's difficulty — the underlying task is solvable in seconds once each lo
 properly bounded and allowed to retry with a fresh random seed instead of hanging forever
 on one unlucky sample.
 
+**Update 2026-09-26:** a sixth gap remains open — one QP solve inside
+`SplineGradientBased` is still unbounded even with Bug 5's timeout armed. See
+[Bug 6](#bug-6-open-a-single-qp-solve-inside-splinegradientbased-is-unbounded).
+
 ---
 
 ## Bug 1: `_plan_release_subphase` Has No Retry-on-Failure
@@ -286,6 +290,73 @@ except Exception as e:
 
 ---
 
+## Bug 6 (open): A Single QP Solve Inside `SplineGradientBased` Is Unbounded
+
+**Status**: open — worked around, not fixed (2026-09-26). To be dealt with later.
+
+### Problem
+
+Bug 5's fix bounds `SplineGradientBased` only *between* its iterations: `shouldStop()`
+checks `timeOut_` once per iteration. Each iteration solves a quadratic program, and that
+solve has no bound of its own, so one slow solve runs as long as it takes, whatever
+`PathOptimizer/timeOut` says.
+
+### Observed Behavior
+
+A 4-part run of `script/screw_assembly/` (seed 10) stopped logging and sat at 100% CPU for
+11+ minutes, with `PathOptimizer/timeOut` set to 5 s. Attaching `gdb` to the live process:
+
+```
+proxsuite::proxqp::sparse::qp_solve<double, long long, RuizEquilibration<...>>
+hpp::core::pathOptimization::QuadraticProgram::solve(LinearConstraint const&, LinearConstraint const&)
+hpp::core::pathOptimization::SplineGradientBased<1, 3>::optimize(PathVector const&)
+hpp::manipulation::pathPlanner::TransitionPlanner::optimizePath(Path const&)
+pyhpp::manipulation::TransitionPlanner::optimizePath        <- PyHPPBackend "optimize if better" pass
+```
+
+It is intermittent: one hang in about 20 screw-assembly missions run with the spline
+optimizer on (a few hundred blocks). The same optimizer is in `agimus_spacelab`'s default optimizer lists, so its
+missions are exposed too.
+
+### Root Cause
+
+`hpp-core/src/path-optimization/quadratic-program.cc`, `QuadraticProgram::solve()`, builds
+a `proxsuite::proxqp::sparse::QP` and sets only `settings.eps_abs`. Everything else,
+including the iteration caps (`max_iter`, `max_iter_in`), is proxsuite's default, so
+nothing bounds a hard QP. The function already treats `PROXQP_MAX_ITER_REACHED` as a
+normal outcome, so a capped solve would degrade gracefully (a less-smoothed path, or the
+optimizer's result rejected) instead of hanging.
+
+The call can't be bounded from Python: it is a single native call. Signals and watchdog
+threads only take effect once it returns, and `PathOptimizer::interrupt()` is checked at
+the same between-iteration points as the timeout.
+
+### Current Workaround
+
+`PyHPPBackend.configure_transition_planner(spline_optimizer=False)` removes
+`SplineGradientBased` from every edge's optimizer list, keeping the shortcut optimizers
+(which honor the timeout). `script/screw_assembly/` uses it. The cost is path smoothness
+wherever the spline pass would have helped. With it, 10/10 missions completed with no hang.
+
+### Proposed Fix (not done)
+
+1. **hpp-core**: add a problem parameter (e.g. `SplineGradientBased/QPMaxIterations`) read
+   by `SplineGradientBased` and passed into `QuadraticProgram::solve()` as
+   `settings.max_iter` / `max_iter_in`. The default keeps today's behavior. Total time per
+   optimization then becomes `PathOptimizer/timeOut` plus at most one bounded solve.
+2. **long_tamp**: replace `spline_optimizer=False` with an option that sets that
+   parameter (e.g. `spline_qp_max_iterations`), and turn the spline optimizer back on in
+   the example with a cap measured on its scenes (the smallest value that doesn't hurt
+   path quality).
+3. **Upstream**: offer (1) to `humanoid-path-planner/hpp-core`. Until it is released,
+   `long_tamp` on stock HPP won't have the parameter, so it must tolerate its absence and
+   keep the off switch as the fallback.
+
+Cost: (1) changes the patched hpp-core fork the `hpp-agimus-arm64` container builds, then
+needs a rebuild of hpp-core and the packages built on it.
+
+---
+
 ## Final Outcome
 
 An isolated repro of the two hardest phases (12–13 of the 13-phase sequence) — previously
@@ -327,3 +398,5 @@ needed to reach it from phase 1 each time.
 - `hpp-core/src/path-optimization/random-shortcut.cc` — `RandomShortcut::optimize()`
 - `hpp-core/src/path-optimization/spline-gradient-based.cc` —
   `SplineGradientBased::optimize()`
+- `hpp-core/src/path-optimization/quadratic-program.cc` — `QuadraticProgram::solve()`
+  (Bug 6: proxsuite settings)

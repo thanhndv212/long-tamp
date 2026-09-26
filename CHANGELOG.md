@@ -131,6 +131,11 @@ entries accumulate under **Unreleased** until the first tagged release.
 
 ### Known issues
 
+- `SplineGradientBased` can hang inside a single QP solve (proxsuite, uncapped iterations),
+  which `PathOptimizer/timeOut` cannot interrupt; one run was stuck 11+ minutes. Worked
+  around with `configure_transition_planner(spline_optimizer=False)`; a proper bound
+  needs an hpp-core change. See `docs/bugs/hpp-core-unbounded-planning-loops.md`, Bug 6.
+
 - The `f_12` pregrasp -> grasp waypoint collision documented in
   `tests/test_grasp_release_use_case_twin.py` is markedly worse than "intermittent" when it
   is the target of a release-then-regrasp cycle specifically: 100% of regrasp draws hit it
