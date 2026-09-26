@@ -28,11 +28,16 @@ Unreleased entries to a dated 0.1.0 section when the release is approved.
   the six-minute process limit. Keep these results visible and resolve them
   before tagging. The normal push/PR selection passed 442 tests with 17
   skips and these two checks deselected.
-- Inspect the first hosted GitHub Actions run on `main`. Local checks passed:
-  source lint and formatting, actionlint, `python -m build`, `twine check`,
-  clean wheel installation, both example scene loads, and the ten-seed batch.
+- The first hosted [PyPI-wheel workflow](https://github.com/thanhndv212/long-tamp/actions/runs/36264650383)
+  passed on `main`: 442 tests passed, 17 skipped, two slow checks deselected;
+  the distribution job also passed. The separate
+  [lint workflow](https://github.com/thanhndv212/long-tamp/actions/runs/36264650392)
+  passed. Local checks also covered actionlint, clean wheel installation, both
+  example scene loads, and the ten-seed batch.
 - Register `long-tamp` as a pending PyPI trusted publisher for GitHub owner
   `thanhndv212`, repository `long-tamp`, workflow `release.yml`, environment
-  `pypi`. Then tag the release commit on `main` as `v0.1.0`.
+  `pypi`. The GitHub environment already requires maintainer review and a `v*`
+  tag. After resolving the TWIN checks and dating the changelog, tag the release
+  commit on `main` as `v0.1.0`.
 
 No PyPI upload or release tag has been made.

@@ -17,14 +17,14 @@ long_tamp needs
 | Step | What | Status |
 |---|---|---|
 | 1 | Remove the manual setup steps | **Done** (below) |
-| 2 | CI on GitHub Actions against the PyPI wheels | Implemented; local validation below, first hosted run pending push |
-| 3 | Publish `long-tamp` 0.1.0 to PyPI | Release workflow prepared; fix TWIN checks, configure publisher, and tag |
+| 2 | CI on GitHub Actions against the PyPI wheels | Implemented; first hosted push run passed on `main` |
+| 3 | Publish `long-tamp` 0.1.0 to PyPI | Release workflow and protected `pypi` environment prepared; fix TWIN checks, configure publisher, and tag |
 | 4 | SessionStart hook for Claude Code cloud sessions | Implemented and locally exercised |
 | 5 | Check in the source-built container and refresh the batch results | Done: source mission passed; ten-seed wheel batch refreshed below |
 
 ## Step 1 (done): remove the manual setup steps
 
-All on `feature/screw-assembly-example`:
+Developed on `feature/screw-assembly-example` and merged to `main`:
 
 - **No `LD_LIBRARY_PATH`.** The 9.0.2 wheels ship `pyhpp`'s extension modules without an
   RPATH. `long_tamp/backends/_hpp_libs.py` preloads the HPP libraries from
@@ -57,7 +57,12 @@ add the one-part mission and two isolated TWIN planning jobs. The distribution j
 installs the wheel into a clean venv outside the checkout. Test reports, resolved
 wheel versions, mission logs and distributions are uploaded as artifacts.
 Job and process timeouts bound the longer planning checks. Scheduled runs require
-this workflow on the default branch. Hosted-run timing remains to be measured.
+this workflow on the default branch. The first hosted push run on `main` passed:
+[PyPI wheels](https://github.com/thanhndv212/long-tamp/actions/runs/36264650383)
+reported 442 passed, 17 skipped, and two slow checks deselected in 6.54 s of
+pytest time; the HPP job took 53 s overall. The distribution job passed in 31 s.
+The separate [lint workflow](https://github.com/thanhndv212/long-tamp/actions/runs/36264650392)
+also passed. Nightly-only jobs were correctly skipped on this push.
 
 
 The workflow uses Ubuntu and Python 3.11:
@@ -88,7 +93,7 @@ only these two checks. These are unresolved planner/scene regressions, not proof
 of a fully green release; keep their nightly results visible and investigate them
 before release. Reproduce with `python -m pytest tests/<filename>.py -m slow_planning
 --timeout=300 --timeout-method=thread` under an external six-minute timeout.
-Measure actual GitHub-runner timing after pushing.
+Measure the two slow checks and mission on the scheduled hosted run.
 
 This would have caught both hangs above and the stale `test_grasp_sequence_logging`
 fixture, which were all invisible while `pyhpp` couldn't be imported.
@@ -103,15 +108,15 @@ agreement, builds and validates the distributions, smoke-tests the installed whe
 and publishes from a separate job with `id-token: write` and environment `pypi`.
 It follows [PyPI trusted publishing](https://docs.pypi.org/trusted-publishers/using-a-publisher/).
 
-Verified 2026-09-26: GitHub already reports `thanhndv212/long-tamp` as public, PyPI's
-project JSON endpoint returns 404, and the repository has no GitHub environments.
+Verified 2026-09-26: GitHub reports `thanhndv212/long-tamp` as public and PyPI's
+project JSON endpoint returns 404. The GitHub `pypi` environment now requires
+review by `thanhndv212` and allows deployment only from tags matching `v*`.
 The maintainer's remaining steps are:
 
-1. Create the GitHub `pypi` environment, with any desired release reviewers.
-2. Register a [pending PyPI publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)
+1. Register a [pending PyPI publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)
    for project `long-tamp`, owner `thanhndv212`, repository `long-tamp`, workflow
    `release.yml`, environment `pypi`. No token is stored in the repository.
-3. Review the first hosted CI run, address the two failing nightly TWIN checks,
+2. Address the two failing nightly TWIN checks,
    and move Unreleased changelog entries to the dated `0.1.0` section. Once the
    release commit is on `main`, create and push annotated tag `v0.1.0`.
 
@@ -183,4 +188,5 @@ this runtime is a prerequisite for minimal Linux images. See `docs/INSTALL.md`.
   replanned**, **13/13 failures recovered**, median **687 s** (547–979 s).
   Every process exited 0; results are in
   [pypi-wheel-batch-2026-09-26.json](https://github.com/thanhndv212/long-tamp/blob/main/script/screw_assembly/results/pypi-wheel-batch-2026-09-26.json).
-  The example README now reports this drill run. No hosted GitHub run is claimed.
+  The example README now reports this local drill run; it was not a hosted
+  GitHub Actions job.
