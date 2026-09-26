@@ -16,6 +16,7 @@ neither is available.
 
 import importlib
 import importlib.util
+import inspect
 import os
 import sys
 import types
@@ -173,6 +174,16 @@ class TestVisitedGraspsMemo(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.cgf = _load_cgf()
+        # The PyPI hpp-python 9.0.2 wheel predates the fix: its _recurse has
+        # no _visitedGrasps memo, and the n=8 case below never finishes.
+        # long_tamp does not depend on it (PrunedRecursionMixin carries its
+        # own memoized _recurse); this test checks the upstream fix only.
+        source = inspect.getsource(cls.cgf.GraphFactoryAbstract._recurse)
+        if "_visitedGrasps" not in source:
+            raise unittest.SkipTest(
+                "installed pyhpp's GraphFactoryAbstract._recurse has no "
+                "_visitedGrasps memo (upstream fix not in this HPP)"
+            )
         cls.Factory = _make_factory(cls.cgf)
 
     # -- correctness: allow-all filter, compare n=2..5 ----------------------

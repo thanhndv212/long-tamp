@@ -50,6 +50,19 @@ below instead. (`pin`/pinocchio itself, a hard dependency below, *does* publish 
 wheels via cmeel — it's specifically the HPP packages, `hpp-python`/`hpp-gepetto-viewer`/
 `hpp-toppra`, that are Linux-only today.)
 
+**No `LD_LIBRARY_PATH` needed.** The `hpp-python` 9.0.2 wheels ship their extension
+modules without an RPATH, so on its own `import pyhpp.manipulation` fails with
+`libhpp-manipulation.so: cannot open shared object file`. `long_tamp` works around it on
+import: it loads the HPP libraries from the wheels' `cmeel.prefix/lib` folder first
+(`long_tamp/backends/_hpp_libs.py`). A script that imports `pyhpp` or `pyhpp_viser`
+without importing `long_tamp` first still needs `LD_LIBRARY_PATH` set to
+`<site-packages>/cmeel.prefix/lib`.
+
+**Examples load from any checkout.** Mesh paths in a URDF are resolved when
+`long_tamp` loads it: relative to the URDF, or, for an absolute path from another
+machine (the example URDFs name meshes by the path on the machine that generated them),
+by matching its tail under the URDF's parent folders (`long_tamp/backends/_urdf_paths.py`).
+
 **NumPy version — the opposite constraint from robotpkg.** The cmeel wheels are built
 against NumPy 2.x (`cmeel-boost`, a transitive dependency of `hpp-python`, requires
 `numpy>=2`). This is unrelated to — and incompatible with — the robotpkg path below, which

@@ -11,9 +11,14 @@ from pinocchio import SE3
 
 from long_tamp.logging import get_logger
 
+from ._hpp_libs import ensure_hpp_libraries
+from ._urdf_paths import resolve_mesh_paths
 from .base import BackendBase, ConstraintResult
 
 logger = get_logger("backends.pyhpp")
+
+# PyPI wheels: load the HPP libraries their extension modules can't find alone.
+ensure_hpp_libraries()
 
 try:
     from pyhpp.core import (
@@ -50,10 +55,8 @@ try:
     HAS_PYHPP = True
     PYHPP_IMPORT_ERROR = None
 except ImportError as _e:
-    # Common failure mode: `import pyhpp` succeeds but a specific symbol is
-    # absent because the installed HPP is upstream (e.g. the robotpkg 6.1.0
-    # binary) rather than the customized/source HPP this project targets.
-    # Keep the real message so the runtime error can name the missing symbol.
+    # Keep the real message so the runtime error can name what is missing:
+    # a symbol (an HPP older than 9.0.2) or a shared library.
     HAS_PYHPP = False
     PYHPP_IMPORT_ERROR = _e
 
@@ -118,14 +121,14 @@ class PyHPPBackend(BackendBase):
             raise ImportError(
                 "PyHPP backend unavailable: could not import the symbols this "
                 "project requires from `pyhpp`." + detail + "\n"
-                "Note: `import pyhpp` succeeding is not enough — long_tamp "
-                "targets a customized/source HPP that exposes extra bindings "
-                "(e.g. RSTimeParameterization, EnforceTransitionSemantic, "
+                "long_tamp needs HPP >= 9.0.2, which has the bindings it uses "
+                "(RSTimeParameterization, EnforceTransitionSemantic, "
                 "GraphRandomShortcut/GraphPartialShortcut, SplineGradientBased_bezier*, "
-                "ProgressiveProjector). The upstream robotpkg binary (6.1.0) does "
-                "not yet ship these. Build HPP from source (the hpp-agimus "
-                "container / DEVEL_HPP_DIR flow) or wait for a release that fills "
-                "the gap: https://github.com/humanoid-path-planner/hpp-python"
+                "ProgressiveProjector). On Linux, install the prebuilt wheels: "
+                '`pip install "long-tamp[hpp]"` (or `pip install -e ".[hpp]"` '
+                "from a checkout). Otherwise build HPP >= 9.0.2 from source; "
+                "older robotpkg binaries (6.1.0) lack these bindings. "
+                "See docs/INSTALL.md."
             )
 
         self._viewer_type = viewer_type
@@ -367,7 +370,7 @@ class PyHPPBackend(BackendBase):
             0,
             robot_name,
             root_joint_type,
-            urdf_path,
+            resolve_mesh_paths(urdf_path),
             srdf_path or "",
             SE3.Identity(),
         )
@@ -421,7 +424,9 @@ class PyHPPBackend(BackendBase):
         if pose is None:
             pose = SE3.Identity()
 
-        urdf.loadModel(self.device, 0, name, "anchor", urdf_path, "", pose)
+        urdf.loadModel(
+            self.device, 0, name, "anchor", resolve_mesh_paths(urdf_path), "", pose
+        )
 
         return name
 
@@ -448,7 +453,7 @@ class PyHPPBackend(BackendBase):
             0,
             name,
             root_joint_type,
-            urdf_path,
+            resolve_mesh_paths(urdf_path),
             srdf_path or "",
             SE3.Identity(),
         )
