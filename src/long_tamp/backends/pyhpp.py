@@ -199,6 +199,11 @@ class PyHPPBackend(BackendBase):
         # RandomShortcut: number of shortcut attempts per optimization pass.
         # HPP core default is 5; increasing to 50 gives much better convergence.
         self._random_shortcut_loops: int = 50
+        # Wall-clock cap per path-optimizer pass. A path can be optimized
+        # twice (inside TransitionPlanner.computePath, then again when
+        # comparing against the unoptimized path), so a short retract that
+        # the spline optimizer can't improve costs 2x this.
+        self._path_optimizer_timeout: float = 30.0
         # SplineGradientBased: whether to enforce zero velocity at state junctions.
         # Setting False allows the spline optimizer to carry momentum through waypoints.
         self._spline_zero_derivatives_at_state: bool = False
@@ -1630,6 +1635,7 @@ class PyHPPBackend(BackendBase):
         distance_scale_factor: Optional[float] = None,
         random_shortcut_loops: Optional[int] = None,
         spline_zero_derivatives_at_state: Optional[bool] = None,
+        path_optimizer_timeout: Optional[float] = None,
     ) -> None:
         """Configure defaults for TransitionPlanner edge-scoped planning.
 
@@ -1647,6 +1653,9 @@ class PyHPPBackend(BackendBase):
                 (HPP default 5; recommended 50+)
             spline_zero_derivatives_at_state: Enforce zero velocity at state
                 junctions in SplineGradientBased (default False = allow momentum)
+            path_optimizer_timeout: Wall-clock cap in seconds per path
+                optimizer pass (default 30). Lower it where paths are short
+                and optimization rarely pays off.
         """
         if inner_planner_type is not None:
             self._transition_inner_planner_type = inner_planner_type
@@ -1668,6 +1677,8 @@ class PyHPPBackend(BackendBase):
             self._spline_zero_derivatives_at_state = bool(
                 spline_zero_derivatives_at_state
             )
+        if path_optimizer_timeout is not None:
+            self._path_optimizer_timeout = float(path_optimizer_timeout)
 
         tp = self._transition_planner
         if tp is not None:
@@ -1904,12 +1915,19 @@ class PyHPPBackend(BackendBase):
         # against innerProblem_, same as the SimpleTimeParameterization
         # case just above.
         try:
-            self.problem.setParameter("PathOptimizer/timeOut", 30.0)
+            self.problem.setParameter(
+                "PathOptimizer/timeOut", self._path_optimizer_timeout
+            )
         except Exception as e:
             logger.warning("PathOptimizer/timeOut on problem failed: %s", e)
         try:
-            tp.innerProblem().setParameter("PathOptimizer/timeOut", 30.0)
-            logger.debug("✓ PathOptimizer/timeOut=30.0s (problem + innerProblem)")
+            tp.innerProblem().setParameter(
+                "PathOptimizer/timeOut", self._path_optimizer_timeout
+            )
+            logger.debug(
+                "✓ PathOptimizer/timeOut=%.1fs (problem + innerProblem)",
+                self._path_optimizer_timeout,
+            )
         except Exception as e:
             logger.warning("PathOptimizer/timeOut on innerProblem failed: %s", e)
         try:
