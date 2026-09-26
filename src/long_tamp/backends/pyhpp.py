@@ -26,6 +26,7 @@ try:
         SplineGradientBased_bezier1,
         SplineGradientBased_bezier3,
         SplineGradientBased_bezier5,
+        WeighedDistance,
     )
     from pyhpp.manipulation import (
         Device,
@@ -360,8 +361,34 @@ class PyHPPBackend(BackendBase):
         if is_first_robot:
             # Create problem
             self.problem = Problem(self.device)
+        else:
+            self._refresh_problem_distance()
 
         return self.device
+
+    def _refresh_problem_distance(self) -> None:
+        """Rebuild the problem's distance for the device as it is now.
+
+        ``Problem(device)`` builds its ``WeighedDistance`` with one weight
+        per joint of the device *at that moment* -- here, right after the
+        first robot. Every joint loaded afterwards (further robots, each
+        object's freeflyer) had no weight, so every distance read past the
+        end of the weight vector: uninitialized memory, so the result
+        depended on memory layout. When it came out NaN, the roadmap's
+        nearest-node search found nothing -- RRT could not extend (planning
+        failed on "Maximal number of iterations" within seconds) or
+        ``Roadmap::addNode`` dereferenced the null nearest node and
+        segfaulted, at the "target generated -> path planning begins"
+        transition. Timing-dependent and hidden under gdb, because it is
+        uninitialized memory rather than a race.
+
+        Transition planners and path projectors created later read
+        ``problem.distance()`` then, so refreshing it after every load that
+        adds joints is enough.
+        """
+        if self.problem is None or self.device is None:
+            return
+        self.problem.distance(WeighedDistance(self.device).asDistancePtr_t())
 
     def load_environment(self, name: str, urdf_path: str, pose: Optional[SE3] = None):
         """Load environment model.
@@ -408,6 +435,7 @@ class PyHPPBackend(BackendBase):
             srdf_path or "",
             SE3.Identity(),
         )
+        self._refresh_problem_distance()
 
         return name
 
