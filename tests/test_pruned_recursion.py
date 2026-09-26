@@ -23,6 +23,7 @@ $HPP_PYTHON_SRC_DIR.  Skipped when neither is available.
 
 import importlib
 import importlib.util
+import inspect
 import os
 import sys
 import types
@@ -274,6 +275,14 @@ class TestPrunedRecursion(unittest.TestCase):
             self.assertEqual(len(pruned.created_states), 2)
             counts[n] = pruned.recurse_calls
 
+        # Growth from 4 to 8 grippers must be nowhere near combinatorial.
+        self.assertLess(counts[8], counts[4] * 10)
+        # The full walk at n=8 is only affordable with upstream's
+        # _visitedGrasps memo; without it (the PyPI hpp-python 9.0.2 wheel)
+        # it does not finish, so compare against it only when it's there.
+        upstream = inspect.getsource(self.cgf.GraphFactoryAbstract._recurse)
+        if "_visitedGrasps" not in upstream:
+            return
         plain_8 = _run(
             self.Plain,
             8,
@@ -284,8 +293,6 @@ class TestPrunedRecursion(unittest.TestCase):
             plain_8.recurse_calls / 100,
             "pruned walk is not meaningfully smaller than the full walk",
         )
-        # Growth from 4 to 8 grippers must be nowhere near combinatorial.
-        self.assertLess(counts[8], counts[4] * 10)
 
     def test_pruned_factory_class_is_cached_and_woven(self):
         cls_a = self.pruned_factory_class(self.Plain)
