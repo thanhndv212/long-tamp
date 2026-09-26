@@ -179,3 +179,16 @@ class TestVerifyPaths:
 
         assert _search(p) == [[1.0], [1.0]]
         assert paths.calls == 0
+
+    def test_rejects_a_candidate_that_blocks_a_protected_phases_path(self):
+        """The protected grasps' paths are checked from the candidate too:
+        the fake stamps probe configs with the candidate number, so
+        blocking candidate 1 blocks every edge probed from it."""
+        paths = _PathPlanner(blocked={1})
+        p = _planner(_ConfigGen(), paths)
+
+        chain = _search(p, also_reachable=[(LATER, [])], verify_paths=True)
+
+        assert chain == [[2.0], [2.0]]
+        # candidate 2: its own 2 edges + N+1's 2 + LATER's 2
+        assert paths.calls >= 6

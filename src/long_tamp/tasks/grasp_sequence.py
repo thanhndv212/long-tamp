@@ -3057,13 +3057,15 @@ class GraspSequencePlanner:
                 still leave a later one unreachable (solver failures only,
                 never a collision), which no retry of that later phase can
                 undo.
-            verify_paths: Also require that phase N's own edges can be
-                path-planned to the candidate from ``q_current``, not only
-                that its targets exist. A target the arm cannot move to is
-                redrawn during the real plan, which voids the hint chain and
-                forces a block replan; checking the path here rejects such
-                candidates up front, at the cost of planning phase N's edges
-                once per candidate.
+            verify_paths: Also require paths, not only targets: phase N's
+                own edges from ``q_current`` to the candidate, and each
+                protected phase's edges from the candidate (N+1 exactly;
+                ``also_reachable`` phases approximately, since the real
+                phase starts after the ones in between). A target the arm
+                cannot move to is redrawn during the real plan, voiding the
+                hint chain, and a protected phase whose approach the
+                candidate blocks fails every resume; both cost a block
+                replan. Costs one planning pass per probed edge.
 
         Returns:
             The full per-edge config **chain** the winning candidate was
@@ -3229,7 +3231,13 @@ class GraspSequencePlanner:
                 # committed, matching the held set when that phase runs.
                 tracker_k = probe_tracker.copy()
                 _build_and_sync(tracker_k, (gripper_k, handle_k), frozen_k, q_candidate)
-                if _probe_chained(tracker_k, gripper_k, handle_k, q_candidate) is None:
+                chain_k = _probe_chained(tracker_k, gripper_k, handle_k, q_candidate)
+                if chain_k is None or (
+                    verify_paths
+                    and not _paths_exist(
+                        tracker_k, gripper_k, handle_k, q_candidate, chain_k
+                    )
+                ):
                     reachable = False
                     break
             if reachable:
