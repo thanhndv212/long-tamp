@@ -596,6 +596,4 @@ class InteractiveGraspSequenceBuilder:
                 )
 
 
-
-
 __all__ = ["InteractiveGraspSequenceBuilder"]

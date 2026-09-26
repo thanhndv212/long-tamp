@@ -1,0 +1,94 @@
+{
+  "date": "2026-09-26",
+  "environment": "Linux aarch64, Python 3.11 venv in hpp-agimus-arm64, stock PyPI HPP 9.0.2 wheels, no LD_LIBRARY_PATH or source HPP PYTHONPATH",
+  "command": "bash run_batch.sh 10 3 batch_pypi",
+  "scene": "four-part cordless-drill screw assembly; per-arm pedestal collision checking enabled",
+  "completed": 10,
+  "attempted": 10,
+  "replanning_blocks": 0,
+  "planning_blocks": 140,
+  "recovered_failures": 13,
+  "failure_episodes": 13,
+  "seconds_median": 687.11,
+  "seconds_min": 547.16,
+  "seconds_max": 979.22,
+  "seeds": [
+    {
+      "seed": 1,
+      "seconds": 567.46,
+      "blocks": 19,
+      "resumes": 2,
+      "replans": 0
+    },
+    {
+      "seed": 2,
+      "seconds": 744.87,
+      "blocks": 19,
+      "resumes": 3,
+      "replans": 0
+    },
+    {
+      "seed": 3,
+      "seconds": 631.55,
+      "blocks": 19,
+      "resumes": 0,
+      "replans": 0
+    },
+    {
+      "seed": 4,
+      "seconds": 575.85,
+      "blocks": 19,
+      "resumes": 0,
+      "replans": 0
+    },
+    {
+      "seed": 5,
+      "seconds": 740.91,
+      "blocks": 19,
+      "resumes": 4,
+      "replans": 0
+    },
+    {
+      "seed": 6,
+      "seconds": 979.22,
+      "blocks": 19,
+      "resumes": 1,
+      "replans": 0
+    },
+    {
+      "seed": 7,
+      "seconds": 547.16,
+      "blocks": 19,
+      "resumes": 2,
+      "replans": 0
+    },
+    {
+      "seed": 8,
+      "seconds": 844.54,
+      "blocks": 19,
+      "resumes": 3,
+      "replans": 0
+    },
+    {
+      "seed": 9,
+      "seconds": 633.31,
+      "blocks": 19,
+      "resumes": 2,
+      "replans": 0
+    },
+    {
+      "seed": 10,
+      "seconds": 767.25,
+      "blocks": 19,
+      "resumes": 2,
+      "replans": 0
+    }
+  ],
+  "wheel_versions": {
+    "hpp-python": "9.0.2",
+    "hpp-gepetto-viewer": "9.0.2",
+    "pin": "4.1.0",
+    "numpy": "2.4.6"
+  },
+  "source_commit": "2117858"
+}

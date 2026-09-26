@@ -95,19 +95,18 @@ because, while HPP plans, the planner process can't serve the viewer.
 
 ## Results
 
-> These runs predate the drill: they used a 0.20 m cylinder screwdriver held on its
-> shaft. The drill has only been checked offline (see below); rerun the batch to refresh
-> this table.
-
-10 seeded runs (seeds 1–10) of the 4-part mission, 3 at a time in the `hpp-agimus-arm64`
-container (`bash run_batch.sh 10 3`):
+10 seeded runs (seeds 1–10) of the 4-part mission with the cordless drill and
+per-arm pedestal collision checks, 3 at a time on Python 3.11 with stock PyPI
+HPP 9.0.2 wheels (`bash run_batch.sh 10 3`). The runs used a clean venv inside
+the `hpp-agimus-arm64` container. See the
+[per-seed results](results/pypi-wheel-batch-2026-09-26.json).
 
 | Metric | Result | Target |
 |---|---|---|
 | Missions completed | **10 / 10** | – |
 | Replanning trigger rate (planning blocks with a replan-from-entry) | **0.0%** (0 / 140) | < 2% |
-| Recovery rate (blocks and moves that failed and still finished) | **100%** (21 / 21) | > 95% |
-| Mission time | median 1223 s, 579–2536 s | – |
+| Recovery rate (blocks and moves that failed and still finished) | **100%** (13 / 13) | > 95% |
+| Mission time | median 687 s, 547–979 s | – |
 | Native crashes | 0 | – |
 
 Every failure was recovered by resuming alone; no block needed a replan. The spread in
@@ -115,11 +114,11 @@ mission time comes from block A's path-verified lookahead, which on some seeds r
 clamp candidates before finding one. With N parts the mission is 4N + 3 blocks
 (4 parts: 19 blocks, 31 grasp/release phases + 5 home moves).
 
-The drill's geometry was checked offline with pinocchio + coal, without HPP. With the
-fingers open, the Robotiq clears the handle proxies by 24 mm at the grasp and 34 mm at
-the pregrasp. ur10_right has collision-free IK solutions for the pick at the dock and
-for the bit tip at all 8 holes. Held at the candle home, the drill stays inside
-`freeflyer_bounds`.
+Before these planning runs, the drill's geometry was also checked offline with
+pinocchio + coal. With the fingers open, the Robotiq clears the handle proxies
+by 24 mm at the grasp and 34 mm at the pregrasp. ur10_right has collision-free
+IK solutions for the pick at the dock and for the bit tip at all 8 holes. Held
+at the candle home, the drill stays inside `freeflyer_bounds`.
 
 What made it reliable (in `long_tamp` itself, not this script): the problem-distance fix
 that removed the native segfault, the lookahead probe and hinted-retry fixes, and

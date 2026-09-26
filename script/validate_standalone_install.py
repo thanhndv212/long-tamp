@@ -3,13 +3,12 @@
 
 Confirms that `long_tamp` imports and a real YAML task config loads and
 validates end-to-end with **zero HPP native bindings** present — only the
-`[standalone]` extra (pinocchio from PyPI). Never constructs a backend,
+base dependencies (pinocchio from PyPI). Never constructs a backend,
 builds a constraint graph, or calls `ManipulationTask.setup()`/`run()`;
-those all require pyhpp and are covered separately once an HPP-stack image
-is available in CI (see `.github/workflows/lint.yml`).
+those all require pyhpp and are covered by the wheel CI (`.github/workflows/pypi.yml`).
 
 Usage:
-    pip install -e ".[standalone]"
+    pip install -e .
     python script/validate_standalone_install.py
 """
 

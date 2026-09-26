@@ -20,7 +20,12 @@ are Linux-only for now. Instantiating a backend without its bindings raises an
 
 ---
 
-## Recommended: pip only, no system packages, no Docker
+## Recommended: pip on Linux
+
+The first `long-tamp` release is not published yet; install from a checkout for now.
+The wheel-backed HPP extra needs Python 3.10 or newer; package metadata uses
+that minimum so pip does not attempt an unsupported source build on Python 3.9.
+After publication, `python -m pip install "long-tamp[hpp]"` will be the package install.
 
 ```bash
 # Editable install with the PyHPP backend + viewer + TOPPRA optimizer
@@ -153,6 +158,14 @@ Build options (see `CMakeLists.txt`):
 # Enable the optional TOPPRA optimizer:
 cmake .. -DCMAKE_INSTALL_PREFIX=$INSTALL_HPP_DIR -DWITH_TOPPRA=ON
 ```
+
+## Minimal Linux images
+
+The wheel stack also needs the platform's OpenMP runtime. The minimal
+`hpp-agimus-arm64` image did not provide it: importing the PyPI Pinocchio wheel failed with `ImportError: libgomp.so.1`. In a minimal Debian/Ubuntu
+image, install `libgomp1` (`apt-get install libgomp1`). No HPP source build or
+`LD_LIBRARY_PATH` setup is needed for the wheel stack. Keep wheel dependencies in
+a clean venv when using a container that also contains source-built HPP libraries.
 
 ## Backend availability at runtime
 

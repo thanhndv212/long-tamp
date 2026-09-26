@@ -1,35 +1,16 @@
-# CI for long_tamp.
-#
-# NOTE: the full test suite (tests/) needs the HPP native bindings (pyhpp), which are not
-# on PyPI, so it still can't run end-to-end on a plain GitHub-hosted runner. A real
-# full-suite job needs an HPP-stack image (source-built HPP) pulled into the job; add it
-# here once one is published somewhere a hosted runner can reach:
-#
-#   test:
-#     runs-on: ubuntu-latest
-#     container: <registry>/hpp-agimus:<tag>
-#     steps:
-#       - uses: actions/checkout@v4
-#       - run: pip install --no-deps -e .
-#       - run: python -m pytest tests/ -v
-#
-# The `test-standalone` job below covers what *is* runnable on a plain hosted runner: the
-# `[standalone]` extra (pinocchio from PyPI, no pyhpp) plus the full test suite, which
-# self-skips every pyhpp-dependent test via existing `HAS_PYHPP`/`check_backend` guards
-# rather than failing to collect — `import long_tamp` itself no longer requires pyhpp.
-# Mirrors agimus_spacelab's .gitlab-ci.yml for the lint jobs (same split: enforcing F-codes
-# + format check, advisory full style set).
-
 name: lint
 
 on:
   push:
-    branches: [main]
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -44,6 +25,7 @@ jobs:
 
   lint-style:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -58,16 +40,14 @@ jobs:
 
   test-standalone:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # No HPP native bindings anywhere in this job — installs pinocchio from PyPI
-      # instead (the [standalone] extra), the same environment shape a first-time
-      # PyPI user gets. Exercises that `import long_tamp` and the pure-Python test
-      # subset work with zero HPP stack present; pyhpp-dependent tests self-skip.
-      - run: pip install --upgrade pip && pip install -e ".[standalone,dev]"
+      # Verify the base install independently of the native HPP extra.
+      - run: pip install --upgrade pip && pip install -e ".[dev]" pytest-timeout
       - run: python -c "import long_tamp; print(long_tamp.get_available_backends())"
-      - run: python -m pytest tests/ -q
+      - run: python -m pytest tests/ -q --timeout=300 --timeout-method=thread
       - run: python script/validate_standalone_install.py

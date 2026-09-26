@@ -452,7 +452,11 @@ class ConfigGenerator:
                 # isn't enough to keep these out of the random seed.
                 for joint_name in self.frozen_joint_names:
                     rank = rank_map.get(joint_name)
-                    if rank is not None and rank < len(q_rand_arr) and rank < len(q_from_arr):
+                    if (
+                        rank is not None
+                        and rank < len(q_rand_arr)
+                        and rank < len(q_from_arr)
+                    ):
                         q_rand_arr[rank] = q_from_arr[rank]
                 q_rand = q_rand_arr
             except Exception:

@@ -3873,7 +3873,11 @@ class GraspSequencePlanner:
             release_constraints = self.graph_constraints
         elif frozen_arms_mode != "none":
             release_frozen = self._release_frozen_arms(
-                gripper, currently_held, frozen_arms_mode, per_phase_frozen_arms, 0,
+                gripper,
+                currently_held,
+                frozen_arms_mode,
+                per_phase_frozen_arms,
+                0,
             )
             if release_frozen:
                 from long_tamp.planning.constraints import ConstraintBuilder

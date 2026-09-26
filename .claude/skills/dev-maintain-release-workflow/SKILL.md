@@ -14,9 +14,9 @@ commit conventions (carried over from `agimus_spacelab`, which has the longer tr
 record), what to do while both repos are maintained in parallel, testing (needs the
 HPP native stack — see the note below), and the PyPI release process.
 
-**How HPP and its native bindings get installed as a dependency is an open question,
-deferred for a separate discussion** — this skill covers everything else and treats that
-as a known gap, not something to solve here.
+On Linux, `pip install -e ".[hpp,dev]"` installs the HPP 9.0.2+ wheels and
+development dependencies. See `docs/plans/pypi-install-roadmap.md` for validation
+and `docs/INSTALL.md` for the source-build fallback on unsupported platforms.
 
 ## When to Use
 
@@ -48,30 +48,25 @@ line.
 
 ## Testing
 
-The real test suite (`pytest tests/`) needs `pyhpp` — HPP's native Python bindings, not on
-PyPI. There is no CI runner with the HPP stack yet (see CI below), so **testing before a
-commit/PR means running it yourself** in an environment with HPP installed — currently the
-`hpp-agimus-arm64` container (source-built HPP; see the container's own docs for how it's
-built) is the only verified environment. `python -m pytest tests/ -q` from the repo root,
-inside that environment.
+Run `python -m pytest tests --timeout=300 --timeout-method=thread` with `pytest-timeout` installed and the
+`[hpp,dev]` extra. CI in `.github/workflows/pypi.yml` runs that suite on Python 3.11
+against PyPI wheels (excluding the two `slow_planning` checks), loads both example
+scenes, and runs those two checks plus a one-part mission nightly
+(and on workflow dispatch). It also builds and smoke-tests the distribution.
 
-Do not skip this because CI will "catch it later" — CI currently only lints (see below).
+The source-built `hpp-agimus-arm64` container remains the path for changing HPP itself;
+its environment must not be mixed with the wheel dependencies. Use a clean venv for
+wheel validation, without source-install `PYTHONPATH` or `LD_LIBRARY_PATH` entries.
 
-## CI (current state)
+## CI
 
-Matches `agimus_spacelab`'s current setup, adapted for GitHub Actions instead of GitLab CI:
-**lint-only**, because the real test suite needs the HPP native stack and there is no
-published container image a hosted runner can pull yet (same gap noted in
-`agimus_spacelab`'s `.gitlab-ci.yml`).
-
-- Enforcing: `ruff check --select F src` (real errors — undefined/unused names, etc.) and
-  a formatter check. A failure here blocks the pipeline.
-- Advisory: the full `ruff check src` style set, non-blocking (`continue-on-error`) until
-  the existing style debt is burned down.
-
-When an HPP-stack container image becomes available somewhere a GitHub Actions runner can
-pull from, add a real `pytest tests/` job — mirror the commented-out sketch in
-`agimus_spacelab`'s `.gitlab-ci.yml` for the shape of it.
+- Enforcing lint: `ruff check --select F src`, `black --check src`.
+- Advisory lint: the full `ruff check src` style set remains non-blocking.
+- Base-install tests: `[dev]`, without HPP, plus the standalone config smoke.
+- Wheel tests, example scene checks, nightly mission and distribution checks:
+  `.github/workflows/pypi.yml`.
+- Publication: `.github/workflows/release.yml`, after a matching version tag and
+  maintainer configuration of the `pypi` environment and PyPI trusted publisher.
 
 ## Parallel maintenance with `agimus_spacelab` (through end of September 2026)
 
@@ -111,9 +106,8 @@ working copy, pointing at a commit that's genuinely part of `agimus_spacelab`'s 
 (where the real `spacelab-example` branch lives). It's been deleted from the `long_tamp`
 working copy; nothing to clean up on GitHub since it was never pushed there.
 
-The underlying need — a proven long-horizon, multi-phase example for validating
-`GraspSequencePlanner`/lookahead/checkpointing changes before `script/twin/`'s generic
-examples catch up to that complexity — is still real and still unmet in `long_tamp`. See
+The from-scratch `script/screw_assembly/` example now provides the long-horizon,
+multi-phase validation of `GraspSequencePlanner`, lookahead and checkpointing. See
 Phase 4 in `research-vault/agimus-spacelab/agimus-spacelab-opensource-release.md`: a
 from-scratch generic long-horizon example (fictional mission, no SpaceLab content) is the
 tracked way to close that gap, not porting or referencing anything from `agimus_spacelab`.
@@ -126,26 +120,22 @@ Not yet done for `long_tamp` — no release has shipped. When cutting one:
    is still moving (per the `Development Status :: 3 - Alpha` classifier already in
    `pyproject.toml`); bump to `1.0.0` once the public API (documented in
    `docs/usage/standalone-usage.md` and `ARCHITECTURE.md`) is considered stable.
-2. **What actually ships to PyPI**: the pure-Python package only (per `README.md`'s own
-   install-tier table) — `pip install long-tamp` gives config parsing, planning-graph
-   construction, transforms, run logging, and the viser viewer. The HPP native bindings
-   (the actual planning backend) are never on PyPI and must come from the user's own
-   environment; instantiating a backend without them raises an `ImportError` naming what's
-   missing. This means a PyPI release is **not** blocked on the still-open "how do we
-   distribute HPP" question — that question only affects how a user gets a *working*
-   installation, not whether the package can be published.
+2. **What ships**: the Python package; example scripts/assets stay in the checkout.
+   `pip install "long-tamp[hpp]"` adds the native HPP wheels on supported Linux systems.
+   The base install still imports without HPP. Keep source-built environments separate.
 3. **Build and check**: `python -m build` (sdist + wheel), then `twine check dist/*`.
    Test in a clean venv: `pip install dist/*.whl` and confirm
    `python -c "from long_tamp import get_available_backends"` imports without pulling in
    any HPP native package.
 4. **Tag**: annotated git tag matching the version (`vX.Y.Z`), pushed after the version
    bump commit lands on `main`.
-5. **Publish**: `twine upload dist/*` (or a GitHub Actions release workflow triggered by
-   the tag — not yet set up; add one modeled on the standard PyPA
-   `pypa/gh-action-pypi-publish` action, using trusted publishing rather than a stored
-   API token, when this is actually set up).
-6. **GitHub release notes**: summarize what changed since the last tag — this is also
-   where a `CHANGELOG.md` would get updated, if/when one exists (doesn't yet).
+5. **Publish**: the tag triggers `.github/workflows/release.yml`, which checks the
+   version, builds and smoke-tests the artifacts, then publishes using PyPI trusted
+   publishing. Configure the publisher for owner `thanhndv212`, repo `long-tamp`,
+   workflow `release.yml`, environment `pypi` before pushing the tag. Configure any
+   required reviewers on that GitHub environment before enabling publication.
+6. **Release notes**: move `CHANGELOG.md`'s Unreleased entries into the dated release
+   section at release time, and use them for the GitHub release notes.
 7. Before the *first* public release specifically: do one more `git log --all --name-only`
    sweep across `long_tamp`'s history (all branches, `git branch -a`) for anything
    SpaceLab-tagged that a future contributor's branch might have reintroduced since the
@@ -174,7 +164,7 @@ Not yet done for `long_tamp` — no release has shipped. When cutting one:
 | "I'll port this to agimus_spacelab later" | Later becomes never once the two trees drift. Port in the same session, or note it explicitly (e.g., a memory/vault entry) if truly deferred. |
 | "This task_planning/ fix is small, agimus_spacelab could use it too" | No — task_planning/ is long_tamp-only, full stop, regardless of size. It supersedes the DBT path there; porting it back reintroduces the coupling the split was for. |
 | "I'll port `agimus_spacelab`'s `script/spacelab/` (or its `spacelab-example` branch) into `long_tamp`, just scoped to `script/`" | That reintroduces exactly what the filter-repo history rewrite was done to remove — the mission-specific content (real part/gripper/handle names, the actual assembly sequence) isn't confined to config, it's baked into the Python itself. Build a from-scratch generic example instead (see Phase 4 in the vault note); don't port. |
-| "CI is green, so tests pass" | CI is lint-only right now. Green CI says nothing about `pytest tests/` — run it yourself in the HPP environment. |
+| "Lint is green, so tests pass" | Check the PyPI-wheel test job separately; lint does not exercise planning. |
 | "PyPI release is blocked until we sort out HPP distribution" | It isn't — the PyPI package is pure-Python only; HPP is a runtime dependency the user provides, not a packaging blocker. |
 
 ## Verification

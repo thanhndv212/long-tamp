@@ -156,6 +156,7 @@ def _grasp_retrying(seq_planner, gripper, handle, q_current, attempts=3):
 
 @requires_pyhpp
 class TestGraspReleaseAgainstRealTwinScene:
+    @pytest.mark.slow_planning
     def test_grasp_release_lifecycle(self):
         """One real bimanual scene, driven end to end: grasp both arms,
         confirm the precondition check blocks a conflicting third grasp

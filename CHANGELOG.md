@@ -10,11 +10,15 @@ entries accumulate under **Unreleased** until the first tagged release.
 
 ### Added
 
+- PyPI-wheel CI on pushes and pull requests, nightly one-part screw-assembly runs,
+  distribution checks, and a tag-triggered trusted-publishing workflow.
+- Cloud-only Claude Code SessionStart hook installing `[hpp,dev]` dependencies.
+
 - `script/screw_assembly/`: a long-horizon, multi-arm example built from generic
   primitives. Two UR10 + Robotiq arms fasten N plates to a jig, two screws each, with a
   tool pickup, home retreats and a tool return (4 parts: 19 blocks, 31 grasp/release phases).
-  Over 10 seeded 4-part runs: 10/10 missions, 0/140 blocks replanned, 21/21 failures
-  recovered. The scene
+  Over 10 seeded 4-part runs with the cordless drill: 10/10 missions,
+  0/140 blocks replanned, 13/13 failures recovered. The scene
   is generated from parameters (`build_scene.py --parts N`) and has no lineage to real
   product CAD. `run_batch.sh` / `summarize.py` run seeded batches and report replanning and
   recovery rates.

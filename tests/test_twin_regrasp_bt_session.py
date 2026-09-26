@@ -76,6 +76,7 @@ def _execute_step_retrying(session, step_id: str, attempts: int = 3) -> dict:
 
 @requires_pyhpp
 class TestTwinRegraspBtSession:
+    @pytest.mark.slow_planning
     def test_release_is_forced_before_regrasp(self):
         session = _build_session()
 

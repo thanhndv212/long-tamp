@@ -4,9 +4,11 @@
 LD_LIBRARY_PATH, no robotpkg, no source build and no Docker. The source-built
 `hpp-agimus-arm64` container stays as the path for changing HPP itself.
 
-**Why it's realistic**: the full 4-part screw-assembly mission (19 blocks, seed 1,
-610 s of planning) completed on the stock `hpp-python` 9.0.2 wheels, and the test suite
-passes on them (444 passed, 17 skipped, 0 failed). The extra bindings long_tamp needs
+**Why it's realistic**: the original cloud run completed the full 4-part screw-assembly
+mission (19 blocks, seed 1, 610 s) on stock `hpp-python` 9.0.2 wheels and reported
+444 passed, 17 skipped, 0 failed. The local ARM64 rerun below exposes two slow TWIN
+failures, so that earlier result is not a blanket reliability claim. The extra bindings
+long_tamp needs
 (`RSTimeParameterization`, `EnforceTransitionSemantic`, `GraphRandomShortcut`, …) are in
 9.0.2.
 
@@ -15,10 +17,10 @@ passes on them (444 passed, 17 skipped, 0 failed). The extra bindings long_tamp 
 | Step | What | Status |
 |---|---|---|
 | 1 | Remove the manual setup steps | **Done** (below) |
-| 2 | CI on GitHub Actions against the PyPI wheels | To do |
-| 3 | Publish `long-tamp` 0.1.0 to PyPI | To do (needs the maintainer) |
-| 4 | SessionStart hook for Claude Code cloud sessions | To do |
-| 5 | Check in the source-built container and refresh the batch results | To do (needs the maintainer) |
+| 2 | CI on GitHub Actions against the PyPI wheels | Implemented; local validation below, first hosted run pending push |
+| 3 | Publish `long-tamp` 0.1.0 to PyPI | Release workflow prepared; fix TWIN checks, configure publisher, and tag |
+| 4 | SessionStart hook for Claude Code cloud sessions | Implemented and locally exercised |
+| 5 | Check in the source-built container and refresh the batch results | Done: source mission passed; ten-seed wheel batch refreshed below |
 
 ## Step 1 (done): remove the manual setup steps
 
@@ -47,45 +49,92 @@ passes.
 
 ## Step 2: CI on GitHub Actions
 
-A workflow on every push and pull request, Ubuntu, Python 3.11:
+Implemented in [pypi.yml](https://github.com/thanhndv212/long-tamp/blob/main/.github/workflows/pypi.yml), alongside the existing
+[lint/base-install workflow](https://github.com/thanhndv212/long-tamp/blob/main/.github/workflows/lint.yml). The removed
+`[standalone]` extra was corrected to `[dev]` in the base-install job.
+Push/PR jobs cover the fast test suite and both scene loads; nightly/manual runs
+add the one-part mission and two isolated TWIN planning jobs. The distribution job builds an sdist and wheel, runs `twine check`, then
+installs the wheel into a clean venv outside the checkout. Test reports, resolved
+wheel versions, mission logs and distributions are uploaded as artifacts.
+Job and process timeouts bound the longer planning checks. Scheduled runs require
+this workflow on the default branch. Hosted-run timing remains to be measured.
+
+
+The workflow uses Ubuntu and Python 3.11:
 
 1. `pip install -e ".[hpp,dev]" pytest-timeout`
-2. `pytest tests --timeout=300`, so a hang fails fast instead of blocking the job.
+2. `pytest tests -m "not slow_planning" --timeout=300 --timeout-method=thread`,
+   using a watchdog thread instead of Python signal handling. An outer
+   20-minute process timeout also bounds native calls that hold the GIL.
 3. `python script/screw_assembly/task_screw_assembly.py --check` and
    `python script/ikea_table_prototype/task_assemble_table.py --show-joints`, to confirm
    both example scenes load.
 4. Nightly only: a 1-part screw mission (`build_scene.py --parts 1`, then
    `task_screw_assembly.py --seed 1`), about 7 minutes.
 
-The full suite took about 6 minutes on a cloud container, mostly in two real-scene twin
-integration tests (203 s and 136 s,
-`test_twin_regrasp_bt_session.py::test_release_is_forced_before_regrasp` and
-`test_grasp_release_use_case_twin.py::test_grasp_release_lifecycle`). If that's too slow
-per push, move those two to the nightly job. Measure the runtime on GitHub's runners on
-the first run.
+The original full-suite cloud run took about 6 minutes, mostly in two TWIN
+integration checks. The local ARM64 rerun took 442 s and exposed two failures:
+
+- `test_grasp_release_use_case_twin.py::test_grasp_release_lifecycle`: the second
+  grasp starts with the ball outside its joint bounds (y=0.5797, allowed -0.4..0.4).
+  The isolated nightly command also fails (89.86 s), on a left-finger/ball collision.
+- `test_twin_regrasp_bt_session.py::test_release_is_forced_before_regrasp`: exceeded
+  its 300 s timeout. A native stack sample was in `BiRrtStar::improve` /
+  `TransitionPlanner::computePath`, not the spline QP.
+
+Both tests are marked `slow_planning` and run in separate nightly matrix jobs,
+with no `continue-on-error` or expected-failure marker. The regular suite excludes
+only these two checks. These are unresolved planner/scene regressions, not proof
+of a fully green release; keep their nightly results visible and investigate them
+before release. Reproduce with `python -m pytest tests/<filename>.py -m slow_planning
+--timeout=300 --timeout-method=thread` under an external six-minute timeout.
+Measure actual GitHub-runner timing after pushing.
 
 This would have caught both hangs above and the stale `test_grasp_sequence_logging`
 fixture, which were all invisible while `pyhpp` couldn't be imported.
 
 ## Step 3: publish `long-tamp` 0.1.0 to PyPI
 
-Follow the `dev-maintain-release-workflow` skill (versioning, tag, CHANGELOG Unreleased →
-0.1.0). Decisions for the maintainer:
+The proposed public release notes and remaining gates are in
+[release-0.1.0.md](release-0.1.0.md).
 
-- Whether 0.1.0 is ready to be public.
-- The PyPI account, or a trusted-publisher setup from GitHub Actions (preferred, no token
-  to store).
-- Whether example assets ship in the package. They would add about 10 MB (the UR10 and
-  Robotiq meshes, the drill scan); keeping `script/` in the repo only is simpler.
+The tag-triggered [release.yml](https://github.com/thanhndv212/long-tamp/blob/main/.github/workflows/release.yml) checks tag/version
+agreement, builds and validates the distributions, smoke-tests the installed wheel,
+and publishes from a separate job with `id-token: write` and environment `pypi`.
+It follows [PyPI trusted publishing](https://docs.pypi.org/trusted-publishers/using-a-publisher/).
 
-After this, `docs/INSTALL.md`'s `pip install long-tamp` line becomes literally true.
+Verified 2026-09-26: GitHub already reports `thanhndv212/long-tamp` as public, PyPI's
+project JSON endpoint returns 404, and the repository has no GitHub environments.
+The maintainer's remaining steps are:
+
+1. Create the GitHub `pypi` environment, with any desired release reviewers.
+2. Register a [pending PyPI publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)
+   for project `long-tamp`, owner `thanhndv212`, repository `long-tamp`, workflow
+   `release.yml`, environment `pypi`. No token is stored in the repository.
+3. Review the first hosted CI run, address the two failing nightly TWIN checks,
+   and move Unreleased changelog entries to the dated `0.1.0` section. Once the
+   release commit is on `main`, create and push annotated tag `v0.1.0`.
+
+The existing distribution scope is retained: example scripts and assets remain in
+the checkout. Both the wheel and sdist were inspected; neither contains example
+assets, run logs, build directories or agent configuration. No tag or publication
+has been performed. The Unreleased changelog remains open until release time.
+
+After publication, `python -m pip install "long-tamp[hpp]"` becomes available.
+Until then, install from the checkout as described in `docs/INSTALL.md`.
 
 ## Step 4: SessionStart hook for Claude Code cloud sessions
 
-A hook in the repo's `.claude/` settings that runs `pip install -e ".[hpp,dev]"` when a
-cloud session starts (the `session-start-hook` skill covers the setup). After step 1 that
-is the only setup needed, so every new cloud session can run the tests and examples
-straight away. Cost: about a minute of install per new session.
+Implemented in [.claude/settings.json](https://github.com/thanhndv212/long-tamp/blob/main/.claude/settings.json) and
+[session-start.sh](https://github.com/thanhndv212/long-tamp/blob/main/.claude/hooks/session-start.sh). It runs on startup/resume,
+exits immediately unless `CLAUDE_CODE_REMOTE=true`, and installs `[hpp,dev]` plus
+`pytest-timeout` from `CLAUDE_PROJECT_DIR`. The hook has a 600-second timeout and
+propagates installation failures. Local sessions do not install anything.
+
+The referenced `session-start-hook` skill was unavailable locally; implementation
+follows the [official cloud hook documentation](https://code.claude.com/docs/en/cloud-environments#install-dependencies-with-a-sessionstart-hook).
+The local no-op and simulated remote installation paths were exercised. An actual
+Claude Code cloud startup remains to be observed after these files are pushed.
 
 ## Step 5: check in the source-built container
 
@@ -108,3 +157,30 @@ straight away. Cost: about a minute of install per new session.
 - **SplineGradientBased QP hang** (Bug 6 in
   [hpp-core unbounded planning loops](../bugs/hpp-core-unbounded-planning-loops.md)) still
   needs an hpp-core change; it will reach PyPI users through a new wheel like any other fix.
+
+## Local validation (2026-09-26)
+
+Validation uses a clean Python 3.11 venv inside `hpp-agimus-arm64`, with stock
+`hpp-python` / `hpp-gepetto-viewer` 9.0.2 wheels and no `PYTHONPATH` or
+`LD_LIBRARY_PATH`. The minimal container needed system `libgomp1` for Pinocchio;
+this runtime is a prerequisite for minimal Linux images. See `docs/INSTALL.md`.
+
+- Base wheel, installed in a separate clean venv: imports outside the checkout;
+  standalone config smoke passes; **363 passed, 98 skipped** in the test suite.
+- Both example scene-load commands pass against the HPP wheels.
+- `python -m build` and `twine check` pass for the wheel and sdist.
+- All workflow files pass actionlint 1.7.12. Source lint and formatting pass.
+- Full HPP suite: **442 passed, 17 skipped, 2 failed** in 442 s (TWIN failures above).
+- Push/PR HPP selection: **442 passed, 17 skipped, 2 deselected** in 4.66 s.
+- One-part nightly mission, seed 1: **success in 139.86 s**.
+- Installing the built wheel with `[hpp]` into the clean venv exposes `pyhpp` and
+  loads/validates the four-part screw scene, without source-package imports.
+- Source-built HPP, four parts, seed 1: **success in 913.41 s**, using the current
+  source checkout; importing `pyhpp.core` directly succeeded before `long_tamp`.
+- Wheel batch seed 1: **success in 567.46 s**. These concurrent ARM64 runs are not
+  a controlled benchmark against the earlier 610 s cloud result.
+- Ten-seed four-part wheel batch: **10/10 complete**, **0/140 planning blocks
+  replanned**, **13/13 failures recovered**, median **687 s** (547–979 s).
+  Every process exited 0; results are in
+  [pypi-wheel-batch-2026-09-26.json](https://github.com/thanhndv212/long-tamp/blob/main/script/screw_assembly/results/pypi-wheel-batch-2026-09-26.json).
+  The example README now reports this drill run. No hosted GitHub run is claimed.
