@@ -10,6 +10,27 @@ entries accumulate under **Unreleased** until the first tagged release.
 
 ### Added
 
+- `script/screw_assembly/`: a long-horizon, multi-arm example built from generic
+  primitives. Two UR10 + Robotiq arms fasten N plates to a jig, two screws each, with a
+  tool pickup, home retreats and a tool return (4 parts: 19 blocks, 31 grasp/release phases).
+  Over 10 seeded 4-part runs: 10/10 missions, 0/140 blocks replanned, 21/21 failures
+  recovered. The scene
+  is generated from parameters (`build_scene.py --parts N`) and has no lineage to real
+  product CAD. `run_batch.sh` / `summarize.py` run seeded batches and report replanning and
+  recovery rates.
+- `long_tamp.tasks.block_recovery.run_block_with_recovery()`: plans a short grasp sequence
+  as one unit and escalates on failure -- in-phase redraws, then `resume_sequence()`, then
+  a replan of the whole block from its entry with fresh lookahead hints (on a broken hint
+  chain, an *unreachable* phase per `last_edge_failure`, or 40 failed resumes). Bounded by
+  `max_replans`. `make_lookahead_hints_factory()` builds the per-attempt hints.
+- `find_feasible_phase_target(verify_paths=True)`: also path-plans the candidate's own
+  edges and each protected phase's edges, on a short budget (`path_check_timeout`,
+  `path_check_iterations`), rejecting candidates the arms can't actually move to or that
+  block a later approach.
+- `YamlTaskLoader` resolves relative `paths:` entries against the YAML file's folder, so
+  one config works on the host and in the container.
+- `configure_transition_planner(path_optimizer_timeout=...)` (default 30 s).
+
 - `create_twin_regrasp_session`, a real-mission BT scenario (`script/twin/twin_bt_session.py`,
   `src/long_tamp/tasks/task_planning/host.py`) where a gripper grasps a handle, then a
   `fallback`/`condition` guard forces a real `release()` and re-`grasp()` of that same
@@ -42,6 +63,20 @@ entries accumulate under **Unreleased** until the first tagged release.
 
 ### Fixed
 
+- The native `SIGSEGV` at the "target generated -> path planning begins" transition (and
+  "Maximal number of iterations reached" failures within seconds regardless of budget).
+  `Problem(device)` builds its `WeighedDistance` right after the first robot is loaded, so
+  every joint loaded later had no weight and distances read uninitialized memory. NaN
+  distances left the roadmap's nearest-node search empty, and `Roadmap::addNode`
+  dereferenced the null node (confirmed from a core dump). The backend now rebuilds the
+  problem's distance after each load that adds joints.
+- Lookahead probes (`find_feasible_phase_target`) now lock and freeze joints exactly like
+  the real phase, including `config_gen.set_frozen_joints()`. They inherited the previous
+  phase's frozen set, so a probe could hold the very arm it needed to move and reject every
+  candidate.
+- A path failure to a lookahead-hinted target is retried (`_HINTED_PATH_RETRIES`, 2) before
+  the target is redrawn; the redraw voids the hint chain and forces a block replan.
+
 - `script/ikea_table_prototype/task_assemble_table.py`: `PER_PHASE_FROZEN_ARMS` froze
   `ur10_left` for phase 0 despite its own comment explaining that phase specifically needs
   `ur10_left` free (it parked in leg1's pregrasp corridor otherwise) -- the freeze was never
@@ -65,6 +100,10 @@ entries accumulate under **Unreleased** until the first tagged release.
 
 ### Changed
 
+- Target generation seeds IK with an unvalidated random draw
+  (`random_config(validate=False)`). Rejection-sampling a collision-free seed, whose object
+  poses were then overwritten anyway, cost millions of wasted collision checks per mission.
+
 - `script/ikea_table_prototype/`: cleared for general use. The IKEA LACK table assembly
   example was scoped as a private, local-only prototype (its own README said it must never
   be merged into `main` or pushed to `origin`, despite already being in both) -- now the
@@ -81,16 +120,6 @@ entries accumulate under **Unreleased** until the first tagged release.
 
 ### Known issues
 
-- A native `SIGSEGV` at the "target generated -> path planning begins" transition,
-  deterministic on `script/ikea_table_prototype/task_assemble_table.py`'s scene (3/3),
-  intermittent elsewhere (e.g. `create_twin_session`, ~1/5 observed). Classic race-condition
-  signature -- avoided when run under `gdb` (changes thread timing), not root-caused. Real
-  runs of `task_assemble_table.py` should go through
-  `gdb -batch -ex run -ex quit --args python3 ...` until this is fixed.
-  The `computePath` vs `planPath` binding choice is not the cause: `agimus_spacelab`
-  switched waypoint edges to `planPath` specifically to avoid it, and all 6 crashes in a
-  14-run batch there still hit this transition, at the `planPath` call. Contention makes it
-  far more likely (0/5 launches crashed run alone, 5/10 with several running at once).
 - The `f_12` pregrasp -> grasp waypoint collision documented in
   `tests/test_grasp_release_use_case_twin.py` is markedly worse than "intermittent" when it
   is the target of a release-then-regrasp cycle specifically: 100% of regrasp draws hit it
