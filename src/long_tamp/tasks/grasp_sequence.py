@@ -128,6 +128,14 @@ class GraspSequencePlanner:
     the number of grasps grows.
     """
 
+    # Path-planning retries to a *hinted* target (from the lookahead) before
+    # it is redrawn at random. RRT is stochastic, so one failed path says
+    # little about a target the lookahead chose; redrawing it voids the
+    # lookahead's guarantee and forces a block replan (live: every block
+    # replan in the screw-assembly example's first clean runs). Unhinted
+    # targets keep redrawing on the first failure.
+    _HINTED_PATH_RETRIES = 2
+
     def __init__(
         self,
         graph_builder: GraphBuilder,
@@ -2392,7 +2400,11 @@ class GraspSequencePlanner:
             path = None
             geometric_path = None
 
-            for _plan_attempt in range(self._MAX_COLLISION_RETRIES):
+            hinted_retries_left = (
+                self._HINTED_PATH_RETRIES if edge_hints[edge_idx] is not None else 0
+            )
+            total_attempts = self._MAX_COLLISION_RETRIES + hinted_retries_left
+            for _plan_attempt in range(total_attempts):
                 try:
                     if verbose:
                         if _plan_attempt == 0:
@@ -2425,7 +2437,18 @@ class GraspSequencePlanner:
 
                 except Exception as _plan_exc:
                     last_plan_exc = _plan_exc
-                    if _plan_attempt < self._MAX_COLLISION_RETRIES - 1:
+                    if hinted_retries_left > 0:
+                        hinted_retries_left -= 1
+                        if verbose:
+                            logger.warning(
+                                "Planning to hinted target failed (attempt %d); "
+                                "retrying the same target (%d retr%s left)",
+                                _plan_attempt + 1,
+                                hinted_retries_left,
+                                "y" if hinted_retries_left == 1 else "ies",
+                            )
+                        continue
+                    if _plan_attempt < total_attempts - 1:
                         if verbose:
                             logger.warning(
                                 "Planning failed (attempt %d), "

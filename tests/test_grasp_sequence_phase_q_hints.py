@@ -161,6 +161,7 @@ class TestPhaseQHintsChain:
         planner = _make_planner(
             _FailNTimesThenSucceed(n_failures=1), max_collision_retries=2
         )
+        planner._HINTED_PATH_RETRIES = 0  # redraw on the first failure
         planner.config_gen = _RecordingConfigGen()
         planner.invalidated_phase_hints = set()
 
@@ -198,6 +199,59 @@ class TestPhaseQHintsChain:
         )
 
         assert planner.invalidated_phase_hints == set()
+
+
+class TestHintedTargetRetriedBeforeRedraw:
+    """A failed path to a lookahead-hinted target is retried as is before
+    the target is redrawn: RRT is stochastic, and a redraw voids the
+    lookahead's guarantee (forcing a block replan)."""
+
+    def test_a_transient_path_failure_keeps_the_hinted_target(self):
+        plan = _FailNTimesThenSucceed(n_failures=2)
+        planner = _make_planner(plan, max_collision_retries=2)
+        planner._HINTED_PATH_RETRIES = 2
+        planner.config_gen = _RecordingConfigGen()
+
+        planner._plan_phase_edges(
+            phase_idx=3,
+            gripper="g1",
+            handle="h1",
+            edge_sequence=["edge01"],
+            q_current=[0.0, 0.0],
+            skip_phases=None,
+            start_edge_idx=0,
+            is_resume=True,
+            verbose=False,
+            phase_q_hints={3: [[1.0, 2.0]]},
+        )
+
+        assert plan.calls == 3
+        assert planner.invalidated_phase_hints == set()
+        assert [h for _, h in planner.config_gen.calls] == [
+            [1.0, 2.0]
+        ], "only the initial hinted generation; no redraw"
+
+    def test_the_hint_is_redrawn_once_its_retries_are_spent(self):
+        planner = _make_planner(
+            _FailNTimesThenSucceed(n_failures=3), max_collision_retries=2
+        )
+        planner._HINTED_PATH_RETRIES = 2
+        planner.config_gen = _RecordingConfigGen()
+
+        planner._plan_phase_edges(
+            phase_idx=3,
+            gripper="g1",
+            handle="h1",
+            edge_sequence=["edge01"],
+            q_current=[0.0, 0.0],
+            skip_phases=None,
+            start_edge_idx=0,
+            is_resume=True,
+            verbose=False,
+            phase_q_hints={3: [[1.0, 2.0]]},
+        )
+
+        assert planner.invalidated_phase_hints == {3}
 
 
 class TestPhaseQHintsAppliedToLastEdgeOnly:
@@ -295,6 +349,7 @@ class TestPhaseQHintsNeverAppliedToCollisionRetryRegeneration:
         planner = _make_planner(
             _FailNTimesThenSucceed(n_failures=1), max_collision_retries=2
         )
+        planner._HINTED_PATH_RETRIES = 0  # this test is about the redraw
         config_gen = _RecordingConfigGen()
         planner.config_gen = config_gen
         hint = [9.9, 9.9]
