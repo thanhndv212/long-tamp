@@ -53,21 +53,6 @@ from long_tamp.tasks.mission_checkpoint import MissionCheckpoint  # noqa: E402
 # Gripper fingers are cosmetic: grasps are rigid TCP constraints.
 FREEZE_JOINT_SUBSTRINGS = ["finger_joint", "knuckle_joint"]
 
-# Each arm's 0.3 m pedestal box overlaps its own upper links in most poses
-# -- a proxy-geometry false positive (see the IKEA prototype's task script,
-# where these were found one link at a time).
-COLLISION_EXCLUSIONS = [
-    (f"{arm}/pedestal", f"{arm}/{joint}")
-    for arm in ("ur10_left", "ur10_right")
-    for joint in (
-        "shoulder_lift_joint",
-        "elbow_joint",
-        "wrist_1_joint",
-        "wrist_2_joint",
-        "wrist_3_joint",
-    )
-]
-
 LEFT, RIGHT = "ur10_left", "ur10_right"
 DRIVER_TIP = "driver/tip"
 ARM_JOINTS = (
@@ -190,8 +175,6 @@ def setup(
         freeze_joint_substrings=task.FREEZE_JOINT_SUBSTRINGS,
         skip_graph=True,
     )
-    for body, joint in COLLISION_EXCLUSIONS:
-        task.scene_builder.disable_collision_pair(obstacle_name=body, joint_name=joint)
     # Paths here are short arm moves; optimization rarely pays off, and at
     # the 30 s default each part release spent ~60 s in two optimizer passes.
     # No spline optimizer: its inner QP solve ignores the timeout, and a

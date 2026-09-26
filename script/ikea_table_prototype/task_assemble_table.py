@@ -173,49 +173,11 @@ GRIPPER_MIMIC_JOINTS: List[Tuple[str, int]] = [
 # -> 0.0079m (pads touching), 0.6 rad -> 0.0307m (closest to 0.03m).
 GRIPPER_CLOSED_VALUE: float = 0.60
 
-# Found live, first run: IK for leg1's pregrasp kept landing in
-# "Collision between object ur10_left/pedestal_0 and
-# ur10_left/upper_arm_link_0" (23/26 attempts were solver-non-convergence,
-# but the 3 that did converge hit exactly this pair). pedestal is a coarse
-# 0.3x0.3x0.3 box build_assets.py's merge-arm stage fixes under the
-# shoulder (see its PEDESTAL_LINK) — two joints away from upper_arm_link
-# in the chain (world -[shoulder_pan]-
-# shoulder_link -[shoulder_lift]- upper_arm_link), so not auto-excluded as
-# an adjacent pair. Excluding it as a known-coarse-proxy false positive,
-# same category task_yaml_template.py's COLLISION_EXCLUSIONS comment
-# describes — not verified against the real UR10 mesh silhouette (no
-# visual inspection was done here, only that planning proceeds past this
-# error). Revisit if a resulting path visibly runs the real arm mesh
-# through the real pedestal mesh once someone views a replay.
-COLLISION_EXCLUSIONS: List[Tuple[str, str]] = [
-    ("ur10_left/pedestal", "ur10_left/shoulder_lift_joint"),
-    ("ur10_right/pedestal", "ur10_right/shoulder_lift_joint"),
-    # Same story, one link further down the chain: after fixing the
-    # workbench-clearance/pregrasp-direction bugs, phase 1 started hitting
-    # "pedestal_0 and forearm_link_0" instead — forearm_link is attached
-    # to elbow_joint, a different joint than upper_arm_link's
-    # shoulder_lift_joint, so the exclusion above never covered it.
-    ("ur10_left/pedestal", "ur10_left/elbow_joint"),
-    ("ur10_right/pedestal", "ur10_right/elbow_joint"),
-    # Same story, another link further down the chain: random_config's
-    # per-attempt failure tally (long_tamp.backends.pyhpp) surfaced
-    # "pedestal_0 and wrist_1_link_0" as a dominant failure reason
-    # (78/1000 in one batch) — wrist_1_link is attached to wrist_1_joint,
-    # still a different joint than the two exclusions above cover.
-    ("ur10_left/pedestal", "ur10_left/wrist_1_joint"),
-    ("ur10_right/pedestal", "ur10_right/wrist_1_joint"),
-    # One more link down again, same rerun: "pedestal_0 and
-    # wrist_2_link_0" (65/1000). At this point every joint from
-    # shoulder_lift through wrist_1 has independently shown up here one
-    # rerun at a time — a coarse 0.3m box under the shoulder is going to
-    # overlap *something* in most arm poses regardless of which specific
-    # downstream link it is, so this joint-by-joint whack-a-mole will
-    # likely keep finding one more link each run. If wrist_3_joint (the
-    # last one before the gripper) turns up next, consider excluding the
-    # whole pedestal-vs-arm-chain in one shot instead of a 5th entry here.
-    ("ur10_left/pedestal", "ur10_left/wrist_2_joint"),
-    ("ur10_right/pedestal", "ur10_right/wrist_2_joint"),
-]
+# Pairs never collision-checked. Empty: the pedestal-vs-arm entries that
+# used to live here hid real collisions (an arm folding down into its own
+# 0.3x0.3x0.6 m pedestal box, which matches the visual stand), not
+# proxy-geometry false positives.
+COLLISION_EXCLUSIONS: List[Tuple[str, str]] = []
 
 # Pick up each leg, dock its peg into the matching table socket, release the
 # arm's grip (the leg stays put, held by the docking grasp) -- 3 phases per
