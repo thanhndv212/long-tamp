@@ -1158,11 +1158,15 @@ class GraspSequencePlanner:
         q_current: Sequence[float],
         verbose: bool,
     ) -> None:
-        """Dump (q_current, held grasps) entering a phase, for repro_phase_range.py.
+        """Dump (q_current, held grasps) entering a phase, for reproducing it.
 
-        No-op unless AGIMUS_CHECKPOINT_DIR is set.
+        No-op unless LONG_TAMP_CHECKPOINT_DIR is set (``MissionCheckpoint.
+        phase_dump_dir`` sets it per block). The pre-split name
+        AGIMUS_CHECKPOINT_DIR is still honored.
         """
-        checkpoint_dir = os.environ.get("AGIMUS_CHECKPOINT_DIR")
+        checkpoint_dir = os.environ.get("LONG_TAMP_CHECKPOINT_DIR") or os.environ.get(
+            "AGIMUS_CHECKPOINT_DIR"
+        )
         if not checkpoint_dir:
             return
         try:

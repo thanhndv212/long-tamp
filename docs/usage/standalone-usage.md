@@ -196,7 +196,7 @@ This mechanism only survives within one `GraspSequencePlanner` instance / one pr
 ### 8b. Cross-process checkpoints (diagnostic re-runs)
 
 A long-running task script can dump `(q_current, held_grasps)` to
-`$AGIMUS_CHECKPOINT_DIR/phase_{NN:02d}.json` after each phase. A small script that loads
+`$LONG_TAMP_CHECKPOINT_DIR/phase_{NN:02d}.json` (formerly `AGIMUS_CHECKPOINT_DIR`, still honored) after each phase. A small script that loads
 one and calls `plan_sequence()` directly on a phase sub-range turns a 20+ minute re-run
 into seconds when debugging one failing phase.
 

@@ -28,14 +28,17 @@ def default_video_output_dir() -> str:
     The single source of truth for every ``output_dir`` default in this
     codebase (``VideoRecorder``, ``record_path_playback``, and the
     backend/task methods that pass ``output_dir`` through to them).
-    Overridable via the ``AGIMUS_VIDEO_OUTPUT_DIR`` environment variable;
+    Overridable via the ``LONG_TAMP_VIDEO_OUTPUT_DIR`` environment variable
+    (the pre-split ``AGIMUS_VIDEO_OUTPUT_DIR`` is still honored);
     otherwise falls back to ``~/devel/demos`` for whichever user is
     running -- previously this was a single developer's hardcoded home
     directory (``/home/dvtnguyen/devel/demos``), copied verbatim into 8
     method signatures across 4 files.
     """
-    return os.environ.get(
-        "AGIMUS_VIDEO_OUTPUT_DIR", str(Path.home() / "devel" / "demos")
+    return (
+        os.environ.get("LONG_TAMP_VIDEO_OUTPUT_DIR")
+        or os.environ.get("AGIMUS_VIDEO_OUTPUT_DIR")
+        or str(Path.home() / "devel" / "demos")
     )
 
 
@@ -76,7 +79,7 @@ class VideoRecorder:
         Args:
             viewer: Gepetto or viser viewer instance.
             output_dir: Directory for video output. Defaults to
-                :func:`default_video_output_dir` (``AGIMUS_VIDEO_OUTPUT_DIR``
+                :func:`default_video_output_dir` (``LONG_TAMP_VIDEO_OUTPUT_DIR``
                 env var, or ``~/devel/demos``) when not given.
             framerate: Video framerate in fps (default: 25)
             frame_extension: Frame format - 'png' or 'jpeg' (default: 'png')

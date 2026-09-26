@@ -27,34 +27,48 @@ from long_tamp.visualization.video_recorder import (
 
 class TestDefaultVideoOutputDir:
     def test_falls_back_to_home_devel_demos(self, monkeypatch):
+        monkeypatch.delenv("LONG_TAMP_VIDEO_OUTPUT_DIR", raising=False)
         monkeypatch.delenv("AGIMUS_VIDEO_OUTPUT_DIR", raising=False)
         monkeypatch.setattr(Path, "home", lambda: Path("/fake/home"))
 
         assert default_video_output_dir() == str(Path("/fake/home/devel/demos"))
 
     def test_env_var_overrides_fallback(self, monkeypatch):
-        monkeypatch.setenv("AGIMUS_VIDEO_OUTPUT_DIR", "/custom/video/dir")
+        monkeypatch.delenv("AGIMUS_VIDEO_OUTPUT_DIR", raising=False)
+        monkeypatch.setenv("LONG_TAMP_VIDEO_OUTPUT_DIR", "/custom/video/dir")
 
         assert default_video_output_dir() == "/custom/video/dir"
+
+    def test_pre_split_env_var_is_still_honored(self, monkeypatch):
+        monkeypatch.delenv("LONG_TAMP_VIDEO_OUTPUT_DIR", raising=False)
+        monkeypatch.setenv("AGIMUS_VIDEO_OUTPUT_DIR", "/legacy/dir")
+
+        assert default_video_output_dir() == "/legacy/dir"
+
+    def test_new_env_var_wins_over_the_pre_split_one(self, monkeypatch):
+        monkeypatch.setenv("LONG_TAMP_VIDEO_OUTPUT_DIR", "/new/dir")
+        monkeypatch.setenv("AGIMUS_VIDEO_OUTPUT_DIR", "/legacy/dir")
+
+        assert default_video_output_dir() == "/new/dir"
 
 
 class TestVideoRecorderResolvesDefault:
     def test_none_output_dir_resolves_to_shared_default(self, monkeypatch):
-        monkeypatch.setenv("AGIMUS_VIDEO_OUTPUT_DIR", "/custom/video/dir")
+        monkeypatch.setenv("LONG_TAMP_VIDEO_OUTPUT_DIR", "/custom/video/dir")
 
         recorder = VideoRecorder(viewer=object(), output_dir=None)
 
         assert recorder.output_dir == "/custom/video/dir"
 
     def test_explicit_output_dir_is_preserved(self, monkeypatch):
-        monkeypatch.setenv("AGIMUS_VIDEO_OUTPUT_DIR", "/custom/video/dir")
+        monkeypatch.setenv("LONG_TAMP_VIDEO_OUTPUT_DIR", "/custom/video/dir")
 
         recorder = VideoRecorder(viewer=object(), output_dir="/explicit/dir")
 
         assert recorder.output_dir == "/explicit/dir"
 
     def test_default_output_dir_when_omitted(self, monkeypatch):
-        monkeypatch.setenv("AGIMUS_VIDEO_OUTPUT_DIR", "/custom/video/dir")
+        monkeypatch.setenv("LONG_TAMP_VIDEO_OUTPUT_DIR", "/custom/video/dir")
 
         recorder = VideoRecorder(viewer=object())
 
@@ -79,9 +93,7 @@ class TestNoHardcodedPersonalPathRemains:
         self._assert_output_dir_defaults_to_none(ManipulationTask.run)
 
     def test_grasp_sequence_planner_replay_sequence(self):
-        self._assert_output_dir_defaults_to_none(
-            GraspSequencePlanner.replay_sequence
-        )
+        self._assert_output_dir_defaults_to_none(GraspSequencePlanner.replay_sequence)
 
     def test_pyhpp_play_and_record_path(self):
         self._assert_output_dir_defaults_to_none(PyHPPBackend.play_and_record_path)
