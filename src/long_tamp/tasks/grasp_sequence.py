@@ -2958,6 +2958,8 @@ class GraspSequencePlanner:
         verbose: bool = True,
         also_reachable: Sequence[tuple[tuple[str, str], list[str]]] = (),
         verify_paths: bool = False,
+        path_check_timeout: float = 8.0,
+        path_check_iterations: int = 3000,
     ) -> list[list[float]] | None:
         """Search for a phase-N grasp target that leaves phase N+1 reachable.
 
@@ -3066,6 +3068,11 @@ class GraspSequencePlanner:
                 hint chain, and a protected phase whose approach the
                 candidate blocks fails every resume; both cost a block
                 replan. Costs one planning pass per probed edge.
+            path_check_timeout, path_check_iterations: Planner budget per
+                edge during those checks (restored afterwards). A check only
+                needs to find *a* path; at the full per-edge budget, every
+                rejected candidate cost ~25 s (live: 27 rejections, 780 s,
+                in one screw-assembly block).
 
         Returns:
             The full per-edge config **chain** the winning candidate was
@@ -3171,7 +3178,30 @@ class GraspSequencePlanner:
             chain: list[list[float]],
         ) -> bool:
             """Path-plan the grasp's edges through ``chain`` in the phase
-            graph currently built; False on the first edge with no path."""
+            graph currently built, on the short check budget; False on the
+            first edge with no path."""
+            configure = getattr(self.planner, "configure_transition_planner", None)
+            saved = (
+                getattr(self.planner, "_transition_time_out", None),
+                getattr(self.planner, "_transition_max_iterations", None),
+            )
+            if configure is not None:
+                configure(
+                    time_out=path_check_timeout, max_iterations=path_check_iterations
+                )
+            try:
+                return _paths_exist_unbudgeted(tracker, gripper, handle, q_from, chain)
+            finally:
+                if configure is not None and None not in saved:
+                    configure(time_out=saved[0], max_iterations=saved[1])
+
+        def _paths_exist_unbudgeted(
+            tracker: GraspStateTracker,
+            gripper: str,
+            handle: str,
+            q_from: list[float],
+            chain: list[list[float]],
+        ) -> bool:
             q = q_from
             for edge_name, q_next in zip(
                 tracker.get_grasp_edge_sequence(gripper, handle), chain

@@ -192,3 +192,28 @@ class TestVerifyPaths:
         assert chain == [[2.0], [2.0]]
         # candidate 2: its own 2 edges + N+1's 2 + LATER's 2
         assert paths.calls >= 6
+
+    def test_path_checks_run_on_a_short_budget_that_is_restored(self):
+        class _Budgeted(_PathPlanner):
+            _transition_time_out = 60.0
+            _transition_max_iterations = 10000
+
+            def __init__(self):
+                super().__init__()
+                self.budgets = []
+
+            def configure_transition_planner(self, time_out, max_iterations):
+                self.budgets.append((time_out, max_iterations))
+                self._transition_time_out = time_out
+                self._transition_max_iterations = max_iterations
+
+        paths = _Budgeted()
+        p = _planner(_ConfigGen(), paths)
+        _search(p, verify_paths=True)
+
+        assert paths.budgets[0] == (8.0, 3000)
+        assert paths.budgets[-1] == (60.0, 10000)
+        assert (paths._transition_time_out, paths._transition_max_iterations) == (
+            60.0,
+            10000,
+        )
