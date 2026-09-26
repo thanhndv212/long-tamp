@@ -1636,6 +1636,7 @@ class PyHPPBackend(BackendBase):
         random_shortcut_loops: Optional[int] = None,
         spline_zero_derivatives_at_state: Optional[bool] = None,
         path_optimizer_timeout: Optional[float] = None,
+        spline_optimizer: Optional[bool] = None,
     ) -> None:
         """Configure defaults for TransitionPlanner edge-scoped planning.
 
@@ -1656,6 +1657,11 @@ class PyHPPBackend(BackendBase):
             path_optimizer_timeout: Wall-clock cap in seconds per path
                 optimizer pass (default 30). Lower it where paths are short
                 and optimization rarely pays off.
+            spline_optimizer: False drops SplineGradientBased from every
+                edge's optimizer list (the shortcut optimizers stay). Its
+                timeout is only checked between iterations, and a single
+                inner QP solve (proxsuite) can run unbounded: a mission was
+                observed stuck 11+ minutes in one solve. Omitted: unchanged.
         """
         if inner_planner_type is not None:
             self._transition_inner_planner_type = inner_planner_type
@@ -1679,6 +1685,22 @@ class PyHPPBackend(BackendBase):
             )
         if path_optimizer_timeout is not None:
             self._path_optimizer_timeout = float(path_optimizer_timeout)
+        if spline_optimizer is False:
+            for attr in (
+                "_transit_edge_optimizers",
+                "_waypoint_pregrasp_optimizers",
+                "_waypoint_grasp_optimizers",
+                "_transition_default_optimizers",
+            ):
+                setattr(
+                    self,
+                    attr,
+                    [
+                        name
+                        for name in getattr(self, attr)
+                        if not name.startswith("SplineGradientBased")
+                    ],
+                )
 
         tp = self._transition_planner
         if tp is not None:
