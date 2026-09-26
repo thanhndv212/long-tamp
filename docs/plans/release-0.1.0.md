@@ -1,4 +1,4 @@
-# 0.1.0 release draft
+# 0.1.0 release
 
 `long-tamp` 0.1.0 is the first PyPI release. On supported Linux systems,
 `python -m pip install "long-tamp[hpp]"` installs the planning library and
@@ -29,6 +29,13 @@ Unreleased entries to a dated 0.1.0 section when the release is approved.
 - The two slow TWIN checks are not a release gate: they are sampling-based
   integration tests of an example scene, excluded from push/PR CI, and listed
   under Known issues in the changelog.
-- PyPI trusted publisher registered for `thanhndv212/long-tamp`, workflow
-  `release.yml`, environment `pypi` (maintainer review required, `v*` tags only).
-- Changelog dated; release commit tagged `v0.1.0` on `main`.
+- Published with the `pypi` environment's `PYPI_API_TOKEN` secret (maintainer
+  review required, `v*` tags only). No PyPI trusted publisher is registered yet:
+  the first attempt failed with `invalid-publisher`. `release.yml` falls back to
+  trusted publishing when the secret is removed, so registering one (owner
+  `thanhndv212`, repo `long-tamp`, workflow `release.yml`, environment `pypi`)
+  and deleting the secret is the follow-up.
+- The second attempt was rejected for an invalid `Topic` classifier; the
+  distribution CI job now validates classifiers.
+- Changelog dated; `v0.1.0` tagged on `main` at `d937a75` and published
+  2026-09-27.
