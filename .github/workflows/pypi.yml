@@ -92,7 +92,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: python -m pip install build twine
+      - run: python -m pip install build twine trove-classifiers
+      - name: Reject classifiers PyPI would refuse at upload
+        run: |
+          python - <<'PY'
+          import tomllib
+          from pathlib import Path
+          from trove_classifiers import classifiers
+          declared = tomllib.loads(Path("pyproject.toml").read_text())["project"]["classifiers"]
+          bad = [c for c in declared if c not in classifiers]
+          assert not bad, f"Invalid classifiers: {bad}"
+          PY
       - run: python -m build
       - run: python -m twine check dist/*
       - name: Smoke-test the wheel outside the checkout
