@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""Replay a recorded screw-assembly mission in viser.
+
+    python3 task_screw_assembly.py --seed 10 --trajectory traj.json   # record
+    python3 replay.py traj.json --port 8081 --loop                     # replay
+
+Loads the scene only (no planning), serves viser on 0.0.0.0:PORT and plays
+the recorded frames at their recorded timing (``--speed`` scales it). HPP's
+paths keep the Robotiq fingers open (a grasp is a rigid TCP constraint), so
+the fingers are closed and opened here as a visual overlay: closed from each
+arm grasp until that arm's release.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from pathlib import Path
+
+import numpy as np
+
+# Joint name -> sign of its closing motion (the 2F-85's mimic multipliers).
+FINGER_MIMIC = {
+    "finger_joint": 1,
+    "left_inner_knuckle_joint": 1,
+    "left_inner_finger_joint": -1,
+    "right_outer_knuckle_joint": 1,
+    "right_inner_knuckle_joint": 1,
+    "right_inner_finger_joint": -1,
+}
+CLOSED = 0.6
+ARM_GRIPPERS = {"ur10_left/gripper": "ur10_left", "ur10_right/gripper": "ur10_right"}
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("trajectory", type=Path)
+    ap.add_argument("--port", type=int, default=8081)
+    ap.add_argument("--speed", type=float, default=1.0)
+    ap.add_argument("--loop", action="store_true", help="replay forever")
+    args = ap.parse_args()
+
+    data = json.loads(args.trajectory.read_text())
+    sys.argv = [sys.argv[0]]
+    import task_screw_assembly as T
+    from pyhpp_viser import Viewer
+
+    task, _ = T.setup()
+    viewer = Viewer(task.planner.device, task.planner.problem)
+    viewer.start(host="0.0.0.0", port=args.port, open=False)
+    server = viewer.viewer
+
+    @server.on_client_connect
+    def _aim(client):
+        client.camera.position = (0.75, -1.55, 1.45)
+        client.camera.look_at = (0.78, 0.0, 0.45)
+        client.camera.up_direction = (0.0, 0.0, 1.0)
+
+    rank = task.robot.rankInConfiguration
+    finger_ranks = {
+        arm: [(rank[f"{arm}/{j}"], sign) for j, sign in FINGER_MIMIC.items()]
+        for arm in ARM_GRIPPERS.values()
+    }
+
+    def overlay(q, closed):
+        for arm, amount in closed.items():
+            for r, sign in finger_ranks[arm]:
+                q[r] = sign * amount
+        return q
+
+    def animate_fingers(q, closed, arm, start, end, steps=12):
+        for i in range(steps + 1):
+            closed[arm] = start + (end - start) * i / steps
+            viewer(overlay(q.copy(), closed))
+            time.sleep(0.02)
+
+    frame_dt = data.get("dt", 0.05) / max(args.speed, 1e-3)
+    segments = data["segments"]
+    n_frames = sum(len(s["configs"]) for s in segments)
+    print(
+        f"replaying {n_frames} frames, {len(segments)} segments "
+        f"(~{n_frames * frame_dt:.0f} s) at http://0.0.0.0:{args.port}",
+        flush=True,
+    )
+    time.sleep(3.0)  # let a browser connect before the first frame
+    while True:
+        closed = {arm: 0.0 for arm in ARM_GRIPPERS.values()}
+        block = None
+        for seg in segments:
+            if seg["block"] != block:
+                block = seg["block"]
+                print(f"  {block}", flush=True)
+            arm = ARM_GRIPPERS.get(seg["gripper"])
+            first = np.asarray(seg["configs"][0], dtype=float)
+            if arm and seg["handle"] is None and closed[arm] > 0:
+                animate_fingers(first, closed, arm, CLOSED, 0.0)
+            for q in seg["configs"]:
+                viewer(overlay(np.asarray(q, dtype=float), closed))
+                time.sleep(frame_dt)
+            if arm and seg["handle"] is not None:
+                last = np.asarray(seg["configs"][-1], dtype=float)
+                animate_fingers(last, closed, arm, 0.0, CLOSED)
+        if not args.loop:
+            break
+        time.sleep(2.0)
+    print("replay done; viewer stays up (Ctrl+C to stop)", flush=True)
+    while True:
+        time.sleep(1.0)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

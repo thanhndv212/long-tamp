@@ -172,9 +172,8 @@ def seed_everything(seed: int) -> None:
     ctypes.CDLL(None).srand(seed)
     pinocchio.seed(seed)
     random.seed(seed)
-    np.random.seed(
-        seed
-    )  # noqa: NPY002 -- the legacy global RNG is what libraries draw from
+    # The legacy global RNG is what library code draws from, so seed it.
+    np.random.seed(seed)  # noqa: NPY002
 
 
 def setup(backend: str = "pyhpp") -> tuple[ScrewAssemblyTask, GraspSequencePlanner]:
@@ -202,6 +201,40 @@ def setup(backend: str = "pyhpp") -> tuple[ScrewAssemblyTask, GraspSequencePlann
         run_logger=getattr(task, "run_logger", None),
     )
     return task, planner
+
+
+def sample_phases(
+    task: ScrewAssemblyTask, phases: list[dict[str, Any]], label: str, dt: float = 0.05
+) -> list[dict[str, Any]]:
+    """Sample the completed phases' paths every ``dt`` seconds of path time
+    (paths are time-parameterized), for replay.py."""
+    segments = []
+    for phase in phases:
+        if not phase.get("complete", True) or phase.get("skipped"):
+            continue
+        configs: list[list[float]] = []
+        for path in phase.get("paths", []):
+            if path is None:
+                continue
+            if isinstance(path, int):
+                path = task.planner.get_path(path)
+            length = path.length()
+            t0 = path.timeRange().first if hasattr(path, "timeRange") else 0.0
+            n = max(2, int(length / dt) + 1)
+            for i in range(n):
+                q, ok = path.eval(t0 + length * i / (n - 1))
+                if ok:
+                    configs.append([round(float(v), 5) for v in q])
+        if configs:
+            segments.append(
+                {
+                    "block": label,
+                    "gripper": phase.get("gripper"),
+                    "handle": phase.get("handle"),
+                    "configs": configs,
+                }
+            )
+    return segments
 
 
 def home_target(task: ScrewAssemblyTask, q: list[float], arm: str, carried: str | None):
@@ -279,6 +312,7 @@ def run_home_move(
                 "resumes": attempt - 1,
                 "replans": 0,
                 "message": "moved",
+                "phase_results": r.get("phase_results", []),
             }
         last = r.get("message", "")
     return {
@@ -296,7 +330,10 @@ def run_mission(
     n_parts: int,
     max_replans: int = 10,
     verbose: bool = True,
+    trajectory: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    """Run the mission block by block. If ``trajectory`` is a list, each
+    successful block's motion is sampled into it (see sample_phases)."""
     q = list(task.q_init)
     records = []
     t_mission = time.time()
@@ -322,6 +359,8 @@ def run_mission(
             )
             if not r["success"]:
                 break
+            if trajectory is not None:
+                trajectory += sample_phases(task, r["phase_results"], block["label"])
             q = r["final_config"]
             continue
         hints_factory = None
@@ -371,6 +410,8 @@ def run_mission(
         )
         if not r["success"]:
             break
+        if trajectory is not None:
+            trajectory += sample_phases(task, planner.phase_results, block["label"])
         q = r["final_config"]
     return {
         "success": all(b["success"] for b in records)
@@ -386,6 +427,11 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--summary", type=Path, help="write a JSON run summary here")
     ap.add_argument("--max-replans", type=int, default=10)
+    ap.add_argument(
+        "--trajectory",
+        type=Path,
+        help="record the planned motion here, for replay.py",
+    )
     ap.add_argument(
         "--check",
         action="store_true",
@@ -404,7 +450,25 @@ def main() -> int:
     if args.check or not ok:
         return 0 if ok else 1
 
-    result = run_mission(task, planner, n_parts, max_replans=args.max_replans)
+    trajectory: list[dict[str, Any]] | None = [] if args.trajectory else None
+    result = run_mission(
+        task, planner, n_parts, max_replans=args.max_replans, trajectory=trajectory
+    )
+    if args.trajectory:
+        args.trajectory.write_text(
+            json.dumps(
+                {
+                    "seed": args.seed,
+                    "parts": n_parts,
+                    "dt": 0.05,
+                    "segments": trajectory,
+                }
+            )
+        )
+        print(
+            f"trajectory: {sum(len(s['configs']) for s in trajectory)} frames "
+            f"in {len(trajectory)} segments -> {args.trajectory}"
+        )
     result["seed"] = args.seed
     result["parts"] = n_parts
     print(
