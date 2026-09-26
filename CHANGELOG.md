@@ -27,6 +27,14 @@ entries accumulate under **Unreleased** until the first tagged release.
   edges and each protected phase's edges, on a short budget (`path_check_timeout`,
   `path_check_iterations`), rejecting candidates the arms can't actually move to or that
   block a later approach.
+- `long_tamp.tasks.mission_checkpoint.MissionCheckpoint`: one folder per mission run that
+  is both its run log (`mission.json`: metadata and one record per block) and its resume
+  point (`checkpoint.json`: next block, configuration, held grasps), rewritten atomically
+  after every block. The screw-assembly runner uses it for `--run-dir` / `--resume`, and
+  records the motion into the same folder for the new `replay.py` viser player.
+- `configure_transition_planner(spline_optimizer=False)` drops `SplineGradientBased` from
+  every edge's optimizers: its inner QP solve ignores the optimizer timeout (a run hung
+  11+ minutes in one solve).
 - `YamlTaskLoader` resolves relative `paths:` entries against the YAML file's folder, so
   one config works on the host and in the container.
 - `configure_transition_planner(path_optimizer_timeout=...)` (default 30 s).
@@ -99,6 +107,9 @@ entries accumulate under **Unreleased** until the first tagged release.
   grasp constraint by millimetres and was rejected by the loop edge.
 
 ### Changed
+
+- Per-phase planner dumps read `LONG_TAMP_CHECKPOINT_DIR`, and the video default
+  `LONG_TAMP_VIDEO_OUTPUT_DIR`; the pre-split `AGIMUS_*` names are still honored.
 
 - Target generation seeds IK with an unvalidated random draw
   (`random_config(validate=False)`). Rejection-sampling a collision-free seed, whose object
