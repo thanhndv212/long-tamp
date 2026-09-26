@@ -18,7 +18,7 @@ long_tamp needs
 |---|---|---|
 | 1 | Remove the manual setup steps | **Done** (below) |
 | 2 | CI on GitHub Actions against the PyPI wheels | Implemented; first hosted push run passed on `main` |
-| 3 | Publish `long-tamp` 0.1.0 to PyPI | Release workflow and protected `pypi` environment prepared; fix TWIN checks, configure publisher, and tag |
+| 3 | Publish `long-tamp` 0.1.0 to PyPI | Tagged `v0.1.0` (2026-09-27); publishes after maintainer approval of the `pypi` environment |
 | 4 | SessionStart hook for Claude Code cloud sessions | Implemented and locally exercised |
 | 5 | Check in the source-built container and refresh the batch results | Done: source mission passed; ten-seed wheel batch refreshed below |
 

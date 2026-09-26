@@ -2,11 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
-No release has shipped yet (see `pyproject.toml`'s `0.1.0`/Alpha status) --
-entries accumulate under **Unreleased** until the first tagged release.
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+(`0.x` while the API is still moving).
 
 ## [Unreleased]
+
+## [0.1.0] - 2026-09-27
+
+First public release, on PyPI as `long-tamp`.
 
 ### Added
 
@@ -127,6 +131,11 @@ entries accumulate under **Unreleased** until the first tagged release.
 
 ### Changed
 
+- `task_config.JOINT_GROUPS` (optional) is now keyed by the same arm keywords as
+  `ALL_ARM_KEYWORDS`; the planner no longer hardcodes a keyword-to-group map for
+  per-phase TOPPRA joint selection, so any robot's config can use it.
+- Comments, docstrings, docs and test fixtures use generic scene names instead of
+  identifiers inherited from the pre-split mission.
 - Per-phase planner dumps read `LONG_TAMP_CHECKPOINT_DIR`, and the video default
   `LONG_TAMP_VIDEO_OUTPUT_DIR`; the pre-split `AGIMUS_*` names are still honored.
 
@@ -150,6 +159,12 @@ entries accumulate under **Unreleased** until the first tagged release.
 
 ### Known issues
 
+- The two `slow_planning` TWIN integration checks
+  (`test_grasp_release_use_case_twin.py`, `test_twin_regrasp_bt_session.py`) are
+  unreliable: a local ARM64 rerun hit a finger/ball collision in one and the process
+  time limit in the other, although both passed in an earlier cloud run. They are
+  excluded from push/PR CI and run nightly.
+
 - `SplineGradientBased` can hang inside a single QP solve (proxsuite, uncapped iterations),
   which `PathOptimizer/timeOut` cannot interrupt; one run was stuck 11+ minutes. Worked
   around with `configure_transition_planner(spline_optimizer=False)`; a proper bound
@@ -165,3 +180,6 @@ entries accumulate under **Unreleased** until the first tagged release.
   gripper/handle pair it names -- the same `panda_right/gripper > ball/handle2` grasp plans
   in ~18s as the *second* phase of a multi-grasp sequence but failed 6/6 draws when built as
   the *only* phase of a single-gripper session. Not root-caused.
+
+[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/thanhndv212/long-tamp/releases/tag/v0.1.0

@@ -114,7 +114,7 @@ tracked way to close that gap, not porting or referencing anything from `agimus_
 
 ## Release process (PyPI)
 
-Not yet done for `long_tamp` — no release has shipped. When cutting one:
+First release: `0.1.0` (2026-09-27, see `docs/plans/release-0.1.0.md`). When cutting one:
 
 1. **Version**: `pyproject.toml`'s `[project] version` follows semver. `0.x` while the API
    is still moving (per the `Development Status :: 3 - Alpha` classifier already in
