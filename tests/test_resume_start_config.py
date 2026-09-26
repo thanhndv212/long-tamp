@@ -4,7 +4,7 @@ A failed phase attempt is a *search*, not executed motion. When the first
 phase of a plan_sequence() call fails part-way, resume_sequence() used to
 restart it from ``last_q_start`` -- the end of the last edge that happened
 to succeed inside the abandoned attempt. Every retry therefore flew the arm
-to wherever the previous attempt gave up: on the screwdriving mission's RS2
+to wherever the previous attempt gave up: on the screwdriving mission's part2
 part, six abandoned pregrasps, 66.4 s of real motion (16% of the run) for
 one grasp that takes 6.8 s.
 

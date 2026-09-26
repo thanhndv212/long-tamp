@@ -83,9 +83,8 @@ complete run. What's been fixed and verified real, in order:
    cause: GraspSequencePlanner.plan_sequence() has no automatic lookahead,
    so phase 0's randomly-drawn grasp orientation can (and did) leave
    phase 1 geometrically unreachable -- exactly the failure class
-   find_feasible_phase_target() exists to fix (previously only wired into
-   SpaceLab's run_block_nonstop(), never into this script or
-   run_sequence()). Fixed generally: grasp() now takes an optional
+   find_feasible_phase_target() exists to fix (previously never wired into
+   this script or run_sequence()). Fixed generally: grasp() now takes an optional
    q_hint, and run_sequence() (sequence_orchestrator.py) takes
    per_phase_frozen_arms and lookahead_pairs, threading a
    find_feasible_phase_target() candidate through as that hint. Verified

@@ -84,7 +84,7 @@ def freeze_joints_by_substrings(
 ) -> List[float]:
     """Keep joint values constant for joints whose names match substrings.
 
-    Intended use: tasks that do not use some robot groups (e.g. VISPA arms)
+    Intended use: tasks that do not use some robot groups (e.g. an idle second arm)
     can keep them fixed during projection/shooting to avoid drift.
 
     Note: pinocchio model joint iteration would be needed to look up joint
@@ -334,7 +334,7 @@ class ConfigGenerator:
                     # target is genuinely infeasible: max_attempts (1000) is
                     # never reached because 30s expires first (~800
                     # attempts), so the post-loop diagnostics below never
-                    # ran. Observed live on RS3's FG release -- 25 minutes,
+                    # ran. Observed live on part3's FG release -- 25 minutes,
                     # ~30k failed solves, not one solver residual logged.
                     # The residual is what distinguishes "unreachable"
                     # (small, wandering) from "contradictory constraints"
@@ -427,8 +427,8 @@ class ConfigGenerator:
         q_from_arr = np.array(q_from) if not isinstance(q_from, np.ndarray) else q_from
 
         # Keep all object freeflyer DOF from q_from in q_rand.
-        # Objects not constrained by this edge (e.g. RS1 during a
-        # Phase 1 frame_gripper-only edge) have no constraint and
+        # Objects not constrained by this edge (e.g. part1 during a
+        # Phase 1 tool_holder-only edge) have no constraint and
         # their DOF pass through q_rand unchanged.  If we use a
         # fully random q_rand, those objects end up at random
         # positions in the generated config, corrupting q_init for

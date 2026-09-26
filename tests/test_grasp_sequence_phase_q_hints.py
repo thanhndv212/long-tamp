@@ -3,8 +3,8 @@ Unit tests for the ``phase_q_hints`` warm-start plumbing through
 ``_plan_phase_edges()``.
 
 Added alongside ``find_feasible_phase_target()`` (see grasp_sequence.py),
-built to fix RS6's CON0 grasp being provably unreachable: Phase 2's WB
-grasp is a randomized target-generation call whose result pins RS6's final
+built to fix part6's CON0 grasp being provably unreachable: Phase 2's WB
+grasp is a randomized target-generation call whose result pins part6's final
 orientation, and this time the random draw happened to leave CON0 facing
 away from the screwdriver. ``find_feasible_phase_target()`` searches for a
 Phase-2 candidate that also leaves Phase 3 reachable, then this plumbing
@@ -15,7 +15,7 @@ instead of drawing a fresh (and possibly bad) random target.
 The hint is the candidate's whole per-edge config chain, one entry per
 edge of the phase's edge sequence. A single config (last edge only) is
 still accepted but does not actually pin the phase's committed config --
-see ``_edge_hints_for_phase()`` for why, and the RS5/2026-08-13 case where
+see ``_edge_hints_for_phase()`` for why, and the part5/2026-08-13 case where
 that shape let the lookahead report success and CON0 fail anyway.
 
 These tests only cover the plumbing: which of ``_plan_phase_edges()``'s
@@ -23,7 +23,7 @@ These tests only cover the plumbing: which of ``_plan_phase_edges()``'s
 collision-retry redraw breaks the chain. They do not exercise
 ``find_feasible_phase_target()`` itself
 (needs a real HPP graph/solver -- see test_lookahead_phase_target.py) or
-prove the hint actually fixes RS6 (see that same integration test).
+prove the hint actually fixes part6 (see that same integration test).
 
 Importing long_tamp requires pyhpp even though the method under test
 has no HPP dependency itself, so these tests must run inside the

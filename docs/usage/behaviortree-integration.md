@@ -273,7 +273,7 @@ bimanual scene, both grasps completed. Nothing below is broken — this is the g
   untouched (still exercises no release) — see the new side findings below
   for why this needed its own scene rather than extending that one.
 - **No lookahead in the capability-driven path.** `find_feasible_phase_target()` (the fix
-  for "phase N's random commitment silently dooms phase N+1," the RS6/CON0 case documented
+  for "phase N's random commitment silently dooms phase N+1," the part6/CON0 case documented
   in that method's own docstring) only exists inside `plan_sequence()`'s internals. A BT or
   symbolic-planner orchestrator built on `grasp()`/`release()` today has no equivalent
   protection — harmless for TWIN's independent bimanual grasps, but would resurface on any

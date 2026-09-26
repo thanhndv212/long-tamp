@@ -29,12 +29,12 @@ GRIPPERS = [
     "arm1/g_tool",
     "arm2/g_tool",
     "arm3/g_wb1",
-    "frame_gripper/g_FG_part",
-    "screw_driver/g_SD_part",
+    "tool_holder/g_holder_part",
+    "driver/g_driver",
 ]
 HANDLES = [
-    "frame_gripper/h_FG_tool",
-    "screw_driver/h_SD_tool",
+    "tool_holder/h_holder_tool",
+    "driver/h_driver_tool",
     "part1/h_wb",
     "part1/h_fg",
     "part1/h_con0",
@@ -42,8 +42,8 @@ HANDLES = [
 
 # The two tool grasps bootstrap establishes before any RS block runs.
 TOOL_GRASPS = {
-    "arm1/g_tool": "frame_gripper/h_FG_tool",
-    "arm2/g_tool": "screw_driver/h_SD_tool",
+    "arm1/g_tool": "tool_holder/h_holder_tool",
+    "arm2/g_tool": "driver/h_driver_tool",
 }
 
 
@@ -75,7 +75,7 @@ def _held(planner):
 def test_grasps_from_earlier_blocks_survive_resume():
     """The bug: bootstrap's tool grasps must not be lost on resume.
 
-    Block state entering RS1's CON0 phase: both tools held (from bootstrap,
+    Block state entering part1's CON0 phase: both tools held (from bootstrap,
     a previous plan_sequence() call) plus this block's two completed phases.
     A resume here must reproduce all four grasps.
     """
@@ -84,7 +84,7 @@ def test_grasps_from_earlier_blocks_survive_resume():
         phase_results=[
             {
                 "phase": 1,
-                "gripper": "frame_gripper/g_FG_part",
+                "gripper": "tool_holder/g_holder_part",
                 "handle": "part1/h_fg",
                 "complete": True,
             },
@@ -97,7 +97,7 @@ def test_grasps_from_earlier_blocks_survive_resume():
             # The CON0 phase that failed and triggered the resume.
             {
                 "phase": 3,
-                "gripper": "screw_driver/g_SD_part",
+                "gripper": "driver/g_driver",
                 "handle": "part1/h_con0",
                 "complete": False,
             },
@@ -108,7 +108,7 @@ def test_grasps_from_earlier_blocks_survive_resume():
 
     assert _held(planner) == {
         **TOOL_GRASPS,
-        "frame_gripper/g_FG_part": "part1/h_fg",
+        "tool_holder/g_holder_part": "part1/h_fg",
         "arm3/g_wb1": "part1/h_wb",
     }
 
@@ -120,7 +120,7 @@ def test_incomplete_phase_is_not_replayed():
         phase_results=[
             {
                 "phase": 1,
-                "gripper": "screw_driver/g_SD_part",
+                "gripper": "driver/g_driver",
                 "handle": "part1/h_con0",
                 "complete": False,
             }
@@ -141,12 +141,12 @@ def test_release_in_this_block_overrides_seeded_grasp():
     planner = _make_planner(
         initial_grasps={
             **TOOL_GRASPS,
-            "frame_gripper/g_FG_part": "part1/h_fg",
+            "tool_holder/g_holder_part": "part1/h_fg",
         },
         phase_results=[
             {
                 "phase": 1,
-                "gripper": "frame_gripper/g_FG_part",
+                "gripper": "tool_holder/g_holder_part",
                 "handle": None,
                 "complete": True,
             }
@@ -161,11 +161,11 @@ def test_release_in_this_block_overrides_seeded_grasp():
 def test_auto_release_switch_replays_as_final_handle():
     """A gripper that switched objects ends on the new handle, not the old."""
     planner = _make_planner(
-        initial_grasps={"screw_driver/g_SD_part": "part1/h_fg"},
+        initial_grasps={"driver/g_driver": "part1/h_fg"},
         phase_results=[
             {
                 "phase": 1,
-                "gripper": "screw_driver/g_SD_part",
+                "gripper": "driver/g_driver",
                 "handle": "part1/h_con0",
                 "complete": True,
             }
@@ -174,7 +174,7 @@ def test_auto_release_switch_replays_as_final_handle():
 
     planner._restore_grasp_tracker_for_resume()
 
-    assert _held(planner) == {"screw_driver/g_SD_part": "part1/h_con0"}
+    assert _held(planner) == {"driver/g_driver": "part1/h_con0"}
 
 
 def test_planner_without_prior_plan_sequence_still_starts_free():

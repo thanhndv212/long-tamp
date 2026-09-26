@@ -439,7 +439,7 @@ class GraphBuilder:
 
             # The filter alone only rejects states; the factory still walks
             # the whole gripper/handle combinatorial space to offer them.
-            # That walk is what killed RS4 A (10 grippers: >10 min, >13 GB
+            # That walk is what killed part4 A (10 grippers: >10 min, >13 GB
             # and unfinished).  Give the factory the two target states so it
             # can skip subtrees neither can be reached from.
             set_targets = getattr(self.factory, "set_target_grasps", None)
@@ -956,8 +956,8 @@ class GraphBuilder:
         # Reset free (unheld) objects to their initial scene positions in
         # q_init.  Phase N's config generation leaves unconstrained objects
         # at random positions.  The factory's LockedJoint foliation locks
-        # each object at robot.currentConfiguration() — so if RS1 ended up
-        # at a random position from Phase 1, Phase 2 would lock RS1 there
+        # each object at robot.currentConfiguration() — so if part1 ended up
+        # at a random position from Phase 1, Phase 2 would lock part1 there
         # (unreachable for the arm).  By restoring free objects to their
         # original positions we ensure the LockedJoint locks them where they
         # actually are in the scene.
@@ -1020,7 +1020,7 @@ class GraphBuilder:
         ``self.factory`` frees nothing, and ~235 MB per build stays
         unreachable until a generational collection happens to run.  The
         lookahead does two builds per candidate and 100 candidates per round,
-        so gen-2 collections cannot keep up -- measured live as RS4 A growing
+        so gen-2 collections cannot keep up -- measured live as part4 A growing
         14.2 GB before the OOM kill.  Cutting the back-reference drops the
         graph by plain refcounting instead; verified with the collector
         disabled entirely (235 MB/build -> 16 MB/build).

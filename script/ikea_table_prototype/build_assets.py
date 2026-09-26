@@ -299,8 +299,8 @@ def generate_hole_peg_meshes() -> None:
 # Assembly (leg-into-table) is modeled as a <gripper>+<handle> docking pair
 # (legN.srdf's "peg" gripper / table.srdf's "socketN_hole" handle), NOT a
 # placement <contact> pair — REVERSED from an earlier version of this
-# comment, which reasoned h_RS1_CON0..3-style paired handles (see
-# agimus_spacelab's screw_driver.srdf -> RSx.srdf docking) were only for a
+# comment, which reasoned paired docking handles (a tool's gripper
+# docking into a part's handle) were only for a
 # dedicated tool docking at a fastener point and used a plain placement
 # <contact> here instead (the same mechanism the ball uses to rest on the
 # ground). That left WHICH socket a released leg lands in emergent/
@@ -395,13 +395,13 @@ _SRDF_LEG_TEMPLATE = """<?xml version="1.0"?>
        docking pair, not a placement <contact>, so the mate is deterministic
        (this leg's peg is only a valid_pairs match for its own socket) rather
        than emergent across all 4 sockets. Same mechanism
-       screw_driver.srdf's "g_SD_part" gripper uses to dock into RSx's
-       h_RSx_CONn handles (ros2_ws_agimusxads/.../screw_driver.srdf) — a
+       driver.srdf's "g_driver" gripper uses to dock into partN's
+       h_conn handles (ros2_ws_agimusxads/.../driver.srdf) — a
        gripper role declared on a carried object, not a robot link, is
        already a proven pattern in this codebase.
        No approaching_direction here: <gripper> doesn't take one (only
        <handle> computes a pregrasp offset) — confirmed against
-       screw_driver.srdf's own g_SD_part tag. Bare name "peg", like this
+       driver.srdf's own g_driver tag. Bare name "peg", like this
        file's own "handle" above — see that tag's own comment for why (the
        object-load-name auto-prefix). -->
   <gripper name="peg" clearance="0.01">

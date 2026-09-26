@@ -140,7 +140,7 @@ planner = GraspSequencePlanner(
     backend="pyhpp", run_logger=logger,
 )
 result = planner.plan_sequence(
-    grasp_sequence=[("ur10/gripper", "RS1/handle"), ("ur10/gripper", None), ...],  # (gripper, None) = explicit release
+    grasp_sequence=[("ur10/gripper", "part1/handle"), ("ur10/gripper", None), ...],  # (gripper, None) = explicit release
     q_init=q0,
     frozen_arms_mode="auto",       # or "manual" + per_phase_frozen_arms
     timeout_per_edge=60.0,
@@ -210,8 +210,8 @@ process, after the original run exited (crashed, was killed, or finished normall
 from long_tamp.planning.path_recorder import PathRecorder
 
 recorder = PathRecorder(output_dir, planner=backend, dt=0.05)
-recorder.begin_step(step_idx, "grasp RS1")
-recorder.record_path(path_or_stored_id, kind="grasp", edge_name="ur10>RS1")
+recorder.begin_step(step_idx, "grasp part1")
+recorder.record_path(path_or_stored_id, kind="grasp", edge_name="ur10>part1")
 recorder.record_phase_results(result["phase_results"])   # call after every plan_sequence()/resume_sequence()
 recorder.close()
 ```

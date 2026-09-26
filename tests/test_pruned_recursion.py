@@ -3,7 +3,7 @@
 
 `GraphFactoryAbstract._recurse` walks every distinct partial gripper-to-handle
 assignment; `graspIsAllowed` only decides whether a *state* is created, so the
-walk itself is the full combinatorial space.  Live on RS4 A that was a single
+walk itself is the full combinatorial space.  Live on part4 A that was a single
 `build_phase_graph` call at 13 GB and climbing after ten minutes -- 10
 grippers, for a graph with 3 states.
 

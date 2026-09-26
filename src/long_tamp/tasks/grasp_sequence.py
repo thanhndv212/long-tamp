@@ -251,7 +251,7 @@ class GraspSequencePlanner:
 
         # Cache q_pregrasp from each grasping phase: gripper -> q_pregrasp.
         # Used as warm-start seed when releasing that gripper later.
-        # Large-clearance handles (e.g. h_RS1_FG: 0.25 m) cause the naive
+        # Large-clearance handles (e.g. h_fg: 0.25 m) cause the naive
         # q_grasped seed to fail (FG freeflyer stuck at contact position).
         self._last_pregrasp_q: dict = {}
 
@@ -346,14 +346,14 @@ class GraspSequencePlanner:
         else:
             # --- Fallback: direct release edge (grasped → free, no waypoint) ---
             #
-            # The _21 edge constrains g_FG_part to move ONLY along the approach
+            # The _21 edge constrains g_holder_part to move ONLY along the approach
             # axis (1-DOF foliation).  When the approach axis is geometrically
-            # blocked by assembly structure (e.g. NYX), no path exists within
+            # blocked by assembly structure (e.g. a neighbouring part), no path exists within
             # the 1-DOF manifold regardless of RRT iterations.
             #
             # The direct LevelSetEdge (name = edge_21 without "_21" suffix) has
-            # a looser path constraint: only vispa2's grasp fold is maintained.
-            # g_FG_part is free to escape in any direction — giving the RRT full
+            # a looser path constraint: only arm2_base's grasp fold is maintained.
+            # g_holder_part is free to escape in any direction — giving the RRT full
             # ur10 DOFs to find a collision-free path around the structure.
             if verbose:
                 logger.warning(
@@ -371,7 +371,7 @@ class GraspSequencePlanner:
                     config_label=f"q_autorelease_{gripper}_free_direct",
                     verbose=verbose,
                     gen_fail_noun="a free config",
-                    q_hint=None,  # random arm seeds — avoids NYX-blocked direction
+                    q_hint=None,  # random arm seeds — avoids structure-blocked direction
                 )
             )
             if path_direct is None:
@@ -556,15 +556,15 @@ class GraspSequencePlanner:
 
         SEED STRATEGY: q_start (the held config) is used as the warm-start hint
         for the initial generation. The naive seed (q_grasped = contact state)
-        fails for large-clearance handles (e.g. h_RS1_FG has clearance=0.25 m,
-        giving 26 cm pregrasp offset): the IK copies frame_gripper/root_joint
+        fails for large-clearance handles (e.g. h_fg has clearance=0.25 m,
+        giving 26 cm pregrasp offset): the IK copies tool_holder/root_joint
         from q_grasped, pinning FG at the contact position, and the
         g_ur10_tool-grasps-FG fold keeps it pinned there, making the 26 cm
         pregrasp unreachable via Newton-Raphson. Using q_start as the hint
-        keeps RS1 at its current (assembly) position. Do NOT use a cached
-        Phase-2 pregrasp here: it would drag RS1 from the assembly position
+        keeps part1 at its current (assembly) position. Do NOT use a cached
+        Phase-2 pregrasp here: it would drag part1 from the assembly position
         back to the ground-level initial pose, producing a long-range path that
-        collides with ground_demo/link_NYX_0.
+        collides with a fixed scene fixture.
 
         After the initial generation, edge_21 planning is retried up to
         _MAX_COLLISION_RETRIES times, regenerating a fresh (unhinted,
@@ -995,13 +995,13 @@ class GraspSequencePlanner:
                   "manual" (use manual_arms), "none" (no locked joints)
             manual_arms: List of arm keywords to freeze (for manual mode)
             verbose: Print progress messages
-            handle: Target handle string (e.g. ``"RS1/h_RS1_WB"``).  When
+            handle: Target handle string (e.g. ``"part1/h_wb"``).  When
                 provided together with ``self.grasp_tracker``, the
                 held-object chain starting at the target's owning object
                 is walked: any arm that currently holds the target (directly
                 or transitively) is kept unfrozen.  This is required when
                 the target object sits inside another held object (e.g.
-                RS1 is inside ``frame_gripper`` held by UR10) — otherwise
+                part1 is inside ``tool_holder`` held by UR10) — otherwise
                 the pregrasp IK cannot reach the target.
 
         Returns:
@@ -1066,7 +1066,7 @@ class GraspSequencePlanner:
                             target_obj,
                         )
                 # Walk up: the holder gripper itself is mounted on some
-                # parent object (e.g. 'g_FG_part' → 'frame_gripper',
+                # parent object (e.g. 'g_holder_part' → 'tool_holder',
                 # 'g_arm_tool' → the robot itself → end of chain).
                 target_obj = holder_gripper.split("/")[0]
 
@@ -1085,7 +1085,7 @@ class GraspSequencePlanner:
         """Return the arm keywords that move ``gripper_name``.
 
         A gripper mounted on a free-flying tool (e.g.
-        ``frame_gripper/g_FG_part``) belongs to whichever arm currently holds
+        ``tool_holder/g_holder_part``) belongs to whichever arm currently holds
         that tool, so the live grasp state is consulted first: if another
         gripper holds a handle on the gripper's owning object, the carrier's
         arms are returned (recursively).  Otherwise the static map is used;
@@ -1198,29 +1198,29 @@ class GraspSequencePlanner:
     ) -> list[str]:
         """Which arms to freeze while ``gripper`` releases ``released_handle``.
 
-        Two rules, both learned the hard way on RS3's FG release (2026-08-14,
+        Two rules, both learned the hard way on part3's FG release (2026-08-14,
         ~30k consecutive solver failures, 0 ever reaching collision checking):
 
-        1. NEVER freeze an arm that holds the object being released.  vispa2
-           holds ``RS3/h_RS3_WB`` while frame_gripper releases
-           ``RS3/h_RS3_FG``; freezing vispa2 pins the workbench carrying RS3,
+        1. NEVER freeze an arm that holds the object being released.  arm2_base
+           holds ``part3/h_wb`` while tool_holder releases
+           ``part3/h_fg``; freezing arm2_base pins the workbench carrying part3,
            so the ~0.25 m FG retreat has to come entirely from UR10 and no
            solution exists.  Measured from the failing checkpoint:
-           0/200 target draws converge with vispa2 frozen, 107/200 without
+           0/200 target draws converge with arm2_base frozen, 107/200 without
            (and the warm start then converges on the first attempt).
            ``compute_phase_locked_joints`` already implements this via its
            ``handle=`` chain walk -- ``_plan_auto_release_if_needed`` passed
            it, ``_plan_release_entry_phase`` did not, which is the whole bug.
         2. Honour an explicit per-phase override in "manual" mode.  Callers
            escalate by dropping an arm from ``per_phase_frozen_arms`` after
-           repeated failures (see run_block_nonstop._maybe_loosen); both
+           repeated failures (see the mission runner's arm-loosening escalation); both
            release paths previously recomputed the set from scratch and
            ignored the override, so those escalations silently did nothing.
         """
         # The chain walk's effect, isolated: arms the walk drops precisely
         # because they carry the released object.  Derived as a diff rather
-        # than re-implemented so the transitive cases (RS3 inside
-        # frame_gripper inside UR10) stay in one tested place.
+        # than re-implemented so the transitive cases (part3 inside
+        # tool_holder inside UR10) stay in one tested place.
         holders = set(
             self.compute_phase_locked_joints(gripper, "auto", verbose=False)
         ) - set(
@@ -1238,8 +1238,8 @@ class GraspSequencePlanner:
 
         # Rule 1 outranks the caller: a manual list naming an arm that holds
         # the released object is asking for an unsatisfiable pregrasp, so
-        # drop it rather than honouring it.  This is what block B's
-        # {0: ["vispa_", "vispa2"]} does during RS3's FG release.
+        # drop it rather than honouring it.  This is what one block's
+        # {0: ["arm2_", "arm2_base"]} does during part3's FG release.
         kept = [a for a in requested if a not in holders]
         if len(kept) != len(requested):
             logger.warning(
@@ -1938,9 +1938,9 @@ class GraspSequencePlanner:
         there.  With the pregrasp edge still drawn at random -- and redrawn
         again by every collision-retry -- the last edge solves from a
         ``q_from`` the probe never saw, so its result drifts off the
-        validated candidate even though the seed was right.  Live: RS5's
+        validated candidate even though the seed was right.  Live: part5's
         pregrasp edge was redrawn 6x (5 planning failures), moving the free
-        ur10 arm and with it RS5 itself, and the CON0 grasp the lookahead
+        ur10 arm and with it part5 itself, and the CON0 grasp the lookahead
         had just verified as reachable then failed 878/878 target draws at
         solver convergence.
 
@@ -2039,7 +2039,7 @@ class GraspSequencePlanner:
                 toward a candidate already verified to leave the NEXT
                 phase reachable, instead of accepting whatever the
                 unguided random restart lands on -- see that method's
-                docstring for the RS6/CON0 case this exists to fix.
+                docstring for the part6/CON0 case this exists to fix.
 
                 Never applied to the collision-retry regeneration call
                 below: its purpose is drawing a genuinely fresh sample when
@@ -2962,12 +2962,12 @@ class GraspSequencePlanner:
         Fixes a real failure class: a phase's target-generation call
         (``ConfigGenerator.generate_via_edge()``) is randomized (random-
         restart IK), and whichever valid solution it lands on can pin
-        constraints the NEXT phase depends on with no way back -- e.g. RS6's
+        constraints the NEXT phase depends on with no way back -- e.g. part6's
         WB grasp (phase N) is one of two simultaneous fixed-offset grasps on
         the same rigid object, so once it and the object's other grasp are
         both committed, the object's orientation is fully determined and
         phase N+1 (CON0) cannot change it no matter how long IT retries.
-        Traced live: RS6's CON0 grasp failed ~2300+ consecutive target-
+        Traced live: part6's CON0 grasp failed ~2300+ consecutive target-
         generation attempts (0 ever reached collision-checking, both with
         the next arm frozen and after the existing 30-failure-unfreeze
         escalation fired) purely because the WB grasp's random draw happened
@@ -2978,15 +2978,15 @@ class GraspSequencePlanner:
         Cheap relative to a blind multi-hour retry stall, but NOT flat-rate
         cheap -- ``build_phase_graph()``'s cost scales with how many
         objects/grippers are already held, not a constant. Measured ~65ms
-        against RS6's checkpoint (only RS1 held at that point in the
-        sequence); measured ~6.2-6.4s against RS2's checkpoint (RS1+RS5+RS6
+        against part6's checkpoint (only part1 held at that point in the
+        sequence); measured ~6.2-6.4s against part2's checkpoint (part1+part5+part6
         all held by then) -- roughly two orders of magnitude more, purely
         from more locked joints/objects for ConstraintGraphFactory to set
         up. Each candidate that reaches the phase-N+1 probe therefore costs
         the phase-N+1 build (this ~6s-and-growing figure) plus up to
-        ``probe_timeout`` -- ~7-12s/candidate by RS2, not milliseconds.
+        ``probe_timeout`` -- ~7-12s/candidate by part2, not milliseconds.
         Target generation itself stays fast throughout (~30ms/attempt
-        measured, confirmed still true at RS2). Still cheap next to a
+        measured, confirmed still true at part2). Still cheap next to a
         single failed ``plan_transition_edge()`` attempt, let alone the
         2300+ retries this replaces -- but ``max_candidates`` needs enough
         headroom to survive several rejected draws at this heavier
@@ -3008,15 +3008,15 @@ class GraspSequencePlanner:
         Only supports grasp phases (``handle is not None``) for both N and
         N+1 -- release phases use a different edge-sequence method
         (``get_release_edge_sequence``) not wired in here, since the one
-        real caller (RS6's WB-grasp -> CON0-grasp pair) never needs it.
+        real caller (part6's WB-grasp -> CON0-grasp pair) never needs it.
         Only manual frozen-arms resolution (an explicit list per phase, not
         "auto"/"interactive"/"global") for the same reason -- the real
-        caller (``run_block_nonstop``) always uses
+        caller (the mission runner) always uses
         ``frozen_arms_mode="manual"`` with an explicit dict already in hand.
 
         Args:
             phase_n: ``(gripper, handle)`` for the phase whose target is
-                being searched for (e.g. VISPA2's WB grasp on RS6).
+                being searched for (e.g. arm2's WB grasp on part6).
             phase_n1: ``(gripper, handle)`` for the phase that must remain
                 reachable from phase N's candidate (e.g. CON0 grasp).
             q_current: Configuration entering phase N (unchanged across the
@@ -3034,10 +3034,10 @@ class GraspSequencePlanner:
             max_candidates: How many phase-N candidates to try before giving
                 up. Per-candidate cost grows with how many objects are
                 already held by this point in the sequence (see cost note
-                above) -- ~7-12s/candidate by RS2, worse for RS3/RS4. 100
+                above) -- ~7-12s/candidate by part2, worse for part3/part4. 100
                 gives real headroom (up to ~15-20 min worst case) rather
                 than gambling on an early-sequence-cost budget that starves
-                the search later in the run, as 20 did for RS2 (exhausted
+                the search later in the run, as 20 did for part2 (exhausted
                 its whole budget in ~22s and never found a candidate that a
                 slightly luckier draw found on attempt #2).
             verbose: Log progress/outcome.
@@ -3086,7 +3086,7 @@ class GraspSequencePlanner:
             each edge's constraint RHS comes from its predecessor's end
             config, the committed config then drifts off this candidate and
             takes the phase N+1 guarantee with it. See
-            ``_edge_hints_for_phase()`` for the mechanism and the live RS5
+            ``_edge_hints_for_phase()`` for the mechanism and the live part5
             case. (``result[-1]`` is still exactly phase N's committed
             target if a caller needs just that.)
         """
@@ -3845,7 +3845,7 @@ class GraspSequencePlanner:
         exactly as ``_plan_release_entry_phase`` does: an arm that holds
         the object being released must never be frozen, or the pregrasp
         retreat becomes unreachable (see that method's docstring for the
-        RS3 case this rule was learned from).
+        part3 case this rule was learned from).
 
         Returns a dict shaped like ``plan_sequence()``'s (``success``,
         ``message``, ``phase_results``, ``final_config``); never raises.
@@ -3959,7 +3959,7 @@ class GraspSequencePlanner:
                 or "global" (use self.graph_constraints from task.setup())
             per_phase_frozen_arms: Dict mapping phase_idx -> list of
                 arm keywords. Used when frozen_arms_mode="manual".
-                Example: {0: ["vispa_", "vispa2"]}
+                Example: {0: ["arm2_", "arm2_base"]}
             skip_phases: Optional set of 0-based phase indices to skip motion
                 planning for. Skipped phases will still generate target configs
                 and update grasp state, but will not call plan_transition_edge().
@@ -4079,10 +4079,10 @@ class GraspSequencePlanner:
         #
         # That is not hypothetical: in screwdriving_sequence.py, which
         # drives the run as a series of separate plan_sequence() blocks, the
-        # two tool grasps (g_ur10_tool/h_FG_tool and g_vispa_tool/h_SD_tool)
+        # two tool grasps (g_ur10_tool/h_holder_tool and g_arm2_tool/h_driver_tool)
         # are established during bootstrap and every later block resumed into
         # a state that had dropped them. The rebuilt phase graph then treats
-        # frame_gripper and screw_driver as free-floating objects, builds a
+        # tool_holder and driver as free-floating objects, builds a
         # structurally different edge for the same phase
         # ('...CON0 | 0-1:1-0_01' instead of '...CON0 | 0-0:1-1:2-3:3-2_01'),
         # and target generation becomes unsatisfiable rather than merely
@@ -4224,7 +4224,7 @@ class GraspSequencePlanner:
         phases committed.
 
         For callers that need to re-plan a block from its start rather than
-        resume forward into it -- e.g. ``run_block_nonstop()`` re-running
+        resume forward into it -- e.g. the mission runner re-running
         the lookahead after a phase's hint chain broke. Resuming keeps those
         commitments (that's the point of a resume); replanning must not, or
         the rebuilt phase graph would see the block's own grasps as already
@@ -4333,7 +4333,7 @@ class GraspSequencePlanner:
                 names such an earlier phase, retrying here is the blind
                 hammering the lookahead exists to prevent -- re-run
                 ``find_feasible_phase_target()`` and re-plan the block from
-                its start instead (``run_block_nonstop()`` in
+                its start instead (the mission runner in
                 screwdriving_sequence.py does exactly this).
 
         Returns:

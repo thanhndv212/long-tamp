@@ -93,7 +93,7 @@ class PrunedRecursionMixin:
     the size of the full injective-partial-map space, and it is the memo
     itself that holds the memory.
 
-    Measured live 2026-08-14 on RS4 A: the 9-gripper phase graph took 2m24s,
+    Measured live 2026-08-14 on part4 A: the 9-gripper phase graph took 2m24s,
     and the 10-gripper one had not finished after 10 minutes at 13 GB RSS and
     climbing.  One extra held grasp is the difference between minutes and an
     OOM kill.

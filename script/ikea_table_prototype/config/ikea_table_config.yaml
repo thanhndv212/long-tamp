@@ -175,9 +175,8 @@ freeflyer_bounds:
 # active in a given grasp/place phase).
 #
 # legN/peg (task_assemble_table.py's docking-into-socket phases) is listed
-# under ur10_right, not ur10_left: same pattern as agimus_spacelab's
-# spacelab_config.yaml wiring screw_driver/g_SD_part under vispa_arm
-# ("Screw Driver is carried by the VISPA arm") — a gripper mounted on a
+# under ur10_right, not ur10_left: the same pattern as a tool-mounted
+# gripper declared under the arm that carries the tool — a gripper mounted on a
 # carried, non-robot object has no entry in this repo's compute_phase_locked
 # _joints() chain-walk (that walk only follows the *handle* side's holder
 # chain, not the active gripper's own carrier), so which arm actually needs
@@ -266,7 +265,7 @@ objects:
 # <gripper> (the docking mate for table/socketN_hole below) — a gripper
 # role on a carried object, not a robot link; see build_assets.py's
 # urdf-srdf stage docstring for the precedent this follows
-# (screw_driver.srdf's g_SD_part).
+# (driver.srdf's g_driver).
 # ---------------------------------------------------------------------------
 grippers:
   - ur10_left/gripper

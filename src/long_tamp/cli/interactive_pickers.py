@@ -37,7 +37,7 @@ def select_grasp_pairs(cfg: Any) -> list[str]:
         or user quits.
 
     Example:
-        >>> from spacelab_config import TaskConfigurations
+        >>> from my_task_config import TaskConfigurations
         >>> cfg = TaskConfigurations.DisplayAllStates
         >>> selected_goals = select_grasp_pairs(cfg)
         >>> print(f"Selected {len(selected_goals)} pairs")

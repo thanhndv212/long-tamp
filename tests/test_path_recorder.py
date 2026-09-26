@@ -143,7 +143,7 @@ class TestOrdering:
         rec = r.record_path(
             FakePath([0.0], [1.0]),
             kind="grasp",
-            edge_name="arm1/g_tool > frame_gripper/h_FG_tool | f_01",
+            edge_name="arm1/g_tool > tool_holder/h_holder_tool | f_01",
         )
         assert "/" not in rec["waypoint_file"]
         assert os.path.exists(os.path.join(r.output_dir, rec["waypoint_file"]))
@@ -221,7 +221,7 @@ class TestSeams:
 class TestQuaternionSeams:
     """A sign flip is not a discontinuity.
 
-    Measured on the first captured run: the RS1 FG grasp's ``_01``/``_12``
+    Measured on the first captured run: the part1 FG grasp's ``_01``/``_12``
     boundary reported max |dq| = 1.366, from exactly four negated
     components (dot = -1.0) with identical translation -- HPP had simply
     picked the other half of the double cover. With six RS parts and two
@@ -364,7 +364,7 @@ class TestSampling:
     def test_waypoint_file_is_self_contained(self, tmp_path):
         """Playback must not need the manifest to interpret one segment."""
         r = _rec(tmp_path, dt=0.5)
-        r.begin_step(3, "RS1 A")
+        r.begin_step(3, "part1 A")
         rec = r.record_path(
             FakePath([0.0, 5.0], [1.0, 6.0]), kind="grasp", edge_name="e"
         )
@@ -372,7 +372,7 @@ class TestSampling:
             data = json.load(f)
         assert data["waypoints"][0] == [0.0, 5.0]
         assert data["waypoints"][-1] == [1.0, 6.0]
-        assert data["step_label"] == "RS1 A"
+        assert data["step_label"] == "part1 A"
         assert data["edge_name"] == "e"
         assert data["length"] == 1.0
 
@@ -410,7 +410,7 @@ class TestPhaseResults:
 
     def test_complete_phases_are_recorded_in_phase_then_edge_order(self, tmp_path):
         r = _rec(tmp_path)
-        r.begin_step(0, "RS1 A")
+        r.begin_step(0, "part1 A")
         phase_results = [
             {
                 "phase": 1,
@@ -431,15 +431,15 @@ class TestPhaseResults:
                 "state_after": "S2",
             },
         ]
-        written = r.record_phase_results(phase_results, block_label="RS1 A")
+        written = r.record_phase_results(phase_results, block_label="part1 A")
         assert [w["edge_name"] for w in written] == ["e_01", "e_12", "e_23"]
         assert [w["phase"] for w in written] == [1, 1, 2]
         assert all(w["kind"] == "grasp" for w in written)
-        assert all(w["block_label"] == "RS1 A" for w in written)
+        assert all(w["block_label"] == "part1 A" for w in written)
 
     def test_release_phases_are_tagged_release(self, tmp_path):
         r = _rec(tmp_path)
-        r.begin_step(0, "RS1 B")
+        r.begin_step(0, "part1 B")
         written = r.record_phase_results(
             [
                 {
@@ -460,7 +460,7 @@ class TestPhaseResults:
         """_build_release_phase_info filters None paths out of "paths" but
         keeps both names in "edges", so the two lists can disagree."""
         r = _rec(tmp_path)
-        r.begin_step(0, "RS3 B")
+        r.begin_step(0, "part3 B")
         written = r.record_phase_results(
             [
                 {
@@ -653,9 +653,9 @@ class TestResumedPhases:
     """
 
     def _rs2(self, tmp_path):
-        """The RS2 sequence, in the shape the planner produces it."""
+        """The part2 sequence, in the shape the planner produces it."""
         r = _rec(tmp_path)
-        r.begin_step(0, "RS2 A0")
+        r.begin_step(0, "part2 A0")
         home, pre_a, pre_b, grasp = [0.0], [1.0], [1.4], [2.0]
 
         # plan_sequence: _01 lands, _12 fails -> partial entry
@@ -664,7 +664,7 @@ class TestResumedPhases:
             "edges": ["e_01", "e_12"], "complete": False,
             "paths": [FakePath(home, pre_a)],
         }
-        r.record_phase_results([partial], block_label="RS2 A0")
+        r.record_phase_results([partial], block_label="part2 A0")
 
         # resume_sequence drops the partial and replans from pre_a
         complete = {
@@ -672,7 +672,7 @@ class TestResumedPhases:
             "edges": ["e_01", "e_12"], "complete": True,
             "paths": [FakePath(pre_a, pre_b), FakePath(pre_b, grasp)],
         }
-        r.record_phase_results([complete], block_label="RS2 A0")
+        r.record_phase_results([complete], block_label="part2 A0")
         return r
 
     def test_the_abandoned_leg_is_kept_and_the_manifest_is_continuous(
@@ -688,7 +688,7 @@ class TestResumedPhases:
         """The old behaviour, reconstructed: skip the partial and the
         manifest reports exactly the discontinuity seen live."""
         r = _rec(tmp_path)
-        r.begin_step(0, "RS2 A0")
+        r.begin_step(0, "part2 A0")
         r.record_path(FakePath([0.0], [0.0]), kind="transit")  # arrives home
         r.record_phase_results([
             {"phase": 1, "gripper": "g", "handle": "h",

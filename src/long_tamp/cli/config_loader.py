@@ -28,7 +28,7 @@ def load_task_config(
 
     Args:
         config_dir: Path to the directory containing config modules.
-        module_name: Name of the module to import (e.g., "spacelab_config").
+        module_name: Name of the module to import (e.g., "my_task_config").
         class_name: Name of the configuration class or attribute to get
                     (e.g., "TaskConfigurations.DisplayAllStates").
         init_poses: If True, call cfg.init_poses() after loading.
@@ -45,7 +45,7 @@ def load_task_config(
         >>> config_dir = Path(__file__).parent / "config"
         >>> cfg = load_task_config(
         ...     config_dir,
-        ...     "spacelab_config",
+        ...     "my_task_config",
         ...     "TaskConfigurations.DisplayAllStates",
         ... )
     """

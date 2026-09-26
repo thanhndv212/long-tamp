@@ -212,7 +212,7 @@ class GraspStateTracker:
 
         Returns:
             Node name string, e.g.
-            "frame_gripper/g_FG_part > RS1/h_RS1_FG | 0-0:1-2_pregrasp"
+            "tool_holder/g_holder_part > part1/h_fg | 0-0:1-2_pregrasp"
 
         Raises:
             ValueError: If gripper is unknown or not currently holding anything.
@@ -246,7 +246,7 @@ class GraspStateTracker:
 
         Returns:
             Edge name string, e.g.
-            "frame_gripper/g_FG_part > RS1/h_RS1_FG | 0-0:1-2_01"
+            "tool_holder/g_holder_part > part1/h_fg | 0-0:1-2_01"
 
         Raises:
             ValueError: If gripper is unknown or not currently holding anything.

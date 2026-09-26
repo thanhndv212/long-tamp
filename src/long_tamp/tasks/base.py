@@ -178,7 +178,7 @@ class ManipulationTask(ABC):
         # Get constraint definitions from config
         constraint_defs = cfg.get_constraint_defs()
 
-        # Object name for placement constraints (e.g., "frame_gripper")
+        # Object name for placement constraints (e.g., "tool_holder")
         obj_name = cfg.TOOL_NAME
 
         # For PyHPP: when the object has no contact surfaces, the

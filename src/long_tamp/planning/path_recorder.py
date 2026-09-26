@@ -410,7 +410,7 @@ class PathRecorder:
         ``resume_sequence`` restarts it from where the failure left the
         robot, not from the block's entry configuration, so the edges the
         failed attempt did plan are the ones that got the robot there.
-        Dropping them leaves a manifest that teleports.  Measured on RS2's
+        Dropping them leaves a manifest that teleports.  Measured on part2's
         FG grasp: ``_01`` planned home -> pregrasp-A, ``_12`` hit a
         collision, and the resume replanned ``_01`` from pregrasp-A to
         pregrasp-B.  Keeping only the surviving pair put a 5.08 rad jump
@@ -572,7 +572,7 @@ class PathRecorder:
         same orientation.  HPP's solvers flip between them freely, so a
         component-wise comparison reports a gap of up to 2.0 across a seam
         where nothing physically moved -- measured on the first captured
-        run, where the RS1 FG grasp's ``_01``/``_12`` boundary showed max
+        run, where the part1 FG grasp's ``_01``/``_12`` boundary showed max
         |dq| = 1.366 from four exactly-negated components with dot = -1.0
         and identical translation.  Left uncorrected, that noise fires on
         most seams and the check stops meaning anything.

@@ -210,7 +210,7 @@ class SceneBuilder:
         """
         logger.info("Disabling collision: %s <-> %s", obstacle_name, joint_name)
         # Remove pairs from the pinocchio GeometryModel directly.
-        # ground_demo and objects are loaded INTO the device geomModel so
+        # ground and objects are loaded INTO the device geomModel so
         # addAllCollisionPairs() creates robot-vs-environment pairs; we
         # remove them here.
         device = self.planner.device
@@ -289,7 +289,7 @@ class SceneBuilder:
             robot_frame_or_joint: A joint name or a frame/link name on the robot.
                 If a frame/link is provided, it is converted to its parent joint.
             obstacle_root_joint: Root joint of the obstacle/object (e.g.
-                `frame_gripper/root_joint`). Child joints are included.
+                `tool_holder/root_joint`). Child joints are included.
         """
         logger.info(
             "Disabling collisions (subtrees): %s <-> %s",
@@ -311,13 +311,13 @@ class SceneBuilder:
         """pyhpp backend: remove cross-pairs between subtrees from the
         pinocchio GeometryModel.  Both `robot_frame_or_joint` and
         `obstacle_root_joint` may be joint names, frame/link names, or
-        prefixes (e.g. "ground_demo/joint_world_NYX").
+        prefixes (e.g. "ground/joint_world_fixture").
 
         Environment objects (loaded as "anchor") all attach to joint 0
         (universe) — there are no distinct joints for them in the model.
         For such cases we fall back to geometry name prefix matching:
         the prefix is inferred as everything up to the first "/" in the
-        argument (e.g. "ground_demo/joint_world_NYX" → "ground_demo/").
+        argument (e.g. "ground/joint_world_fixture" → "ground/").
         """
         device = self.planner.device
         m = device.model()
@@ -366,7 +366,7 @@ class SceneBuilder:
                     for i, go in enumerate(gm.geometryObjects)
                     if go.parentJoint in subtree
                 ]
-            # Prefix fallback: "ground_demo/joint_world_NYX" → "ground_demo/"
+            # Prefix fallback: "ground/joint_world_fixture" → "ground/"
             prefix = name.split("/")[0] + "/"
             return [
                 i

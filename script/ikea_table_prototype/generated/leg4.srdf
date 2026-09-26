@@ -27,13 +27,13 @@
        docking pair, not a placement <contact>, so the mate is deterministic
        (this leg's peg is only a valid_pairs match for its own socket) rather
        than emergent across all 4 sockets. Same mechanism
-       screw_driver.srdf's "g_SD_part" gripper uses to dock into RSx's
-       h_RSx_CONn handles (ros2_ws_agimusxads/.../screw_driver.srdf) — a
+       driver.srdf's "g_driver" gripper uses to dock into partN's
+       h_conn handles (ros2_ws_agimusxads/.../driver.srdf) — a
        gripper role declared on a carried object, not a robot link, is
        already a proven pattern in this codebase.
        No approaching_direction here: <gripper> doesn't take one (only
        <handle> computes a pregrasp offset) — confirmed against
-       screw_driver.srdf's own g_SD_part tag. Bare name "peg", like this
+       driver.srdf's own g_driver tag. Bare name "peg", like this
        file's own "handle" above — see that tag's own comment for why (the
        object-load-name auto-prefix). -->
   <gripper name="peg" clearance="0.01">

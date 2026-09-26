@@ -82,7 +82,7 @@ class TaskPlanningSession:
         grasp-tracker state, recorder state, etc.).
 
         ``ScrewdrivingPlanningSession`` upholds this via
-        ``run_block_nonstop``/``move_arm_to_target_nonstop`` in
+        the mission runner/``move_arm_to_target_nonstop`` in
         ``screwdriving_sequence.py``: their return value (not a
         side-effecting mutation) is the only thing that updates
         ``self.q_current``, so a call that raises or is retried by

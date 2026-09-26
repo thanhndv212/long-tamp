@@ -869,7 +869,7 @@ class FactoryConstraintRegistry:
         Args:
             constraint_defs: List of (type, name, args) tuples from
                 config.get_constraint_defs()
-            obj_name: Object name for placement constraints (e.g., "frame_gripper")
+            obj_name: Object name for placement constraints (e.g., "tool_holder")
             skip_placement: If True, skip registration of placement and
                 complement constraints.  Use this with the PyHPP backend when
                 the object has no contact surfaces: the
@@ -889,11 +889,11 @@ class FactoryConstraintRegistry:
                 ("placement", "placement", {"obj": "joint", ...}),
                 ("complement", "placement", {"obj": "joint", ...}),
             ]
-            name_map = registry.register_from_defs(constraint_defs, "frame_gripper")
+            name_map = registry.register_from_defs(constraint_defs, "tool_holder")
             # name_map = {
             #     "grasp": "g grasps h",
-            #     "placement": "place_frame_gripper",
-            #     "placement/complement": "place_frame_gripper/complement",
+            #     "placement": "place_tool_holder",
+            #     "placement/complement": "place_tool_holder/complement",
             # }
         """
         name_map: Dict[str, str] = {}
