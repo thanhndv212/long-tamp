@@ -72,17 +72,32 @@ class _ConfigGen:
         return True, [float(self.candidate)]
 
 
-def _planner(config_gen):
+class _PathPlanner:
+    """plan_transition_edge stand-in: no path to any candidate in ``blocked``
+    (identified by the candidate number the fake generator stamps into q)."""
+
+    def __init__(self, blocked=()):
+        self.blocked = set(blocked)
+        self.calls = 0
+
+    def plan_transition_edge(self, edge, q1, q2):
+        self.calls += 1
+        if int(q2[0]) in self.blocked:
+            raise RuntimeError("no path")
+        return object(), object()
+
+
+def _planner(config_gen, path_planner=None):
     p = object.__new__(GraspSequencePlanner)
     p.grasp_tracker = _Tracker({"arm1/g_wb": None, "tool/g_tip": None})
     p.graph_builder = _GraphBuilder()
     p.config_gen = config_gen
-    p.planner = object()
+    p.planner = path_planner or object()
     p.task_config = None
     return p
 
 
-def _search(p, also_reachable=()):
+def _search(p, also_reachable=(), verify_paths=False):
     return p.find_feasible_phase_target(
         phase_n=PHASE_N,
         phase_n1=PHASE_N1,
@@ -93,6 +108,7 @@ def _search(p, also_reachable=()):
         max_candidates=5,
         verbose=False,
         also_reachable=also_reachable,
+        verify_paths=verify_paths,
     )
 
 
@@ -148,3 +164,18 @@ class TestAlsoReachable:
 
         builds = len(p.graph_builder.builds)
         assert gen.frozen_sets[-builds:] == [[]] * builds
+
+
+class TestVerifyPaths:
+    def test_rejects_a_candidate_with_no_path_to_it(self):
+        paths = _PathPlanner(blocked={1})
+        p = _planner(_ConfigGen(), paths)
+
+        assert _search(p, verify_paths=True) == [[2.0], [2.0]]
+
+    def test_is_off_by_default(self):
+        paths = _PathPlanner(blocked={1})
+        p = _planner(_ConfigGen(), paths)
+
+        assert _search(p) == [[1.0], [1.0]]
+        assert paths.calls == 0

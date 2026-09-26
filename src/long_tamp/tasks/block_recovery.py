@@ -335,6 +335,7 @@ def make_lookahead_hints_factory(
     max_rounds: int | None = 5,
     probe_timeout: float = 5.0,
     max_candidates: int = 100,
+    verify_paths: bool = False,
     verbose: bool = True,
 ) -> HintsFactory:
     """Build a ``hints_factory`` that probes the block's lookahead.
@@ -344,6 +345,8 @@ def make_lookahead_hints_factory(
     in ``also_protect`` -- reachable, retrying up to ``max_rounds`` fresh
     rounds. Returns ``{phase_pair[0]: chain}``, or ``None`` when no round
     found one (the block then plans unhinted; the recovery ladder remains).
+    ``verify_paths`` also path-plans phase ``phase_pair[0]`` to each candidate
+    (see ``find_feasible_phase_target``), so fewer hint chains break later.
     """
     frozen = per_phase_frozen_arms or {}
     n_idx, n1_idx = phase_pair
@@ -370,6 +373,7 @@ def make_lookahead_hints_factory(
                 max_candidates=max_candidates,
                 verbose=verbose,
                 also_reachable=also,
+                verify_paths=verify_paths,
             )
             if chain is not None:
                 return {n_idx: chain}

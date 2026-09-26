@@ -2957,6 +2957,7 @@ class GraspSequencePlanner:
         max_candidates: int = 100,
         verbose: bool = True,
         also_reachable: Sequence[tuple[tuple[str, str], list[str]]] = (),
+        verify_paths: bool = False,
     ) -> list[list[float]] | None:
         """Search for a phase-N grasp target that leaves phase N+1 reachable.
 
@@ -3056,6 +3057,13 @@ class GraspSequencePlanner:
                 still leave a later one unreachable (solver failures only,
                 never a collision), which no retry of that later phase can
                 undo.
+            verify_paths: Also require that phase N's own edges can be
+                path-planned to the candidate from ``q_current``, not only
+                that its targets exist. A target the arm cannot move to is
+                redrawn during the real plan, which voids the hint chain and
+                forces a block replan; checking the path here rejects such
+                candidates up front, at the cost of planning phase N's edges
+                once per candidate.
 
         Returns:
             The full per-edge config **chain** the winning candidate was
@@ -3153,6 +3161,30 @@ class GraspSequencePlanner:
                     self.graph_builder._phase_handles,
                 )
 
+        def _paths_exist(
+            tracker: GraspStateTracker,
+            gripper: str,
+            handle: str,
+            q_from: list[float],
+            chain: list[list[float]],
+        ) -> bool:
+            """Path-plan the grasp's edges through ``chain`` in the phase
+            graph currently built; False on the first edge with no path."""
+            q = q_from
+            for edge_name, q_next in zip(
+                tracker.get_grasp_edge_sequence(gripper, handle), chain
+            ):
+                try:
+                    path, _ = self.planner.plan_transition_edge(
+                        edge=edge_name, q1=q, q2=q_next
+                    )
+                except Exception:
+                    return False
+                if path is None:
+                    return False
+                q = q_next
+            return True
+
         def _probe_chained(
             tracker: GraspStateTracker, gripper: str, handle: str, q_from: list[float]
         ) -> list[list[float]] | None:
@@ -3180,6 +3212,10 @@ class GraspSequencePlanner:
 
             chain = _probe_chained(probe_tracker, gripper_n, handle_n, q_current)
             if not chain:
+                continue
+            if verify_paths and not _paths_exist(
+                probe_tracker, gripper_n, handle_n, q_current, chain
+            ):
                 continue
             q_candidate = chain[-1]
 
