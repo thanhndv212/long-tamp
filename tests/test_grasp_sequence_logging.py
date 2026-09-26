@@ -37,7 +37,9 @@ class _FakeRunLogger:
 
 def _make_planner():
     """Bare GraspSequencePlanner, bypassing __init__."""
-    return object.__new__(GraspSequencePlanner)
+    planner = object.__new__(GraspSequencePlanner)
+    planner.freeze_joint_substrings = []  # set by __init__ since 1c77c14
+    return planner
 
 
 class TestBuildPhaseGraphAndConstraintsLogging:
