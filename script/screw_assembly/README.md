@@ -22,7 +22,8 @@ per part i  A0  ur10_left grasps part i from the staging row
 return      the tool rack takes the driver back; ur10_right lets go
 ```
 
-With N parts that's 3N + 2 blocks and 7N + 3 phases (4 parts: 14 blocks, 31 phases).
+With N parts that's 4N + 3 blocks: 7N + 3 grasp/release phases plus N + 1 home moves
+(4 parts: 19 blocks, 31 phases + 5 moves).
 
 **Why block A is hard.** Clamping commits ur10_left's pose around the part, and that pose
 decides whether the driver can still reach *both* holes. A random clamp draw can leave
@@ -63,6 +64,24 @@ python3 task_screw_assembly.py --seed 1 --summary run.json
 process draws the same sequence. `--summary` writes per-block timings, resumes and
 replans as JSON.
 
-## Status
+## Results
 
-See the bottom of this file for measured results.
+10 seeded runs (seeds 1–10) of the 4-part mission, 3 at a time in the `hpp-agimus-arm64`
+container (`bash run_batch.sh 10 3`):
+
+| Metric | Result | Target |
+|---|---|---|
+| Missions completed | **10 / 10** | – |
+| Replanning trigger rate (planning blocks with a replan-from-entry) | **0.0%** (0 / 140) | < 2% |
+| Recovery rate (blocks and moves that failed and still finished) | **100%** (21 / 21) | > 95% |
+| Mission time | median 1223 s, 579–2536 s | – |
+| Native crashes | 0 | – |
+
+Every failure was recovered by resuming alone; no block needed a replan. The spread in
+mission time comes from block A's path-verified lookahead, which on some seeds rejects many
+clamp candidates before finding one. With N parts the mission is 4N + 3 blocks
+(4 parts: 19 blocks, 31 grasp/release phases + 5 home moves).
+
+What made it reliable (in `long_tamp` itself, not this script): the problem-distance fix
+that removed the native segfault, the lookahead probe and hinted-retry fixes, and
+`verify_paths`. See the library CHANGELOG.
