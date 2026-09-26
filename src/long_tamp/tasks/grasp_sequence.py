@@ -1117,19 +1117,13 @@ class GraspSequencePlanner:
             return set()
         return {arms} if isinstance(arms, str) else set(arms)
 
-    # Arm keyword → JOINT_GROUPS key mapping (case-insensitive substring)
-    _ARM_KEYWORD_TO_GROUP = {
-        "ur10": "UR10",
-        "vispa_": "VISPA_ARM",
-        "vispa2": "VISPA_BASE",
-    }
-
     def _get_active_joints_for_unfrozen_arms(self, frozen_arms: list[str]) -> list[str]:
         """Get joint names for all unfrozen arms.
 
-        Maps arm keywords (e.g. "ur10", "vispa_") to their joint names
-        via task_config.JOINT_GROUPS.  Used to configure TOPPRA's
-        selectJoints() per phase.
+        Maps arm keywords (e.g. "ur10_left") to their joint names via
+        task_config.JOINT_GROUPS, keyed by the same keywords as
+        ALL_ARM_KEYWORDS.  Used to configure TOPPRA's selectJoints() per
+        phase; returns [] (TOPPRA left unchanged) when JOINT_GROUPS is unset.
 
         Args:
             frozen_arms: List of frozen arm keywords
@@ -1145,9 +1139,7 @@ class GraspSequencePlanner:
         for arm_keyword in self.ALL_ARM_KEYWORDS:
             if arm_keyword in frozen_arms:
                 continue
-            group_key = self._ARM_KEYWORD_TO_GROUP.get(arm_keyword)
-            if group_key and group_key in joint_groups:
-                active_joints.extend(joint_groups[group_key])
+            active_joints.extend(joint_groups.get(arm_keyword, []))
         return active_joints
 
     def _dump_phase_checkpoint(

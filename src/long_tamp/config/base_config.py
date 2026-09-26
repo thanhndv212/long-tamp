@@ -195,6 +195,9 @@ class BaseTaskConfig(ABC):
     ARM_GROUPS: Dict = {}
     GRIPPER_TO_ARM_KEYWORD: Dict[str, Union[str, List[str]]] = {}
     ALL_ARM_KEYWORDS: List[str] = []
+    # JOINT_GROUPS (optional): {joint_keyword: [joint names]}, used to
+    # restrict TOPPRA time parameterization to the unfrozen arms' joints
+    JOINT_GROUPS: Dict[str, List[str]] = {}
 
     # ==========================================================================
     # Initial Configuration (Override in subclass)
