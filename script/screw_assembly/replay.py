@@ -94,7 +94,10 @@ def main() -> int:
                 print(f"  {block}", flush=True)
             arm = ARM_GRIPPERS.get(seg["gripper"])
             first = np.asarray(seg["configs"][0], dtype=float)
-            if arm and seg["handle"] is None and closed[arm] > 0:
+            # A release opens the fingers; a home move (also handle None)
+            # carries its object, so its fingers stay closed.
+            release = seg["handle"] is None and "home" not in seg["block"]
+            if arm and release and closed[arm] > 0:
                 animate_fingers(first, closed, arm, CLOSED, 0.0)
             for q in seg["configs"]:
                 viewer(overlay(np.asarray(q, dtype=float), closed))
