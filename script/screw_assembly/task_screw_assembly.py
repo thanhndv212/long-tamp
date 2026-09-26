@@ -5,13 +5,13 @@ A long-horizon, multi-arm TAMP example built from generic primitives (see
 README.md and build_scene.py). The mission is a chain of short *blocks*,
 each planned with ``run_block_with_recovery()``:
 
-  Bootstrap   ur10_right picks the driver (screwdriver) from the tool rack.
+  Bootstrap   ur10_right picks the driver (a cordless drill) off its dock.
   Per part i  A0  ur10_left grasps part i from the staging row.
               A   the jig clamp takes part i (ur10_left moves it there),
                   then the driver tip screws hole 1 and hole 2 -- grasp +
                   release per hole -- while ur10_left still holds the part.
               B   ur10_left releases part i; it stays clamped.
-  Return      the tool rack takes the driver back; ur10_right lets go.
+  Return      the dock takes the driver back; ur10_right lets go.
 
 Block A is where long-horizon planning gets hard: the clamp phase commits
 ur10_left's pose around the part, and that pose decides whether the driver
@@ -268,12 +268,7 @@ def home_target(task: ScrewAssemblyTask, q: list[float], arm: str, carried: str 
     if carried is not None:
         # Grasp: gripper frame == handle frame, so
         # world<-object = world<-gripper * (object<-handle)^-1.
-        grip = pin.XYZQUATToSE3(
-            np.array(
-                [0, 0, build_scene.DRIVER_GRIP_Z]
-                + [float(v) for v in build_scene.DOWN.split()]
-            )
-        )
+        grip = pin.XYZQUATToSE3(np.array(build_scene.DRIVER_GRIP_XYZQUAT))
         model = task.planner.device.model()
         data = model.createData()
         pin.framesForwardKinematics(model, data, qt)

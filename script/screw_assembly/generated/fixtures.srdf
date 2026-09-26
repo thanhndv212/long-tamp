@@ -22,9 +22,10 @@
     <position xyz="0.84 0.15 0.446" xyzw="0 0.7071068 0 0.7071068"/>
     <link name="base_link"/>
   </gripper>
-  <!-- Tool rack: holds the driver's h_rack (its tip), GAP above the rack. -->
+  <!-- Charging dock: holds the drill's h_rack (battery base) GAP above
+       the dock, bit toward -X world (DOWN turned 180 deg about world Z). -->
   <gripper name="rack_hold" clearance="0.03">
-    <position xyz="1.08 0.36 0.506" xyzw="0 0.7071068 0 0.7071068"/>
+    <position xyz="1.08 0.36 0.436" xyzw="-0.7071068 0 0.7071068 0"/>
     <link name="base_link"/>
   </gripper>
 </robot>

@@ -2,15 +2,20 @@
 """Generate the screw-assembly cell: URDF/SRDF for every part plus the task YAML.
 
 A generic, parametric long-horizon assembly scene -- two UR10 + Robotiq 2F-85
-arms, a fixed jig, a tool rack, a screwdriver, and N plate parts, each
-fastened by two screws. Everything except the arms is box/cylinder
-primitives authored here, so the scene has no lineage to any real product
-CAD. See README.md for the mission it is built for.
+arms, a fixed jig, a charging dock, a cordless drill/driver, and N plate
+parts, each fastened by two screws. The drill's look is a real scan (YCB
+035_power_drill, CC BY 4.0, see assets/ycb_035_power_drill/); its collision
+geometry, and everything else except the arms, is box/cylinder primitives
+authored here. See README.md for the mission it is built for.
 
-Usage (host or container -- output uses no absolute paths of its own):
+Usage (host or container):
 
     python3 build_scene.py            # 4 parts (default)
     python3 build_scene.py --parts 2  # smaller scene for debugging
+
+The drill's mesh is the only absolute path this writes: like the arms' URDFs
+it points into the hpp-agimus-arm64 container's checkout (REPO_ROOT);
+``--repo-root`` points it elsewhere.
 
 Writes generated/*.urdf|srdf and config/screw_assembly_config.yaml.
 
@@ -29,10 +34,23 @@ prototype's top-down leg grasp; don't re-derive it from rotation algebra.
 ``approaching_direction`` is the direction the *gripper* moves relative to
 the handle. For a moving gripper engaging a resting object (Robotiq on a
 part, driver tip into a hole) that is the frame's +X. For a FIXED gripper
-the object is lowered into (jig clamp, tool rack) the gripper moves UP
+the object is lowered into (jig clamp, charging dock) the gripper moves UP
 relative to the object, so those handles use -X: with +X the pregrasp put
 the part 3 cm *inside* the jig (found live -- every clamp pregrasp
 collided the carrying gripper with the jig).
+
+THE DRILL
+---------
+A pistol-grip drill held the way a person holds one: the Robotiq closes
+across the handle, approaching from behind it along the bit axis. So the
+grasp frame and the bit share their +X, and a top-down screw (tip frame +X =
+world down) keeps the gripper top-down while it screws.
+Drill frame: +X along the bit (forward), +Z from the battery up to the motor
+body, origin at the centre of the battery's base. It stands on that base on
+the dock, bit horizontal and pointing away from ur10_right, so the pick is a
+horizontal reach from behind the handle. The tip gripper is turned 180 deg
+about the bit so that, screwing, the handle points toward ur10_right's side
+(+X world), away from ur10_left's hand on the part's tab.
 
 CONTACT GAPS
 ------------
@@ -87,13 +105,35 @@ JIG_X = 0.84
 JIG_H = 0.04
 JIG_TOP = BENCH_TOP + GAP + JIG_H  # jig floats GAP above the bench
 
-# Tool rack (fixtures robot) and screwdriver.
+# Charging dock (fixtures robot) the drill stands on, and the drill.
 RACK = (1.08, 0.36)  # xy
-RACK_SIZE = (0.06, 0.06, 0.10)
+RACK_SIZE = (0.14, 0.09, 0.03)
 RACK_TOP = BENCH_TOP + GAP + RACK_SIZE[2]
-DRIVER_R = 0.015
-DRIVER_L = 0.20
-DRIVER_GRIP_Z = 0.05  # Robotiq grasp point, driver-local, above center
+
+# Drill/driver (YCB 035_power_drill scan). Collision proxies, drill frame
+# (see THE DRILL), as (name, kind, size, center): measured from the scan's
+# vertex slices, each padded a few mm.
+REPO_ROOT = "/home/thanhndv212/devel/hpp/src/long_tamp"  # in the container
+DRILL_MESH = "script/screw_assembly/assets/ycb_035_power_drill/textured.obj"
+# Scan frame -> drill frame: scan +X is backward, +Y up the handle, +Z the
+# side; the battery base's centre is at scan (-0.030, -0.0832, 0.0255).
+DRILL_MESH_XYZ = "-0.030 -0.0255 0.0832"
+DRILL_MESH_RPY = "1.5707963 0 3.1415927"
+DRILL_PROXIES = [
+    ("battery", "box", (0.110, 0.060, 0.034), (0.0, 0.0, 0.017)),
+    ("handle", "box", (0.054, 0.038, 0.097), (-0.022, 0.0, 0.0815)),
+    ("trigger", "box", (0.040, 0.038, 0.040), (0.018, 0.0, 0.108)),
+    ("body", "box", (0.170, 0.056, 0.062), (0.007, 0.0, 0.159)),
+    ("chuck", "cylinder", (0.020, 0.025), (0.1045, 0.0, 0.160)),
+    ("bit", "cylinder", (0.0035, 0.050), (0.142, 0.0, 0.160)),
+]
+DRILL_TIP = (0.167, 0.0, 0.160)  # end of the bit
+DRILL_MASS = 0.895  # YCB's measured mass
+# Robotiq grasp: centre of the handle, approach along the bit (identity).
+DRIVER_GRIP_XYZQUAT = [-0.022, 0.0, 0.085, 0.0, 0.0, 0.0, 1.0]
+DRILL_YAW_XYZW = "0 0 1 0"  # on the dock: bit toward -X world
+# rack_hold: DOWN, then 180 deg about world Z (the drill's dock yaw).
+RACK_HOLD_XYZW = "-0.7071068 0 0.7071068 0"
 
 # Arm start ("home") configurations: "candle" -- upper arm and forearm
 # straight up over the pedestal, 1.5 m apart and clear of the bench.
@@ -189,49 +229,71 @@ def part_srdf(name):
     )
 
 
-def driver_urdf():
-    geom = f'<cylinder radius="{DRIVER_R}" length="{DRIVER_L}"/>'
-    return f"""<?xml version="1.0"?>
-{HEADER}<robot name="driver">
-  <link name="base_link">
-    <inertial>
-      <mass value="0.3"/>
-      <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
-    </inertial>
-    <visual>
-      <geometry>{geom}</geometry>
-      <material name="driver_mat"><color rgba="0.9 0.55 0.1 1"/></material>
-    </visual>
-    <collision>
+def driver_urdf(repo_root: str = REPO_ROOT):
+    collisions = ""
+    for name, kind, size, c in DRILL_PROXIES:
+        if kind == "box":
+            geom = f'<box size="{size[0]} {size[1]} {size[2]}"/>'
+            rpy = "0 0 0"
+        else:  # cylinder along the bit (drill +X)
+            geom = f'<cylinder radius="{size[0]}" length="{size[1]}"/>'
+            rpy = "0 1.5707963 0"
+        collisions += f"""    <collision name="{name}">
+      <origin xyz="{c[0]} {c[1]} {c[2]}" rpy="{rpy}"/>
       <geometry>{geom}</geometry>
     </collision>
-  </link>
+"""
+    bit = next(p for p in DRILL_PROXIES if p[0] == "bit")
+    return f"""<?xml version="1.0"?>
+{HEADER}<!-- Cordless drill/driver: visual = YCB 035_power_drill scan (CC BY 4.0,
+     see assets/ycb_035_power_drill/README.md); collision = primitives
+     fitted to it, plus a driver bit the scan lacks. -->
+<robot name="driver">
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0 0 0.09"/>
+      <mass value="{DRILL_MASS}"/>
+      <inertia ixx="3e-3" ixy="0" ixz="0" iyy="3e-3" iyz="0" izz="2e-3"/>
+    </inertial>
+    <visual>
+      <origin xyz="{DRILL_MESH_XYZ}" rpy="{DRILL_MESH_RPY}"/>
+      <geometry><mesh filename="{repo_root}/{DRILL_MESH}"/></geometry>
+    </visual>
+    <visual>
+      <origin xyz="{bit[3][0]} {bit[3][1]} {bit[3][2]}" rpy="0 1.5707963 0"/>
+      <geometry><cylinder radius="{bit[2][0]}" length="{bit[2][1]}"/></geometry>
+      <material name="bit_mat"><color rgba="0.75 0.75 0.78 1"/></material>
+    </visual>
+{collisions}  </link>
 </robot>
 """
 
 
 def driver_srdf():
-    tip = -DRIVER_L / 2
+    g = DRIVER_GRIP_XYZQUAT
+    tip = " ".join(str(v) for v in DRILL_TIP)
     return (
         f'<?xml version="1.0"?>\n{HEADER}<robot name="driver">\n'
-        + _handle(
-            "h_grip",
-            f"0 0 {DRIVER_GRIP_Z}",
-            0.05,
-            "Robotiq grasp on the shaft, top-down, driver held vertical",
-        )
+        + f"""  <!-- Robotiq grasp across the handle, approaching from behind it
+       along the bit (+X), fingers closing across its 38 mm width (Y). -->
+  <handle name="h_grip" clearance="0.05" approaching_direction="1 0 0">
+    <position xyz="{g[0]} {g[1]} {g[2]}" xyzw="{g[3]} {g[4]} {g[5]} {g[6]}"/>
+    <link name="base_link"/>
+  </handle>
+"""
         + _handle(
             "h_rack",
-            f"0 0 {tip}",
+            "0 0 0",
             0.03,
-            "Tip end: the tool rack holds the driver here on return. Fixed "
+            "Battery base: the dock holds the drill standing here. Fixed "
             "gripper, so like h_seat the approach is -X",
             approach="-1 0 0",
         )
-        + f"""  <!-- Tool-mounted gripper: the driver tip, pointing down (local +X
-       down, same convention as every handle). Docks into partN/h_holeK. -->
+        + f"""  <!-- Tool-mounted gripper: the bit's end. +X along the bit, turned
+       180 deg about it (xyzw 1 0 0 0) so that docked in partN/h_holeK
+       (+X down, +Z world +X) the handle points to world +X. -->
   <gripper name="tip" clearance="0.01">
-    <position xyz="0 0 {tip}" xyzw="{DOWN}"/>
+    <position xyz="{tip}" xyzw="1 0 0 0"/>
     <link name="base_link"/>
   </gripper>
 </robot>
@@ -245,7 +307,7 @@ def fixtures_urdf(n):
     return (
         f'<?xml version="1.0"?>\n{HEADER}'
         "<!-- Static cell furniture as one fixed-base, zero-joint robot, so\n"
-        "     the jig clamps and the tool rack can be <gripper>s that hold\n"
+        "     the jig clamps and the charging dock can be <gripper>s that hold\n"
         "     parts and the driver in place (an object handle cannot). -->\n"
         '<robot name="fixtures">\n'
         + _box_link(
@@ -279,9 +341,10 @@ def fixtures_srdf(n):
     <link name="base_link"/>
   </gripper>
 """
-    out += f"""  <!-- Tool rack: holds the driver's h_rack (its tip), GAP above the rack. -->
+    out += f"""  <!-- Charging dock: holds the drill's h_rack (battery base) GAP above
+       the dock, bit toward -X world (DOWN turned 180 deg about world Z). -->
   <gripper name="rack_hold" clearance="0.03">
-    <position xyz="{RACK[0]} {RACK[1]} {round(RACK_TOP + GAP, 4)}" xyzw="{DOWN}"/>
+    <position xyz="{RACK[0]} {RACK[1]} {round(RACK_TOP + GAP, 4)}" xyzw="{RACK_HOLD_XYZW}"/>
     <link name="base_link"/>
   </gripper>
 </robot>
@@ -342,7 +405,7 @@ def config_yaml(n):
     ys = part_ys(n)
     parts = [f"part{i}" for i in range(1, n + 1)]
     rest_z = round(BENCH_TOP + PART[2] / 2 + GAP, 4)
-    driver_z = round(RACK_TOP + GAP + DRIVER_L / 2, 4)
+    driver_z = round(RACK_TOP + GAP, 4)
     obj_paths = "\n".join(
         f"    {p}: {{urdf: ../generated/{p}.urdf, srdf: ../generated/{p}.srdf}}"
         for p in parts
@@ -389,7 +452,7 @@ joint_groups:
 {_joint_group("ur10_right", RIGHT_HOME)}
 
 # Objects must stay in bounds anywhere an arm can carry them -- including
-# the driver held at ur10_right's candle home (x~1.5, z~2): tighter bounds
+# the drill held at ur10_right's candle home (x~1.5, z~2): tighter bounds
 # made every phase after the first home retreat reject its start config.
 freeflyer_bounds:
   translation: [[-0.3, 1.8], [-1.0, 1.0], [0.2, 2.4]]
@@ -408,7 +471,7 @@ arm_groups:
 objects:
 {obj_poses}
   driver:
-    initial_pose_xyzquat: [{RACK[0]}, {RACK[1]}, {driver_z}, 0, 0, 0, 1]
+    initial_pose_xyzquat: [{RACK[0]}, {RACK[1]}, {driver_z}, {", ".join(DRILL_YAW_XYZW.split())}]
     handles: [driver/h_grip, driver/h_rack]
 
 grippers:
@@ -445,13 +508,19 @@ optimization:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--parts", type=int, default=4, choices=range(1, 7))
+    ap.add_argument(
+        "--repo-root",
+        default=REPO_ROOT,
+        help="long_tamp checkout the drill mesh path points into "
+        "(default: the container's)",
+    )
     args = ap.parse_args()
     GEN.mkdir(exist_ok=True)
     CFG.mkdir(exist_ok=True)
     files = {
         GEN / "fixtures.urdf": fixtures_urdf(args.parts),
         GEN / "fixtures.srdf": fixtures_srdf(args.parts),
-        GEN / "driver.urdf": driver_urdf(),
+        GEN / "driver.urdf": driver_urdf(args.repo_root),
         GEN / "driver.srdf": driver_srdf(),
         GEN / "workbench.urdf": bench_urdf(),
         GEN / "ground.urdf": ground_urdf(),

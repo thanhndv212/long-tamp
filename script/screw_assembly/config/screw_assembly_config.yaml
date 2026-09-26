@@ -55,7 +55,7 @@ joint_groups:
     - {joint: ur10_right/right_inner_finger_joint, initial: 0.0, bounds: [-0.8757, 0.0]}
 
 # Objects must stay in bounds anywhere an arm can carry them -- including
-# the driver held at ur10_right's candle home (x~1.5, z~2): tighter bounds
+# the drill held at ur10_right's candle home (x~1.5, z~2): tighter bounds
 # made every phase after the first home retreat reject its start config.
 freeflyer_bounds:
   translation: [[-0.3, 1.8], [-1.0, 1.0], [0.2, 2.4]]
@@ -85,7 +85,7 @@ objects:
     initial_pose_xyzquat: [0.44, 0.15, 0.413, 0, 0, 0, 1]
     handles: [part4/h_grasp, part4/h_seat, part4/h_hole1, part4/h_hole2]
   driver:
-    initial_pose_xyzquat: [1.08, 0.36, 0.606, 0, 0, 0, 1]
+    initial_pose_xyzquat: [1.08, 0.36, 0.436, 0, 0, 1, 0]
     handles: [driver/h_grip, driver/h_rack]
 
 grippers:
