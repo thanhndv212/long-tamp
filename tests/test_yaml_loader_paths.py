@@ -22,8 +22,7 @@ def _loader(tmp_path, paths_block):
 def test_relative_entries_resolve_against_the_yaml_folder(tmp_path):
     loader, cfg_dir = _loader(
         tmp_path,
-        textwrap.dedent(
-            """\
+        textwrap.dedent("""\
             robot:
               arm: {urdf: ../robots/arm.urdf, srdf: ../robots/arm.srdf}
             environment:
@@ -31,8 +30,7 @@ def test_relative_entries_resolve_against_the_yaml_folder(tmp_path):
             objects:
               part: {urdf: gen/part.urdf, srdf: gen/part.srdf}
               plain: gen/plain.urdf
-            """
-        ),
+            """),
     )
 
     fp = loader.file_paths
@@ -49,14 +47,12 @@ def test_relative_entries_resolve_against_the_yaml_folder(tmp_path):
 def test_absolute_package_and_empty_entries_pass_through(tmp_path):
     loader, _ = _loader(
         tmp_path,
-        textwrap.dedent(
-            """\
+        textwrap.dedent("""\
             robot:
               arm: {urdf: /abs/arm.urdf, srdf: "package://pkg/arm.srdf"}
             objects:
               part: {urdf: /abs/part.urdf}
-            """
-        ),
+            """),
     )
 
     fp = loader.file_paths
