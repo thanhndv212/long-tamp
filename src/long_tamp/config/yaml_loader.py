@@ -236,14 +236,28 @@ class YamlTaskLoader:
     # Private builders
     # ------------------------------------------------------------------
 
+    def _resolve_path(self, path: str) -> str:
+        """Resolve a relative ``paths:`` entry against this YAML's folder.
+
+        Absolute paths, ``package://`` URIs and empty strings pass through
+        unchanged. Relative paths let one config work wherever the repo is
+        checked out -- on the host or bind-mounted into a container at a
+        different root -- instead of baking in one environment's absolute
+        path.
+        """
+        if not path or "://" in path or Path(path).is_absolute():
+            return path
+        return str((self._yaml_path.parent / path).resolve())
+
     def _build_file_paths(self) -> dict[str, Any]:
         paths = self._data.get("paths", {})
+        resolve = self._resolve_path
 
         robot_paths: dict[str, dict[str, Any]] = {}
         for name, rdata in paths.get("robot", {}).items():
             robot_entry: dict[str, Any] = {
-                "urdf": rdata.get("urdf", ""),
-                "srdf": rdata.get("srdf", ""),
+                "urdf": resolve(rdata.get("urdf", "")),
+                "srdf": resolve(rdata.get("srdf", "")),
             }
             # Optional root pose [x, y, z, qx, qy, qz, qw] for this robot,
             # e.g. to place two independent fixed-base robots in one scene
@@ -256,16 +270,16 @@ class YamlTaskLoader:
 
         env_paths: dict[str, str] = {}
         for name, urdf in paths.get("environment", {}).items():
-            env_paths[name] = urdf
+            env_paths[name] = resolve(urdf)
 
         obj_paths: dict[str, dict[str, str]] = {}
         for name, odata in paths.get("objects", {}).items():
             if isinstance(odata, str):
-                obj_paths[name] = {"urdf": odata, "srdf": ""}
+                obj_paths[name] = {"urdf": resolve(odata), "srdf": ""}
             else:
                 obj_paths[name] = {
-                    "urdf": odata.get("urdf", ""),
-                    "srdf": odata.get("srdf", ""),
+                    "urdf": resolve(odata.get("urdf", "")),
+                    "srdf": resolve(odata.get("srdf", "")),
                 }
 
         return {
