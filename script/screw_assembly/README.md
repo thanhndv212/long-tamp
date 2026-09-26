@@ -57,12 +57,33 @@ Inside the `hpp-agimus-arm64` container (pyhpp), from this folder:
 ```bash
 python3 build_scene.py --parts 4                 # regenerate generated/ and config/
 python3 task_screw_assembly.py --check           # load the scene, validate the start
-python3 task_screw_assembly.py --seed 1 --summary run.json
+python3 task_screw_assembly.py --seed 1          # run the mission
+python3 task_screw_assembly.py --seed 1 --run-dir runs/<folder> --resume   # continue it
+python3 replay.py runs/<folder>/trajectory.json --loop   # watch it (viser, port 8081)
 ```
 
 `--seed` seeds HPP's random draws (libc `srand`, `pinocchio.seed`). Unseeded, every
-process draws the same sequence. `--summary` writes per-block timings, resumes and
-replans as JSON.
+process draws the same sequence.
+
+**Each run gets a folder** (`--run-dir`, default `runs/seed<S>_<timestamp>/`) that is both
+its log and its resume point (`long_tamp.tasks.mission_checkpoint.MissionCheckpoint`):
+
+| File | What it is |
+|---|---|
+| `mission.json` | run log: seed, commit, one record per block (success, seconds, resumes, replans), outcome; resumes append |
+| `checkpoint.json` | resume point: next block, configuration, held grasps |
+| `trajectory.json` | the planned motion, sampled at 20 Hz of path time, for `replay.py` |
+| `run.log` | full DEBUG log |
+| `phases/` | per-phase planner dumps, one subfolder per block |
+
+All of it is rewritten after every block, so a killed run keeps an accurate record, and
+`--resume` continues from the last completed block. It refuses to resume if the mission's
+block list has changed.
+
+`replay.py` plays a trajectory in viser without planning, at recorded speed (`--speed`,
+`--loop`). It closes and opens the Robotiq fingers at each grasp and release; the planned
+paths keep them open, because a grasp is a rigid constraint. It runs in its own process
+because, while HPP plans, the planner process can't serve the viewer.
 
 ## Results
 
