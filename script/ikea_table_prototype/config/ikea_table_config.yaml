@@ -16,38 +16,31 @@
 # placement check, which verifies every object's actual placement (see
 # its own docstring) — not re-derived / re-guessed here.
 #
-# Every path below is a hpp-agimus-arm64-CONTAINER-absolute path
-# (/home/thanhndv212/devel/hpp/src/long_tamp/...), not this host's path
-# (/Users/thanhndv212/Develop/agimus-ws/long-tamp/...) — pyhpp, and hence
-# any task script consuming this YAML via ManipulationTask/SceneBuilder,
-# only imports inside that container (see debug_view_frames.py's
-# docstring), which bind-mounts this repo at that different path
-# (confirmed via `docker exec hpp-agimus-arm64 ...`), not at the host's
-# own path. Robot URDFs additionally use the `.container.urdf` *variant*
-# because their internal mesh <filename> references also had to be
-# container-absolute (build_assets.py's merge-arm/container-variant
-# stages); table/legN.urdf's internal mesh references turned out to
-# already be container-absolute on disk (verified by grepping their
-# `filename="..."` attributes) — ground/workbench.urdf have no meshes at
-# all (pure primitive-box geometry), so no variant was ever needed there.
+# Paths below are relative to this file (YamlTaskLoader resolves them), so
+# the config loads from any checkout: the hpp-agimus-arm64 container, a
+# host, or a PyPI install. The URDFs' own mesh <filename>s are still
+# absolute to whichever machine generated them (container or host);
+# long_tamp resolves those when it loads each URDF (see
+# long_tamp/backends/_urdf_paths.py). Robot URDFs use the `.container.urdf`
+# variant for historical reasons; either variant now loads anywhere.
 #
 # Consumed by: YamlTaskLoader (src/long_tamp/config/yaml_loader.py)
 
 task: ikea_table_assembly
 
 # ---------------------------------------------------------------------------
-# File paths (used by SceneBuilder) — all absolute, see header note above.
+# File paths (used by SceneBuilder) — relative to this file.
 # ---------------------------------------------------------------------------
 paths:
   robot:
     ur10_left:
-      urdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/ur10_robotiq.container.urdf"
-      srdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/ur10_robotiq.srdf"
+      urdf: "../generated/ur10_robotiq.container.urdf"
+      srdf: "../generated/ur10_robotiq.srdf"
       # No `pose` — loaded at world identity, matching
       # debug_view_frames.py's layout.
     ur10_right:
-      urdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/ur10_robotiq_right.container.urdf"
-      srdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/ur10_robotiq.srdf"
+      urdf: "../generated/ur10_robotiq_right.container.urdf"
+      srdf: "../generated/ur10_robotiq.srdf"
       # No `pose` either — ur10_right's 1.5m/180deg world offset is baked
       # into its own URDF as an outer fixed "world_mount" link (see
       # build_assets.py's merge-arm stage), NOT applied via this YAML's
@@ -58,25 +51,25 @@ paths:
       # docstring for the bug detail).
 
   environment:
-    ground: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/ground.urdf"
-    workbench: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/workbench.urdf"
+    ground: "../generated/ground.urdf"
+    workbench: "../generated/workbench.urdf"
 
   objects:
     table:
-      urdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/table.urdf"
-      srdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/table.srdf"
+      urdf: "../generated/table.urdf"
+      srdf: "../generated/table.srdf"
     leg1:
-      urdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/leg1.urdf"
-      srdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/leg1.srdf"
+      urdf: "../generated/leg1.urdf"
+      srdf: "../generated/leg1.srdf"
     leg2:
-      urdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/leg2.urdf"
-      srdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/leg2.srdf"
+      urdf: "../generated/leg2.urdf"
+      srdf: "../generated/leg2.srdf"
     leg3:
-      urdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/leg3.urdf"
-      srdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/leg3.srdf"
+      urdf: "../generated/leg3.urdf"
+      srdf: "../generated/leg3.srdf"
     leg4:
-      urdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/leg4.urdf"
-      srdf: "/home/thanhndv212/devel/hpp/src/long_tamp/script/ikea_table_prototype/generated/leg4.srdf"
+      urdf: "../generated/leg4.urdf"
+      srdf: "../generated/leg4.srdf"
 
 # ---------------------------------------------------------------------------
 # Scene selection

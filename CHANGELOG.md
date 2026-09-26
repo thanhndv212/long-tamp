@@ -71,6 +71,21 @@ entries accumulate under **Unreleased** until the first tagged release.
 
 ### Fixed
 
+- The PyPI (cmeel) HPP wheels import without `LD_LIBRARY_PATH`: their extension modules
+  carry no RPATH, so `long_tamp.backends.pyhpp` now preloads the HPP libraries from
+  `cmeel.prefix/lib` when the plain import fails on a missing shared library. Each library
+  is loaded once, by soname (the wheels ship `libhpp-util.so` and `libhpp-util.so.9.0.2`
+  as two copies; mapping both corrupted the heap at exit).
+- URDF mesh paths are resolved at load time (`_urdf_paths.resolve_mesh_paths`), so the
+  examples load outside the hpp-agimus container: relative paths against the URDF's folder,
+  and absolute paths from another machine by their tail under the URDF's parent folders.
+  `script/ikea_table_prototype`'s config now names its URDFs relative to itself, and
+  `screw_assembly/build_scene.py` writes the drill mesh path relative (no `--repo-root`).
+- `print_joint_info()` skips joints without a configuration rank (`universe`, listed by
+  HPP 9.0.2's `getJointNames()`), which raised `KeyError`.
+- The PyHPP backend's import error no longer says the PyPI wheels lack long_tamp's
+  bindings: HPP 9.0.2 has them (the full screw-assembly mission runs on the wheels).
+
 - The native `SIGSEGV` at the "target generated -> path planning begins" transition (and
   "Maximal number of iterations reached" failures within seconds regardless of budget).
   `Problem(device)` builds its `WeighedDistance` right after the first robot is loaded, so

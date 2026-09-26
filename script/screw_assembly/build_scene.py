@@ -13,9 +13,8 @@ Usage (host or container):
     python3 build_scene.py            # 4 parts (default)
     python3 build_scene.py --parts 2  # smaller scene for debugging
 
-The drill's mesh is the only absolute path this writes: like the arms' URDFs
-it points into the hpp-agimus-arm64 container's checkout (REPO_ROOT);
-``--repo-root`` points it elsewhere.
+Output uses no absolute paths: the drill's mesh is named relative to the
+URDF, which long_tamp resolves when it loads the scene.
 
 Writes generated/*.urdf|srdf and config/screw_assembly_config.yaml.
 
@@ -113,8 +112,7 @@ RACK_TOP = BENCH_TOP + GAP + RACK_SIZE[2]
 # Drill/driver (YCB 035_power_drill scan). Collision proxies, drill frame
 # (see THE DRILL), as (name, kind, size, center): measured from the scan's
 # vertex slices, each padded a few mm.
-REPO_ROOT = "/home/thanhndv212/devel/hpp/src/long_tamp"  # in the container
-DRILL_MESH = "script/screw_assembly/assets/ycb_035_power_drill/textured.obj"
+DRILL_MESH = "../assets/ycb_035_power_drill/textured.obj"  # from generated/
 # Scan frame -> drill frame: scan +X is backward, +Y up the handle, +Z the
 # side; the battery base's centre is at scan (-0.030, -0.0832, 0.0255).
 DRILL_MESH_XYZ = "-0.030 -0.0255 0.0832"
@@ -229,7 +227,7 @@ def part_srdf(name):
     )
 
 
-def driver_urdf(repo_root: str = REPO_ROOT):
+def driver_urdf():
     collisions = ""
     for name, kind, size, c in DRILL_PROXIES:
         if kind == "box":
@@ -257,7 +255,7 @@ def driver_urdf(repo_root: str = REPO_ROOT):
     </inertial>
     <visual>
       <origin xyz="{DRILL_MESH_XYZ}" rpy="{DRILL_MESH_RPY}"/>
-      <geometry><mesh filename="{repo_root}/{DRILL_MESH}"/></geometry>
+      <geometry><mesh filename="{DRILL_MESH}"/></geometry>
     </visual>
     <visual>
       <origin xyz="{bit[3][0]} {bit[3][1]} {bit[3][2]}" rpy="0 1.5707963 0"/>
@@ -508,19 +506,13 @@ optimization:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--parts", type=int, default=4, choices=range(1, 7))
-    ap.add_argument(
-        "--repo-root",
-        default=REPO_ROOT,
-        help="long_tamp checkout the drill mesh path points into "
-        "(default: the container's)",
-    )
     args = ap.parse_args()
     GEN.mkdir(exist_ok=True)
     CFG.mkdir(exist_ok=True)
     files = {
         GEN / "fixtures.urdf": fixtures_urdf(args.parts),
         GEN / "fixtures.srdf": fixtures_srdf(args.parts),
-        GEN / "driver.urdf": driver_urdf(args.repo_root),
+        GEN / "driver.urdf": driver_urdf(),
         GEN / "driver.srdf": driver_srdf(),
         GEN / "workbench.urdf": bench_urdf(),
         GEN / "ground.urdf": ground_urdf(),

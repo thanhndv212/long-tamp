@@ -60,7 +60,7 @@ docstring.
 
 ## Run it
 
-Inside the `hpp-agimus-arm64` container (pyhpp), from this folder:
+With HPP installed (`pip install -e ".[hpp]"` from the repo root on Linux, or the `hpp-agimus-arm64` container), from this folder:
 
 ```bash
 python3 build_scene.py --parts 4                 # regenerate generated/ and config/

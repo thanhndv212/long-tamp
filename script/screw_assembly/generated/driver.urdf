@@ -12,7 +12,7 @@
     </inertial>
     <visual>
       <origin xyz="-0.030 -0.0255 0.0832" rpy="1.5707963 0 3.1415927"/>
-      <geometry><mesh filename="/home/thanhndv212/devel/hpp/src/long_tamp/script/screw_assembly/assets/ycb_035_power_drill/textured.obj"/></geometry>
+      <geometry><mesh filename="../assets/ycb_035_power_drill/textured.obj"/></geometry>
     </visual>
     <visual>
       <origin xyz="0.142 0.0 0.16" rpy="0 1.5707963 0"/>
