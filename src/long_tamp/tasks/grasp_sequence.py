@@ -3081,24 +3081,49 @@ class GraspSequencePlanner:
             q_for_build: list[float],
         ) -> None:
             held = {g: h for g, h in tracker.current_grasps.items() if h is not None}
-            constraint_names = None
+            # Lock exactly what the real phase build locks (frozen arms plus
+            # the cosmetic freeze_joint_substrings), and tell the config
+            # generator which joints to hold. Without set_frozen_joints the
+            # generator kept the *previous* real phase's frozen set: probing a
+            # driver-tip grasp right after a phase that froze the driver's arm
+            # held that arm still, so every probe failed in the solver (live:
+            # 1000/1000, no collisions) while the real phase planned the same
+            # target in 12 attempts.
+            constraint_names: list[str] = []
+            frozen_joint_names: list[str] = []
             if frozen_arms:
-                constraint_names, _ = ConstraintBuilder.create_locked_joint_constraints(
+                names, joints = ConstraintBuilder.create_locked_joint_constraints(
                     self.graph_builder.ps,
                     self.graph_builder.robot,
                     q_for_build,
                     frozen_arms,
                     backend=self.graph_builder.backend,
                 )
+                constraint_names += list(names or [])
+                frozen_joint_names += list(joints or [])
+            if getattr(self, "freeze_joint_substrings", None):
+                names, joints = ConstraintBuilder.create_locked_joint_constraints(
+                    self.graph_builder.ps,
+                    self.graph_builder.robot,
+                    q_for_build,
+                    self.freeze_joint_substrings,
+                    backend=self.graph_builder.backend,
+                )
+                for name, joint in zip(names or [], joints or []):
+                    if joint not in frozen_joint_names:
+                        constraint_names.append(name)
+                        frozen_joint_names.append(joint)
             self.graph_builder.build_phase_graph(
                 config=self.task_config,
                 held_grasps=held,
                 next_grasp=next_grasp,
-                graph_constraints=constraint_names,
+                graph_constraints=constraint_names or None,
                 q_init=q_for_build,
                 q_init_original=q_scene_init,
             )
             _sync_graph_refs(self.graph_builder.get_graph())
+            if hasattr(self.config_gen, "set_frozen_joints"):
+                self.config_gen.set_frozen_joints(frozen_joint_names)
             if hasattr(self.graph_builder, "_phase_grippers"):
                 tracker.set_phase_indices(
                     self.graph_builder._phase_grippers,

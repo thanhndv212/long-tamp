@@ -55,6 +55,10 @@ class _ConfigGen:
     def __init__(self, dead_for_later=()):
         self.dead_for_later = set(dead_for_later)
         self.candidate = 0
+        self.frozen_sets = []  # set_frozen_joints() calls, in order
+
+    def set_frozen_joints(self, names):
+        self.frozen_sets.append(list(names))
 
     def update_graph(self, graph):
         pass
@@ -130,3 +134,17 @@ class TestAlsoReachable:
         p = _planner(_ConfigGen(dead_for_later={1, 2, 3, 4, 5}))
 
         assert _search(p, also_reachable=[(LATER, [])]) is None
+
+    def test_every_probe_build_resets_the_generators_frozen_joints(self):
+        """The generator holds its frozen joints at q_from across restarts.
+        If a probe build doesn't set them, it inherits the previous *real*
+        phase's set -- live, the driver's arm stayed frozen while probing
+        a driver-tip grasp, and every probe failed in the solver."""
+        gen = _ConfigGen()
+        gen.frozen_sets.append(["stale/arm_joint"])  # left by a real phase
+        p = _planner(gen)
+
+        _search(p, also_reachable=[(LATER, [])])
+
+        builds = len(p.graph_builder.builds)
+        assert gen.frozen_sets[-builds:] == [[]] * builds
