@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Plan diagrams (#7): `task_planning.visualize.to_mermaid(plan)` and
+  `to_dot(plan)` render a TaskPlan (fallback alternatives as dashed `else` edges,
+  attempt budgets, optionally each step's grounded effects with `registry=`).
 - World-state providers (#3, ADR-0002): `GraspTrackerState` reports observed
   `holds(gripper, handle)` atoms from a `GraspStateTracker`; `RecordedFacts`
   holds facts no sensor shows afterwards (e.g. `screwed(part, hole)`), persisted

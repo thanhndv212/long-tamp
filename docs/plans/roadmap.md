@@ -46,7 +46,7 @@ feasibility before any geometry runs; missions skip steps whose effect already h
       `home_move` capabilities)
 - [ ] [#6](https://github.com/thanhndv212/long-tamp/issues/6) Initial-state scenario harness (V4), ≥4 screw-assembly scenarios, TWIN regrasp
       from ≥3 initial grasp states
-- [ ] [#7](https://github.com/thanhndv212/long-tamp/issues/7) Static plan diagram: `to_mermaid()` / `to_dot()` for TaskPlans
+- [x] [#7](https://github.com/thanhndv212/long-tamp/issues/7) Static plan diagram: `to_mermaid()` / `to_dot()` for TaskPlans
 
 **Exit test:** the screw-assembly TaskPlan succeeds from ≥4 initial states with no plan
 change; the 10-seed batch gate passes.
