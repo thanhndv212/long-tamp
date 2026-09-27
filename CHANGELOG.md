@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Capability preconditions and effects (#2, ADR-0002): `CapabilityDescriptor`
+  takes `preconditions=` and `effects=` as literals over the step's parameters
+  (`"not holds(?gripper, _)"`, `"holds(?gripper, ?handle)"`), parsed and checked
+  against `required_parameters` at construction
+  (`long_tamp.tasks.task_planning.predicates`). A plan may declare an
+  `initial_state`; `TaskPlan.from_dict` then simulates every branch and rejects a
+  plan whose preconditions can fail, naming the step, literal and state, before
+  any geometry runs. Sessions take an optional `world_state=` callable, and
+  `TaskStepReady` then evaluates the step's preconditions against it. Both TWIN
+  missions declare real literals and are checked this way.
+
 - `long_tamp.grasping`: a grasp planner, separate from motion planning.
   `GraspPlanner` samples, evaluates and ranks parallel-jaw grasps on an object's
   URDF collision primitives and closes the fingers at any grasp pose, including
@@ -48,6 +59,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `replay.py` used a fixed `finger_joint = 0.6` for every object, which put the
   pads 6.8 mm into the drill handle; it now uses the same closures (0.496 on the
   drill, 0.567 on a part's tab).
+
+### Deprecated
+
+- `CapabilityDescriptor(effects=("grasp_state",))`: bare state tags now belong
+  in the new `writes=` field. They are moved there automatically, with a
+  `DeprecationWarning`; `effects` declares literals.
 
 ## [0.1.0] - 2026-09-27
 
