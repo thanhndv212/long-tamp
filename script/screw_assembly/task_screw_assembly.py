@@ -50,14 +50,13 @@ from long_tamp.tasks.block_recovery import (  # noqa: E402
 )
 from long_tamp.tasks.grasp_sequence import GraspSequencePlanner  # noqa: E402
 from long_tamp.tasks.mission_checkpoint import MissionCheckpoint  # noqa: E402
+from screw_domain import LEFT, RIGHT, build_mission  # noqa: E402
 
 # Planning keeps the fingers frozen open (a grasp is a rigid TCP constraint);
 # how far they close on each handle comes from the grasp planner, see
 # finger_closures().
 FREEZE_JOINT_SUBSTRINGS = ["finger_joint", "knuckle_joint"]
 
-LEFT, RIGHT = "ur10_left", "ur10_right"
-DRIVER_TIP = "driver/tip"
 ARM_JOINTS = (
     "shoulder_pan_joint",
     "shoulder_lift_joint",
@@ -66,71 +65,6 @@ ARM_JOINTS = (
     "wrist_2_joint",
     "wrist_3_joint",
 )
-
-# Home retreat for the driver arm (the same idea as agimus_spacelab's
-# home-retreat policy): parked where it stopped, ur10_right boxed in
-# ur10_left twice per part -- live, the lookahead's clamp targets kept
-# failing to path-plan (hint chain broken, 15 times) and the driver's path
-# to hole 1 failed 45 resumes on "ur10_left/wrist_1 vs ur10_right's
-# gripper". So it retreats, still holding the driver, after the pickup
-# and after each part's screws.
-HOME_MOVE = {"move": (RIGHT, "driver")}
-
-
-def build_mission(n_parts: int) -> list[dict[str, Any]]:
-    """The mission as a list of blocks, each a dict the runner consumes."""
-    blocks: list[dict[str, Any]] = [
-        {
-            "label": "bootstrap: pick driver",
-            "seq": [(f"{RIGHT}/gripper", "driver/h_grip")],
-            "frozen": {0: [LEFT]},
-        },
-        {"label": "ur10_right home (bootstrap)", **HOME_MOVE},
-    ]
-    for i in range(1, n_parts + 1):
-        p = f"part{i}"
-        blocks += [
-            {
-                "label": f"{p} A0: grasp",
-                "seq": [(f"{LEFT}/gripper", f"{p}/h_grasp")],
-                "frozen": {0: [RIGHT]},
-            },
-            {
-                "label": f"{p} A: clamp + screw",
-                "seq": [
-                    (f"fixtures/clamp{i}", f"{p}/h_seat"),
-                    (DRIVER_TIP, f"{p}/h_hole1"),
-                    (DRIVER_TIP, None),
-                    (DRIVER_TIP, f"{p}/h_hole2"),
-                    (DRIVER_TIP, None),
-                ],
-                # Phase 0 moves ur10_left (it carries the part into the
-                # clamp); the screw phases move ur10_right (driver).
-                "frozen": {0: [RIGHT], 1: [LEFT], 2: [LEFT], 3: [LEFT], 4: [LEFT]},
-                # Clamp candidate must leave hole 1 (phase 1) AND hole 2
-                # (phase 3) reachable: the clamp pose fixes ur10_left
-                # around the part for both.
-                "lookahead": {"pair": (0, 1), "also": (3,)},
-            },
-            {"label": f"ur10_right home ({p})", **HOME_MOVE},
-            {
-                "label": f"{p} B: release",
-                "seq": [(f"{LEFT}/gripper", None)],
-                "frozen": {0: [RIGHT]},
-            },
-        ]
-    blocks.append(
-        {
-            "label": "return: rack driver",
-            "seq": [
-                ("fixtures/rack_hold", "driver/h_rack"),
-                (f"{RIGHT}/gripper", None),
-            ],
-            "frozen": {0: [LEFT], 1: [LEFT]},
-        }
-    )
-    return blocks
-
 
 class ScrewAssemblyTask(ManipulationTask):
     FREEZE_JOINT_SUBSTRINGS = FREEZE_JOINT_SUBSTRINGS
