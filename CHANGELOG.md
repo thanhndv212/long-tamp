@@ -13,8 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Plan diagrams (#7): `task_planning.visualize.to_mermaid(plan)` and
   `to_dot(plan)` render a TaskPlan (fallback alternatives as dashed `else` edges,
   attempt budgets, optionally each step's grounded effects with `registry=`).
-- World-state providers (#3, ADR-0002): `GraspTrackerState` reports observed
-  `holds(gripper, handle)` atoms from a `GraspStateTracker`; `RecordedFacts`
+- Effect-based completion (#4, ADR-0002): with a `world_state`, a transaction
+  is complete exactly when its grounded effects hold in the world. A step whose
+  effect already holds is skipped without running (`effect already holds`), and
+  one whose effect was undone runs again; `is_step_complete` reports the reason.
+  Steps without declared effects, and sessions without a world state, keep the
+  in-memory record. The TWIN sessions use the grasp tracker as their world state.
+- World-state providers (#3, ADR-0002): `GraspTrackerState(planner)` reports
+  observed `holds(gripper, handle)` atoms from the planner's grasp tracker
+  (re-read on every call, since the planner replaces it on resume/reset); `RecordedFacts`
   holds facts no sensor shows afterwards (e.g. `screwed(part, hole)`), persisted
   atomically and reloaded on restart; `CompositeWorldState` merges sources into a
   session's `world_state=`. A session built with `recorded=` writes a step's

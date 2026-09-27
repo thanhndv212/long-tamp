@@ -40,7 +40,7 @@ feasibility before any geometry runs; missions skip steps whose effect already h
       simulates them and rejects infeasible plans; `TaskStepReady` checks preconditions
 - [x] [#3](https://github.com/thanhndv212/long-tamp/issues/3) World-state provider: observed predicates (grasps, poses) and recorded facts
       (written only by completed execution, e.g. `screwed(part, hole)`)
-- [ ] [#4](https://github.com/thanhndv212/long-tamp/issues/4) Runtime effect guard: a transaction is skipped when its effect already holds
+- [x] [#4](https://github.com/thanhndv212/long-tamp/issues/4) Runtime effect guard: a transaction is skipped when its effect already holds
       (replaces the in-memory completed set)
 - [ ] [#5](https://github.com/thanhndv212/long-tamp/issues/5) Screw-assembly domain and mission expressed as a TaskPlan (`plan_block`,
       `home_move` capabilities)

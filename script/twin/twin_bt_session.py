@@ -98,6 +98,7 @@ def build_twin_session(options_json: str = "{}") -> Any:
     from long_tamp.tasks.grasp_sequence import GraspSequencePlanner
     from long_tamp.tasks.task_planning.capabilities import CapabilityRegistry
     from long_tamp.tasks.task_planning.host import HostSession
+    from long_tamp.tasks.task_planning.world_state import GraspTrackerState
     from long_tamp.tasks.task_planning.model import TaskPlan
 
     task = twin.LiftBallTask(backend="pyhpp")
@@ -146,7 +147,11 @@ def build_twin_session(options_json: str = "{}") -> Any:
 
     document = _build_plan_document(twin.GRASP_SEQUENCE)
     plan = TaskPlan.from_dict(document, registry)
-    return HostSession(plan, registry)
+    # The grasp tracker is the world state: TaskStepReady checks real
+    # preconditions, and a transaction whose effect already holds is skipped.
+    return HostSession(
+        plan, registry, world_state=GraspTrackerState(seq_planner)
+    )
 
 
 def build_twin_regrasp_session(options_json: str = "{}") -> Any:
@@ -212,6 +217,7 @@ def build_twin_regrasp_session(options_json: str = "{}") -> Any:
     from long_tamp.tasks.grasp_sequence import GraspSequencePlanner
     from long_tamp.tasks.task_planning.capabilities import CapabilityRegistry
     from long_tamp.tasks.task_planning.host import HostSession
+    from long_tamp.tasks.task_planning.world_state import GraspTrackerState
     from long_tamp.tasks.task_planning.model import TaskPlan
 
     task = twin.LiftBallTask(backend="pyhpp")
@@ -266,7 +272,11 @@ def build_twin_regrasp_session(options_json: str = "{}") -> Any:
 
     document = _build_regrasp_plan_document()
     plan = TaskPlan.from_dict(document, registry)
-    return HostSession(plan, registry)
+    # The grasp tracker is the world state: TaskStepReady checks real
+    # preconditions, and a transaction whose effect already holds is skipped.
+    return HostSession(
+        plan, registry, world_state=GraspTrackerState(seq_planner)
+    )
 
 
 def _build_regrasp_plan_document() -> dict[str, Any]:

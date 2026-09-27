@@ -91,8 +91,40 @@ class TaskPlanningSession:
             unsatisfied=unsatisfied,
         )
 
+    def _completion(self, step_id: str) -> tuple[bool, str]:
+        """Whether ``step_id`` is done, and why (ADR-0002).
+
+        With a world state and declared effects, a step is done exactly when
+        all its grounded effects hold in the world, whatever happened earlier
+        in this run: an undone effect makes it run again. Otherwise the
+        in-memory record of steps completed in this run decides. Raises if
+        the world state can't be read.
+        """
+        node = self._nodes.get(step_id)
+        if node is not None and node["type"] == "transaction":
+            node = node["children"][0]
+        if (
+            self.world_state is not None
+            and node is not None
+            and node["type"] == "operation"
+        ):
+            descriptor = self.registry.descriptor(node["capability"])
+            _, effects = grounded_literals(node, descriptor)
+            if effects:
+                state = parse_state(self.world_state())
+                if all(holds(effect, state) for effect in effects):
+                    return True, "effect_holds"
+                return False, "effect_not_holding"
+        if step_id in self._completed:
+            return True, "completed_this_run"
+        return False, "not_completed"
+
     def is_step_complete(self, step_id: str) -> str:
-        return _response(status="success", complete=step_id in self._completed)
+        try:
+            complete, reason = self._completion(step_id)
+        except Exception as error:  # noqa: BLE001 - world-state provider boundary
+            return _response(status="failure", complete=False, message=str(error))
+        return _response(status="success", complete=complete, reason=reason)
 
     def evaluate_condition(self, step_id: str) -> str:
         node = self._nodes.get(step_id)
@@ -135,10 +167,21 @@ class TaskPlanningSession:
         whose single child capability is not registered as
         ``restartable=True`` (see ``model.py``).
         """
-        if step_id in self._completed:
+        try:
+            complete, reason = self._completion(step_id)
+        except Exception as error:  # noqa: BLE001 - world-state provider boundary
             return _response(
-                status="skipped", step_id=step_id, message="already complete"
+                status="failure",
+                step_id=step_id,
+                message=f"world state unavailable: {error}",
             )
+        if complete:
+            message = (
+                "effect already holds"
+                if reason == "effect_holds"
+                else "already complete"
+            )
+            return _response(status="skipped", step_id=step_id, message=message)
         if self._stop_requested.is_set():
             return _response(
                 status="cancelled", step_id=step_id, message="stop requested"
