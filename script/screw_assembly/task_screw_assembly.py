@@ -51,7 +51,9 @@ from long_tamp.tasks.block_recovery import (  # noqa: E402
 from long_tamp.tasks.grasp_sequence import GraspSequencePlanner  # noqa: E402
 from long_tamp.tasks.mission_checkpoint import MissionCheckpoint  # noqa: E402
 
-# Gripper fingers are cosmetic: grasps are rigid TCP constraints.
+# Planning keeps the fingers frozen open (a grasp is a rigid TCP constraint);
+# how far they close on each handle comes from the grasp planner, see
+# finger_closures().
 FREEZE_JOINT_SUBSTRINGS = ["finger_joint", "knuckle_joint"]
 
 LEFT, RIGHT = "ur10_left", "ur10_right"
@@ -195,6 +197,19 @@ def setup(
         run_logger=getattr(task, "run_logger", None),
     )
     return task, planner
+
+
+def finger_closures():
+    """Per (arm gripper, handle) Robotiq closure, from the grasp planner.
+
+    Both arms carry a Robotiq 2F-85; the driver tip and the fixtures'
+    clamps are virtual grippers with no fingers, so they have no entry.
+    """
+    from long_tamp.grasping import ROBOTIQ_2F85, FingerClosureTable
+
+    return FingerClosureTable.from_task_yaml(
+        CONFIG, {f"{LEFT}/gripper": ROBOTIQ_2F85, f"{RIGHT}/gripper": ROBOTIQ_2F85}
+    )
 
 
 def sample_phases(
@@ -535,10 +550,23 @@ def main() -> int:
 
     import atexit
 
+    closures = finger_closures()
+    for row in closures.report():
+        if row["handle"].startswith(("driver", "part1")):
+            print(
+                f"grasp {row['gripper']} > {row['handle']}: close to "
+                f"{row['width'] * 1000:.1f} mm (finger_joint {row['q']:.3f})"
+                + ("" if row["feasible"] else f"  WARNING: {'; '.join(row['reasons'])}")
+            )
     live_viewer = None
     if not args.no_viewer:
-        live_viewer = MissionViewer(task, args.viewer_port, q_start or task.q_init,
-                                    camera=((2.15, -2.30, 1.55), (0.75, 0.0, 0.58)))
+        live_viewer = MissionViewer(
+            task,
+            args.viewer_port,
+            q_start or task.q_init,
+            camera=((2.15, -2.30, 1.55), (0.75, 0.0, 0.58)),
+            closures=closures,
+        )
         atexit.register(live_viewer.close)
     try:
         result = run_mission(

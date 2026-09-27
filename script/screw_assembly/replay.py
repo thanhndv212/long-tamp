@@ -7,8 +7,9 @@
 Loads the scene only (no planning), serves viser on 0.0.0.0:PORT and plays
 the recorded frames at their recorded timing (``--speed`` scales it). HPP's
 paths keep the Robotiq fingers open (a grasp is a rigid TCP constraint), so
-the fingers are closed and opened here as a visual overlay: closed from each
-arm grasp until that arm's release.
+the fingers are closed and opened here as an overlay: closed from each arm
+grasp until that arm's release, to the width the grasp planner computes for
+that handle (``task_screw_assembly.finger_closures()``).
 """
 
 from __future__ import annotations
@@ -21,17 +22,6 @@ from pathlib import Path
 
 import numpy as np
 
-# Joint name -> sign of its closing motion (the 2F-85's mimic multipliers).
-FINGER_MIMIC = {
-    "finger_joint": 1,
-    "left_inner_knuckle_joint": 1,
-    "left_inner_finger_joint": -1,
-    "right_outer_knuckle_joint": 1,
-    "right_inner_knuckle_joint": 1,
-    "right_inner_finger_joint": -1,
-}
-CLOSED = 0.6
-ARM_GRIPPERS = {"ur10_left/gripper": "ur10_left", "ur10_right/gripper": "ur10_right"}
 
 
 def main() -> int:
@@ -48,6 +38,7 @@ def main() -> int:
     from pyhpp_viser import Viewer
 
     task, _ = T.setup()
+    closures = T.finger_closures()
     viewer = Viewer(task.planner.device, task.planner.problem)
     viewer.start(host="0.0.0.0", port=args.port, open=False)
     server = viewer.viewer
@@ -59,21 +50,19 @@ def main() -> int:
         client.camera.up_direction = (0.0, 0.0, 1.0)
 
     rank = task.robot.rankInConfiguration
-    finger_ranks = {
-        arm: [(rank[f"{arm}/{j}"], sign) for j, sign in FINGER_MIMIC.items()]
-        for arm in ARM_GRIPPERS.values()
-    }
 
-    def overlay(q, closed):
-        for arm, amount in closed.items():
-            for r, sign in finger_ranks[arm]:
-                q[r] = sign * amount
+    def overlay(q, fingers):
+        for values in fingers.values():
+            for joint, value in values.items():
+                q[rank[joint]] = value
         return q
 
-    def animate_fingers(q, closed, arm, start, end, steps=12):
+    def animate_fingers(q, fingers, gripper, target, steps=12):
+        start = fingers.get(gripper) or closures.open_values(gripper)
         for i in range(steps + 1):
-            closed[arm] = start + (end - start) * i / steps
-            viewer(overlay(q.copy(), closed))
+            s = i / steps
+            fingers[gripper] = {j: start[j] + (v - start[j]) * s for j, v in target.items()}
+            viewer(overlay(q.copy(), fingers))
             time.sleep(0.02)
 
     frame_dt = data.get("dt", 0.05) / max(args.speed, 1e-3)
@@ -86,25 +75,28 @@ def main() -> int:
     )
     time.sleep(3.0)  # let a browser connect before the first frame
     while True:
-        closed = {arm: 0.0 for arm in ARM_GRIPPERS.values()}
+        fingers: dict[str, dict[str, float]] = {}
         block = None
         for seg in segments:
             if seg["block"] != block:
                 block = seg["block"]
                 print(f"  {block}", flush=True)
-            arm = ARM_GRIPPERS.get(seg["gripper"])
+            gripper = seg["gripper"]
+            hand = closures.has(gripper)
             first = np.asarray(seg["configs"][0], dtype=float)
             # A release opens the fingers; a home move (also handle None)
             # carries its object, so its fingers stay closed.
             release = seg["handle"] is None and "home" not in seg["block"]
-            if arm and release and closed[arm] > 0:
-                animate_fingers(first, closed, arm, CLOSED, 0.0)
+            if hand and release and gripper in fingers:
+                animate_fingers(first, fingers, gripper, closures.open_values(gripper))
+                fingers.pop(gripper)
             for q in seg["configs"]:
-                viewer(overlay(np.asarray(q, dtype=float), closed))
+                viewer(overlay(np.asarray(q, dtype=float), fingers))
                 time.sleep(frame_dt)
-            if arm and seg["handle"] is not None:
+            if hand and seg["handle"] is not None:
                 last = np.asarray(seg["configs"][-1], dtype=float)
-                animate_fingers(last, closed, arm, 0.0, CLOSED)
+                target = closures.closed_values(gripper, seg["handle"])
+                animate_fingers(last, fingers, gripper, target)
         if not args.loop:
             break
         time.sleep(2.0)

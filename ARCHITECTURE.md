@@ -71,6 +71,8 @@ code is put together*, not how to deploy it.
 
   config/  — declarative task configuration (BaseTaskConfig, YamlTaskLoader)
              consumed by tasks/ and planning/
+  grasping/ — grasp planner: gripper models, grasp candidates, finger
+             closures; no HPP dependency, consumed by tasks/ and scripts
   logging/ — RunLogger + JSONL event schema, cross-cutting, used by tasks/
   visualization/ — constraint-graph diagrams, handle/gripper frame display,
              video recording; cross-cutting, used by tasks/ and scripts
@@ -245,6 +247,39 @@ Each class here does one job and is usable on its own, independent of the
   — terminal menu-driven wrapper around `GraspSequencePlanner` for
   exploratory/interactive planning sessions (used by
   `script/*/interactive_planning.py`).
+
+## Grasp planning (`grasping/`)
+
+The motion planner treats a grasp as a rigid constraint (gripper frame ==
+handle frame) and keeps the finger joints frozen open, so on its own it
+never says *which* handle a hand can hold or *how far the fingers close*.
+`grasping/` is that separate step, next to motion planning rather than
+inside it, so an orchestrator (the behaviour-tree host, a task script) can
+run it as its own module:
+
+- **`ParallelGripperModel`** (`gripper.py`) — a hand in one canonical
+  frame (+X approach, +Y closing): finger joints and their mimic
+  multipliers, a stroke table (driving value → pad gap and pad depth), and
+  a conservative box hull (palm, pads, linkage, the knuckles between the
+  pads). `ROBOTIQ_2F85` is calibrated by forward kinematics of this repo's
+  URDF (`calibrate_from_urdf`); `PANDA_HAND` is nominal.
+- **`GraspPlanner`** (`planner.py`) — samples antipodal grasps on an
+  object's collision primitives (boxes, cylinders, spheres; a mesh becomes
+  its bounding box), closes the fingers with pad rays along the closing axis
+  (symmetric closure: the first finger to touch stops both), rejects grasps
+  that don't fit the stroke, are off-centre, or collide, and ranks the rest.
+  `evaluate_handle()` does the same for an existing SRDF handle;
+  `GraspCandidate.srdf_handle()` writes a planned grasp as a `<handle>`.
+- **`FingerClosureTable`** (`objects.py`) — built from a task YAML: for
+  every `(gripper, handle)` pair of `valid_pairs` whose gripper has a hand
+  model, the finger joint values to command. Virtual grippers (a tool tip,
+  a jig clamp) have no entry.
+
+Pure numpy; pinocchio only for calibration. Consumers:
+`visualization.MissionViewer(closures=...)` closes the fingers in playback,
+and `tasks/task_planning/grasp_capability.py` registers `plan_grasp`,
+`grasp_feasible`, `close_gripper`, `open_gripper` as task-plan
+capabilities. See `script/grasp_planning/`.
 
 ## Configuration (`config/`)
 

@@ -8,6 +8,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `long_tamp.grasping`: a grasp planner, separate from motion planning.
+  `GraspPlanner` samples, evaluates and ranks parallel-jaw grasps on an object's
+  URDF collision primitives and closes the fingers at any grasp pose, including
+  hand-written SRDF handles; planned grasps export as SRDF `<handle>`s.
+  `ParallelGripperModel` presets: `ROBOTIQ_2F85` (stroke and knuckle envelope
+  calibrated by forward kinematics of the repo's URDF) and `PANDA_HAND`.
+  `FingerClosureTable` maps each `(gripper, handle)` pair of a task YAML to the
+  finger joint values to command.
+- `tasks/task_planning/grasp_capability.py`: `plan_grasp`, `grasp_feasible`,
+  `close_gripper`, `open_gripper` capabilities for task plans / the BT host.
+- `script/grasp_planning/`: `plan_grasps.py` (rank grasps, check an object's
+  handles, emit SRDF) and `validate_closure.py` (check closures against the real
+  Robotiq meshes with pinocchio + coal).
+
+### Fixed
+
+- The Robotiq fingers never closed on the drill in the screw-assembly viewer:
+  planned paths keep them frozen open, and native playback showed exactly that
+  (pads 24 mm off the handle). `MissionViewer(closures=...)` now closes them to the
+  grasp planner's width at each grasp and opens them at each release.
+  `replay.py` used a fixed `finger_joint = 0.6` for every object, which put the
+  pads 6.8 mm into the drill handle; it now uses the same closures (0.496 on the
+  drill, 0.567 on a part's tab).
+
 ## [0.1.0] - 2026-09-27
 
 First public release, on PyPI as `long-tamp`.
