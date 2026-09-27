@@ -32,7 +32,7 @@ def _registry():
             version="1.0",
             required_parameters={"gripper": str, "handle": str},
             resources=("robot",),
-            effects=("grasp_state",),
+            writes=("grasp_state",),
             safety_class="planning-only",
             max_attempts=10,
             max_timeout=30.0,

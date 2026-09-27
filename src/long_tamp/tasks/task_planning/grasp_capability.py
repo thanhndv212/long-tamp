@@ -38,7 +38,7 @@ PLAN_GRASP = CapabilityDescriptor(
     "plan_grasp",
     "1.0",
     {"gripper": str, "object": str},
-    effects=("grasp_candidates",),
+    writes=("grasp_candidates",),
     restartable=True,
 )
 GRASP_FEASIBLE = CapabilityDescriptor(
@@ -51,7 +51,7 @@ CLOSE_GRIPPER = CapabilityDescriptor(
     "1.0",
     {"gripper": str, "handle": str},
     resources=("gripper",),
-    effects=("finger_state",),
+    writes=("finger_state",),
     restartable=True,
 )
 OPEN_GRIPPER = CapabilityDescriptor(
@@ -59,7 +59,7 @@ OPEN_GRIPPER = CapabilityDescriptor(
     "1.0",
     {"gripper": str},
     resources=("gripper",),
-    effects=("finger_state",),
+    writes=("finger_state",),
     restartable=True,
 )
 

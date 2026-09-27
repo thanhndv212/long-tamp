@@ -7,14 +7,19 @@ import json
 from .capabilities import CapabilityDescriptor, CapabilityRegistry
 from .compiler import compile_behavior_tree
 from .model import TaskPlan
-from .session import TaskPlanningSession
+from .session import TaskPlanningSession, WorldState
 
 
 class HostSession(TaskPlanningSession):
     """Task session carrying the deterministic BT artifact consumed by C++."""
 
-    def __init__(self, plan: TaskPlan, registry: CapabilityRegistry) -> None:
-        super().__init__(plan, registry)
+    def __init__(
+        self,
+        plan: TaskPlan,
+        registry: CapabilityRegistry,
+        world_state: WorldState | None = None,
+    ) -> None:
+        super().__init__(plan, registry, world_state)
         self.artifact = compile_behavior_tree(plan)
 
     def get_behavior_tree_xml(self) -> str:
@@ -53,7 +58,7 @@ def create_fake_session(options_json: str = "{}") -> HostSession:
             "move",
             "1.0",
             {"target": str},
-            effects=("robot_pose",),
+            writes=("robot_pose",),
             restartable=True,
         ),
         move_impl,

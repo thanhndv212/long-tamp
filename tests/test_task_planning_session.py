@@ -16,7 +16,7 @@ def _session(implementation=None, node_type="operation", transaction=False):
             capability_id="move",
             version="1.0",
             required_parameters={"target": str},
-            effects=("robot_pose",),
+            writes=("robot_pose",),
             restartable=True,
         ),
         implementation
