@@ -125,6 +125,24 @@ atoms) makes `TaskStepReady` evaluate the step's grounded preconditions against 
 the response lists any `unsatisfied` literals. Without it, `TaskStepReady` only checks that
 the step exists.
 
+The world state comes from two kinds of sources (`task_planning/world_state.py`), and
+nothing else may feed it:
+
+- **observed** predicates, read live from the world model: `GraspTrackerState(tracker)`
+  reports `holds(gripper, handle)` from a `GraspStateTracker`;
+- **recorded** facts, which no sensor shows once a step is over (a screw driven in):
+  `RecordedFacts(path, predicates={"screwed"})` holds them, persisted atomically to `path`.
+  A session built with `recorded=` writes a step's grounded effects on those predicates
+  **only when the step completes**; failed steps and plan validation never write.
+
+```python
+recorded = RecordedFacts(run_dir / "facts.json", predicates={"screwed", "racked"})
+world = CompositeWorldState(GraspTrackerState(planner.grasp_tracker), recorded)
+session = TaskPlanningSession(plan, registry, world_state=world, recorded=recorded)
+```
+
+Planner bookkeeping (a plan computed, an attempt count) is never a predicate.
+
 `TaskPlan.from_dict(document, registry)` normalizes (NFC, sorted keys, finite numbers only),
 validates, and returns a frozen `TaskPlan` whose `.document` property is a **defensive deep
 copy** — callers can't mutate the validated IR in place. `plan_fingerprint` hashes the

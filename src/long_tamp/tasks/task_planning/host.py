@@ -8,6 +8,7 @@ from .capabilities import CapabilityDescriptor, CapabilityRegistry
 from .compiler import compile_behavior_tree
 from .model import TaskPlan
 from .session import TaskPlanningSession, WorldState
+from .world_state import RecordedFacts
 
 
 class HostSession(TaskPlanningSession):
@@ -18,8 +19,9 @@ class HostSession(TaskPlanningSession):
         plan: TaskPlan,
         registry: CapabilityRegistry,
         world_state: WorldState | None = None,
+        recorded: RecordedFacts | None = None,
     ) -> None:
-        super().__init__(plan, registry, world_state)
+        super().__init__(plan, registry, world_state, recorded)
         self.artifact = compile_behavior_tree(plan)
 
     def get_behavior_tree_xml(self) -> str:

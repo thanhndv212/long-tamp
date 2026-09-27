@@ -10,6 +10,7 @@ from typing import Any
 from .capabilities import CapabilityRegistry
 from .model import TaskPlan, grounded_literals
 from .predicates import holds, parse_state
+from .world_state import RecordedFacts
 
 #: Returns the current world as ground atoms (``"holds(left, ball)"`` strings or
 #: ``Atom``s): observed predicates and recorded facts, never planner bookkeeping.
@@ -25,7 +26,9 @@ class TaskPlanningSession:
 
     With ``world_state``, ``check_precondition`` evaluates a step's grounded
     preconditions against the world; without it, it only checks that the step
-    exists (the pre-0.2 behaviour).
+    exists (the pre-0.2 behaviour). With ``recorded`` (a ``RecordedFacts``),
+    a step that completes writes its grounded effects on the recorded
+    predicates there; failed steps and plan validation never do.
     """
 
     def __init__(
@@ -33,11 +36,13 @@ class TaskPlanningSession:
         plan: TaskPlan,
         registry: CapabilityRegistry,
         world_state: WorldState | None = None,
+        recorded: RecordedFacts | None = None,
     ) -> None:
         registry.freeze()
         self.plan = plan
         self.registry = registry
         self.world_state = world_state
+        self.recorded = recorded
         self._nodes = self._index_nodes(plan.document["root"])
         self._completed: set[str] = set()
         self._stop_requested = threading.Event()
@@ -162,6 +167,10 @@ class TaskPlanningSession:
             metrics = implementation(dict(executable.get("parameters", {})))
         except Exception as error:  # noqa: BLE001 - capability boundary
             return _response(status="retry", step_id=step_id, message=str(error))
+        if self.recorded is not None:
+            descriptor = self.registry.descriptor(executable["capability"])
+            _, effects = grounded_literals(executable, descriptor)
+            self.recorded.apply(effects)
         self._completed.add(step_id)
         return _response(
             status="success",
