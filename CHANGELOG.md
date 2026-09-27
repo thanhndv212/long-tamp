@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Effect-based completion (#4, ADR-0002): with a `world_state`, a transaction
+  is complete exactly when its grounded effects hold in the world. A step whose
+  effect already holds is skipped without running (`effect already holds`), and
+  one whose effect was undone runs again; `is_step_complete` reports the reason.
+  Steps without declared effects, and sessions without a world state, keep the
+  in-memory record. The TWIN sessions use the grasp tracker as their world state.
 - World-state providers (#3, ADR-0002): `GraspTrackerState` reports observed
   `holds(gripper, handle)` atoms from a `GraspStateTracker`; `RecordedFacts`
   holds facts no sensor shows afterwards (e.g. `screwed(part, hole)`), persisted

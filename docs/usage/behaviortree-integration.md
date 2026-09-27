@@ -125,6 +125,16 @@ atoms) makes `TaskStepReady` evaluate the step's grounded preconditions against 
 the response lists any `unsatisfied` literals. Without it, `TaskStepReady` only checks that
 the step exists.
 
+The same session answers **"is this step done?"** from the world too (`TaskStepComplete`,
+`execute_step`): a transaction whose operation declares effects is complete exactly when
+all its grounded effects hold. A step whose effect already holds is skipped without
+running (`status: "skipped"`, `message: "effect already holds"`), so a mission started
+from a partly done state, or restarted, picks up where the world is. A step whose effect
+was undone after it ran (a part slipped out) runs again. Steps without declared effects,
+and sessions without `world_state=`, fall back to the in-memory record of steps completed
+in this run. `is_step_complete` reports the `reason` (`effect_holds`,
+`effect_not_holding`, `completed_this_run`, `not_completed`).
+
 The world state comes from two kinds of sources (`task_planning/world_state.py`), and
 nothing else may feed it:
 
@@ -156,7 +166,7 @@ maps IR nodes deterministically:
 
 | IR node | Compiled BT shape |
 |---|---|
-| `transaction` | `Fallback[ TaskStepComplete, Sequence[ TaskStepReady, RetryUntilSuccessful(num_attempts=effective)[ ExecuteTaskStep ] ] ]` — already-complete short-circuits, not-ready fails without consuming a retry |
+| `transaction` | `Fallback[ TaskStepComplete, Sequence[ TaskStepReady, RetryUntilSuccessful(num_attempts=effective)[ ExecuteTaskStep ] ] ]` — already-complete (effect holds in the world, see §3) short-circuits, not-ready fails without consuming a retry |
 | `retry` | `RetryUntilSuccessful(num_attempts=effective)` wrapping the compiled child |
 | `operation` | `ExecuteTaskStep` |
 | `condition` | `TaskCapabilityCondition` |
