@@ -78,9 +78,19 @@ is pushed to `main` directly. An agent drives its own PR from opening to merge:
    conflict, no review thread is left unanswered, and no reviewer has requested changes.
    An agent merges only when the maintainer has asked it to for that PR ("merge when
    green" counts). Squash-merge, with the PR's Conventional Commits title as the commit
-   subject, so `main` stays one commit per change. Then stop watching the PR and delete
-   the branch.
-5. **After merge.** User-visible changes already carry their `CHANGELOG.md` Unreleased
+   subject, so `main` stays one commit per change. Then stop watching the PR and cancel
+   any scheduled check-ins for it.
+5. **Delete the PR branch** right after the merge, on the remote and locally:
+   `git push origin --delete <branch>` (or the PR page's "Delete branch" button), then
+   `git branch -D <branch>` after switching to `main`. The squash commit on `main` holds
+   everything the branch had, so nothing is lost. Confirm it is gone with
+   `git ls-remote --heads origin <branch>` (no output). If the agent can't delete it
+   (the push is refused, e.g. a 403 from a session's git proxy that only allows pushes
+   to its own branch), tell the maintainer the branch name and the PR link instead of
+   leaving it silently. A session that must keep working under the same branch name
+   resets it to the new `main` instead (`git checkout -B <branch> origin/main`, then
+   `git push --force-with-lease` to that branch), since it holds only merged history.
+6. **After merge.** User-visible changes already carry their `CHANGELOG.md` Unreleased
    entry (it is part of the PR, not a follow-up). A new session continuing the work
    starts a fresh branch from the updated `main`; a merged PR is never reused.
 
@@ -256,3 +266,5 @@ Before landing a change:
       change is user-visible
 - [ ] Landed through a PR that met the merge conditions in "Pull requests: open → review
       → merge" (CI green on the current head, no conflict, every review thread answered)
+- [ ] PR branch deleted after the merge (remote and local), or the maintainer told which
+      branch is left and why
