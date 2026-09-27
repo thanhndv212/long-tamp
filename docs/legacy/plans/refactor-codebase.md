@@ -612,7 +612,7 @@ dead `solve_mode` gate, and a latent off-by-one in
 
 #### Why
 
-[`ManipulationTask.run()`](../../../src/long_tamp/tasks/base.py)
+[`ManipulationTask.run()`](https://github.com/thanhndv212/long-tamp/blob/main/src/long_tamp/tasks/base.py)
 (originally `tasks/base.py:460-824`, 365 lines) had grown to contain: 4
 nested closures that didn't need to be closures, two structurally
 different solve strategies (`manipulation-planner` segment-by-segment vs.

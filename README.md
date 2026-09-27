@@ -115,7 +115,7 @@ flowchart TD
     p5 --> result["concatenated multi-phase path, O of N planning cost"]
 ```
 
-Both diagrams are copied from **[`ARCHITECTURE.md`](ARCHITECTURE.md)**, which is the
+Both diagrams are copied from **[`ARCHITECTURE.md`](https://github.com/thanhndv212/long-tamp/blob/main/ARCHITECTURE.md)**, which is the
 maintained source — it's dated at the top and covers dependency direction and what each
 class does in more depth than fits here. If the two ever disagree, trust `ARCHITECTURE.md`
 and update this copy to match.
@@ -171,7 +171,7 @@ Python `logging` hierarchy — see [`docs/usage/standalone-usage.md`](docs/usage
 ## Documentation
 
 - **Installation**: [`docs/INSTALL.md`](docs/INSTALL.md) — pip (primary), robotpkg/source-build fallback, CMake install path, optional extras, backend detection.
-- **Architecture**: [`ARCHITECTURE.md`](ARCHITECTURE.md) — module layering, dependency direction, data flow. Dated at the top; check it before trusting a claim about what exists.
+- **Architecture**: [`ARCHITECTURE.md`](https://github.com/thanhndv212/long-tamp/blob/main/ARCHITECTURE.md) — module layering, dependency direction, data flow. Dated at the top; check it before trusting a claim about what exists.
 - **Usage guide (living reference)**: [`docs/usage/standalone-usage.md`](docs/usage/standalone-usage.md) — writing a task, multi-phase sequences, resume/replay/checkpoints, backends, example scripts.
 - **Development report**: [`docs/legacy/report/development-report.md`](docs/legacy/report/development-report.md) — *why* the framework is built this way: architecture decisions vs. bare HPP, measured before/after numbers, project timeline, and a bugs-found appendix. A point-in-time report, not a living reference.
 - **Design rationale for specific mechanisms**: [`docs/features/`](docs/features/); **upstream HPP defects worked around here**: [`docs/bugs/`](docs/bugs/).

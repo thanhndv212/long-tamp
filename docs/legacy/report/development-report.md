@@ -15,7 +15,7 @@ HPP, and a guide to building a mission with it.
 
 > **Living reference.** This report is a snapshot. The maintained, continuously-updated
 > usage reference is [`standalone-usage.md`](../../usage/standalone-usage.md) (plus
-> [`dbt-integration.md`](../../usage/dbt-integration.md) for the ROS 2 / Dynamic-Behavior-Tree consumer
+> [`dbt-integration.md`](../usage/dbt-integration.md) for the ROS 2 / Dynamic-Behavior-Tree consumer
 > built on top of this same library) — when the two disagree, trust that doc, not this one.
 
 **At a glance**
