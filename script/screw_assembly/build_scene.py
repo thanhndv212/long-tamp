@@ -127,8 +127,10 @@ DRILL_PROXIES = [
 ]
 DRILL_TIP = (0.167, 0.0, 0.160)  # end of the bit
 DRILL_MASS = 0.895  # YCB's measured mass
-# Robotiq grasp: centre of the handle, approach along the bit (identity).
-DRIVER_GRIP_XYZQUAT = [-0.022, 0.0, 0.085, 0.0, 0.0, 0.0, 1.0]
+# Robotiq grasp: centre of the handle, approach along the bit.  The 180°
+# roll keeps the closing axis across the handle while placing the palm above
+# the handle, so the driver hangs below the right wrist in its usable pose.
+DRIVER_GRIP_XYZQUAT = [-0.022, 0.0, 0.085, 1.0, 0.0, 0.0, 0.0]
 DRILL_YAW_XYZW = "0 0 1 0"  # on the dock: bit toward -X world
 # rack_hold: DOWN, then 180 deg about world Z (the drill's dock yaw).
 RACK_HOLD_XYZW = "-0.7071068 0 0.7071068 0"
@@ -273,7 +275,7 @@ def driver_srdf():
     return (
         f'<?xml version="1.0"?>\n{HEADER}<robot name="driver">\n'
         + f"""  <!-- Robotiq grasp across the handle, approaching from behind it
-       along the bit (+X), fingers closing across its 38 mm width (Y). -->
+       along the bit (+X). A 180 deg roll puts the palm above the handle. -->
   <handle name="h_grip" clearance="0.05" approaching_direction="1 0 0">
     <position xyz="{g[0]} {g[1]} {g[2]}" xyzw="{g[3]} {g[4]} {g[5]} {g[6]}"/>
     <link name="base_link"/>
