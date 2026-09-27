@@ -94,6 +94,37 @@ and be unique across the whole tree.
   `constraints.max_attempts` / `max_timeout` are capped at the descriptor's own limits, never
   raised.
 
+### Preconditions and effects
+
+Capabilities declare what a step needs and what it achieves, as literals over its
+parameters (`long_tamp.tasks.task_planning.predicates`, see ADR-0002):
+
+```python
+CapabilityDescriptor(
+    "grasp", "1.0", {"gripper": str, "handle": str},
+    preconditions=("not holds(?gripper, _)", "not holds(_, ?handle)"),
+    effects=("holds(?gripper, ?handle)",),
+    writes=("grasp_state",),        # state tags the step touches (was `effects` before 0.2)
+    restartable=True,
+)
+```
+
+`?name` binds to the step parameter `name`, `_` matches anything, and `not` negates. A
+negative effect deletes every matching atom (`not holds(?gripper, _)` empties the
+gripper). For a capability used as a `condition`, the preconditions are what it tests.
+
+A plan may declare an optional **`initial_state`**: a list of ground atoms
+(`["holds(left, ball)"]`, closed world). When present, `TaskPlan.from_dict` simulates every
+branch of the plan from it (a failed step leaves the state unchanged; a `fallback` explores
+each child from the states where the previous ones failed) and rejects the plan if an
+operation can be reached with a precondition false, naming the step, the literal and the
+state. Without `initial_state`, only the syntax and parameter binding are checked.
+
+At run time, a session built with `world_state=` (a callable returning the current ground
+atoms) makes `TaskStepReady` evaluate the step's grounded preconditions against the world;
+the response lists any `unsatisfied` literals. Without it, `TaskStepReady` only checks that
+the step exists.
+
 `TaskPlan.from_dict(document, registry)` normalizes (NFC, sorted keys, finite numbers only),
 validates, and returns a frozen `TaskPlan` whose `.document` property is a **defensive deep
 copy** — callers can't mutate the validated IR in place. `plan_fingerprint` hashes the
@@ -220,9 +251,10 @@ without touching HPP at all.
 
 ## 9. Adding a capability or a new mission
 
-1. Write a `CapabilityDescriptor` (id, version, `required_parameters`, `effects`,
-   `max_attempts`, `max_timeout`, and `restartable=True` if it will back a `transaction`) and
-   a plain callable `dict -> dict` implementation.
+1. Write a `CapabilityDescriptor` (id, version, `required_parameters`, `preconditions`,
+   `effects`, `writes`, `max_attempts`, `max_timeout`, and `restartable=True` if it will back
+   a `transaction`; see §3 "Preconditions and effects") and a plain callable `dict -> dict`
+   implementation.
 2. `registry.register(descriptor, implementation)` into a fresh `CapabilityRegistry` — do
    this before constructing any `TaskPlanningSession`/`HostSession`; the registry freezes
    (`RuntimeError` on further `register`/`bind`) the moment a session is constructed.
@@ -294,8 +326,8 @@ bimanual scene, both grasps completed. Nothing below is broken — this is the g
   future model-proposed) plan; nothing in this repo *searches* for one. Real TAMP
   integration needs a predicate/effects layer a symbolic planner reads and writes, plus
   "stream" functions bridging PDDLStream-style continuous sampling requests to
-  `ConfigGenerator`/`grasp()`. `CapabilityDescriptor.effects` is still just documentation —
-  unused by anything beyond `snapshot()`'s JSON output.
+  `ConfigGenerator`/`grasp()`. The predicate layer exists since 0.2 (§3: preconditions,
+  effects, plan-time simulation); the symbolic search on top of it is roadmap M3.
 
 **Not done by design — the risk/reward didn't justify it yet:**
 
