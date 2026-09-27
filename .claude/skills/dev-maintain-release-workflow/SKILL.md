@@ -1,6 +1,6 @@
 ---
 name: dev-maintain-release-workflow
-description: Development, maintenance, and PyPI release workflow for long_tamp. Use when committing, branching, versioning, releasing, or deciding whether a change needs to be mirrored to/from the agimus_spacelab sibling repo.
+description: Development, maintenance, and PyPI release workflow for long_tamp. Use when committing, branching, opening/reviewing/merging a pull request, versioning, releasing, or deciding whether a change needs to be mirrored to/from the agimus_spacelab sibling repo.
 ---
 
 # long_tamp: Develop, Maintain, Release
@@ -45,6 +45,44 @@ area touched (`backends`, `planning`, `tasks`, `docs`, `script/twin`, …). Body
 **Branches**: `feature/<short-description>`, `fix/<short-description>`,
 `refactor/<short-description>`. Keep them short-lived; `main` stays the always-mergeable
 line.
+
+## Pull requests: open → review → merge
+
+Every change reaches `main` through a pull request, including agent-authored ones; nothing
+is pushed to `main` directly. An agent drives its own PR from opening to merge:
+
+1. **Open.** Push the branch, then open the PR against `main` with the GitHub CLI or the
+   GitHub MCP tools. Title in Conventional Commits form (`feat(grasping): ...`): it becomes
+   the squash commit's subject. Body: **Why** (the problem, with evidence: numbers, logs),
+   **What** (by module), **Validation** (tests run and their result, lint, anything checked
+   by hand), **Found along the way** (issues noticed but not fixed here), **Not modelled /
+   limits**. Report failures as they are, with the test name; a test that is flaky on
+   `main` too is stated as such, with the runs that show it.
+2. **Watch.** Subscribe to the PR's activity (CI results, reviews, comments) and keep a
+   check-in scheduled until it is merged or closed: events can arrive late or not at all.
+3. **Drive to green.** On every event or check-in, look at the whole PR on its current
+   head, in this order:
+   - *Merge conflict*: merge `main` into the branch, resolve, re-run the checks, push.
+   - *CI red*: find the root cause and push a fix. "Flaky" is not a root cause; a
+     failure that is red on `main` too gets one PR comment naming the check and why it
+     isn't this PR's. Never skip, disable or quarantine a test to get green; never push
+     an empty commit or close/reopen to re-run CI.
+   - *Review comments*: fix small, local asks (nits, renames, an added test) and push;
+     reply on each thread and resolve it. Larger asks (multi-file refactors, API changes,
+     open-ended design) go to the maintainer as a proposal before any push.
+   Before each push, run the same checks CI enforces (`ruff check --select F src`,
+   `black --check src`, the tests of the touched modules) and re-read the diff.
+4. **Merge** once all of these hold: every required CI check is green on the current
+   head (`lint`, `lint-style`, `test-standalone`, `test-hpp`, `distribution`,
+   GitGuardian; the `nightly-*` jobs are skipped on PRs), the PR is mergeable with no
+   conflict, no review thread is left unanswered, and no reviewer has requested changes.
+   An agent merges only when the maintainer has asked it to for that PR ("merge when
+   green" counts). Squash-merge, with the PR's Conventional Commits title as the commit
+   subject, so `main` stays one commit per change. Then stop watching the PR and delete
+   the branch.
+5. **After merge.** User-visible changes already carry their `CHANGELOG.md` Unreleased
+   entry (it is part of the PR, not a follow-up). A new session continuing the work
+   starts a fresh branch from the updated `main`; a merged PR is never reused.
 
 ## Testing
 
@@ -182,3 +220,5 @@ Before landing a change:
       content looks like if unsure
 - [ ] Docs (`docs/usage/`, `ARCHITECTURE.md`, `README.md`, `mkdocs.yml` nav) updated if the
       change is user-visible
+- [ ] Landed through a PR that met the merge conditions in "Pull requests: open → review
+      → merge" (CI green on the current head, no conflict, every review thread answered)
