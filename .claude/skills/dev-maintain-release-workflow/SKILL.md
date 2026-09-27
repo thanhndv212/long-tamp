@@ -23,6 +23,32 @@ and `docs/INSTALL.md` for the source-build fallback on unsupported platforms.
 Any time you're about to commit, branch, cut a release, or are unsure whether a change
 belongs in `long_tamp`, `agimus_spacelab`, both, or neither.
 
+## Feature lifecycle, tracker and validation
+
+The full process is written for all contributors in `docs/development/workflow.md`
+(roadmap → issue → ADR if design-level → branch → implement + tests → validate →
+PR with docs + CHANGELOG → squash-merge → issue closed, roadmap ticked → milestone gate
+→ release). Validation levels V0–V4 and the screw-assembly batch gate are in
+`docs/development/validation.md`. Follow those; this skill adds the agent-specific parts.
+
+**Tracker.** GitHub issues + milestones on `thanhndv212/long-tamp`, one milestone per
+roadmap milestone (`docs/plans/roadmap.md`). Before starting work, find or open the issue
+(`gh issue list --milestone "M1 …"`, `gh issue view N`); put `Closes #N` in the PR body.
+Labels: one `type:*`, one or more `area:*`, `needs-batch-gate` when the V3 gate is
+required, `skip-changelog` for refactor/test/CI/docs-only PRs. When a PR completes a
+roadmap item, tick it in `docs/plans/roadmap.md` in the same PR. Never close a milestone
+without its exit test's result files committed under `script/screw_assembly/results/`.
+
+**Validation with screw assembly.** V2 on a branch: `gh workflow run pypi.yml --ref
+<branch>` (runs the `nightly-*` jobs). V3 needs hours on the maintainer's machine or
+container: don't claim it ran unless it did; if it's required and can't be run in the
+session, say so in the PR and leave the PR unmerged until the maintainer posts the
+`summarize.py --gate` output. Baselines are per environment (PyPI-wheel vs source-built
+differ ~1.8x in time); never compare across environments.
+
+**ADRs** (`docs/adr/`): write one before a new public interface, module boundary,
+dependency or plan-IR schema change. Supersede, don't rewrite, an accepted ADR.
+
 ## Commit and Branch Conventions
 
 Carried over from `agimus_spacelab`'s established practice — same conventions, same
@@ -42,8 +68,8 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `style`, `chore`. Scope is the
 area touched (`backends`, `planning`, `tasks`, `docs`, `script/twin`, …). Body explains
 *why*, not what — the diff already shows what.
 
-**Branches**: `feature/<short-description>`, `fix/<short-description>`,
-`refactor/<short-description>`. Keep them short-lived; `main` stays the always-mergeable
+**Branches**: `feature/<issue>-<short-description>`, `fix/<issue>-<short-description>`,
+`refactor/…`, `docs/…`, `chore/…`. Keep them short-lived; `main` stays the always-mergeable
 line.
 
 ## Pull requests: open → review → merge
@@ -70,11 +96,13 @@ is pushed to `main` directly. An agent drives its own PR from opening to merge:
    - *Review comments*: fix small, local asks (nits, renames, an added test) and push;
      reply on each thread and resolve it. Larger asks (multi-file refactors, API changes,
      open-ended design) go to the maintainer as a proposal before any push.
-   Before each push, run the same checks CI enforces (`ruff check --select F src`,
-   `black --check src`, the tests of the touched modules) and re-read the diff.
+   Before each push, run the same checks CI enforces (`pre-commit run -a`, which runs
+   `ruff check --select F src` and `black --check src`; `mkdocs build --strict` if docs
+   changed; the tests of the touched modules) and re-read the diff.
 4. **Merge** once all of these hold: every required CI check is green on the current
-   head (`lint`, `lint-style`, `test-standalone`, `test-hpp`, `distribution`,
-   GitGuardian; the `nightly-*` jobs are skipped on PRs), the PR is mergeable with no
+   head (`lint`, `lint-style` (advisory), `test-standalone`, `test-hpp`, `distribution`,
+   `docs`, `changelog`, GitGuardian; the `nightly-*` jobs are skipped on PRs), the
+   validation evidence the issue asked for is in the PR, the PR is mergeable with no
    conflict, no review thread is left unanswered, and no reviewer has requested changes.
    An agent merges only when the maintainer has asked it to for that PR ("merge when
    green" counts). Squash-merge, with the PR's Conventional Commits title as the commit
@@ -235,8 +263,10 @@ First release: `0.1.0` (2026-09-27, see `docs/plans/release-0.1.0.md`). When cut
   that must not exist in this repo at all (SpaceLab-mission specifics) — that gets removed
   outright, not archived.
 - `mkdocs.yml`'s `nav` must stay in sync with `docs/` — a moved or removed file needs its
-  nav entry updated in the same commit, not left dangling (this repo hand-verifies nav
-  links resolve; there's no automated check for it yet — consider adding one).
+  nav entry updated in the same commit. Enforced: the CI `docs` job runs
+  `mkdocs build --strict` with `validation.omitted_files: warn`, so a page missing from
+  `nav` or a broken link fails the PR. Links from docs to repo-root files (README,
+  ARCHITECTURE, src/) use absolute GitHub URLs, since mkdocs only sees `docs/`.
 
 ## Common Rationalizations
 
@@ -252,7 +282,13 @@ First release: `0.1.0` (2026-09-27, see `docs/plans/release-0.1.0.md`). When cut
 ## Verification
 
 Before landing a change:
+- [ ] Linked issue (`Closes #N`) with acceptance criteria met
 - [ ] Commit message follows `type(scope): description`, explains why
+- [ ] Validation levels the issue requires were run and recorded (V3/V4 result files
+      under `script/screw_assembly/results/`), or the gap is stated in the PR
+- [ ] `CHANGELOG.md` entry, or `skip-changelog` label with a reason
+- [ ] Roadmap item ticked in `docs/plans/roadmap.md` if this PR completes one; ADR
+      added/superseded if a design decision changed
 - [ ] `pytest tests/ -q` run in an HPP-enabled environment (not just lint)
 - [ ] If the change touches `backends/`, `planning/`, `tasks/` (outside `task_planning/`),
       `config/`, `logging/`, `visualization/`, `utils/`, or `cli/` — considered whether it

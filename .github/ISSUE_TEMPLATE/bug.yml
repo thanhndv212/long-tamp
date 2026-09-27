@@ -1,0 +1,32 @@
+name: Bug report
+description: Something planned, executed or installed incorrectly
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Expected vs. actual behaviour.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: Exact command, including `--seed` (runs are only reproducible when seeded).
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The relevant part of the run log or traceback.
+      render: text
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS/arch, Python, long_tamp version or commit, HPP install type (PyPI wheels or source-built), `pip freeze | grep -i -E "hpp|pin|long"`.
+    validations:
+      required: true

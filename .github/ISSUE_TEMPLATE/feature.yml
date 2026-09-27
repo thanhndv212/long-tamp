@@ -1,0 +1,48 @@
+name: Feature / roadmap item
+description: New capability or a roadmap work item
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is missing or hard today, with evidence if you have it.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What to build. Link an ADR if this is a design-level change.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Testable conditions for "done".
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: dropdown
+    id: validation
+    attributes:
+      label: Validation level required
+      description: See docs/development/validation.md
+      options:
+        - V1 (CI only)
+        - V2 (smoke mission)
+        - V3 (screw-assembly batch gate)
+        - V4 (initial-state scenarios)
+    validations:
+      required: true
+  - type: checkboxes
+    id: impact
+    attributes:
+      label: Impact
+      options:
+        - label: User-visible (CHANGELOG entry)
+        - label: Public API or docs change
+        - label: Needs an ADR

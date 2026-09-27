@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Roadmap
+    url: https://github.com/thanhndv212/long-tamp/blob/main/docs/plans/roadmap.md
+    about: Check whether your idea is already planned.

@@ -42,6 +42,9 @@ site/
 # for GitHub Actions to run it).
 .github/*
 !.github/workflows/
+!.github/ISSUE_TEMPLATE/
+!.github/pull_request_template.md
+!.github/dependabot.yml
 .vscode/
 .idea/
 *.swp
