@@ -178,6 +178,32 @@ Every compiled node keeps a `source_map` entry back to its IR path. The resultin
 compiler_version, xml, source_map}` — the C++ side and any stored checkpoint can both assert
 they're looking at the exact plan+compiler combination that produced a given run.
 
+### Plan diagrams
+
+`long_tamp.tasks.task_planning.visualize` renders a validated plan as Mermaid
+(`to_mermaid(plan)`) or Graphviz (`to_dot(plan)`), to review a plan (a generated one
+especially) before running it. Sequences are `→`, fallbacks `?` hexagons whose alternatives
+are dashed `else` edges, conditions diamonds, and transactions show their capability call
+and attempt budget; pass `registry=` to also show each step's grounded effects (`⇒`). The
+TWIN regrasp plan (`script/twin/twin_bt_session.py`):
+
+```mermaid
+flowchart TD
+    root["→ TWIN regrasp"]
+    grasp_handle1["Grasp ball/handle with panda_left/gripper<br/>grasp(panda_left/gripper, ball/handle) ×3<br/>⇒ holds(panda_left/gripper, ball/handle)"]
+    already_cycled{{"? Already released and regrasped ball/handle"}}
+    gripper_empty{"panda_left/gripper currently holds nothing?"}
+    release_then_regrasp["→ Release ball/handle, regrasp ball/handle"]
+    release_gripper["Release panda_left/gripper<br/>release(panda_left/gripper) ×3<br/>⇒ not holds(panda_left/gripper, _)"]
+    grasp_handle1_again["Regrasp ball/handle with panda_left/gripper<br/>grasp(panda_left/gripper, ball/handle) ×3<br/>⇒ holds(panda_left/gripper, ball/handle)"]
+    root --> grasp_handle1
+    root --> already_cycled
+    already_cycled --> gripper_empty
+    already_cycled -.->|else| release_then_regrasp
+    release_then_regrasp --> release_gripper
+    release_then_regrasp --> grasp_handle1_again
+```
+
 ## 5. C++ host and the CPython bridge
 
 `examples/behaviortree/src/main.cpp` takes `--factory <name>` (checked against a hardcoded

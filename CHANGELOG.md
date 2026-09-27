@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Plan diagrams (#7): `task_planning.visualize.to_mermaid(plan)` and
+  `to_dot(plan)` render a TaskPlan (fallback alternatives as dashed `else` edges,
+  attempt budgets, optionally each step's grounded effects with `registry=`).
 - Effect-based completion (#4, ADR-0002): with a `world_state`, a transaction
   is complete exactly when its grounded effects hold in the world. A step whose
   effect already holds is skipped without running (`effect already holds`), and
