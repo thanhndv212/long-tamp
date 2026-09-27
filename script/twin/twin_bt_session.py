@@ -150,7 +150,7 @@ def build_twin_session(options_json: str = "{}") -> Any:
     # The grasp tracker is the world state: TaskStepReady checks real
     # preconditions, and a transaction whose effect already holds is skipped.
     return HostSession(
-        plan, registry, world_state=GraspTrackerState(seq_planner.grasp_tracker)
+        plan, registry, world_state=GraspTrackerState(seq_planner)
     )
 
 
@@ -275,7 +275,7 @@ def build_twin_regrasp_session(options_json: str = "{}") -> Any:
     # The grasp tracker is the world state: TaskStepReady checks real
     # preconditions, and a transaction whose effect already holds is skipped.
     return HostSession(
-        plan, registry, world_state=GraspTrackerState(seq_planner.grasp_tracker)
+        plan, registry, world_state=GraspTrackerState(seq_planner)
     )
 
 

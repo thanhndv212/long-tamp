@@ -138,8 +138,9 @@ in this run. `is_step_complete` reports the `reason` (`effect_holds`,
 The world state comes from two kinds of sources (`task_planning/world_state.py`), and
 nothing else may feed it:
 
-- **observed** predicates, read live from the world model: `GraspTrackerState(tracker)`
-  reports `holds(gripper, handle)` from a `GraspStateTracker`;
+- **observed** predicates, read live from the world model: `GraspTrackerState(planner)`
+  reports `holds(gripper, handle)` from the planner's grasp tracker (pass the planner, not
+  the tracker: the planner replaces its tracker object on resume/reset);
 - **recorded** facts, which no sensor shows once a step is over (a screw driven in):
   `RecordedFacts(path, predicates={"screwed"})` holds them, persisted atomically to `path`.
   A session built with `recorded=` writes a step's grounded effects on those predicates
@@ -147,7 +148,7 @@ nothing else may feed it:
 
 ```python
 recorded = RecordedFacts(run_dir / "facts.json", predicates={"screwed", "racked"})
-world = CompositeWorldState(GraspTrackerState(planner.grasp_tracker), recorded)
+world = CompositeWorldState(GraspTrackerState(planner), recorded)
 session = TaskPlanningSession(plan, registry, world_state=world, recorded=recorded)
 ```
 

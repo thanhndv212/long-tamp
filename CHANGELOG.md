@@ -16,8 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one whose effect was undone runs again; `is_step_complete` reports the reason.
   Steps without declared effects, and sessions without a world state, keep the
   in-memory record. The TWIN sessions use the grasp tracker as their world state.
-- World-state providers (#3, ADR-0002): `GraspTrackerState` reports observed
-  `holds(gripper, handle)` atoms from a `GraspStateTracker`; `RecordedFacts`
+- World-state providers (#3, ADR-0002): `GraspTrackerState(planner)` reports
+  observed `holds(gripper, handle)` atoms from the planner's grasp tracker
+  (re-read on every call, since the planner replaces it on resume/reset); `RecordedFacts`
   holds facts no sensor shows afterwards (e.g. `screwed(part, hole)`), persisted
   atomically and reloaded on restart; `CompositeWorldState` merges sources into a
   session's `world_state=`. A session built with `recorded=` writes a step's
