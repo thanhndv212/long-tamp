@@ -420,7 +420,7 @@ def mission_session(
     for descriptor in DESCRIPTORS.values():
         registry.register(descriptor, run)
     plan = TaskPlan.from_dict(build_plan_document(n_parts), registry)
-    world = CompositeWorldState(GraspTrackerState(planner.grasp_tracker), recorded)
+    world = CompositeWorldState(GraspTrackerState(planner), recorded)
     return TaskPlanningSession(plan, registry, world_state=world, recorded=recorded)
 
 
