@@ -25,15 +25,24 @@ from .predicates import Atom, Literal, apply_effects, parse_state
 
 
 class GraspTrackerState:
-    """Observed ``holds(gripper, handle)`` atoms from a ``GraspStateTracker``.
+    """Observed ``holds(gripper, handle)`` atoms from a grasp tracker.
 
-    Reads ``tracker.current_grasps`` on every call, so it always reflects the
-    planner's current grasp state.
+    Pass the ``GraspSequencePlanner`` itself (recommended): its
+    ``grasp_tracker`` is re-read on every call, because the planner replaces
+    the tracker object when it resumes or resets. A tracker passed directly
+    is read as is. Either way ``current_grasps`` is read on every call, so
+    the atoms reflect the current grasp state.
     """
 
-    def __init__(self, tracker: Any, predicate: str = "holds") -> None:
-        self.tracker = tracker
+    def __init__(self, source: Any, predicate: str = "holds") -> None:
+        self.source = source
         self.predicate = predicate
+
+    @property
+    def tracker(self) -> Any:
+        if hasattr(self.source, "current_grasps"):
+            return self.source
+        return self.source.grasp_tracker
 
     def __call__(self) -> frozenset[Atom]:
         return frozenset(

@@ -34,6 +34,17 @@ def test_grasp_tracker_state_reports_what_each_gripper_holds():
     assert parse_atom("holds(right/gripper, driver/h_grip)") in state()
 
 
+def test_grasp_tracker_state_follows_a_planner_that_replaces_its_tracker():
+    """GraspSequencePlanner replaces grasp_tracker on resume/reset; reading
+    the planner, not a tracker captured once, stays current."""
+    planner = SimpleNamespace(
+        grasp_tracker=SimpleNamespace(current_grasps={"g": "old"})
+    )
+    state = GraspTrackerState(planner)
+    planner.grasp_tracker = SimpleNamespace(current_grasps={"g": "new"})
+    assert state() == _atoms("holds(g, new)")
+
+
 def test_grasp_tracker_predicate_name_is_configurable():
     tracker = SimpleNamespace(current_grasps={"g": "h"})
     assert GraspTrackerState(tracker, predicate="grasped")() == _atoms("grasped(g, h)")
