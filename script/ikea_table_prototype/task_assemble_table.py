@@ -285,7 +285,10 @@ class TableAssemblyTask(ManipulationTask):
 # Run function (called from main, importable for tests)
 # ---------------------------------------------------------------------------
 
-def run_task(backend: str = "pyhpp") -> bool:
+from long_tamp.visualization.mission_viewer import MissionViewer
+
+
+def run_task(backend: str = "pyhpp", show_viewer: bool = True, viewer_port: int = 8081) -> bool:
     """Set up the task, run the planner, offer interactive replay.
 
     Returns:
@@ -336,75 +339,65 @@ def run_task(backend: str = "pyhpp") -> bool:
         return False
     print(f"\n✓ Initial config: {len(q_init)} DOF")
 
-    # Viewer is started AFTER all planning below, not here: the viser
-    # server's background thread segfaulted the native RRT/collision-check
-    # step deterministically when live at solve time (reproduced twice in a
-    # row on this scene, same "Generated target config" -> SIGSEGV
-    # transition, matching the exact concurrency issue
-    # script/twin/task_lift_ball.py's own run_task() already documents and
-    # avoids the same way -- this script just hadn't applied that fix yet).
-    # Planning headless first, then visualizing the already-computed paths,
-    # sidesteps it entirely.
-
-    print("\nCreating GraspSequencePlanner...")
-    seq_planner = GraspSequencePlanner(
-        graph_builder=task.graph_builder,
-        config_gen=task.config_gen,
-        planner=task.planner,
-        task_config=task.task_config,
-        backend=task.backend,
-        graph_constraints=getattr(task, "_graph_constraints", None),
-        freeze_joint_substrings=task.FREEZE_JOINT_SUBSTRINGS,
-        auto_save_dir=None,
-        run_logger=getattr(task, "run_logger", None),
-    )
-
-    print(f"\nPlanning sequence: {GRASP_SEQUENCE}")
-    print(f"  Lookahead-protected phases: {LOOKAHEAD_PAIRS}")
+    viewer = MissionViewer(task, viewer_port, q_init) if show_viewer else None
     try:
-        result = run_sequence(
-            seq_planner=seq_planner,
-            grasp_sequence=GRASP_SEQUENCE,
-            q_init=q_init,
-            verbose=True,
-            per_phase_frozen_arms=PER_PHASE_FROZEN_ARMS,
-            lookahead_pairs=LOOKAHEAD_PAIRS,
-            q_scene_init=q_init,
+        print("\nCreating GraspSequencePlanner...")
+        seq_planner = GraspSequencePlanner(
+            graph_builder=task.graph_builder,
+            config_gen=task.config_gen,
+            planner=task.planner,
+            task_config=task.task_config,
+            backend=task.backend,
+            graph_constraints=getattr(task, "_graph_constraints", None),
+            freeze_joint_substrings=task.FREEZE_JOINT_SUBSTRINGS,
+            auto_save_dir=None,
+            run_logger=getattr(task, "run_logger", None),
         )
-    except Exception as exc:
-        import traceback
-        print(f"\n✗ Planning error: {exc}")
-        traceback.print_exc()
-        return False
 
-    if not result["success"]:
-        print("\n" + "=" * 70)
-        print("✗ PLANNING FAILED")
-        print("=" * 70)
-        print(f"  Reason: {result.get('message', 'Unknown')}")
-        return False
-
-    print("\n" + "=" * 70)
-    print("✓ PLANNING SUCCEEDED")
-    print("=" * 70)
-    print(seq_planner.get_phase_summary())
-
-    all_paths = [
-        p
-        for phase in seq_planner.phase_results
-        for p in phase.get("paths", [])
-        if p is not None
-    ]
-    if all_paths:
-        print(f"\n✓ {len(all_paths)} path(s) generated")
-        print("\nStarting viewer (all planning is done — nothing solves live)...")
+        print(f"\nPlanning sequence: {GRASP_SEQUENCE}")
+        print(f"  Lookahead-protected phases: {LOOKAHEAD_PAIRS}")
         try:
-            task.planner.visualize(q_init)
+            result = run_sequence(
+                seq_planner=seq_planner,
+                grasp_sequence=GRASP_SEQUENCE,
+                q_init=q_init,
+                verbose=True,
+                per_phase_frozen_arms=PER_PHASE_FROZEN_ARMS,
+                lookahead_pairs=LOOKAHEAD_PAIRS,
+                q_scene_init=q_init,
+            )
         except Exception as exc:
-            print(f"⚠ Visualization unavailable: {exc}")
-            return True
-        _interactive_replay(task, seq_planner)
-    return True
+            import traceback
+            print(f"\n✗ Planning error: {exc}")
+            traceback.print_exc()
+            return False
+
+        if not result["success"]:
+            print("\n" + "=" * 70)
+            print("✗ PLANNING FAILED")
+            print("=" * 70)
+            print(f"  Reason: {result.get('message', 'Unknown')}")
+            return False
+
+        print("\n" + "=" * 70)
+        print("✓ PLANNING SUCCEEDED")
+        print("=" * 70)
+        print(seq_planner.get_phase_summary())
+
+        all_paths = [
+            p
+            for phase in seq_planner.phase_results
+            for p in phase.get("paths", [])
+            if p is not None
+        ]
+        if viewer is not None:
+            viewer.completed(seq_planner.phase_results)
+            viewer.finish()
+        return True
+    finally:
+        if viewer is not None:
+            viewer.close()
+
 
 
 # ---------------------------------------------------------------------------
@@ -614,15 +607,16 @@ def main() -> int:
         help="HPP backend to use (default: pyhpp)",
     )
     parser.add_argument(
-        "--no-viz",
+        "--no-viz", "--no-viewer",
         action="store_true",
-        help="Skip gepetto-viewer display",
+        help="Disable Viser and native path playback",
     )
     parser.add_argument(
         "--show-joints",
         action="store_true",
         help="Print all joint names and DOF ranks, then exit",
     )
+    parser.add_argument("--viewer-port", type=int, default=8081)
     args = parser.parse_args()
 
     if args.show_joints:
@@ -632,7 +626,8 @@ def main() -> int:
         print_joint_info(task.robot)
         return 0
 
-    success = run_task(backend=args.backend)
+    success = run_task(backend=args.backend, show_viewer=not args.no_viz,
+                       viewer_port=args.viewer_port)
     return 0 if success else 1
 
 

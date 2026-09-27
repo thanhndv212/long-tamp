@@ -44,6 +44,17 @@ selection.
   `task_my_task.py` — copy, fill in the `<PLACEHOLDER>`s, run.
 - **Read a real, minimal example**: `script/twin/task_lift_ball.py` (bimanual scene).
 
+### Interactive examples
+
+The screw-assembly, TWIN lift-ball, and IKEA table task runners, plus both task
+templates, open Viser before planning. Successful planning blocks play native HPP
+paths; the full concatenated path plays at completion. In a terminal, Enter
+replays the full path, a path number selects an individual path, and `q` exits.
+Use `--no-viewer` for unattended runs and `--viewer-port 8081` to choose the port.
+The viewer closes on normal exit or a Python exception. Saved-result replay
+remains a separate workflow. BehaviorTree host adapters and asset-generation
+utilities are not interactive task runners.
+
 ## Package structure & architecture
 
 `tasks/` orchestrates `planning/`, which is backend-agnostic and depends only on `backends/`

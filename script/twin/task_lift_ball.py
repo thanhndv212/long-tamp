@@ -222,7 +222,10 @@ def _replay_all(task: LiftBallTask, seq_planner: GraspSequencePlanner) -> None:
                 print(f"  ⚠ replay failed: {exc}")
 
 
-def run_task(backend: str = "pyhpp", show_viewer: bool = False, viewer_type: str = "auto") -> bool:
+from long_tamp.visualization.mission_viewer import MissionViewer
+
+
+def run_task(backend: str = "pyhpp", show_viewer: bool = True, viewer_type: str = "auto", viewer_port: int = 8081) -> bool:
     """Run the full task lifecycle. Returns True on planning success."""
     task = LiftBallTask(backend=backend, viewer_type=viewer_type)
 
@@ -256,75 +259,62 @@ def run_task(backend: str = "pyhpp", show_viewer: bool = False, viewer_type: str
         return False
     print(f"\n✓ Initial config: {len(q_init)} DOF")
 
-    # Viewer is started AFTER all planning below, not here: the viser
-    # server's background thread segfaulted the native RRT/collision-check
-    # step deterministically when live at solve time (reproduced twice at
-    # the same edge) — planning headless first, then visualizing the
-    # already-computed paths, sidesteps that concurrency issue entirely.
-
-    print("\nCreating GraspSequencePlanner...")
-    seq_planner = GraspSequencePlanner(
-        graph_builder=task.graph_builder,
-        config_gen=task.config_gen,
-        planner=task.planner,
-        task_config=task.task_config,
-        backend=task.backend,
-        graph_constraints=getattr(task, "_graph_constraints", None),
-        auto_save_dir=None,
-        run_logger=getattr(task, "run_logger", None),
-    )
-
-    print(f"\nPlanning grasp sequence: {GRASP_SEQUENCE}")
+    viewer = MissionViewer(task, viewer_port, q_init) if show_viewer else None
     try:
-        result = seq_planner.plan_sequence(
-            grasp_sequence=GRASP_SEQUENCE, q_init=q_init, verbose=True
+        print("\nCreating GraspSequencePlanner...")
+        seq_planner = GraspSequencePlanner(
+            graph_builder=task.graph_builder,
+            config_gen=task.config_gen,
+            planner=task.planner,
+            task_config=task.task_config,
+            backend=task.backend,
+            graph_constraints=getattr(task, "_graph_constraints", None),
+            auto_save_dir=None,
+            run_logger=getattr(task, "run_logger", None),
         )
-    except Exception as exc:
-        import traceback
 
-        print(f"\n✗ Planning error: {exc}")
-        traceback.print_exc()
-        return False
-
-    if not result["success"]:
-        print("\n" + "=" * 70)
-        print("✗ GRASP SEQUENCE FAILED")
-        print("=" * 70)
-        print(f"  Reason: {result.get('error', 'Unknown')}")
-        return False
-
-    print("\n" + "=" * 70)
-    print("✓ BOTH GRASPS SUCCEEDED")
-    print("=" * 70)
-    print(seq_planner.get_phase_summary())
-
-    print(f"\nLifting the ball {LIFT_HEIGHT_M}m...")
-    lift_result = _lift_the_ball(task, seq_planner, result["final_config"])
-    if lift_result["success"]:
-        print("✓ LIFT SUCCEEDED")
-    else:
-        print(f"✗ Lift failed: {lift_result.get('message', 'Unknown')}")
-        print("  (grasp sequence itself still succeeded)")
-
-    if show_viewer:
-        print("\nStarting viewer (all planning is done — nothing solves live)...")
+        print(f"\nPlanning grasp sequence: {GRASP_SEQUENCE}")
         try:
-            task.planner.visualize(q_init)
+            result = seq_planner.plan_sequence(
+                grasp_sequence=GRASP_SEQUENCE, q_init=q_init, verbose=True
+            )
         except Exception as exc:
-            print(f"⚠ Visualization unavailable: {exc}")
-            return True
-        print("Replaying full sequence in the viewer...")
-        _replay_all(task, seq_planner)
-        print("✓ Replay done. Viewer stays up — Ctrl+C to exit.")
-        import time
+            import traceback
 
-        try:
-            while True:
-                time.sleep(1.0)
-        except KeyboardInterrupt:
-            print()
+            print(f"\n✗ Planning error: {exc}")
+            traceback.print_exc()
+            return False
 
-    return True
+        if not result["success"]:
+            print("\n" + "=" * 70)
+            print("✗ GRASP SEQUENCE FAILED")
+            print("=" * 70)
+            print(f"  Reason: {result.get('error', 'Unknown')}")
+            return False
+
+        print("\n" + "=" * 70)
+        print("✓ BOTH GRASPS SUCCEEDED")
+        print("=" * 70)
+        print(seq_planner.get_phase_summary())
+
+        grasp_phase_count = len(seq_planner.phase_results)
+        if viewer is not None:
+            viewer.completed(seq_planner.phase_results)
+        print(f"\nLifting the ball {LIFT_HEIGHT_M}m...")
+        lift_result = _lift_the_ball(task, seq_planner, result["final_config"])
+        if lift_result["success"]:
+            print("✓ LIFT SUCCEEDED")
+        else:
+            print(f"✗ Lift failed: {lift_result.get('message', 'Unknown')}")
+            print("  (grasp sequence itself still succeeded)")
+
+        if viewer is not None:
+            viewer.completed(seq_planner.phase_results[grasp_phase_count:])
+            viewer.finish()
+        return True
+    finally:
+        if viewer is not None:
+            viewer.close()
 
 
 def main() -> int:
@@ -333,12 +323,12 @@ def main() -> int:
     parser.add_argument("--show-joints", action="store_true")
     parser.add_argument(
         "--viewer-type",
-        default=None,
-        choices=["viser", "gepetto", "auto"],
-        help="Show the scene in a browser (viser, default) or gepetto-viewer "
-        "and replay the planned motion, then keep the viewer alive. Omit to "
-        "run headless (no viewer).",
+        default="viser",
+        choices=["viser"],
+        help="Use Viser for native HPP playback (default); --no-viewer disables it.",
     )
+    parser.add_argument("--no-viz", "--no-viewer", action="store_true")
+    parser.add_argument("--viewer-port", type=int, default=8081)
     args = parser.parse_args()
 
     if args.show_joints:
@@ -351,7 +341,8 @@ def main() -> int:
 
     success = run_task(
         backend=args.backend,
-        show_viewer=args.viewer_type is not None,
+        show_viewer=not args.no_viz,
+        viewer_port=args.viewer_port,
         viewer_type=args.viewer_type or "auto",
     )
     return 0 if success else 1

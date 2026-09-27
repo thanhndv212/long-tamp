@@ -94,10 +94,16 @@ block list has changed.
 paths keep them open, because a grasp is a rigid constraint. It runs in its own process
 because, while HPP plans, the planner process can't serve the viewer.
 
-The task runner starts its Viser result view only after planning completes, then keeps it
-available on port 8081. This avoids running the viewer's background thread alongside HPP's
-native collision checks. Use `--viewer-port <port>` to select another port or `--no-viewer`
-for batch runs.
+The task runner opens Viser before planning, using the same backend viewer and
+native HPP playback pattern as SpaceLab's full-mission runner. Each completed
+block plays its successful HPP paths directly. At the end, the concatenated
+HPP PathVector plays automatically. In an interactive terminal, press Enter to
+replay it, enter a path number to play an individual path, or `q` to exit.
+On resume, native playback covers paths planned in the current invocation;
+use `replay.py` for saved motion including earlier blocks.
+Use `--viewer-port <port>` to change port or `--no-viewer` for batch runs.
+Inside Docker, open the printed localhost URL on the host if a browser cannot
+be launched in the container.
 
 ## Results
 

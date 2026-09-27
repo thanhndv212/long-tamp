@@ -353,6 +353,23 @@ def fixtures_srdf(n):
 
 
 def bench_urdf():
+    # Match the IKEA workbench: four 50 mm square supports, from ground
+    # level to the underside of the top. Keep all geometry on one fixed link.
+    leg_height = round(BENCH_TOP - 0.04, 4)
+    legs = ""
+    for dx in (-0.45, 0.45):
+        for y in (-0.45, 0.45):
+            xyz = f"{round(BENCH_X + dx, 4)} {y} {leg_height / 2}"
+            for kind in ("visual", "collision"):
+                material = (
+                    '<material name="top_mat"/>' if kind == "visual" else ""
+                )
+                legs += f"""    <{kind}>
+      <origin xyz="{xyz}"/>
+      <geometry><box size="0.05 0.05 {leg_height}"/></geometry>
+{material}
+    </{kind}>
+"""
     return (
         f'<?xml version="1.0"?>\n{HEADER}<robot name="workbench">\n'
         + _box_link(
@@ -360,7 +377,7 @@ def bench_urdf():
             (1.0, 1.0, 0.04),
             f"{BENCH_X} 0 {round(BENCH_TOP - 0.02, 4)}",
             "0.45 0.32 0.2 1",
-        )
+        ).replace("  </link>", legs + "  </link>")
         + "</robot>\n"
     )
 

@@ -19,8 +19,8 @@ can still reach *both* holes. So A is planned with a lookahead that checks
 the clamp candidate against hole 1 and hole 2 before committing, and with
 the recovery ladder behind it (resume, then replan the block).
 
-Runs inside the hpp-agimus-arm64 container (pyhpp). A Viser view opens after
-planning completes; pass ``--no-viewer`` for an unattended run:
+Runs inside the hpp-agimus-arm64 container (pyhpp). A Viser view opens before
+planning and plays completed HPP paths; pass ``--no-viewer`` for an unattended run:
 
     python3 build_scene.py --parts 4
     python3 task_screw_assembly.py --seed 1 --summary out.json
@@ -330,6 +330,7 @@ def run_mission(
     checkpoint: MissionCheckpoint | None = None,
     start_block: int = 0,
     q_start: list[float] | None = None,
+    live_viewer=None,
 ) -> dict[str, Any]:
     """Run the mission block by block from ``start_block`` (at ``q_start``).
 
@@ -385,6 +386,8 @@ def run_mission(
             if trajectory is not None:
                 trajectory += sample_phases(task, r["phase_results"], block["label"])
                 save_trajectory()
+            if live_viewer is not None:
+                live_viewer.completed(r["phase_results"])
             q = r["final_config"]
             continue
         hints_factory = None
@@ -446,6 +449,8 @@ def run_mission(
         if trajectory is not None:
             trajectory += sample_phases(task, planner.phase_results, block["label"])
             save_trajectory()
+        if live_viewer is not None:
+            live_viewer.completed(planner.phase_results)
         q = r["final_config"]
     return {
         "success": all(b["success"] for b in records)
@@ -456,31 +461,7 @@ def run_mission(
     }
 
 
-def show_result_in_viser(task: ScrewAssemblyTask, q: list[float], port: int) -> None:
-    """Serve the completed scene in Viser and keep it available until Ctrl-C.
-
-    Viser deliberately starts only after planning.  Its background thread can
-    race HPP's native collision checker when it is live during a solve.
-    """
-    from pyhpp_viser import Viewer
-
-    viewer = Viewer(task.planner.device, task.planner.problem)
-    viewer.start(host="0.0.0.0", port=port, open=True)
-    server = viewer.viewer
-
-    @server.on_client_connect
-    def aim(client):
-        client.camera.position = (2.15, -2.30, 1.55)
-        client.camera.look_at = (0.75, 0.0, 0.58)
-        client.camera.up_direction = (0.0, 0.0, 1.0)
-
-    viewer(np.asarray(q, dtype=float))
-    print(f"\nViser view: http://localhost:{port} (Ctrl-C to exit)", flush=True)
-    try:
-        while True:
-            time.sleep(1.0)
-    except KeyboardInterrupt:
-        print()
+from long_tamp.visualization.mission_viewer import MissionViewer
 
 
 def main() -> int:
@@ -491,7 +472,7 @@ def main() -> int:
     ap.add_argument(
         "--no-viewer",
         action="store_true",
-        help="exit after planning instead of opening the Viser result view",
+        help="run without the live Viser viewer or path playback",
     )
     ap.add_argument(
         "--viewer-port",
@@ -552,16 +533,29 @@ def main() -> int:
             print(f"resuming at block {start_block} ({labels[start_block]!r})")
     print(f"run folder: {run_dir}")
 
-    result = run_mission(
-        task,
-        planner,
-        n_parts,
-        max_replans=args.max_replans,
-        trajectory=trajectory,
-        checkpoint=checkpoint,
-        start_block=start_block,
-        q_start=q_start,
-    )
+    import atexit
+
+    live_viewer = None
+    if not args.no_viewer:
+        live_viewer = MissionViewer(task, args.viewer_port, q_start or task.q_init,
+                                    camera=((2.15, -2.30, 1.55), (0.75, 0.0, 0.58)))
+        atexit.register(live_viewer.close)
+    try:
+        result = run_mission(
+            task,
+            planner,
+            n_parts,
+            max_replans=args.max_replans,
+            trajectory=trajectory,
+            checkpoint=checkpoint,
+            start_block=start_block,
+            q_start=q_start,
+            live_viewer=live_viewer,
+        )
+    except BaseException:
+        if live_viewer is not None:
+            live_viewer.close()
+        raise
     checkpoint.finish(result["success"], result["seconds"])
     write_trajectory(traj_path, trajectory, n_parts)
     result["seed"] = args.seed
@@ -573,8 +567,11 @@ def main() -> int:
     if args.summary:
         summary = {k: v for k, v in result.items() if k != "final_config"}
         args.summary.write_text(json.dumps(summary, indent=2))
-    if not args.no_viewer:
-        show_result_in_viser(task, result["final_config"], args.viewer_port)
+    if live_viewer is not None:
+        try:
+            live_viewer.finish()
+        finally:
+            live_viewer.close()
     return 0 if result["success"] else 1
 
 
