@@ -113,3 +113,19 @@ def test_a_mission_started_with_the_part_in_hand_is_feasible():
 def test_home_moves_have_no_effects_so_they_always_run():
     assert screw_domain.DESCRIPTORS["home"].effects == ()
     assert screw_domain.RECORDED_PREDICATES == {"screwed"}
+
+
+def test_every_scenario_start_is_accepted_by_the_same_plan():
+    """V4's scenarios (scenarios.py) all start the *same* plan; each start
+    state must pass the load-time check (2 parts, as the scenarios run)."""
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[1] / "script/screw_assembly/scenarios.py"
+    spec_ = importlib.util.spec_from_file_location("screw_scenarios", path)
+    scenarios = importlib.util.module_from_spec(spec_)
+    spec_.loader.exec_module(scenarios)
+
+    for name, spec in scenarios.SCENARIOS.items():
+        _check(2, spec["atoms"])
+        blocks = [b["label"] for b in screw_domain.build_mission(2)]
+        assert all(label in blocks for label in spec["setup"]), name

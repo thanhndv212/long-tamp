@@ -13,7 +13,7 @@ change is measured against a known-good baseline instead of judged by eye.
 | **V1** CI | lint, base-install tests, wheel tests, distribution, docs build, changelog check | GitHub Actions, every push/PR | ~20 min |
 | **V2** smoke mission | one-part screw assembly, seed 1, plus the TWIN checks | `gh workflow run pypi.yml --ref <branch>` (the `nightly-*` jobs) | ~20 min |
 | **V3** batch gate | 10 seeds × 4 parts, `summarize.py --gate` against the baseline | the baseline's environment (see below) | 1.5–4 h |
-| **V4** scenario gate | the mission from ≥4 initial states (tool already held, part already clamped/screwed, …) | same as V3; **introduced by milestone M1** | ~1 h |
+| **V4** scenario gate | the same plan from several initial states: screw assembly (`scenarios.py --all`, 4 scenarios) and the TWIN regrasp (3 scenarios) | same as V3 | ~1 h |
 
 ## Which change needs which level
 
@@ -51,6 +51,37 @@ The gate passes when **all** of these hold:
 Commit the `results/*.json` file in the PR and paste the gate output into the PR's
 Validation section. A failing gate blocks the merge unless the PR explains why the
 baseline itself must move (see below).
+
+## Running the V4 scenario gate
+
+Each scenario reaches its start state by planning part of the mission for real (the
+*setup*), then runs the **unchanged** plan from there. It passes when the mission
+completes, the work the setup did is skipped (effects that hold, parts already done), and
+none of it is planned again. Every scenario runs in its own process.
+
+```bash
+cd script/screw_assembly
+python build_scene.py --parts 2
+python scenarios.py --all --seed 1 --json results/$(date +%F)-scenarios.json
+cd ../twin
+python scenarios.py --all --seed 1
+```
+
+| Screw assembly (2 parts) | Start state | Expected skips |
+|---|---|---|
+| `nominal` | nothing held | none |
+| `driver_in_hand` | ur10_right holds the driver | the pickup |
+| `part_in_hand` | ur10_left holds part 1 | part 1's grasp |
+| `part1_assembled` | part 1 clamped, screwed, released; driver held | the pickup, all of part 1 |
+
+| TWIN regrasp | Start state | Expected skips |
+|---|---|---|
+| `nominal` | nothing held | none |
+| `left_holds_ball` | panda_left holds `ball/handle` | the first grasp |
+| `right_holds_handle2` | panda_right holds `ball/handle2` | none (the other arm is busy) |
+
+Every scenario's start state is also checked without HPP in the test suite: the same plan
+must pass the load-time check from it.
 
 ## Baselines are per environment
 
