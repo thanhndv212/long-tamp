@@ -23,9 +23,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `script/grasp_planning/`: `plan_grasps.py` (rank grasps, check an object's
   handles, emit SRDF) and `validate_closure.py` (check closures against the real
   Robotiq meshes with pinocchio + coal).
+- Screw-assembly batch gate: `script/screw_assembly/summarize.py --gate --baseline
+  <results.json>` exits non-zero unless every mission completed, the replanning
+  trigger rate is < 2 %, the recovery rate is > 95 % and the median time is
+  ≤ 1.25× the baseline; `--json` records a result file in the committed schema.
+- Contributor process: `CONTRIBUTING.md`, `docs/development/workflow.md` (issue →
+  PR → release lifecycle, definition of done), `docs/development/validation.md`
+  (validation levels V0–V4 on the screw-assembly mission), `docs/plans/roadmap.md`
+  (milestones M1–M6), architecture decision records under `docs/adr/`, PR and issue
+  templates, a pre-commit config mirroring the lint job, and Dependabot for actions.
+- CI: a `docs` job (`mkdocs build --strict`, which now also fails on pages missing
+  from the nav) and a `changelog` job on pull requests (library or example changes
+  need a `CHANGELOG.md` entry unless labelled `skip-changelog`).
 
 ### Fixed
 
+- Broken links in the docs site: links from included root files (README,
+  ARCHITECTURE) and from `docs/` to files outside it now use absolute GitHub URLs;
+  archived legacy pages point at the pages' current locations.
 - The Robotiq fingers never closed on the drill in the screw-assembly viewer:
   planned paths keep them frozen open, and native playback showed exactly that
   (pads 24 mm off the handle). `MissionViewer(closures=...)` now closes them to the
