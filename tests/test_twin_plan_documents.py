@@ -42,7 +42,7 @@ def test_lift_ball_plan_is_feasible():
 
 def test_regrasp_plan_is_feasible():
     document = twin_bt_session._build_regrasp_plan_document()
-    TaskPlan.from_dict(document, _registry(grasp_attempts=8))
+    TaskPlan.from_dict(document, _registry())
 
 
 def test_two_grippers_on_one_handle_are_rejected():

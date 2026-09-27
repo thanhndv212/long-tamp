@@ -35,7 +35,6 @@ than tracking their own resume state.
 from __future__ import annotations
 
 import sys
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -187,18 +186,14 @@ def build_twin_regrasp_session(options_json: str = "{}") -> Any:
     ``panda_left/gripper`` regrasping ``ball/handle`` (this function's
     actual choice) sidesteps both: its first grasp reliably reaches the
     target standalone (2/2 real runs, ~90-95s of RRT planning each). The
-    regrasp step (release, then grasp the same target again) does hit a
-    real snag of its own, though a *known* one: it lands on the exact
-    ``f_12`` pregrasp -> grasp waypoint collision already documented as
-    intermittently flaky in ``tests/test_grasp_release_use_case_twin.py``
-    (``panda_left/panda_*finger_*`` vs ``ball/base_link_0``) -- observed
-    100% of regrasp draws across two independent verification runs before
-    the ``grasp`` capability's ``max_attempts`` below was raised from 3 to
-    8 to give the BT-level ``RetryUntilSuccessful`` more real budget
-    against it (consistent with how the *first* grasp above also sometimes
-    needs several draws, just never zero for zero). This is a pre-existing
-    scene-asset clearance question, not a compiler/session bug -- see that
-    test's own docstring for why it's tracked but not fixed here.
+    regrasp step (release, then grasp the same target again) used to hit
+    the ``f_12`` pregrasp -> grasp collision (``panda_left/panda_*finger_*``
+    vs ``ball/base_link_0``) on most draws, and ran with ``max_attempts=8``
+    to compensate. Root cause (#28): phase graphs didn't keep the moving
+    arm's fingers frozen, so each target drew random finger widths, some
+    closing inside the ball. ``GraspSequencePlanner`` now inherits the
+    frozen patterns from ``task.setup()``, and the regrasp uses the
+    standard budget of 3.
 
     The plan IR expresses the forced cycle as a ``fallback``: an ``empty``
     *condition* checking whether the gripper currently holds nothing (false
@@ -265,12 +260,7 @@ def build_twin_regrasp_session(options_json: str = "{}") -> Any:
 
     descriptors = _descriptors()
     registry = CapabilityRegistry()
-    # Higher than create_twin_session's grasp (3): this scenario's regrasp
-    # step deterministically re-lands on ball/handle's known flaky f_12
-    # waypoint (see this function's docstring) -- more BT-level
-    # RetryUntilSuccessful budget compensates for real target-generation
-    # variance on that specific marginal edge.
-    registry.register(replace(descriptors["grasp"], max_attempts=8), grasp_impl)
+    registry.register(descriptors["grasp"], grasp_impl)
     registry.register(descriptors["release"], release_impl)
     registry.register(descriptors["empty"], empty_impl)
 

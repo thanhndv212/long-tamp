@@ -33,33 +33,14 @@ Consolidating to one construction was the correct fix for THAT gap (not a
 workaround -- it also matches real usage), and did make this test
 noticeably more reliable.
 
-It does not make this test deterministic, though. Residual flakiness
-remains, tied to one specific edge:
-``panda_left/gripper > ball/handle | f_12`` (pregrasp -> grasp waypoint),
-which has intermittently failed with the identical collision --
-``panda_left/panda_leftfinger_2`` vs ``ball/base_link_0`` -- across
-several observed runs, including as the very first real-scene test in a
-run (not just a later one). The consistency of the collision pair across
-failures suggests a real, marginal clearance in the TWIN scene's own
-finger/ball geometry for this grasp approach (possibly worth a look at
-``script/twin/assets/pokeball_bimanual.urdf`` someday), not pure solver
-noise -- but that is a scene-asset question, separate from and outside the
-scope of validating ``grasp()``/``release()`` themselves, which is what
-this test exists to do. ``_plan_phase_edges``'s own small retry budget
-(``_MAX_GENERATION_RETRIES``, see ``grasp_sequence.py``) already absorbs
-most single-draw bad luck; a red result here should be re-run before being
-treated as a ``grasp()``/``release()`` regression -- it has never failed
-for a reason other than this one specific edge's collision.
-
-This same edge is markedly *more* than "intermittent" when it is the
-target of a release-then-regrasp cycle specifically (release ``ball/handle``
-from ``panda_left/gripper``, then grasp it again) rather than a single
-fresh grasp: 100% of regrasp draws hit it across two independent
-verification runs of ``tests/test_twin_regrasp_bt_session.py`` and the
-``taskplan_bt_twin_regrasp`` CTest, vs. 0% of first-grasp draws in those
-same runs -- see ``twin_bt_session.py``'s ``build_twin_regrasp_session``
-docstring, which raised that scenario's ``grasp`` capability
-``max_attempts`` from 3 to 8 to compensate. Still not root-caused.
+It used to be flaky on one edge, ``panda_left/gripper > ball/handle | f_12``
+(pregrasp -> grasp), with ``panda_left/panda_*finger_*`` vs
+``ball/base_link_0`` collisions. Root cause (#28): phase graphs rebuilt the
+locked joints from the frozen *arms* only, so the moving arm's "frozen"
+fingers took random widths in every generated configuration, some closing
+inside the 25 mm-radius ball. ``GraspSequencePlanner`` now inherits the
+patterns ``task.setup()`` froze, and the TWIN fingers are frozen fully open
+(0.04), clear of the ball by >= 15 mm at the grasp pose.
 
 Both primitives are deliberately exercised in ONE ``GraspSequencePlanner``
 instance (rather than a second instance running ``plan_sequence()`` in
