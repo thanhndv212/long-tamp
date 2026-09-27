@@ -65,7 +65,8 @@ With HPP installed (`pip install -e ".[hpp]"` from the repo root on Linux, or th
 ```bash
 python3 build_scene.py --parts 4                 # regenerate generated/ and config/
 python3 task_screw_assembly.py --check           # load the scene, validate the start
-python3 task_screw_assembly.py --seed 1          # run the mission
+python3 task_screw_assembly.py --seed 1          # run, then open the Viser result view
+python3 task_screw_assembly.py --seed 1 --no-viewer # run without keeping a viewer open
 python3 task_screw_assembly.py --seed 1 --run-dir runs/<folder> --resume   # continue it
 python3 replay.py runs/<folder>/trajectory.json --loop   # watch it (viser, port 8081)
 ```
@@ -92,6 +93,11 @@ block list has changed.
 `--loop`). It closes and opens the Robotiq fingers at each grasp and release; the planned
 paths keep them open, because a grasp is a rigid constraint. It runs in its own process
 because, while HPP plans, the planner process can't serve the viewer.
+
+The task runner starts its Viser result view only after planning completes, then keeps it
+available on port 8081. This avoids running the viewer's background thread alongside HPP's
+native collision checks. Use `--viewer-port <port>` to select another port or `--no-viewer`
+for batch runs.
 
 ## Results
 

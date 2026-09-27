@@ -19,7 +19,8 @@ can still reach *both* holes. So A is planned with a lookahead that checks
 the clamp candidate against hole 1 and hole 2 before committing, and with
 the recovery ladder behind it (resume, then replan the block).
 
-Runs inside the hpp-agimus-arm64 container (pyhpp). Headless by default:
+Runs inside the hpp-agimus-arm64 container (pyhpp). A Viser view opens after
+planning completes; pass ``--no-viewer`` for an unattended run:
 
     python3 build_scene.py --parts 4
     python3 task_screw_assembly.py --seed 1 --summary out.json
@@ -455,11 +456,49 @@ def run_mission(
     }
 
 
+def show_result_in_viser(task: ScrewAssemblyTask, q: list[float], port: int) -> None:
+    """Serve the completed scene in Viser and keep it available until Ctrl-C.
+
+    Viser deliberately starts only after planning.  Its background thread can
+    race HPP's native collision checker when it is live during a solve.
+    """
+    from pyhpp_viser import Viewer
+
+    viewer = Viewer(task.planner.device, task.planner.problem)
+    viewer.start(host="0.0.0.0", port=port, open=True)
+    server = viewer.viewer
+
+    @server.on_client_connect
+    def aim(client):
+        client.camera.position = (2.15, -2.30, 1.55)
+        client.camera.look_at = (0.75, 0.0, 0.58)
+        client.camera.up_direction = (0.0, 0.0, 1.0)
+
+    viewer(np.asarray(q, dtype=float))
+    print(f"\nViser view: http://localhost:{port} (Ctrl-C to exit)", flush=True)
+    try:
+        while True:
+            time.sleep(1.0)
+    except KeyboardInterrupt:
+        print()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--summary", type=Path, help="write a JSON run summary here")
     ap.add_argument("--max-replans", type=int, default=10)
+    ap.add_argument(
+        "--no-viewer",
+        action="store_true",
+        help="exit after planning instead of opening the Viser result view",
+    )
+    ap.add_argument(
+        "--viewer-port",
+        type=int,
+        default=8081,
+        help="port for the Viser result view (default: 8081)",
+    )
     ap.add_argument(
         "--run-dir",
         type=Path,
@@ -534,6 +573,8 @@ def main() -> int:
     if args.summary:
         summary = {k: v for k, v in result.items() if k != "final_config"}
         args.summary.write_text(json.dumps(summary, indent=2))
+    if not args.no_viewer:
+        show_result_in_viser(task, result["final_config"], args.viewer_port)
     return 0 if result["success"] else 1
 
 
