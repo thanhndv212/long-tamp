@@ -49,6 +49,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Joints frozen by `task.setup(freeze_joint_substrings=...)` (e.g. gripper
+  fingers) were only kept frozen on idle arms: phase graphs rebuild the locked
+  joints from the frozen *arms*, so the moving arm's "frozen" fingers took random
+  widths in every generated configuration unless `GraspSequencePlanner` was also
+  given the patterns (#28). On TWIN, a finger closing to 14.8 mm inside the 25 mm
+  ball made the grasp pose collide, the cause of the long-standing flaky TWIN
+  checks. `GraspSequencePlanner` now inherits the patterns `setup()` froze (pass
+  `freeze_joint_substrings=[]` to opt out); this also fixes the templates and
+  `interactive_grasp_sequence_builder`, which never passed them. The TWIN fingers
+  are frozen fully open (0.04, clear of the ball by ≥ 15 mm; 0.025 was flush), and
+  the regrasp scenario is back to `max_attempts=3`.
 - Broken links in the docs site: links from included root files (README,
   ARCHITECTURE) and from `docs/` to files outside it now use absolute GitHub URLs;
   archived legacy pages point at the pages' current locations.

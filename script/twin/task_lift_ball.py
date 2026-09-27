@@ -51,7 +51,8 @@ GRASP_SEQUENCE: list[tuple[str, str | None]] = [
 
 # Finger joints are frozen (fixed at their initial YAML value throughout
 # planning) — this task's grasp is a rigid TCP constraint, not simulated
-# finger closing, so their only role is to render at a sensible width.
+# finger closing. They are still collision-checked, so the YAML freezes them
+# fully open, clear of the ball (see the config's joint_groups comment).
 FREEZE_JOINT_SUBSTRINGS: list[str] = ["panda_finger_joint"]
 COLLISION_EXCLUSIONS: list[tuple[str, str]] = []
 
