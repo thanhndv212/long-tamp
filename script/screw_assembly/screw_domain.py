@@ -198,34 +198,132 @@ def _step(index: int, block: dict[str, Any]) -> tuple[str, dict[str, str]]:
     }
 
 
+def descriptors(n_parts: int) -> dict[str, CapabilityDescriptor]:
+    """``DESCRIPTORS`` plus the mission's two guard conditions.
+
+    ``part_done`` holds once a part is clamped and both holes are screwed;
+    ``all_parts_done`` once every part is. They guard the part blocks and the
+    driver pickup, whose own effects are undone later in the mission (the
+    part is released, the driver racked), so a resumed or scenario run skips
+    finished work instead of redoing it (without them, a run resumed after a
+    part's release would grasp and release that clamped part again).
+    """
+    done = []
+    for i in range(1, n_parts + 1):
+        p = f"part{i}"
+        done += [
+            f"holds(fixtures/clamp{i}, {p}/h_seat)",
+            f"screwed({p}, {p}/h_hole1)",
+            f"screwed({p}, {p}/h_hole2)",
+        ]
+    return {
+        **DESCRIPTORS,
+        "part_done": CapabilityDescriptor(
+            "part_done",
+            "1.0",
+            {"part": str, "clamp": str, "seat": str, "hole1": str, "hole2": str},
+            preconditions=(
+                "holds(?clamp, ?seat)",
+                "screwed(?part, ?hole1)",
+                "screwed(?part, ?hole2)",
+            ),
+        ),
+        "all_parts_done": CapabilityDescriptor(
+            "all_parts_done", f"1.{n_parts}", {}, preconditions=tuple(done)
+        ),
+    }
+
+
+def _transaction(index: int, block: dict[str, Any]) -> dict[str, Any]:
+    capability, parameters = _step(index, block)
+    step_id = f"b{index:02d}-{capability}"
+    return {
+        "type": "transaction",
+        "id": step_id,
+        "label": block["label"],
+        "restart_state": ["q_current", "grasp_state"],
+        "children": [
+            {
+                "type": "operation",
+                "id": f"{step_id}.execute",
+                "capability": capability,
+                "parameters": parameters,
+            }
+        ],
+    }
+
+
 def build_plan_document(
     n_parts: int, initial_state: list[str] | None = None
 ) -> dict[str, Any]:
     """The mission as a TaskPlan: one transaction per ``build_mission`` block.
 
+    Structure (block order unchanged)::
+
+        sequence
+          fallback  all parts done?  else  sequence[pick driver, home]
+          fallback  part i done?     else  sequence[A0, A, home, B]   (per part)
+          rack driver
+
     ``initial_state`` (ground atoms) is what the plan is checked against at
     load time; the default is the nominal start, where nothing is held.
     """
-    children = []
-    for index, block in enumerate(build_mission(n_parts)):
-        capability, parameters = _step(index, block)
-        step_id = f"b{index:02d}-{capability}"
+    blocks = build_mission(n_parts)
+    steps = [_transaction(i, b) for i, b in enumerate(blocks)]
+    children: list[dict[str, Any]] = [
+        {
+            "type": "fallback",
+            "id": "tool-ready",
+            "label": "Driver picked (unless every part is done)",
+            "children": [
+                {
+                    "type": "condition",
+                    "id": "all-parts-done",
+                    "label": "All parts done",
+                    "capability": "all_parts_done",
+                    "parameters": {},
+                },
+                {
+                    "type": "sequence",
+                    "id": "pick-driver",
+                    "label": "Pick driver",
+                    "children": steps[0:2],
+                },
+            ],
+        }
+    ]
+    for i in range(1, n_parts + 1):
+        p = f"part{i}"
+        first = 2 + 4 * (i - 1)
         children.append(
             {
-                "type": "transaction",
-                "id": step_id,
-                "label": block["label"],
-                "restart_state": ["q_current", "grasp_state"],
+                "type": "fallback",
+                "id": f"{p}",
+                "label": f"Part {i} assembled",
                 "children": [
                     {
-                        "type": "operation",
-                        "id": f"{step_id}.execute",
-                        "capability": capability,
-                        "parameters": parameters,
-                    }
+                        "type": "condition",
+                        "id": f"{p}-done",
+                        "label": f"{p} clamped and screwed",
+                        "capability": "part_done",
+                        "parameters": {
+                            "part": p,
+                            "clamp": f"fixtures/clamp{i}",
+                            "seat": f"{p}/h_seat",
+                            "hole1": f"{p}/h_hole1",
+                            "hole2": f"{p}/h_hole2",
+                        },
+                    },
+                    {
+                        "type": "sequence",
+                        "id": f"{p}-assemble",
+                        "label": f"Assemble {p}",
+                        "children": steps[first : first + 4],
+                    },
                 ],
             }
         )
+    children.append(steps[-1])
     return {
         "schema_version": "1.0",
         "mission_id": f"ScrewAssembly{n_parts}",
@@ -242,6 +340,20 @@ def build_plan_document(
             "children": children,
         },
     }
+
+
+def transactions(document: dict[str, Any]) -> list[dict[str, Any]]:
+    """The plan's transactions in execution order."""
+    found = []
+
+    def visit(node: dict[str, Any]) -> None:
+        if node["type"] == "transaction":
+            found.append(node)
+        for child in node.get("children", []):
+            visit(child)
+
+    visit(document["root"])
+    return found
 
 
 def blocks_by_label(n_parts: int) -> dict[str, dict[str, Any]]:

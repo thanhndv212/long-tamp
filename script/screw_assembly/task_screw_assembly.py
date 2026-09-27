@@ -58,13 +58,14 @@ from long_tamp.tasks.task_planning import (  # noqa: E402
     TaskPlan,
     TaskPlanningSession,
 )
+from long_tamp.tasks.task_planning.predicates import holds  # noqa: E402
 from screw_domain import (  # noqa: E402
-    DESCRIPTORS,
     LEFT,
     RECORDED_PREDICATES,
     RIGHT,
     blocks_by_label,
     build_plan_document,
+    descriptors,
 )
 
 # Planning keeps the fingers frozen open (a grasp is a rigid TCP constraint);
@@ -416,12 +417,60 @@ def mission_session(
             raise RuntimeError(f"{label}: {r['message']}")
         return {"replans": r["replans"], "resumes": r["resumes"]}
 
-    registry = CapabilityRegistry()
-    for descriptor in DESCRIPTORS.values():
-        registry.register(descriptor, run)
-    plan = TaskPlan.from_dict(build_plan_document(n_parts), registry)
     world = CompositeWorldState(GraspTrackerState(planner), recorded)
+
+    def check(descriptor):
+        """A guard condition: true when its literals hold in the world."""
+
+        def evaluate(parameters: dict[str, Any]) -> bool:
+            state = world()
+            return all(
+                holds(literal.ground(parameters), state)
+                for literal in descriptor.precondition_literals
+            )
+
+        return evaluate
+
+    registry = CapabilityRegistry()
+    for name, descriptor in descriptors(n_parts).items():
+        is_guard = name in ("part_done", "all_parts_done")
+        registry.register(descriptor, check(descriptor) if is_guard else run)
+    plan = TaskPlan.from_dict(build_plan_document(n_parts), registry)
     return TaskPlanningSession(plan, registry, world_state=world, recorded=recorded)
+
+
+def run_node(session: TaskPlanningSession, node: dict[str, Any], skipped: list) -> bool:
+    """Run a plan node the way its compiled BehaviorTree runs it.
+
+    sequence: every child in order; fallback: children until one succeeds;
+    condition: its capability's verdict; transaction: complete (effect holds
+    in the world) -> skip, not ready (preconditions) -> fail, else execute.
+    """
+    kind, label = node["type"], node.get("label", node["id"])
+    if kind == "sequence":
+        return all(run_node(session, child, skipped) for child in node["children"])
+    if kind == "fallback":
+        return any(run_node(session, child, skipped) for child in node["children"])
+    if kind == "condition":
+        value = json.loads(session.evaluate_condition(node["id"])).get("value", False)
+        if value:
+            skipped.append(label)
+            print(f"\n=== {label}: yes, skipping what it guards")
+        return bool(value)
+    done = json.loads(session.is_step_complete(node["id"]))
+    if done.get("complete"):
+        skipped.append(label)
+        print(f"\n=== {label} === skipped ({done['reason']})")
+        return True
+    ready = json.loads(session.check_precondition(node["id"]))
+    if not ready.get("ready"):
+        print(
+            f"\n=== {label} === not ready: "
+            f"{ready.get('unsatisfied') or ready.get('message')}"
+        )
+        return False
+    result = json.loads(session.execute_step(node["id"]))
+    return result["status"] == "success"
 
 
 def run_mission(
@@ -456,27 +505,8 @@ def run_mission(
     }
     session = mission_session(task, planner, ctx, recorded, max_replans, verbose)
     t_mission = time.time()
-    success, skipped = True, []
-    # Each step as its compiled BT transaction runs it: complete? (effect
-    # holds in the world) -> skip; ready? (preconditions) -> execute.
-    for step in session.plan.document["root"]["children"]:
-        done = json.loads(session.is_step_complete(step["id"]))
-        if done.get("complete"):
-            skipped.append(step["label"])
-            print(f"\n=== {step['label']} === skipped ({done['reason']})")
-            continue
-        ready = json.loads(session.check_precondition(step["id"]))
-        if not ready.get("ready"):
-            print(
-                f"\n=== {step['label']} === not ready: "
-                f"{ready.get('unsatisfied') or ready.get('message')}"
-            )
-            success = False
-            break
-        result = json.loads(session.execute_step(step["id"]))
-        if result["status"] != "success":
-            success = False
-            break
+    skipped: list[str] = []
+    success = run_node(session, session.plan.document["root"], skipped)
     return {
         "success": success,
         "seconds": round(time.time() - t_mission, 2),

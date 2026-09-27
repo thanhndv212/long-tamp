@@ -50,6 +50,19 @@ block. Its capabilities declare what a block needs and achieves:
 | `rack` | return | ur10_right holds something, dock free | dock holds the driver, ur10_right holds nothing |
 | `home` | home moves | — | — (always runs; cheap) |
 
+Two guard conditions wrap the work whose own effects are undone later in the mission:
+each part's four blocks run only if `part_done(part)` (clamped, both holes screwed) is false,
+and the driver pickup only if not every part is done. So a run resumed after a part was
+released, or started from a state where some parts are already assembled, skips that
+work instead of grasping and releasing the clamped part again:
+
+```
+sequence
+  fallback  all parts done?  else  sequence[pick driver, home]
+  fallback  part i done?     else  sequence[A0, A, home, B]      (per part)
+  rack driver
+```
+
 `holds` is observed from the planner's grasp tracker; `screwed` is recorded in the run
 folder's `facts.json`, written only when a block completes. The plan is checked when it
 loads (preconditions simulated through every step), and `task_screw_assembly.py` runs it

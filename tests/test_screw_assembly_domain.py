@@ -22,17 +22,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "script/screw_assem
 import screw_domain  # noqa: E402
 
 
-def _registry():
+def _registry(n_parts=1):
     registry = CapabilityRegistry()
-    for descriptor in screw_domain.DESCRIPTORS.values():
+    for descriptor in screw_domain.descriptors(n_parts).values():
         registry.register(descriptor, lambda parameters: {})
     return registry
+
+
+def _check(n_parts, initial_state=()):
+    document = screw_domain.build_plan_document(n_parts, list(initial_state))
+    return TaskPlan.from_dict(document, _registry(n_parts))
+
+
+_PART1_DONE = [
+    "holds(fixtures/clamp1, part1/h_seat)",
+    "screwed(part1, part1/h_hole1)",
+    "screwed(part1, part1/h_hole2)",
+]
+_DRIVER = "holds(ur10_right/gripper, driver/h_grip)"
 
 
 @pytest.mark.parametrize("n_parts", [1, 2, 4])
 def test_one_transaction_per_block_in_mission_order(n_parts):
     document = screw_domain.build_plan_document(n_parts)
-    steps = document["root"]["children"]
+    steps = screw_domain.transactions(document)
     blocks = screw_domain.build_mission(n_parts)
     assert [s["children"][0]["parameters"]["block"] for s in steps] == [
         b["label"] for b in blocks
@@ -42,11 +55,11 @@ def test_one_transaction_per_block_in_mission_order(n_parts):
 
 @pytest.mark.parametrize("n_parts", [1, 4])
 def test_nominal_mission_is_feasible(n_parts):
-    TaskPlan.from_dict(screw_domain.build_plan_document(n_parts), _registry())
+    _check(n_parts)
 
 
 def test_capabilities_declare_the_right_effects():
-    steps = screw_domain.build_plan_document(1)["root"]["children"]
+    steps = screw_domain.transactions(screw_domain.build_plan_document(1))
     capabilities = [s["children"][0]["capability"] for s in steps]
     assert capabilities == [
         "grasp",  # bootstrap: pick driver
@@ -65,27 +78,36 @@ def test_capabilities_declare_the_right_effects():
 
 def test_screwing_without_the_driver_is_rejected():
     document = screw_domain.build_plan_document(1)
-    steps = document["root"]["children"]
-    del steps[0]  # no driver pickup
+    pick = document["root"]["children"][0]["children"][1]["children"]
+    del pick[0]  # no driver pickup
     with pytest.raises(PlanValidationError, match="holds.ur10_right/gripper"):
         TaskPlan.from_dict(document, _registry())
 
 
 def test_a_mission_started_with_the_driver_in_hand_is_feasible():
-    """Same plan, scenario start: the pickup's effect already holds, so it is
-    skipped (as the effect guard does at run time) instead of rejected."""
-    document = screw_domain.build_plan_document(
-        1, initial_state=["holds(ur10_right/gripper, driver/h_grip)"]
-    )
-    TaskPlan.from_dict(document, _registry())
+    """The pickup's effect already holds: skipped, not rejected."""
+    _check(1, [_DRIVER])
 
 
 def test_a_mission_started_with_a_foreign_tool_in_hand_is_rejected():
-    document = screw_domain.build_plan_document(
-        1, initial_state=["holds(ur10_right/gripper, part2/h_grasp)"]
-    )
     with pytest.raises(PlanValidationError, match="b00-grasp"):
-        TaskPlan.from_dict(document, _registry())
+        _check(1, ["holds(ur10_right/gripper, part2/h_grasp)"])
+
+
+def test_resuming_after_a_part_was_released_skips_that_part():
+    """Killed after part 1's release: A0's own effect no longer holds (the part
+    was let go). Without the part_done guard A0 would grasp the clamped part
+    again and B release it again: pointless planning, but not infeasible."""
+    _check(2, [_DRIVER, *_PART1_DONE])
+
+
+def test_a_finished_mission_does_not_pick_the_driver_again():
+    finished = [*_PART1_DONE, "holds(fixtures/rack_hold, driver/h_rack)"]
+    _check(1, finished)
+
+
+def test_a_mission_started_with_the_part_in_hand_is_feasible():
+    _check(1, ["holds(ur10_left/gripper, part1/h_grasp)"])
 
 
 def test_home_moves_have_no_effects_so_they_always_run():
