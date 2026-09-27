@@ -77,7 +77,7 @@ jobs:
         working-directory: script/screw_assembly
         run: |
           python build_scene.py --parts 1
-          timeout 20m python -u task_screw_assembly.py --seed 1 --run-dir runs/nightly
+          timeout 20m python -u task_screw_assembly.py --seed 1 --run-dir runs/nightly --no-viewer
       - uses: actions/upload-artifact@v4
         if: always()
         with:

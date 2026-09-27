@@ -49,6 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The screw-assembly mission hung before its first block whenever nobody
+  opened the viewer (#29). `MissionViewer` passed `open=True` to pyhpp_viser,
+  which opens a browser and blocks until a client connects, which never happens
+  on a headless machine; the nightly mission job timed out every run. The viewer
+  now only serves the scene and prints its URL (`open_browser=True` restores the
+  old behaviour), and the nightly job runs with `--no-viewer`.
 - Broken links in the docs site: links from included root files (README,
   ARCHITECTURE) and from `docs/` to files outside it now use absolute GitHub URLs;
   archived legacy pages point at the pages' current locations.

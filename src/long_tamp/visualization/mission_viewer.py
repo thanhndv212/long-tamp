@@ -18,7 +18,22 @@ class MissionViewer:
     closures = None
     fps = 30.0
 
-    def __init__(self, task, port, initial, camera=None, closures=None, fps=30.0):
+    def __init__(
+        self,
+        task,
+        port,
+        initial,
+        camera=None,
+        closures=None,
+        fps=30.0,
+        open_browser=False,
+    ):
+        """Serve the scene on ``port`` and show ``initial``.
+
+        Never waits for a browser: with ``open_browser=True`` pyhpp_viser
+        also opens one and blocks until a client connects, which never
+        happens on a headless machine (#29), so it is opt-in.
+        """
         from pyhpp_viser import Viewer
 
         self.backend = task.planner
@@ -31,7 +46,7 @@ class MissionViewer:
         self._fingers = {}
         self._segments = []
         self.backend.viewer = Viewer(self.backend.device, self.backend.problem)
-        self.backend.viewer.start(host="0.0.0.0", port=port, open=True)
+        self.backend.viewer.start(host="0.0.0.0", port=port, open=open_browser)
 
         @self.backend.viewer.viewer.on_client_connect
         def aim(client):
