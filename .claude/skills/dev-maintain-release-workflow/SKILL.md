@@ -1,6 +1,6 @@
 ---
 name: dev-maintain-release-workflow
-description: Development, maintenance, and PyPI release workflow for long_tamp. Use when committing, branching, opening/reviewing/merging a pull request, versioning, releasing, or deciding whether a change needs to be mirrored to/from the agimus_spacelab sibling repo.
+description: Development, maintenance, and PyPI release workflow for long_tamp. Use when committing, branching, opening/reviewing/merging a pull request, versioning, releasing, installing long_tamp for development (pip vs CMake), debugging a stale-install ModuleNotFoundError, or deciding whether a change needs to be mirrored to/from the agimus_spacelab sibling repo.
 ---
 
 # long_tamp: Develop, Maintain, Release
@@ -83,6 +83,39 @@ is pushed to `main` directly. An agent drives its own PR from opening to merge:
 5. **After merge.** User-visible changes already carry their `CHANGELOG.md` Unreleased
    entry (it is part of the PR, not a follow-up). A new session continuing the work
    starts a fresh branch from the updated `main`; a merged PR is never reused.
+
+## Installing `long_tamp` for development: pip vs CMake
+
+Choose one install per environment. Two installs in one environment conflict, and the
+CMake copy wins without warning.
+
+| Situation | Use | Why |
+|---|---|---|
+| Editing `long_tamp` Python (any `src/long_tamp/` change, running `script/` examples, tests) | **`pip install -e .`**. In the source-built container use `pip install --no-deps -e .`: the source-built HPP libraries are compiled and linked against the env's conda-forge `pinocchio`/`eigenpy`/`numpy`, and letting pip pull the PyPI `pin`/`numpy` wheels would load a second, ABI-mismatched copy (converter errors or segfaults) | Editable: the interpreter reads `src/long_tamp/` directly, so edits take effect without reinstalling |
+| Clean-venv wheel validation / release checks | `pip install -e ".[hpp,dev]"` (or the built wheel) | Matches CI and what PyPI users get |
+| A downstream **CMake/ament** package needs `find_package(long_tamp)` or the installed `share/long_tamp/` data (URDF/SRDF/meshes/scripts), or you're building a frozen deployment snapshot | **CMake** `make install` into `$INSTALL_HPP_DIR` | This is the only path that exports the CMake package and installs the `share/` data |
+
+**The trap (hit 2026-09-27):** CMake's `install(DIRECTORY src/long_tamp DESTINATION
+${PYTHON_SITELIB})` *copies* the package into
+`$INSTALL_HPP_DIR/lib/python3.11/site-packages/long_tamp`. The container's
+`~/devel/hpp/config.sh` puts that directory on `PYTHONPATH`, and `PYTHONPATH` entries
+come before the editable install's `.pth`. The copy freezes at the commit you last ran
+`make install` from, so modules added afterwards fail with
+`ModuleNotFoundError: No module named 'long_tamp.<new module>'` (that time it was
+`visualization.mission_viewer`), and edits you make to existing modules are silently
+ignored. `agimus_spacelab` avoids this because `config.sh` prepends its `src/` ahead of
+the install dir. `long_tamp` gets no such prepend.
+
+Rules:
+- For day-to-day Python work in the container, do **not** `make install` long_tamp. If
+  you had to (e.g. for a downstream CMake consumer), remove the Python copy afterwards
+  with `rm -rf $INSTALL_HPP_DIR/lib/python3.11/site-packages/long_tamp`. The `share/`
+  data and CMake config stay, and the editable install takes over again.
+- If an import error names a module that exists in `src/`, first check which copy is
+  loaded:
+  `python -c "import long_tamp; print(long_tamp.__file__)"`. It must print
+  `.../src/long_tamp/src/long_tamp/__init__.py`. Any `install/.../site-packages` path is
+  a stale copy.
 
 ## Testing
 
@@ -203,6 +236,7 @@ First release: `0.1.0` (2026-09-27, see `docs/plans/release-0.1.0.md`). When cut
 | "This task_planning/ fix is small, agimus_spacelab could use it too" | No — task_planning/ is long_tamp-only, full stop, regardless of size. It supersedes the DBT path there; porting it back reintroduces the coupling the split was for. |
 | "I'll port `agimus_spacelab`'s `script/spacelab/` (or its `spacelab-example` branch) into `long_tamp`, just scoped to `script/`" | That reintroduces exactly what the filter-repo history rewrite was done to remove — the mission-specific content (real part/gripper/handle names, the actual assembly sequence) isn't confined to config, it's baked into the Python itself. Build a from-scratch generic example instead (see Phase 4 in the vault note); don't port. |
 | "Lint is green, so tests pass" | Check the PyPI-wheel test job separately; lint does not exercise planning. |
+| "I'll just `make install` so the container picks up my change" | That puts a frozen copy on `PYTHONPATH` that shadows the editable install. Use `pip install --no-deps -e .` for Python work; CMake install is only for downstream CMake consumers (see "Installing `long_tamp` for development"). |
 | "PyPI release is blocked until we sort out HPP distribution" | It isn't — the PyPI package is pure-Python only; HPP is a runtime dependency the user provides, not a packaging blocker. |
 
 ## Verification
