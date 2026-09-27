@@ -38,6 +38,25 @@ hole 2 unreachable, and no retry of the hole-2 phase can fix that. So block A ru
   entry. The replan fires early when a phase proves unreachable (solver-only failures,
   no collisions).
 
+**The mission is a TaskPlan.** `screw_domain.py` holds the block definitions and expresses
+the mission as a `long_tamp` TaskPlan: one transaction per block, in order, each naming its
+block. Its capabilities declare what a block needs and achieves:
+
+| Capability | Blocks | Preconditions | Effects |
+|---|---|---|---|
+| `grasp` | pick driver, A0 | gripper and handle both free | `holds(gripper, handle)` |
+| `clamp_and_screw` | A | ur10_left holds the part, ur10_right holds the driver, clamp free | `holds(clamp, seat)`, `screwed(part, hole1)`, `screwed(part, hole2)` |
+| `release` | B | gripper holds something | gripper holds nothing |
+| `rack` | return | ur10_right holds something, dock free | dock holds the driver, ur10_right holds nothing |
+| `home` | home moves | — | — (always runs; cheap) |
+
+`holds` is observed from the planner's grasp tracker; `screwed` is recorded in the run
+folder's `facts.json`, written only when a block completes. The plan is checked when it
+loads (preconditions simulated through every step), and `task_screw_assembly.py` runs it
+through a `TaskPlanningSession` step by step, like the compiled BehaviorTree would: a step
+whose effect already holds is skipped, a step whose preconditions don't hold stops the
+mission with the unsatisfied literals, and every other step plans its block.
+
 ## Scene
 
 | Object | What it is | Frames |
@@ -80,14 +99,16 @@ its log and its resume point (`long_tamp.tasks.mission_checkpoint.MissionCheckpo
 | File | What it is |
 |---|---|
 | `mission.json` | run log: seed, commit, one record per block (success, seconds, resumes, replans), outcome; resumes append |
-| `checkpoint.json` | resume point: next block, configuration, held grasps |
+| `checkpoint.json` | resume point: configuration and held grasps after the last completed block |
+| `facts.json` | recorded facts (`screwed(part, hole)`) written by completed blocks |
 | `trajectory.json` | the planned motion, sampled at 20 Hz of path time, for `replay.py` |
 | `run.log` | full DEBUG log |
 | `phases/` | per-phase planner dumps, one subfolder per block |
 
-All of it is rewritten after every block, so a killed run keeps an accurate record, and
-`--resume` continues from the last completed block. It refuses to resume if the mission's
-block list has changed.
+All of it is rewritten after every block, so a killed run keeps an accurate record.
+`--resume` restores the configuration, grasps and recorded facts, then runs the whole plan:
+steps whose effects already hold are skipped, so it continues from the world state rather
+than from a block index (home moves re-run; they take well under a second).
 
 `replay.py` plays a trajectory in viser without planning, at recorded speed (`--speed`,
 `--loop`). It runs in its own process because, while HPP plans, the planner process
