@@ -356,6 +356,13 @@ class ManipulationTask(ABC):
         self._graph_constraints = graph_constraints
 
         self._finalize_graph_setup(graph_constraints, skip_graph)
+        # Record the frozen patterns on the graph builder, so every
+        # GraspSequencePlanner built on it keeps those joints frozen on each
+        # phase graph too (#28).
+        if self.graph_builder is not None:
+            self.graph_builder.frozen_joint_substrings = list(
+                getattr(self, "_frozen_joint_patterns", [])
+            )
 
         logger.info("✓ Task setup complete")
 
@@ -455,6 +462,7 @@ class ManipulationTask(ABC):
             locked joint constraints are created.
         """
         graph_constraints = None
+        self._frozen_joint_patterns = []
         patterns = freeze_joint_substrings
         if patterns is None and self.use_factory:
             # Read freeze patterns from task_config (set by YAML loader)
@@ -479,6 +487,7 @@ class ManipulationTask(ABC):
                         ", ".join(sorted(frozen_names)),
                     )
                     graph_constraints = constraint_names
+                    self._frozen_joint_patterns = list(patterns)
 
         return graph_constraints
 

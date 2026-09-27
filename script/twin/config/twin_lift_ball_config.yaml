@@ -81,9 +81,14 @@ environments:
 # data's panda.srdf. Bounds are the URDF's real joint limits (Panda's arm
 # joints are hard-limited, unlike UR5's continuous ones, so unlike that
 # config these aren't a blanket +/-2*pi). Finger joints are frozen (see
-# FREEZE_JOINT_SUBSTRINGS in task_lift_ball.py) at a width that roughly
-# frames the 0.05m-diameter ball — purely cosmetic, since this task's
-# grasp is a rigid TCP constraint, not simulated finger closing.
+# FREEZE_JOINT_SUBSTRINGS in task_lift_ball.py) fully open, at Panda's 0.04
+# upper bound. The grasp is a rigid TCP constraint, not simulated finger
+# closing, but the frozen fingers are still collision-checked against the
+# ball: at 0.025 (a 0.05 m opening around the 0.05 m ball) the rubber
+# fingertips overlap the ball by 0.02 mm at the grasp pose, so every grasp
+# would collide. Fully open, every finger collision box clears the ball by
+# >= 15 mm at the grasp pose. (Issue #28: the fingers must also actually stay
+# frozen on the moving arm, which GraspSequencePlanner now guarantees.)
 # ---------------------------------------------------------------------------
 joint_groups:
   PANDA_LEFT:
@@ -94,8 +99,8 @@ joint_groups:
     - {joint: panda_left/panda_joint5,       initial:  0.000000, bounds: [-2.8973, 2.8973]}
     - {joint: panda_left/panda_joint6,       initial:  1.570700, bounds: [-0.0175, 3.7525]}
     - {joint: panda_left/panda_joint7,       initial:  0.785398, bounds: [-2.8973, 2.8973]}
-    - {joint: panda_left/panda_finger_joint1, initial: 0.025, bounds: [0.0, 0.04]}
-    - {joint: panda_left/panda_finger_joint2, initial: 0.025, bounds: [0.0, 0.04]}
+    - {joint: panda_left/panda_finger_joint1, initial: 0.04, bounds: [0.0, 0.04]}
+    - {joint: panda_left/panda_finger_joint2, initial: 0.04, bounds: [0.0, 0.04]}
   PANDA_RIGHT:
     - {joint: panda_right/panda_joint1,       initial:  0.000000, bounds: [-2.8973, 2.8973]}
     - {joint: panda_right/panda_joint2,       initial: -0.785398, bounds: [-1.7628, 1.7628]}
@@ -104,14 +109,17 @@ joint_groups:
     - {joint: panda_right/panda_joint5,       initial:  0.000000, bounds: [-2.8973, 2.8973]}
     - {joint: panda_right/panda_joint6,       initial:  1.570700, bounds: [-0.0175, 3.7525]}
     - {joint: panda_right/panda_joint7,       initial:  0.785398, bounds: [-2.8973, 2.8973]}
-    - {joint: panda_right/panda_finger_joint1, initial: 0.025, bounds: [0.0, 0.04]}
-    - {joint: panda_right/panda_finger_joint2, initial: 0.025, bounds: [0.0, 0.04]}
+    - {joint: panda_right/panda_finger_joint1, initial: 0.04, bounds: [0.0, 0.04]}
+    - {joint: panda_right/panda_finger_joint2, initial: 0.04, bounds: [0.0, 0.04]}
 
 # ---------------------------------------------------------------------------
-# Freeflyer bounds applied to every object root joint (the ball)
+# Freeflyer bounds applied to every object root joint (the ball). The z
+# upper bound leaves room above the lift: a dual-arm hold could end a phase
+# at z = 0.905 with the old 0.9 bound, and the next edge then rejected its
+# own start configuration as out of bounds (#28).
 # ---------------------------------------------------------------------------
 freeflyer_bounds:
-  translation: [[0.0, 1.1], [-0.4, 0.4], [0.0, 0.9]]
+  translation: [[0.0, 1.1], [-0.4, 0.4], [0.0, 1.2]]
   quaternion:  [[-1.0001, 1.0001], [-1.0001, 1.0001],
                 [-1.0001, 1.0001], [-1.0001, 1.0001]]
 
