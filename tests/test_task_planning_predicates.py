@@ -205,8 +205,13 @@ def test_initial_state_is_respected():
         initial_state=["holds(left, ball)"],
     )
     TaskPlan.from_dict(document, _registry())
-    document["initial_state"] = []
-    with pytest.raises(PlanValidationError, match="release-1.execute"):
+    # Grasping the ball with a gripper that already holds the cup is infeasible
+    # (and not already done, so the effect guard does not skip it).
+    document = _document(
+        [_transaction("grasp-1", "grasp", gripper="left", handle="ball")],
+        initial_state=["holds(left, cup)"],
+    )
+    with pytest.raises(PlanValidationError, match="grasp-1.execute"):
         TaskPlan.from_dict(document, _registry())
 
 
@@ -279,6 +284,19 @@ def test_a_branch_reachable_only_on_failure_is_still_checked():
     )
     with pytest.raises(PlanValidationError, match="grasp-mug.execute"):
         TaskPlan.from_dict(document, _registry())
+
+
+def test_a_transaction_whose_effect_already_holds_is_skipped_in_simulation():
+    """Matches run time (ADR-0002): the step is complete, so its preconditions
+    are not checked and the state is unchanged."""
+    document = _document(
+        [
+            _transaction("grasp-1", "grasp", gripper="left", handle="ball"),
+            _transaction("release-1", "release", gripper="left"),
+        ],
+        initial_state=["holds(left, ball)"],
+    )
+    TaskPlan.from_dict(document, _registry())
 
 
 def test_fingerprint_changes_when_a_precondition_changes():

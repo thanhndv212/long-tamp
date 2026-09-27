@@ -236,8 +236,11 @@ def simulate_plan(
     Raises ``PlanValidationError`` if some operation can be reached in a state
     where one of its preconditions is false, or if the plan can never succeed.
     A step that fails is assumed to leave the state unchanged (the transaction
-    contract); a condition whose capability declares preconditions succeeds
-    exactly when they hold, otherwise both outcomes are explored.
+    contract); a transaction whose declared effects already hold succeeds
+    without running, as the run-time effect guard does (sessions without a
+    world state don't skip); a condition whose capability declares
+    preconditions succeeds exactly when they hold, otherwise both outcomes
+    are explored.
     """
     successes, _ = _simulate(root, registry, {initial})
     if not successes:
@@ -259,7 +262,21 @@ def _simulate(
         )
     node_type = node["type"]
     if node_type == "transaction":
-        return _simulate(node["children"][0], registry, states)
+        # A transaction whose effects already hold is complete: at run time
+        # the effect guard skips it (ADR-0002), so it succeeds unchanged and
+        # its preconditions are not checked.
+        child = node["children"][0]
+        _, effects = grounded_literals(child, registry.descriptor(child["capability"]))
+        done = (
+            {s for s in states if all(holds(e, s) for e in effects)}
+            if effects
+            else set()
+        )
+        todo = set(states) - done
+        successes, failures = (
+            _simulate(child, registry, todo) if todo else (set(), set())
+        )
+        return successes | done, failures
     if node_type == "retry":
         return _simulate(node["child"], registry, states)
     if node_type == "sequence":
