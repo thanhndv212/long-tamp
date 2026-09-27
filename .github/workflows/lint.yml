@@ -51,3 +51,41 @@ jobs:
       - run: python -c "import long_tamp; print(long_tamp.get_available_backends())"
       - run: python -m pytest tests/ -q --timeout=300 --timeout-method=thread
       - run: python script/validate_standalone_install.py
+
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --upgrade pip && pip install "mkdocs>=1.6" "mkdocs-material>=9.5" "mkdocs-include-markdown-plugin>=7.0"
+      # Strict: a broken link or a page missing from mkdocs.yml's nav fails the PR
+      # (see `validation:` in mkdocs.yml).
+      - run: mkdocs build --strict
+
+  changelog:
+    # A PR that changes the library or the examples carries a CHANGELOG.md entry,
+    # unless it is labelled `skip-changelog` (refactors, tests, CI, docs-only).
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require a CHANGELOG entry
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          SKIP: ${{ contains(github.event.pull_request.labels.*.name, 'skip-changelog') }}
+        run: |
+          changed=$(git diff --name-only "$BASE"...HEAD)
+          echo "$changed"
+          if [ "$SKIP" = "true" ]; then echo "skip-changelog label set"; exit 0; fi
+          if ! echo "$changed" | grep -qE '^(src|script)/'; then
+            echo "no library/example change"; exit 0
+          fi
+          if echo "$changed" | grep -qx 'CHANGELOG.md'; then exit 0; fi
+          echo "::error::src/ or script/ changed without a CHANGELOG.md entry. Add one under [Unreleased], or label the PR skip-changelog."
+          exit 1
