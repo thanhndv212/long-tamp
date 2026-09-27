@@ -59,7 +59,7 @@ Timing depends heavily on the environment. The same mission ran with a median of
 and **~1220 s** in a source-built HPP container. Only compare a batch against a
 baseline from the same environment. The canonical baseline is the **PyPI-wheel
 environment** (what CI and users run). If you only have another environment,
-first record a baseline there from `main`, then run your branch, and put both files in
+first record a baseline there from `dev`, then run your branch, and put both files in
 the PR.
 
 Updating the canonical baseline is a deliberate change: its own PR (or a clearly
@@ -69,7 +69,7 @@ and the old and new numbers.
 ## Milestone gate
 
 A milestone closes when its exit test (listed in [plans/roadmap.md](../plans/roadmap.md))
-passes on `main`, with V3 (and V4 from M1 on) result files committed under
+passes on `dev`, with V3 (and V4 from M1 on) result files committed under
 `script/screw_assembly/results/` and linked from the milestone's closing notes.
 
 ## Seeds and determinism

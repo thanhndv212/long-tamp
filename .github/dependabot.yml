@@ -7,3 +7,4 @@ updates:
     schedule:
       interval: monthly
     labels: ["type:chore", "area:ci", "skip-changelog"]
+    target-branch: dev

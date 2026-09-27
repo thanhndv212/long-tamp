@@ -28,7 +28,8 @@ a source-built HPP environment with the PyPI wheels in one venv.
 
 ## Make the change
 
-1. Branch from `main`: `feature/<issue>-<slug>` (or `fix/…`, `docs/…`, `chore/…`).
+1. Branch from `dev` (the integration branch; `main` holds releases):
+   `feature/<issue>-<slug>` (or `fix/…`, `docs/…`, `chore/…`).
 2. Write tests with the code. Real-scene planning checks are marked
    `@pytest.mark.slow_planning`.
 3. Commit with [Conventional Commits](https://www.conventionalcommits.org/):
@@ -40,8 +41,8 @@ a source-built HPP environment with the PyPI wheels in one venv.
 
 ## Open a pull request
 
-Use the PR template and link the issue (`Closes #N`). A PR merges when CI is green
-on its latest commit, it has no conflicts, every review thread is answered, and the
+Open it **against `dev`**, use the PR template and link the issue (`Closes #N`). A PR
+merges when CI is green on its latest commit, it has no conflicts, every review thread is answered, and the
 validation evidence the issue asked for is in the PR. PRs are squash-merged with their
 Conventional Commits title.
 

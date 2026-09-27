@@ -69,28 +69,31 @@ area touched (`backends`, `planning`, `tasks`, `docs`, `script/twin`, …). Body
 *why*, not what — the diff already shows what.
 
 **Branches**: `feature/<issue>-<short-description>`, `fix/<issue>-<short-description>`,
-`refactor/…`, `docs/…`, `chore/…`. Keep them short-lived; `main` stays the always-mergeable
+`refactor/…`, `docs/…`, `chore/…`, cut from `dev` (hotfixes from `main`). Keep them
+short-lived. **`dev` is the integration branch** (all roadmap work), **`main` holds
+releases** (release PRs `dev → main`, merged with a merge commit, and hotfixes); see
+"Branches" in `docs/development/workflow.md`. `dev` stays the always-mergeable
 line.
 
 ## Pull requests: open → review → merge
 
-Every change reaches `main` through a pull request, including agent-authored ones; nothing
-is pushed to `main` directly. An agent drives its own PR from opening to merge:
+Every change reaches `dev` (or, for releases/hotfixes, `main`) through a pull request,
+including agent-authored ones; nothing is pushed to `dev` or `main` directly. An agent drives its own PR from opening to merge:
 
-1. **Open.** Push the branch, then open the PR against `main` with the GitHub CLI or the
+1. **Open.** Push the branch, then open the PR against `dev` with the GitHub CLI or the
    GitHub MCP tools. Title in Conventional Commits form (`feat(grasping): ...`): it becomes
    the squash commit's subject. Body: **Why** (the problem, with evidence: numbers, logs),
    **What** (by module), **Validation** (tests run and their result, lint, anything checked
    by hand), **Found along the way** (issues noticed but not fixed here), **Not modelled /
    limits**. Report failures as they are, with the test name; a test that is flaky on
-   `main` too is stated as such, with the runs that show it.
+   `dev` too is stated as such, with the runs that show it.
 2. **Watch.** Subscribe to the PR's activity (CI results, reviews, comments) and keep a
    check-in scheduled until it is merged or closed: events can arrive late or not at all.
 3. **Drive to green.** On every event or check-in, look at the whole PR on its current
    head, in this order:
-   - *Merge conflict*: merge `main` into the branch, resolve, re-run the checks, push.
+   - *Merge conflict*: merge `dev` into the branch, resolve, re-run the checks, push.
    - *CI red*: find the root cause and push a fix. "Flaky" is not a root cause; a
-     failure that is red on `main` too gets one PR comment naming the check and why it
+     failure that is red on `dev` too gets one PR comment naming the check and why it
      isn't this PR's. Never skip, disable or quarantine a test to get green; never push
      an empty commit or close/reopen to re-run CI.
    - *Review comments*: fix small, local asks (nits, renames, an added test) and push;
@@ -106,21 +109,23 @@ is pushed to `main` directly. An agent drives its own PR from opening to merge:
    conflict, no review thread is left unanswered, and no reviewer has requested changes.
    An agent merges only when the maintainer has asked it to for that PR ("merge when
    green" counts). Squash-merge, with the PR's Conventional Commits title as the commit
-   subject, so `main` stays one commit per change. Then stop watching the PR and cancel
+   subject, so `dev` stays one commit per change. After the merge, close the linked
+   issue explicitly (`gh issue close N -c "Done in #PR (on dev)"`): closing keywords only
+   fire on merges into the default branch (`main`). Then stop watching the PR and cancel
    any scheduled check-ins for it.
 5. **Delete the PR branch** right after the merge, on the remote and locally:
    `git push origin --delete <branch>` (or the PR page's "Delete branch" button), then
-   `git branch -D <branch>` after switching to `main`. The squash commit on `main` holds
+   `git branch -D <branch>` after switching to `dev`. The squash commit on `dev` holds
    everything the branch had, so nothing is lost. Confirm it is gone with
    `git ls-remote --heads origin <branch>` (no output). If the agent can't delete it
    (the push is refused, e.g. a 403 from a session's git proxy that only allows pushes
    to its own branch), tell the maintainer the branch name and the PR link instead of
    leaving it silently. A session that must keep working under the same branch name
-   resets it to the new `main` instead (`git checkout -B <branch> origin/main`, then
+   resets it to the new `dev` instead (`git checkout -B <branch> origin/dev`, then
    `git push --force-with-lease` to that branch), since it holds only merged history.
 6. **After merge.** User-visible changes already carry their `CHANGELOG.md` Unreleased
    entry (it is part of the PR, not a follow-up). A new session continuing the work
-   starts a fresh branch from the updated `main`; a merged PR is never reused.
+   starts a fresh branch from the updated `dev`; a merged PR is never reused.
 
 ## Installing `long_tamp` for development: pip vs CMake
 
@@ -237,7 +242,7 @@ First release: `0.1.0` (2026-09-27, see `docs/plans/release-0.1.0.md`). When cut
    `python -c "from long_tamp import get_available_backends"` imports without pulling in
    any HPP native package.
 4. **Tag**: annotated git tag matching the version (`vX.Y.Z`), pushed after the version
-   bump commit lands on `main`.
+   bump reaches `main` through the release PR `dev → main` (merge commit, not squash).
 5. **Publish**: the tag triggers `.github/workflows/release.yml`, which checks the
    version, builds and smoke-tests the artifacts, then publishes using PyPI trusted
    publishing. Configure the publisher for owner `thanhndv212`, repo `long-tamp`,

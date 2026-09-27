@@ -15,10 +15,29 @@ flowchart LR
   E --> F[Validate V0-V4]
   F --> G[PR: docs + CHANGELOG]
   G --> H[CI green + review]
-  H --> I[Squash-merge, delete branch]
-  I --> J[Issue closes, roadmap updated]
-  J -->|milestone done| K[Milestone gate + release]
+  H --> I[Squash-merge into dev, delete branch]
+  I --> J[Close issue, tick roadmap]
+  J -->|milestone done| K[Milestone gate on dev]
+  K --> L[Release PR dev to main, tag]
 ```
+
+## Branches
+
+| Branch | Role | Receives |
+|---|---|---|
+| `main` | Released code. What PyPI and the docs site reflect. Tags `vX.Y.Z` are cut here. | Release PRs from `dev`, hotfix PRs |
+| `dev` | Integration branch. All roadmap work lands here first. | Squash-merged feature/fix PRs |
+| `feature/<issue>-<slug>`, `fix/…`, `refactor/…`, `docs/…`, `chore/…` | One issue (or a coherent part of one) | — |
+
+- Feature work branches from `dev` and opens its PR **against `dev`**.
+- A **release PR** `dev → main` is opened when a milestone's gate passes (or for a
+  patch release). It is merged with a **merge commit**, not squashed, so `dev` and
+  `main` keep a shared history and the next release PR has no spurious conflicts.
+- **Hotfix:** `fix/<issue>-<slug>` from `main`, PR against `main`, patch release, then
+  merge `main` back into `dev`.
+- `main` is GitHub's default branch, and closing keywords (`Closes #N`) only act on
+  merges into the default branch. After a PR merges into `dev`, **close its issue
+  explicitly**: `gh issue close N -c "Done in #<PR> (on dev)"`.
 
 ## 1. Plan: roadmap → issue
 
@@ -39,7 +58,7 @@ flowchart LR
 ## 2. Branch
 
 `feature/<issue>-<slug>`, `fix/<issue>-<slug>`, `refactor/…`, `docs/…`, `chore/…`,
-from an up-to-date `main`. Keep branches short-lived: one issue, or a coherent part of
+from an up-to-date `dev` (hotfixes: from `main`). Keep branches short-lived: one issue, or a coherent part of
 one, per PR. A milestone is delivered by several PRs, not one.
 
 ## 3. Implement
@@ -73,21 +92,22 @@ In the **same PR** as the code:
 
 ## 6. Pull request → merge
 
-Open the PR with the template (`Closes #<issue>`). The merge conditions and the
+Open the PR **against `dev`** with the template (`Closes #<issue>`). The merge conditions and the
 drive-to-green procedure are in `.claude/skills/dev-maintain-release-workflow/SKILL.md`
 and apply to everyone:
 
 - every required check green on the current head (`lint`, `lint-style` advisory,
   `test-standalone`, `test-hpp`, `distribution`, `docs`, `changelog`);
-- no conflict with `main`, every review thread answered, no "changes requested";
+- no conflict with `dev`, every review thread answered, no "changes requested";
 - the validation evidence the issue asked for is in the PR;
-- **squash-merge** with the Conventional Commits title, then delete the branch.
+- **squash-merge** into `dev` with the Conventional Commits title, then delete the branch.
 
 Never skip, disable or quarantine a test to get green.
 
 ## 7. After merge
 
-- The issue closes through `Closes #N`. If it didn't, close it with a link to the PR.
+- Close the issue with a link to the PR (`Closes #N` doesn't fire on merges into
+  `dev`, see Branches).
 - If the merged work completes a roadmap item, tick it in
   [plans/roadmap.md](../plans/roadmap.md) (it can be part of the PR itself).
 - A milestone closes only when its **exit test** passes and the result files are
@@ -95,10 +115,11 @@ Never skip, disable or quarantine a test to get green.
 
 ## 8. Release
 
-Each completed milestone is a minor release (`0.x.0`), following the release process
-in the dev skill: version bump, `CHANGELOG` `[Unreleased]` → dated section, tag
-`vX.Y.Z`, trusted publishing, GitHub release notes from the changelog. Patch releases
-(`0.x.y`) carry fixes only. The release commit must carry a V3 batch result.
+Each completed milestone is a minor release (`0.x.0`): on `dev`, bump the version and
+move `CHANGELOG` `[Unreleased]` into a dated section; open the release PR `dev → main`
+with the milestone's V3 (and V4) result files linked; merge it with a merge commit; tag
+`vX.Y.Z` on `main`, which triggers trusted publishing; write the GitHub release notes
+from the changelog; close the milestone. Patch releases (`0.x.y`) carry fixes only.
 
 ## Definition of done
 
@@ -109,4 +130,4 @@ A change is done when all of these hold:
 - [ ] `CHANGELOG.md` entry (or `skip-changelog` with a reason)
 - [ ] Docs updated; `mkdocs build --strict` passes
 - [ ] ADR written or updated if a design decision changed
-- [ ] PR merged by squash, branch deleted, issue closed, roadmap ticked
+- [ ] PR squash-merged into `dev`, branch deleted, issue closed, roadmap ticked

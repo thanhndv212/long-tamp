@@ -1,4 +1,5 @@
-<!-- Title: Conventional Commits, e.g. "feat(task_planning): check preconditions in TaskStepReady".
+<!-- Base branch: `dev` (feature/fix work) or `main` (release PR from dev, or a hotfix).
+     Title: Conventional Commits, e.g. "feat(task_planning): check preconditions in TaskStepReady".
      It becomes the squash commit's subject. -->
 
 Closes #
