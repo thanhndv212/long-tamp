@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- World-state providers (#3, ADR-0002): `GraspTrackerState` reports observed
+  `holds(gripper, handle)` atoms from a `GraspStateTracker`; `RecordedFacts`
+  holds facts no sensor shows afterwards (e.g. `screwed(part, hole)`), persisted
+  atomically and reloaded on restart; `CompositeWorldState` merges sources into a
+  session's `world_state=`. A session built with `recorded=` writes a step's
+  grounded effects on the recorded predicates only when the step completes.
 - Capability preconditions and effects (#2, ADR-0002): `CapabilityDescriptor`
   takes `preconditions=` and `effects=` as literals over the step's parameters
   (`"not holds(?gripper, _)"`, `"holds(?gripper, ?handle)"`), parsed and checked

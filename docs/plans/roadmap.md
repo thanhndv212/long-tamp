@@ -38,7 +38,7 @@ feasibility before any geometry runs; missions skip steps whose effect already h
 
 - [x] [#2](https://github.com/thanhndv212/long-tamp/issues/2) Typed preconditions and effects on `CapabilityDescriptor`; `TaskPlan.from_dict`
       simulates them and rejects infeasible plans; `TaskStepReady` checks preconditions
-- [ ] [#3](https://github.com/thanhndv212/long-tamp/issues/3) World-state provider: observed predicates (grasps, poses) and recorded facts
+- [x] [#3](https://github.com/thanhndv212/long-tamp/issues/3) World-state provider: observed predicates (grasps, poses) and recorded facts
       (written only by completed execution, e.g. `screwed(part, hole)`)
 - [ ] [#4](https://github.com/thanhndv212/long-tamp/issues/4) Runtime effect guard: a transaction is skipped when its effect already holds
       (replaces the in-memory completed set)
