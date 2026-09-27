@@ -11,7 +11,15 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
-from .capabilities import CapabilityRegistry
+from .capabilities import CapabilityDescriptor, CapabilityRegistry
+from .predicates import (
+    Atom,
+    Literal,
+    apply_effects,
+    format_state,
+    holds,
+    parse_state,
+)
 
 _ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$")
 _SUPPORTED_NODE_TYPES = {
@@ -80,6 +88,12 @@ class TaskPlan:
         seen: set[str] = set()
         effective_attempts: dict[str, int] = {}
         cls._validate_node(normalized.get("root"), registry, seen, effective_attempts)
+        if "initial_state" in normalized:
+            try:
+                initial = parse_state(normalized["initial_state"])
+            except (TypeError, ValueError) as error:
+                raise PlanValidationError(f"invalid initial_state: {error}") from error
+            simulate_plan(normalized["root"], registry, initial)
         canonical = _canonical_json(normalized)
         fingerprint_input = {
             "domain": "agimus-task-plan-v1",
@@ -190,3 +204,94 @@ class TaskPlan:
                 f"max_timeout {max_timeout} exceeds capability limit "
                 f"{descriptor.max_timeout}"
             )
+        try:
+            grounded_literals(node, descriptor)
+        except ValueError as error:
+            raise PlanValidationError(f"step {node_id}: {error}") from error
+
+
+# Fallbacks multiply the reachable states; plans are small, so a cap only
+# guards against pathological documents.
+_MAX_REACHABLE_STATES = 1024
+
+
+def grounded_literals(
+    node: dict[str, Any], descriptor: CapabilityDescriptor
+) -> tuple[list[Literal], list[Literal]]:
+    """A condition/operation node's preconditions and effects, grounded."""
+    parameters = node.get("parameters", {})
+    return (
+        [lit.ground(parameters) for lit in descriptor.precondition_literals],
+        [lit.ground(parameters) for lit in descriptor.effect_literals],
+    )
+
+
+def simulate_plan(
+    root: dict[str, Any],
+    registry: CapabilityRegistry,
+    initial: frozenset[Atom],
+) -> None:
+    """Symbolically execute every branch of a plan from ``initial``.
+
+    Raises ``PlanValidationError`` if some operation can be reached in a state
+    where one of its preconditions is false, or if the plan can never succeed.
+    A step that fails is assumed to leave the state unchanged (the transaction
+    contract); a condition whose capability declares preconditions succeeds
+    exactly when they hold, otherwise both outcomes are explored.
+    """
+    successes, _ = _simulate(root, registry, {initial})
+    if not successes:
+        raise PlanValidationError(
+            f"plan can never succeed from initial_state {format_state(initial)}"
+        )
+
+
+def _simulate(
+    node: dict[str, Any],
+    registry: CapabilityRegistry,
+    states: set[frozenset[Atom]],
+) -> tuple[set[frozenset[Atom]], set[frozenset[Atom]]]:
+    """Return the (success, failure) states reachable after ``node``."""
+    if len(states) > _MAX_REACHABLE_STATES:
+        raise PlanValidationError(
+            f"too many reachable states to verify at {node['id']} "
+            f"(> {_MAX_REACHABLE_STATES})"
+        )
+    node_type = node["type"]
+    if node_type == "transaction":
+        return _simulate(node["children"][0], registry, states)
+    if node_type == "retry":
+        return _simulate(node["child"], registry, states)
+    if node_type == "sequence":
+        current, failures = set(states), set()
+        for child in node["children"]:
+            if not current:
+                break
+            current, failed = _simulate(child, registry, current)
+            failures |= failed
+        return current, failures
+    if node_type == "fallback":
+        current, successes = set(states), set()
+        for child in node["children"]:
+            if not current:
+                break
+            succeeded, current = _simulate(child, registry, current)
+            successes |= succeeded
+        return successes, current
+
+    descriptor = registry.descriptor(node["capability"])
+    preconditions, effects = grounded_literals(node, descriptor)
+    if node_type == "condition":
+        if not preconditions:
+            return set(states), set(states)
+        successes = {s for s in states if all(holds(p, s) for p in preconditions)}
+        return successes, set(states) - successes
+
+    for state in states:
+        for literal in preconditions:
+            if not holds(literal, state):
+                raise PlanValidationError(
+                    f"step {node['id']}: precondition {literal} does not hold in "
+                    f"reachable state {format_state(state)}"
+                )
+    return {apply_effects(s, effects) for s in states}, set(states)

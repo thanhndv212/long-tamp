@@ -35,10 +35,51 @@ than tracking their own resume state.
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 _TWIN_SCRIPT_DIR = Path(__file__).resolve().parent
+
+
+def _descriptors() -> dict[str, Any]:
+    """The TWIN capabilities' contracts: pure data, no HPP needed.
+
+    A gripper holds at most one handle and a handle is held by at most one
+    gripper; ``release`` empties the gripper; ``empty`` tests exactly that.
+    """
+    from long_tamp.tasks.task_planning.capabilities import CapabilityDescriptor
+
+    return {
+        "grasp": CapabilityDescriptor(
+            capability_id="grasp",
+            version="1.0",
+            required_parameters={"gripper": str, "handle": str},
+            preconditions=("not holds(?gripper, _)", "not holds(_, ?handle)"),
+            effects=("holds(?gripper, ?handle)",),
+            writes=("grasp_state",),
+            max_attempts=3,
+            max_timeout=300.0,
+            restartable=True,
+        ),
+        "release": CapabilityDescriptor(
+            capability_id="release",
+            version="1.0",
+            required_parameters={"gripper": str},
+            preconditions=("holds(?gripper, _)",),
+            effects=("not holds(?gripper, _)",),
+            writes=("grasp_state",),
+            max_attempts=3,
+            max_timeout=300.0,
+            restartable=True,
+        ),
+        "empty": CapabilityDescriptor(
+            capability_id="empty",
+            version="1.0",
+            required_parameters={"gripper": str},
+            preconditions=("not holds(?gripper, _)",),
+        ),
+    }
 
 
 def build_twin_session(options_json: str = "{}") -> Any:
@@ -56,10 +97,7 @@ def build_twin_session(options_json: str = "{}") -> Any:
     import task_lift_ball as twin  # local import: path-dependent, see above
 
     from long_tamp.tasks.grasp_sequence import GraspSequencePlanner
-    from long_tamp.tasks.task_planning.capabilities import (
-        CapabilityDescriptor,
-        CapabilityRegistry,
-    )
+    from long_tamp.tasks.task_planning.capabilities import CapabilityRegistry
     from long_tamp.tasks.task_planning.host import HostSession
     from long_tamp.tasks.task_planning.model import TaskPlan
 
@@ -102,31 +140,10 @@ def build_twin_session(options_json: str = "{}") -> Any:
         state["q_current"] = result["final_config"]
         return {"gripper": parameters["gripper"]}
 
+    descriptors = _descriptors()
     registry = CapabilityRegistry()
-    registry.register(
-        CapabilityDescriptor(
-            capability_id="grasp",
-            version="1.0",
-            required_parameters={"gripper": str, "handle": str},
-            effects=("grasp_state",),
-            max_attempts=3,
-            max_timeout=300.0,
-            restartable=True,
-        ),
-        grasp_impl,
-    )
-    registry.register(
-        CapabilityDescriptor(
-            capability_id="release",
-            version="1.0",
-            required_parameters={"gripper": str},
-            effects=("grasp_state",),
-            max_attempts=3,
-            max_timeout=300.0,
-            restartable=True,
-        ),
-        release_impl,
-    )
+    registry.register(descriptors["grasp"], grasp_impl)
+    registry.register(descriptors["release"], release_impl)
 
     document = _build_plan_document(twin.GRASP_SEQUENCE)
     plan = TaskPlan.from_dict(document, registry)
@@ -198,10 +215,7 @@ def build_twin_regrasp_session(options_json: str = "{}") -> Any:
     import task_lift_ball as twin  # local import: path-dependent, see above
 
     from long_tamp.tasks.grasp_sequence import GraspSequencePlanner
-    from long_tamp.tasks.task_planning.capabilities import (
-        CapabilityDescriptor,
-        CapabilityRegistry,
-    )
+    from long_tamp.tasks.task_planning.capabilities import CapabilityRegistry
     from long_tamp.tasks.task_planning.host import HostSession
     from long_tamp.tasks.task_planning.model import TaskPlan
 
@@ -249,44 +263,16 @@ def build_twin_regrasp_session(options_json: str = "{}") -> Any:
             seq_planner.grasp_tracker.current_grasps.get(parameters["gripper"]) is None
         )
 
+    descriptors = _descriptors()
     registry = CapabilityRegistry()
-    registry.register(
-        CapabilityDescriptor(
-            capability_id="grasp",
-            version="1.0",
-            required_parameters={"gripper": str, "handle": str},
-            effects=("grasp_state",),
-            # Higher than create_twin_session's grasp (3): this scenario's
-            # regrasp step deterministically re-lands on ball/handle's known
-            # flaky f_12 waypoint (see this function's docstring) -- more
-            # BT-level RetryUntilSuccessful budget compensates for real
-            # target-generation variance on that specific marginal edge.
-            max_attempts=8,
-            max_timeout=300.0,
-            restartable=True,
-        ),
-        grasp_impl,
-    )
-    registry.register(
-        CapabilityDescriptor(
-            capability_id="release",
-            version="1.0",
-            required_parameters={"gripper": str},
-            effects=("grasp_state",),
-            max_attempts=3,
-            max_timeout=300.0,
-            restartable=True,
-        ),
-        release_impl,
-    )
-    registry.register(
-        CapabilityDescriptor(
-            capability_id="empty",
-            version="1.0",
-            required_parameters={"gripper": str},
-        ),
-        empty_impl,
-    )
+    # Higher than create_twin_session's grasp (3): this scenario's regrasp
+    # step deterministically re-lands on ball/handle's known flaky f_12
+    # waypoint (see this function's docstring) -- more BT-level
+    # RetryUntilSuccessful budget compensates for real target-generation
+    # variance on that specific marginal edge.
+    registry.register(replace(descriptors["grasp"], max_attempts=8), grasp_impl)
+    registry.register(descriptors["release"], release_impl)
+    registry.register(descriptors["empty"], empty_impl)
 
     document = _build_regrasp_plan_document()
     plan = TaskPlan.from_dict(document, registry)
@@ -308,6 +294,9 @@ def _build_regrasp_plan_document() -> dict[str, Any]:
         "mission_id": "TwinRegrasp",
         "scene": {"id": "twin-lift-ball", "robots": ["panda_left"]},
         "provenance": {"kind": "human", "generator": "twin-bt-regrasp-adapter"},
+        # TWIN starts with both grippers free; TaskPlan.from_dict simulates
+        # the plan from here and rejects it if a precondition can fail.
+        "initial_state": [],
         "root": {
             "type": "sequence",
             "id": "root",
@@ -418,6 +407,7 @@ def _build_plan_document(grasp_sequence: list[tuple[str, str]]) -> dict[str, Any
         "mission_id": "TwinLiftBall",
         "scene": {"id": "twin-lift-ball", "robots": ["panda_left", "panda_right"]},
         "provenance": {"kind": "human", "generator": "twin-bt-adapter"},
+        "initial_state": [],
         "root": {
             "type": "sequence",
             "id": "root",

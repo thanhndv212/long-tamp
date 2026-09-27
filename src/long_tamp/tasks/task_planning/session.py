@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Callable, Iterable
 from typing import Any
 
 from .capabilities import CapabilityRegistry
-from .model import TaskPlan
+from .model import TaskPlan, grounded_literals
+from .predicates import holds, parse_state
+
+#: Returns the current world as ground atoms (``"holds(left, ball)"`` strings or
+#: ``Atom``s): observed predicates and recorded facts, never planner bookkeeping.
+WorldState = Callable[[], Iterable[Any]]
 
 
 def _response(**values: Any) -> str:
@@ -15,12 +21,23 @@ def _response(**values: Any) -> str:
 
 
 class TaskPlanningSession:
-    """Dispatch validated operation nodes through a trusted registry."""
+    """Dispatch validated operation nodes through a trusted registry.
 
-    def __init__(self, plan: TaskPlan, registry: CapabilityRegistry) -> None:
+    With ``world_state``, ``check_precondition`` evaluates a step's grounded
+    preconditions against the world; without it, it only checks that the step
+    exists (the pre-0.2 behaviour).
+    """
+
+    def __init__(
+        self,
+        plan: TaskPlan,
+        registry: CapabilityRegistry,
+        world_state: WorldState | None = None,
+    ) -> None:
         registry.freeze()
         self.plan = plan
         self.registry = registry
+        self.world_state = world_state
         self._nodes = self._index_nodes(plan.document["root"])
         self._completed: set[str] = set()
         self._stop_requested = threading.Event()
@@ -47,8 +64,27 @@ class TaskPlanningSession:
         return self.plan.canonical_json
 
     def check_precondition(self, step_id: str) -> str:
-        exists = step_id in self._nodes
-        return _response(status="success" if exists else "failure", ready=exists)
+        node = self._nodes.get(step_id)
+        if node is None or self.world_state is None:
+            exists = node is not None
+            return _response(status="success" if exists else "failure", ready=exists)
+        if node["type"] == "transaction":
+            node = node["children"][0]
+        if node["type"] not in {"operation", "condition"}:
+            return _response(status="success", ready=True, unsatisfied=[])
+        descriptor = self.registry.descriptor(node["capability"])
+        preconditions, _ = grounded_literals(node, descriptor)
+        try:
+            state = parse_state(self.world_state())
+        except Exception as error:  # noqa: BLE001 - world-state provider boundary
+            return _response(status="failure", ready=False, message=str(error))
+        unsatisfied = [str(p) for p in preconditions if not holds(p, state)]
+        ready = not unsatisfied
+        return _response(
+            status="success" if ready else "failure",
+            ready=ready,
+            unsatisfied=unsatisfied,
+        )
 
     def is_step_complete(self, step_id: str) -> str:
         return _response(status="success", complete=step_id in self._completed)
