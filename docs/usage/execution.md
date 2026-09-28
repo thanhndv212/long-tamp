@@ -68,3 +68,38 @@ command.
 
 `MockBackend` (scriptable: busy starts, failures, stalls, slow real-time factor) is there
 for tests and demos.
+
+## Running a TaskPlan: `PlanExecutor`
+
+`PlanExecutor(session, backend, policy, control).run()` walks the plan with the compiled
+BehaviorTree's semantics (`task_planning.runner.run_plan`). For each step that runs, it
+checks the pause/stop control, lets the step's capability plan it, then executes the motion
+the capability submitted, command by command, on the backend under `run_command`:
+
+```python
+from long_tamp.execution import ExecutionCommand, PathPlaybackBackend, PlanExecutor
+
+executor = PlanExecutor(session, backend=PathPlaybackBackend(display=viewer))
+
+def grasp_impl(parameters):          # a capability
+    result = planner.grasp(...)      # plans the step, updates the world model
+    for path in result["paths"]:
+        executor.submit(ExecutionCommand(step_id="grasp", duration=path.length(), payload=path))
+    return {}
+
+run = executor.run()                 # PlanRun: success, skipped, failed_step, executions
+```
+
+- Motion goes through `submit`, not through the session's JSON responses (those exist for
+  the C++ host and can't carry path objects). Commands from a failed planning attempt are
+  discarded.
+- A failed execution (backend failure, BUSY exhausted, heartbeat silence, deadline) fails
+  its step with the reason, and the plan stops there.
+- Without a backend, steps are only planned; submitted motion is dropped.
+- Execution follows planning, so the world model already reflects a step when its motion
+  runs; a failed execution stops the mission rather than rolling that back.
+
+`PathPlaybackBackend` plays a time-parameterized path (anything with `length()` and
+`eval(t)`, like an HPP path, or an id resolved by `get_path`) in scaled real time, sending
+each configuration to `display` (a viewer) or playing headless. The screw-assembly example
+takes `--backend none|mock|playback`.

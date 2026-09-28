@@ -16,7 +16,9 @@ from .contract import (
     Feedback,
 )
 from .control import ExecutionControl
+from .executor import PlanExecutor, StepExecution
 from .mock import MockBackend
+from .playback import PathPlaybackBackend
 from .supervisor import run_command
 
 __all__ = [
@@ -28,5 +30,8 @@ __all__ = [
     "ExecutionStatus",
     "Feedback",
     "MockBackend",
+    "PathPlaybackBackend",
+    "PlanExecutor",
+    "StepExecution",
     "run_command",
 ]
