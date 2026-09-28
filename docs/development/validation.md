@@ -78,7 +78,7 @@ python scenarios.py --all --seed 1
 |---|---|---|
 | `nominal` | nothing held | none |
 | `left_holds_ball` | panda_left holds `ball/handle` | the first grasp |
-| `right_holds_handle2` | panda_right holds `ball/handle2` | none (the other arm is busy) |
+| `both_hold` | panda_left on `ball/handle`, panda_right on `ball/handle2` | the first grasp; the left arm then releases and regrasps while the right arm holds the ball |
 
 Every scenario's start state is also checked without HPP in the test suite: the same plan
 must pass the load-time check from it.

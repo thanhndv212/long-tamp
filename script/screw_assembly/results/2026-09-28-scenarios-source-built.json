@@ -1,0 +1,90 @@
+[
+ {
+  "scenario": "nominal",
+  "seed": 1,
+  "pass": true,
+  "reason": "",
+  "setup_seconds": 0.0,
+  "mission_seconds": 237.47,
+  "skipped": [],
+  "planned": [
+   "bootstrap: pick driver",
+   "ur10_right home (bootstrap)",
+   "part1 A0: grasp",
+   "part1 A: clamp + screw",
+   "ur10_right home (part1)",
+   "part1 B: release",
+   "part2 A0: grasp",
+   "part2 A: clamp + screw",
+   "ur10_right home (part2)",
+   "part2 B: release",
+   "return: rack driver"
+  ]
+ },
+ {
+  "scenario": "driver_in_hand",
+  "seed": 1,
+  "pass": true,
+  "reason": "",
+  "setup_seconds": 12.64,
+  "mission_seconds": 247.57,
+  "skipped": [
+   "bootstrap: pick driver"
+  ],
+  "planned": [
+   "ur10_right home (bootstrap)",
+   "part1 A0: grasp",
+   "part1 A: clamp + screw",
+   "ur10_right home (part1)",
+   "part1 B: release",
+   "part2 A0: grasp",
+   "part2 A: clamp + screw",
+   "ur10_right home (part2)",
+   "part2 B: release",
+   "return: rack driver"
+  ]
+ },
+ {
+  "scenario": "part_in_hand",
+  "seed": 1,
+  "pass": true,
+  "reason": "",
+  "setup_seconds": 12.8,
+  "mission_seconds": 202.57,
+  "skipped": [
+   "part1 A0: grasp"
+  ],
+  "planned": [
+   "bootstrap: pick driver",
+   "ur10_right home (bootstrap)",
+   "part1 A: clamp + screw",
+   "ur10_right home (part1)",
+   "part1 B: release",
+   "part2 A0: grasp",
+   "part2 A: clamp + screw",
+   "ur10_right home (part2)",
+   "part2 B: release",
+   "return: rack driver"
+  ]
+ },
+ {
+  "scenario": "part1_assembled",
+  "seed": 1,
+  "pass": true,
+  "reason": "",
+  "setup_seconds": 147.24,
+  "mission_seconds": 166.28,
+  "skipped": [
+   "bootstrap: pick driver",
+   "part1 clamped and screwed"
+  ],
+  "planned": [
+   "ur10_right home (bootstrap)",
+   "part2 A0: grasp",
+   "part2 A: clamp + screw",
+   "ur10_right home (part2)",
+   "part2 B: release",
+   "return: rack driver"
+  ]
+ }
+]

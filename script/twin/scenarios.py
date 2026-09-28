@@ -30,9 +30,16 @@ SCENARIOS: dict[str, dict[str, Any]] = {
         "setup": [("panda_left/gripper", "ball/handle")],
         "skip": ["Grasp ball/handle with panda_left/gripper"],
     },
-    "right_holds_handle2": {
-        "setup": [("panda_right/gripper", "ball/handle2")],
-        "skip": [],
+    # Both arms hold the ball (TWIN's own two grasps, in the order that plans:
+    # panda_right on handle2 alone fails target generation on f_01, see
+    # build_twin_regrasp_session). The regrasp then releases and regrasps the
+    # left arm while the right arm holds the ball.
+    "both_hold": {
+        "setup": [
+            ("panda_left/gripper", "ball/handle"),
+            ("panda_right/gripper", "ball/handle2"),
+        ],
+        "skip": ["Grasp ball/handle with panda_left/gripper"],
     },
 }
 
