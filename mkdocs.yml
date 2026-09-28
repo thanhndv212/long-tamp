@@ -68,6 +68,7 @@ nav:
       - Standalone usage: usage/standalone-usage.md
       - BehaviorTree.CPP integration: usage/behaviortree-integration.md
       - Execution backends: usage/execution.md
+      - Mission events: usage/events.md
   - Features:
       - Overview: features/README.md
       - Phase-target lookahead: features/phase-target-lookahead.md

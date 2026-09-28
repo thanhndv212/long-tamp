@@ -12,6 +12,10 @@ compiled BehaviorTree's semantics). For every step that runs:
    the step, and the plan stops there;
 4. ``control.checkpoint(step, "after")``.
 
+``on_event`` receives the mission's event stream (``task_planning.events``):
+the plan's transitions, plus a ``motion`` event pair (``RUNNING``, then the
+result with its metrics) for every command run on the backend.
+
 Without a backend, steps are planned only (submitted commands are dropped),
 which is how planning-only runs and batch validation use it.
 
@@ -29,6 +33,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from long_tamp.tasks.task_planning.events import MOTION_ROLE, EventSink, make_event
 from long_tamp.tasks.task_planning.runner import PlanRun, run_plan
 
 from .contract import (
@@ -74,6 +79,7 @@ class PlanExecutor:
         policy: ExecutionPolicy | None = None,
         control: ExecutionControl | None = None,
         on_skip: Callable[[str, str], None] | None = None,
+        on_event: EventSink | None = None,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
@@ -82,6 +88,7 @@ class PlanExecutor:
         self.policy = policy or ExecutionPolicy()
         self.control = control or ExecutionControl()
         self.on_skip = on_skip
+        self.on_event = on_event
         self.clock, self.sleep = clock, sleep
         self._pending: list[ExecutionCommand] = []
         self._executions: list[StepExecution] = []
@@ -97,6 +104,7 @@ class PlanExecutor:
             on_skip=self.on_skip,
             before_step=self._before,
             after_step=self._after,
+            on_event=self.on_event,
         )
         run.executions = list(self._executions)
         return run
@@ -109,6 +117,7 @@ class PlanExecutor:
         commands, self._pending = self._pending, []
         if self.backend is not None:
             for command in commands:
+                self._emit(node, command, "RUNNING")
                 outcome = run_command(
                     self.backend,
                     command,
@@ -118,7 +127,41 @@ class PlanExecutor:
                     sleep=self.sleep,
                 )
                 self._executions.append(StepExecution(node["id"], command, outcome))
+                self._emit(node, command, outcome.status.name, "RUNNING", outcome)
                 if outcome.status is not ExecutionStatus.SUCCESS:
                     return f"execution failed ({outcome.reason}): {outcome.message}"
         self.control.checkpoint(node["id"], "after")
         return None
+
+    def _emit(
+        self,
+        node: dict[str, Any],
+        command: ExecutionCommand,
+        status: str,
+        previous: str = "IDLE",
+        outcome: ExecutionResult | None = None,
+    ) -> None:
+        if self.on_event is None:
+            return
+        metrics = None
+        if outcome is not None:
+            metrics = {
+                "seconds": round(outcome.elapsed, 3),
+                "feedback_count": outcome.feedback_count,
+                "busy_retries": outcome.busy_retries,
+            }
+            if outcome.reason:
+                metrics["reason"] = outcome.reason
+            if command.duration is not None:
+                metrics["duration"] = round(command.duration, 3)
+        self.on_event(
+            make_event(
+                node["id"],
+                MOTION_ROLE,
+                command.step_id,
+                status,
+                previous,
+                message=outcome.message if outcome is not None else "",
+                metrics=metrics,
+            )
+        )

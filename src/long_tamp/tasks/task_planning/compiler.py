@@ -8,9 +8,13 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Any
 
+from .events import element_name
 from .model import TaskPlan
 
-COMPILER_VERSION = "1.0"
+# 1.1: every element emitted for an IR node carries ``_ir_id`` and
+# ``_ir_role`` (see events.py); BehaviorTree.CPP keeps them as non-port
+# attributes.
+COMPILER_VERSION = "1.1"
 
 
 @dataclass(frozen=True)
@@ -69,44 +73,64 @@ def _compile_node(
     node_type = node["type"]
     label = node.get("label", node_id)
 
+    def stamp(role: str, **attrib: str) -> dict[str, str]:
+        return {**attrib, "_ir_id": node_id, "_ir_role": role}
+
     if node_type == "transaction":
-        fallback = ET.SubElement(parent, "Fallback", {"name": f"{label} transaction"})
+        fallback = ET.SubElement(
+            parent,
+            "Fallback",
+            stamp("transaction", name=element_name(label, "transaction")),
+        )
         ET.SubElement(
             fallback,
             "TaskStepComplete",
-            {"name": f"{label} complete", "step_id": node_id},
+            stamp("complete", name=element_name(label, "complete"), step_id=node_id),
         )
-        sequence = ET.SubElement(fallback, "Sequence", {"name": f"{label} ready"})
+        sequence = ET.SubElement(
+            fallback, "Sequence", stamp("ready", name=element_name(label, "ready"))
+        )
         ET.SubElement(
             sequence,
             "TaskStepReady",
-            {"name": f"{label} precondition", "step_id": node_id},
+            stamp(
+                "precondition",
+                name=element_name(label, "precondition"),
+                step_id=node_id,
+            ),
         )
         retry = ET.SubElement(
             sequence,
             "RetryUntilSuccessful",
-            {
-                "name": f"{label} retry",
-                "num_attempts": str(plan.effective_attempts[node_id]),
-            },
+            stamp(
+                "attempts",
+                name=element_name(label, "attempts"),
+                num_attempts=str(plan.effective_attempts[node_id]),
+            ),
         )
-        ET.SubElement(retry, "ExecuteTaskStep", {"name": label, "step_id": node_id})
+        ET.SubElement(
+            retry,
+            "ExecuteTaskStep",
+            stamp("execute", name=element_name(label, "execute"), step_id=node_id),
+        )
         return
     if node_type in {"operation", "condition"}:
         tag = (
             "TaskCapabilityCondition" if node_type == "condition" else "ExecuteTaskStep"
         )
-        ET.SubElement(parent, tag, {"name": label, "step_id": node_id})
+        ET.SubElement(parent, tag, stamp(node_type, name=label, step_id=node_id))
         return
     if node_type == "retry":
         attempts = str(plan.effective_attempts[node_id])
         element = ET.SubElement(
-            parent, "RetryUntilSuccessful", {"name": label, "num_attempts": attempts}
+            parent,
+            "RetryUntilSuccessful",
+            stamp("retry", name=label, num_attempts=attempts),
         )
         _compile_node(plan, node["child"], element, source_map, node_path)
         return
 
     tag = "Sequence" if node_type == "sequence" else "Fallback"
-    element = ET.SubElement(parent, tag, {"name": label})
+    element = ET.SubElement(parent, tag, stamp(node_type, name=label))
     for child in node["children"]:
         _compile_node(plan, child, element, source_map, node_path)
