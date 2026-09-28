@@ -10,10 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- CI: the TWIN nightly checks are informational (a failure is reported, the
-  nightly stays green); `tests/test_grasp_release_screw.py`, seeded, on the
-  screw-assembly cell, is the blocking real-scene check of `grasp()` and
-  `release()` (new `nightly-grasp-release` job) (#54).
+- CI: TWIN is no longer checked in CI. Its handover location is random and
+  often infeasible (a 5 cm ball between two Panda hands), so its checks passed
+  or failed by chance; the scripts and tests stay as an example to run by hand.
+  `tests/test_grasp_release_screw.py`, seeded, on the screw-assembly cell, is
+  the real-scene check of `grasp()` and `release()` (new `nightly-grasp-release`
+  job) (#54).
 
 ### Fixed
 

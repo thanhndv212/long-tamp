@@ -1,8 +1,9 @@
 """``grasp()`` / ``release()`` on a real scene we own: the screw-assembly cell.
 
-The blocking counterpart of ``test_grasp_release_use_case_twin.py``, whose
-borrowed scene fails now and then (#54). Seeded, and built so that every step
-is feasible by construction: ur10_right grasps the driver on its dock,
+It replaces ``test_grasp_release_use_case_twin.py`` in CI: TWIN's handover
+location is random and often infeasible, so that test passed or failed by
+chance (#54). This one is seeded, and built so that every step is feasible by
+construction: ur10_right grasps the driver on its dock,
 ur10_left grasps part 1 on the staging row, a conflicting grasp is refused
 without planning, then both release where they grasped (nothing has moved,
 so each release goes back the way its grasp came).
