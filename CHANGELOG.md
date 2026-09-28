@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Execution contract (#8, ADR-0004), `long_tamp.execution`, ROS-free: backends
+  implement a polled `start` / `poll` / `cancel` protocol with `Feedback`
+  heartbeats; `run_command` supervises a command (BUSY retried with backoff,
+  cancelled on heartbeat silence or past a deadline scaled by the command's
+  duration and a minimum real-time factor, with the reason reported);
+  `ExecutionControl` pauses, resumes, stops and sets breakpoints at step
+  boundaries; `MockBackend` produces every status for tests.
+
 ## [0.2.0] - 2026-09-28
 
 Milestone M1: state model and effect-based resume. Capabilities declare
