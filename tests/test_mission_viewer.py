@@ -173,3 +173,36 @@ def test_opening_a_browser_is_opt_in(monkeypatch):
     task = _fake_viser(monkeypatch, started)
     module.MissionViewer(task, 8081, [0.0], open_browser=True)
     assert started[0]["open"] is True
+
+
+def _unwatched_viewer(calls):
+    """A viewer whose viser server has no browser connected."""
+    viewer = module.MissionViewer.__new__(module.MissionViewer)
+    viewer.path_ids = []
+    viewer.backend = SimpleNamespace(
+        store_path=lambda path: 7,
+        play_path=lambda pid: calls.append(pid),
+        concatenate_paths=lambda ids: calls.append(tuple(ids)) or 99,
+        viewer=SimpleNamespace(viewer=SimpleNamespace(get_clients=lambda: {})),
+    )
+    return viewer
+
+
+def test_nothing_is_played_while_nobody_is_watching(monkeypatch):
+    """#35: playback with no browser connected cost real time during the
+    mission and, at the end, a full replay that grew to ~7 GB per process."""
+    calls = []
+    viewer = _unwatched_viewer(calls)
+    monkeypatch.setattr(module.sys, "stdin", SimpleNamespace(isatty=lambda: False))
+    viewer.completed([{"paths": [3]}])
+    viewer.finish()
+    assert viewer.path_ids == [3]  # still recorded, for a later viewer
+    assert calls == []
+
+
+def test_playback_resumes_once_a_browser_connects(monkeypatch):
+    calls = []
+    viewer = _unwatched_viewer(calls)
+    viewer.backend.viewer.viewer.get_clients = lambda: {1: object()}
+    viewer.completed([{"paths": [3]}])
+    assert calls == [3]

@@ -41,6 +41,12 @@ python summarize.py batch_<topic> \
     --gate --baseline results/pypi-wheel-batch-2026-09-26.json
 ```
 
+**Size the parallelism by memory, not CPU.** Planning is single-threaded (one mission
+keeps one core busy), but a 4-part mission needs roughly 4 GB of RAM. On a 16 GB machine or
+container use `PAR` ≤ 3. Six missions in parallel on 16 GB got OOM-killed mid-mission
+(exit 137, see #35); count such runs as infrastructure failures, not planning failures,
+and rerun them.
+
 The gate passes when **all** of these hold:
 
 - every mission completed (10/10);
