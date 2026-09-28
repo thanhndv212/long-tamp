@@ -45,7 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `FastDownwardPlanner` runs Fast Downward (https://github.com/aibasel/downward)
   directly on the exported PDDL, with no compilation step; `default_planner`
   prefers it when an executable is found (`LONG_TAMP_FAST_DOWNWARD`, `PATH`, or
-  the one bundled with `up-fast-downward`).
+  the one bundled with `up-fast-downward`). `UnifiedPlanningPlanner("auto")`
+  warns when it falls back to pyperplan, which is slow and can hang on larger
+  problems.
 
 ### Changed
 

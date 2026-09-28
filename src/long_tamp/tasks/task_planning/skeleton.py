@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import warnings
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any, Protocol
@@ -98,6 +99,13 @@ class UnifiedPlanningPlanner:
             ) from error
         get_environment().credits_stream = None
         name = self.engine_name()
+        if self.engine == "auto" and name == "pyperplan":
+            warnings.warn(
+                "Unified Planning fell back to pyperplan, which is slow and "
+                "can hang on larger problems; use FastDownwardPlanner or "
+                "install up-fast-downward",
+                stacklevel=2,
+            )
         problem = PDDLReader().parse_problem_string(export.domain, export.problem)
         with OneshotPlanner(name=name) as planner:
             map_backs = []
