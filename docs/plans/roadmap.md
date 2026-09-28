@@ -60,7 +60,7 @@ change; the 10-seed batch gate passes.
 - [x] [#8](https://github.com/thanhndv212/long-tamp/issues/8) Executor contract: statuses `SUCCESS/FAILURE/RUNNING/BUSY`, heartbeats with
       inactivity timeouts, duration-scaled execution timeouts, pause/resume/breakpoints
 - [x] [#9](https://github.com/thanhndv212/long-tamp/issues/9) Python executor for TaskPlans (default), with mock and trajectory-playback backends
-- [ ] [#10](https://github.com/thanhndv212/long-tamp/issues/10) `Refiner` interface over `run_block_with_recovery()` and the phase-target lookahead
+- [x] [#10](https://github.com/thanhndv212/long-tamp/issues/10) `Refiner` interface over `run_block_with_recovery()` and the phase-target lookahead
 - [x] [#11](https://github.com/thanhndv212/long-tamp/issues/11) Structured JSONL event stream from the executor; the BehaviorTree.CPP host emits
       the same stream (IR ids stamped on compiled nodes)
 - [x] [#12](https://github.com/thanhndv212/long-tamp/issues/12) Resume from world state after the process is killed mid-mission

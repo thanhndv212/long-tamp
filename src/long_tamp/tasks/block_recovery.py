@@ -93,8 +93,12 @@ def run_block_with_recovery(
 
     Returns:
         ``success``, ``final_config``, ``replans``, ``resumes``,
-        ``message`` and ``label``. ``final_config`` is ``q_init`` on
-        failure.
+        ``message``, ``label`` and ``failure``. ``final_config`` is
+        ``q_init`` on failure. ``failure`` is ``None`` on success, else the
+        last failure before giving up: ``{"kind", "phase_idx", "edge"}``
+        with ``kind`` one of ``"unreachable"``, ``"stuck"`` (resume limit),
+        ``"hint_chain_broken"`` (``phase_idx`` the first broken phase,
+        ``edge`` ``None``) and ``"no_resumable_state"`` (both ``None``).
     """
     frozen = (
         {i: list(arms) for i, arms in per_phase_frozen_arms.items()}
@@ -107,6 +111,7 @@ def run_block_with_recovery(
     fail_counts: dict[int, int] = {}
     replans = 0
     total_resumes = 0
+    failure: dict[str, Any] | None = None
 
     def _log(msg: str, *args: Any) -> None:
         if verbose:
@@ -139,6 +144,7 @@ def run_block_with_recovery(
             "resumes": total_resumes,
             "message": message,
             "label": label,
+            "failure": None if success else failure,
         }
 
     hints = hints_factory() if hints_factory else None
@@ -164,8 +170,10 @@ def run_block_with_recovery(
         if result.get("success"):
             return _result(True, result["final_config"], "planned")
 
-        reason = _hint_chain_broken(seq_planner, hints)
-        if reason is None:
+        broken = _hint_chain_broken(seq_planner, hints)
+        if broken is not None:
+            reason, failure = broken
+        else:
             reason = _resume_until_stuck(
                 seq_planner,
                 mode,
@@ -180,6 +188,7 @@ def run_block_with_recovery(
             total_resumes += reason["resumes"]
             if reason["success"]:
                 return _result(True, reason["final_config"], "resumed")
+            failure = reason["failure"]
             reason = reason["why"]
 
         # --- level 3: discard the block's commitments and start over ----
@@ -197,13 +206,14 @@ def run_block_with_recovery(
 
 def _hint_chain_broken(
     seq_planner: GraspSequencePlanner, hints: dict | None
-) -> str | None:
+) -> tuple[str, dict[str, Any]] | None:
     broken = set(getattr(seq_planner, "invalidated_phase_hints", ())) & set(hints or {})
     if not broken:
         return None
     return (
         f"hint chain broken for phase(s) {sorted(i + 1 for i in broken)} "
-        "(a hinted target was redrawn)"
+        "(a hinted target was redrawn)",
+        {"kind": "hint_chain_broken", "phase_idx": min(broken), "edge": None},
     )
 
 
@@ -236,6 +246,11 @@ def _resume_until_stuck(
                 "final_config": q,
                 "resumes": resumes,
                 "why": "no resumable state",
+                "failure": (
+                    None
+                    if q is not None
+                    else {"kind": "no_resumable_state", "phase_idx": None, "edge": None}
+                ),
             }
 
         resumes += 1
@@ -268,6 +283,7 @@ def _resume_until_stuck(
                 "final_config": result["final_config"],
                 "resumes": resumes,
                 "why": "",
+                "failure": None,
             }
 
         edge = unreachable_failed_edge(seq_planner)
@@ -286,6 +302,11 @@ def _resume_until_stuck(
                 "why": f"phase {failed['phase_idx'] + 1} unreachable "
                 f"(solver-only failures, no collisions, {streak} resumes "
                 f"on {failed['edge_name']})",
+                "failure": {
+                    "kind": "unreachable",
+                    "phase_idx": failed["phase_idx"],
+                    "edge": failed["edge_name"],
+                },
             }
         if resumes >= resume_limit:
             return {
@@ -294,6 +315,11 @@ def _resume_until_stuck(
                 "resumes": resumes,
                 "why": f"phase {state['phase_idx'] + 1} still failing after "
                 f"{resumes} resumes ({state['edge_name']})",
+                "failure": {
+                    "kind": "stuck",
+                    "phase_idx": state["phase_idx"],
+                    "edge": state["edge_name"],
+                },
             }
         if resumes % 10 == 0:
             gc.collect()

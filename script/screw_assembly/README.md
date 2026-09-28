@@ -38,6 +38,10 @@ hole 2 unreachable, and no retry of the hole-2 phase can fix that. So block A ru
   entry. The replan fires early when a phase proves unreachable (solver-only failures,
   no collisions).
 
+Both sit behind the refiner interface (`long_tamp.tasks.refiner.GraspSequenceRefiner`,
+ADR-0001): `screw_domain.refinement_step(block)` turns a block into a `RefinementStep`, and
+a failed refinement reports facts such as `unreachable(driver/tip, part1/h_hole2)`.
+
 **The mission is a TaskPlan.** `screw_domain.py` holds the block definitions and expresses
 the mission as a `long_tamp` TaskPlan: one transaction per block, in order, each naming its
 block. Its capabilities declare what a block needs and achieves:
