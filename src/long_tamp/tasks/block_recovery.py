@@ -98,7 +98,9 @@ def run_block_with_recovery(
         last failure before giving up: ``{"kind", "phase_idx", "edge"}``
         with ``kind`` one of ``"unreachable"``, ``"stuck"`` (resume limit),
         ``"hint_chain_broken"`` (``phase_idx`` the first broken phase,
-        ``edge`` ``None``) and ``"no_resumable_state"`` (both ``None``).
+        ``edge`` ``None``) and ``"no_resumable_state"`` (both ``None``);
+        ``"unreachable"`` and ``"stuck"`` also carry the planner's last
+        ``error`` message.
     """
     frozen = (
         {i: list(arms) for i, arms in per_phase_frozen_arms.items()}
@@ -306,6 +308,7 @@ def _resume_until_stuck(
                     "kind": "unreachable",
                     "phase_idx": failed["phase_idx"],
                     "edge": failed["edge_name"],
+                    "error": str(failed.get("error", "")),
                 },
             }
         if resumes >= resume_limit:
@@ -319,6 +322,7 @@ def _resume_until_stuck(
                     "kind": "stuck",
                     "phase_idx": state["phase_idx"],
                     "edge": state["edge_name"],
+                    "error": str(state.get("error", "")),
                 },
             }
         if resumes % 10 == 0:

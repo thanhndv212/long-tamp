@@ -26,12 +26,19 @@ from .block_recovery import make_lookahead_hints_factory, run_block_with_recover
 if TYPE_CHECKING:
     from .grasp_sequence import GraspSequencePlanner
 
-# Failure kinds from run_block_with_recovery -> the predicate reporting them.
+# The facts a failed refinement reports (issue #15), in the predicate language:
+#   cannot_reach(g, h)        a grasp phase kept failing (resume limit)
+#   ik_unreachable(g, h)      its constraints can't be solved from the step's
+#                             earlier commitments (solver-only failures)
+#   release_infeasible(g, h)  letting go of h kept failing
+#   lookahead_failed(g, h)    the lookahead's hinted target was redrawn
+#   blocks(a, b)              the last failure was body a colliding with body b
 FAILURE_PREDICATES = {
-    "unreachable": "unreachable",
-    "stuck": "phase_failed",
+    "unreachable": "ik_unreachable",
+    "stuck": "cannot_reach",
     "hint_chain_broken": "lookahead_failed",
 }
+_COLLISION = re.compile(r"Collision between object (\S+) and (\S+?)(?:[\s,.;)]|$)")
 
 
 @dataclass(frozen=True)
@@ -96,16 +103,38 @@ def _constant(text: str) -> str:
     return re.sub(r"[\s,()?]+", "_", text).strip("_") or "_"
 
 
-def failure_facts(step: RefinementStep, failure: dict[str, Any] | None) -> list[str]:
-    """Ground atoms describing a failed refinement.
+def _body(name: str) -> str:
+    """A collision object's body: ``panda_right/panda_link6_0`` -> ``panda_right/panda_link6``."""
+    return re.sub(r"_\d+$", "", name)
 
-    Always ``refinement_failed(<label>)``; plus, when the failing phase is
-    known, ``unreachable`` / ``phase_failed`` / ``lookahead_failed``
-    ``(<gripper>, <handle>)`` (``handle`` ``none`` for a release).
+
+def failure_facts(step: RefinementStep, failure: dict[str, Any] | None) -> list[str]:
+    """Ground atoms describing a failed refinement (see ``FAILURE_PREDICATES``).
+
+    Always ``refinement_failed(<label>)``; when the failing phase is known,
+    ``cannot_reach`` / ``ik_unreachable`` / ``lookahead_failed``
+    ``(<gripper>, <handle>)``, or ``release_infeasible(<gripper>, <handle it
+    held>)`` for a release phase; and ``blocks(<body>, <body>)`` when the last
+    error was a collision.
     """
     facts = [f"refinement_failed({_constant(step.label)})"]
     if not failure:
         return facts
+    predicate = FAILURE_PREDICATES.get(failure.get("kind", ""))
+    idx = failure.get("phase_idx")
+    if predicate and idx is not None and 0 <= idx < len(step.sequence):
+        gripper, handle = step.sequence[idx]
+        if handle is None:
+            # A release: name what the gripper held (its last grasp in the
+            # step), else "none".
+            held = [h for g, h in step.sequence[:idx] if g == gripper and h]
+            predicate, handle = "release_infeasible", held[-1] if held else "none"
+        facts.append(f"{predicate}({_constant(gripper)}, {_constant(handle)})")
+    collision = _COLLISION.search(str(failure.get("error", "")))
+    if collision:
+        a, b = (_constant(_body(n)) for n in collision.groups())
+        facts.append(f"blocks({a}, {b})")
+    return facts
     predicate = FAILURE_PREDICATES.get(failure.get("kind", ""))
     idx = failure.get("phase_idx")
     if predicate and idx is not None and 0 <= idx < len(step.sequence):
