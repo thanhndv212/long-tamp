@@ -59,7 +59,12 @@ from long_tamp.tasks.task_planning import (  # noqa: E402
     TaskPlanningSession,
 )
 from long_tamp.tasks.task_planning.predicates import holds  # noqa: E402
-from long_tamp.tasks.task_planning.runner import run_plan  # noqa: E402
+from long_tamp.execution import (  # noqa: E402
+    ExecutionCommand,
+    MockBackend,
+    PathPlaybackBackend,
+    PlanExecutor,
+)
 from screw_domain import (  # noqa: E402
     LEFT,
     RECORDED_PREDICATES,
@@ -378,9 +383,30 @@ def run_block(
                     checkpoint.dir / "trajectory.json", trajectory, ctx["n_parts"]
                 )
         if live_viewer is not None:
-            live_viewer.completed(phase_results)
+            # With a playback backend the backend drives the viewer; record only.
+            live_viewer.completed(phase_results, play=not ctx.get("backend_displays"))
         ctx["q"] = r["final_config"]
+        ctx["last_phases"] = phase_results
     return r
+
+
+def block_commands(
+    task: ScrewAssemblyTask, label: str, phases: list[dict[str, Any]]
+) -> list[ExecutionCommand]:
+    """The motion a block produced, one command per completed path."""
+    commands = []
+    for phase in phases:
+        if not phase.get("complete", True) or phase.get("skipped"):
+            continue
+        for path in phase.get("paths", []):
+            if path is None:
+                continue
+            if isinstance(path, int):
+                path = task.planner.get_path(path)
+            commands.append(
+                ExecutionCommand(step_id=label, duration=path.length(), payload=path)
+            )
+    return commands
 
 
 def mission_session(
@@ -416,6 +442,10 @@ def mission_session(
         )
         if not r["success"]:
             raise RuntimeError(f"{label}: {r['message']}")
+        executor = ctx.get("executor")
+        if executor is not None:
+            for command in block_commands(task, label, ctx.get("last_phases", [])):
+                executor.submit(command)
         return {"replans": r["replans"], "resumes": r["resumes"]}
 
     world = CompositeWorldState(GraspTrackerState(planner), recorded)
@@ -451,8 +481,12 @@ def run_mission(
     q_start: list[float] | None = None,
     live_viewer=None,
     recorded: RecordedFacts | None = None,
+    backend=None,
 ) -> dict[str, Any]:
     """Run the mission's TaskPlan from ``q_start`` (default: the scene start).
+
+    The plan runs on a ``PlanExecutor``: each step plans its block, then its
+    motion executes on ``backend`` (``None``: planning only, the default).
 
     Steps run in plan order through a TaskPlanningSession; a step whose
     effect already holds in the world (grasp tracker + ``recorded`` facts) is
@@ -469,13 +503,17 @@ def run_mission(
         "checkpoint": checkpoint,
         "live_viewer": live_viewer,
         "n_parts": n_parts,
+        "backend_displays": getattr(backend, "display", None) is not None,
     }
     session = mission_session(task, planner, ctx, recorded, max_replans, verbose)
-    t_mission = time.time()
-    run = run_plan(
+    executor = PlanExecutor(
         session,
+        backend=backend,
         on_skip=lambda label, why: print(f"\n=== {label} === skipped ({why})"),
     )
+    ctx["executor"] = executor
+    t_mission = time.time()
+    run = executor.run()
     if not run.success:
         print(f"\n=== {run.failed_step} stopped the mission: {run.message}")
     success, skipped = run.success, run.skipped
@@ -484,11 +522,22 @@ def run_mission(
         "seconds": round(time.time() - t_mission, 2),
         "blocks": ctx["records"],
         "skipped": skipped,
+        "executed": len(run.executions),
         "final_config": ctx["q"],
     }
 
 
 from long_tamp.visualization.mission_viewer import MissionViewer
+
+
+def make_backend(name: str, task: ScrewAssemblyTask, live_viewer=None):
+    """The execution backend for ``--backend``."""
+    if name == "mock":
+        return MockBackend(rtf=1000.0)
+    if name == "playback":
+        display = (lambda q: task.planner.viewer(q)) if live_viewer else None
+        return PathPlaybackBackend(display=display)
+    return None
 
 
 def main() -> int:
@@ -500,6 +549,14 @@ def main() -> int:
         "--no-viewer",
         action="store_true",
         help="run without the live Viser viewer or path playback",
+    )
+    ap.add_argument(
+        "--backend",
+        choices=("none", "mock", "playback"),
+        default="none",
+        help="what executes each block's motion after it is planned: none "
+        "(planning only, the default), mock (instant, for testing the pipeline) "
+        "or playback (plays the paths in real time, in the viewer if it is on)",
     )
     ap.add_argument(
         "--viewer-port",
@@ -596,6 +653,7 @@ def main() -> int:
             q_start=q_start,
             live_viewer=live_viewer,
             recorded=recorded,
+            backend=make_backend(args.backend, task, live_viewer),
         )
     except BaseException:
         if live_viewer is not None:

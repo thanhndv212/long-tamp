@@ -36,16 +36,38 @@ class PlanRun:
     #: The step that stopped the run, and why.
     failed_step: str | None = None
     message: str = ""
+    #: Commands executed for the steps (filled by executors; see
+    #: ``long_tamp.execution.executor``).
+    executions: list[Any] = field(default_factory=list)
 
 
 def run_plan(
     session: TaskPlanningSession,
     on_skip: Callable[[str, str], None] | None = None,
+    before_step: Callable[[dict[str, Any]], bool] | None = None,
+    after_step: Callable[[dict[str, Any], dict[str, Any]], str | None] | None = None,
 ) -> PlanRun:
-    """Run ``session``'s plan from its root; see the module docstring."""
+    """Run ``session``'s plan from its root; see the module docstring.
+
+    Hooks for executors (all optional):
+
+    - ``before_step(node)`` runs when a step is ready, before it executes;
+      returning ``False`` stops the run there (message ``"stopped"``);
+    - ``after_step(node, result)`` runs after a step executed successfully
+      (``result`` is ``execute_step``'s response); returning an error message
+      fails the step with it.
+    """
     run = PlanRun()
-    run.success = _run(session, session.plan.document["root"], run, on_skip)
+    hooks = _Hooks(on_skip, before_step, after_step)
+    run.success = _run(session, session.plan.document["root"], run, hooks)
     return run
+
+
+@dataclass
+class _Hooks:
+    on_skip: Callable[[str, str], None] | None = None
+    before_step: Callable[[dict[str, Any]], bool] | None = None
+    after_step: Callable[[dict[str, Any], dict[str, Any]], str | None] | None = None
 
 
 def _label(node: dict[str, Any]) -> str:
@@ -56,29 +78,29 @@ def _run(
     session: TaskPlanningSession,
     node: dict[str, Any],
     run: PlanRun,
-    on_skip: Callable[[str, str], None] | None,
+    hooks: _Hooks,
 ) -> bool:
     kind = node["type"]
     if kind == "sequence":
-        return all(_run(session, child, run, on_skip) for child in node["children"])
+        return all(_run(session, child, run, hooks) for child in node["children"])
     if kind == "fallback":
-        return any(_run(session, child, run, on_skip) for child in node["children"])
+        return any(_run(session, child, run, hooks) for child in node["children"])
     if kind == "retry":
         attempts = session.plan.effective_attempts.get(node["id"], 1)
-        return any(_run(session, node["child"], run, on_skip) for _ in range(attempts))
+        return any(_run(session, node["child"], run, hooks) for _ in range(attempts))
     if kind == "condition":
         value = json.loads(session.evaluate_condition(node["id"])).get("value", False)
         if value:
             run.skipped.append(_label(node))
-            if on_skip is not None:
-                on_skip(_label(node), "condition holds")
+            if hooks.on_skip is not None:
+                hooks.on_skip(_label(node), "condition holds")
         return bool(value)
 
     done = json.loads(session.is_step_complete(node["id"]))
     if done.get("complete"):
         run.skipped.append(_label(node))
-        if on_skip is not None:
-            on_skip(_label(node), done.get("reason", "complete"))
+        if hooks.on_skip is not None:
+            hooks.on_skip(_label(node), done.get("reason", "complete"))
         return True
     ready = json.loads(session.check_precondition(node["id"]))
     if not ready.get("ready"):
@@ -86,11 +108,22 @@ def _run(
         unsatisfied = ready.get("unsatisfied") or [ready.get("message", "")]
         run.message = f"not ready: {', '.join(unsatisfied)}"
         return False
+    if hooks.before_step is not None and not hooks.before_step(node):
+        run.failed_step = node["id"]
+        run.message = "stopped"
+        return False
     attempts = session.plan.effective_attempts.get(node["id"], 1)
     result: dict[str, Any] = {}
     for _ in range(attempts):
         result = json.loads(session.execute_step(node["id"]))
         if result["status"] in ("success", "skipped"):
+            error = (
+                hooks.after_step(node, result) if hooks.after_step is not None else None
+            )
+            if error:
+                run.failed_step = node["id"]
+                run.message = error
+                return False
             return True
         if result["status"] != "retry":
             break

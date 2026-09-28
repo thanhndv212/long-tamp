@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   duration and a minimum real-time factor, with the reason reported);
   `ExecutionControl` pauses, resumes, stops and sets breakpoints at step
   boundaries; `MockBackend` produces every status for tests.
+- Python TaskPlan executor (#9): `PlanExecutor(session, backend).run()` plans
+  each step through the session and executes the motion its capability submitted
+  (`executor.submit(command)`) on the backend under `run_command`, with
+  pause/stop/breakpoints at step boundaries; a failed execution fails its step.
+  `run_plan` gained `before_step` / `after_step` hooks. `PathPlaybackBackend`
+  plays time-parameterized paths (to a viewer or headless). Screw assembly runs on
+  it, with `--backend none|mock|playback` (default: planning only).
 
 ## [0.2.0] - 2026-09-28
 

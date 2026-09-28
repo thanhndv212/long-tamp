@@ -205,3 +205,43 @@ def test_mock_backend_covers_every_status():
         ExecutionStatus.FAILURE,
         ExecutionStatus.BUSY,
     }
+
+
+# ----------------------------------------------------------- path playback
+
+
+class _Path:
+    """A 1-D straight path over 2 s of path time."""
+
+    def length(self):
+        return 2.0
+
+    def eval(self, t):
+        return [t / 2.0], True
+
+
+def test_path_playback_plays_the_path_over_its_duration():
+    from long_tamp.execution.playback import PathPlaybackBackend
+
+    shown = []
+    clock = FakeClock()
+    backend = PathPlaybackBackend(display=shown.append, speed=1.0, clock=clock)
+    result = run_command(
+        backend,
+        ExecutionCommand("s1", duration=2.0, payload=_Path()),
+        ExecutionPolicy(poll_interval=0.5),
+        clock=clock,
+        sleep=clock.sleep,
+    )
+    assert result.status is ExecutionStatus.SUCCESS
+    assert shown[0] == [0.0] and shown[-1] == [1.0]
+    assert result.elapsed == pytest.approx(2.0, abs=0.5)
+
+
+def test_path_playback_resolves_ids_and_rejects_unknown_ones():
+    from long_tamp.execution.playback import PathPlaybackBackend
+
+    paths = {7: _Path()}
+    backend = PathPlaybackBackend(get_path=paths.get, speed=100.0)
+    assert backend.start(ExecutionCommand("s", payload=7)) is ExecutionStatus.RUNNING
+    assert backend.start(ExecutionCommand("s", payload=8)) is ExecutionStatus.FAILURE
