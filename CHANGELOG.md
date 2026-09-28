@@ -20,6 +20,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it for 1, 2 and 4 parts and from partly done states, and every plan is checked
   step by step against long_tamp's own semantics.
 
+### Changed
+
+- CI: TWIN is no longer checked in CI. Its handover location is random and
+  often infeasible (a 5 cm ball between two Panda hands), so its checks passed
+  or failed by chance; the scripts and tests stay as an example to run by hand.
+  `tests/test_grasp_release_screw.py`, seeded, on the screw-assembly cell, is
+  the real-scene check of `grasp()` and `release()` (new `nightly-grasp-release`
+  job) (#54).
+
+### Fixed
+
+- Releases recover from more failures (#54): a release now runs in up to
+  `1 + _MAX_GENERATION_RETRIES` rounds, each redrawing its pregrasp from the held
+  configuration (before, the pregrasp was drawn once, and the pregrasp -> free
+  step only retried from the pregrasp already reached); nothing is committed
+  before a round succeeds. The held configuration is projected onto the grasp's
+  constraints only when the projection stays collision-free.
+- TWIN: the ball's y bound widens to +-0.6 m. A dual-arm hold could leave the
+  ball at y = -0.43..-0.44, and every release from there was rejected as out of
+  bounds (#54).
+- The screw-assembly `--run-dir` help now lists every file in the run folder.
+
 ## [0.3.0] - 2026-09-28
 
 Milestone M2: executor contract and refiner interface. Planned motion runs on

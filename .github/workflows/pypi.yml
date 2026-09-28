@@ -36,14 +36,12 @@ jobs:
             test-results.xml
             wheel-versions.txt
 
-  nightly-twin:
+  # grasp()/release() on the screw-assembly cell (our own assets, seeded):
+  # the blocking real-scene check of the primitives.
+  nightly-grasp-release:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        test: [test_grasp_release_use_case_twin, test_twin_regrasp_bt_session]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -51,16 +49,11 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: python -m pip install -e ".[hpp,dev]" pytest-timeout
-      - name: Run the slow scene check in its own process
+      - name: Grasp and release on the screw-assembly cell
         run: >-
-          timeout --kill-after=30s 6m python -m pytest
-          tests/${{ matrix.test }}.py -m slow_planning
-          --timeout=300 --timeout-method=thread --junitxml=test-results.xml
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: ${{ matrix.test }}
-          path: test-results.xml
+          timeout --kill-after=30s 10m python -m pytest
+          tests/test_grasp_release_screw.py -m slow_planning
+          --timeout=540 --timeout-method=thread
 
   nightly-mission:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
