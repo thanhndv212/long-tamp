@@ -36,8 +36,32 @@ jobs:
             test-results.xml
             wheel-versions.txt
 
+  # grasp()/release() on the screw-assembly cell (our own assets, seeded):
+  # the blocking real-scene check of the primitives.
+  nightly-grasp-release:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -e ".[hpp,dev]" pytest-timeout
+      - name: Grasp and release on the screw-assembly cell
+        run: >-
+          timeout --kill-after=30s 10m python -m pytest
+          tests/test_grasp_release_screw.py -m slow_planning
+          --timeout=540 --timeout-method=thread
+
+  # Informational: TWIN's scene is borrowed (hpp-practicals, example-robot-data)
+  # and its checks fail now and then (#54), so a failure is reported but does
+  # not fail the nightly. The blocking grasp/release check is
+  # tests/test_grasp_release_screw.py on the screw-assembly scene.
   nightly-twin:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:

@@ -579,6 +579,16 @@ class GraspSequencePlanner:
             logger.debug("Release edge sequence: %s", release_edges)
         return release_edges
 
+    def _config_valid(self, q: list) -> tuple[bool, str]:
+        """Collision-free and within bounds; ``(True, "")`` without a checker."""
+        checker = getattr(self.config_gen, "is_config_valid", None)
+        if checker is None:
+            return True, ""
+        try:
+            return checker(list(q))
+        except Exception as e:  # noqa: BLE001 - a check that can't run
+            return True, f"not checked: {e}"
+
     def _project_onto_release_source_state(
         self, q_current: list, verbose: bool
     ) -> list:
@@ -603,7 +613,19 @@ class GraspSequencePlanner:
                 max_iterations=10000,
                 error_threshold=1e-4,
             )
-            if success:
+            valid, report = self._config_valid(q_projected) if success else (True, "")
+            if success and not valid:
+                # The projection only enforces the state's constraints; it can
+                # move an arm into collision (a Panda link into the ground,
+                # #54), which then fails every release attempt from it.
+                logger.warning(
+                    "Projection onto '%s' gave an invalid configuration (%s); "
+                    "keeping the unprojected one (%s)",
+                    source_state,
+                    report,
+                    "valid" if self._config_valid(q_current)[0] else "also invalid",
+                )
+            elif success:
                 q_current = list(q_projected)
                 if verbose:
                     logger.debug(

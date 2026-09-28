@@ -77,3 +77,43 @@ def test_release_reports_a_release_that_failed_every_round():
     assert result["success"] is False
     assert "no pregrasp" in result["message"]
     assert result["final_config"] == [1.0]
+
+
+class _Graph:
+    def __init__(self, projected):
+        self.projected = projected
+
+    def apply_state_constraints(self, state_name, q, max_iterations, error_threshold):
+        return True, self.projected, 0.0
+
+
+class _Checker:
+    def __init__(self, invalid):
+        self.invalid = invalid
+
+    def is_config_valid(self, q):
+        return (False, "collision") if q in self.invalid else (True, "")
+
+
+def _projecting_planner(projected, invalid):
+    planner = object.__new__(GraspSequencePlanner)
+    planner.grasp_tracker = GraspStateTracker(
+        grippers=["g1"], handles=["h1"], initial_grasps={"g1": "h1"}
+    )
+    planner.grasp_tracker.get_current_state_name = lambda: "g1 grasps h1"
+    planner.graph_builder = _Graph(projected)
+    planner.config_gen = _Checker(invalid)
+    return planner
+
+
+def test_a_valid_projection_is_used():
+    planner = _projecting_planner([2.0], invalid=[])
+    assert planner._project_onto_release_source_state([1.0], verbose=False) == [2.0]
+
+
+def test_a_projection_into_collision_keeps_the_held_configuration():
+    """#54: projecting the held configuration onto the grasp's constraints
+    could push a Panda link into the ground, and every release attempt from
+    there failed on that collision."""
+    planner = _projecting_planner([2.0], invalid=[[2.0]])
+    assert planner._project_onto_release_source_state([1.0], verbose=False) == [1.0]

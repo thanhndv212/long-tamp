@@ -8,14 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- CI: the TWIN nightly checks are informational (a failure is reported, the
+  nightly stays green); `tests/test_grasp_release_screw.py`, seeded, on the
+  screw-assembly cell, is the blocking real-scene check of `grasp()` and
+  `release()` (new `nightly-grasp-release` job) (#54).
+
 ### Fixed
 
-- A release that failed on an unlucky draw had no way back: its pregrasp came from
-  a single generation call, and the pregrasp -> free step was retried only from the
-  pregrasp already reached. The release now runs in up to
-  `1 + _MAX_GENERATION_RETRIES` rounds, each redrawing the pregrasp from the held
-  configuration, and commits nothing before a round succeeds. This made the TWIN
-  grasp/release test fail about one run in three to six (#54).
+- Releases recover from more failures (#54): a release now runs in up to
+  `1 + _MAX_GENERATION_RETRIES` rounds, each redrawing its pregrasp from the held
+  configuration (before, the pregrasp was drawn once, and the pregrasp -> free
+  step only retried from the pregrasp already reached); nothing is committed
+  before a round succeeds. The held configuration is projected onto the grasp's
+  constraints only when the projection stays collision-free.
+- TWIN: the ball's y bound widens to +-0.6 m. A dual-arm hold could leave the
+  ball at y = -0.43..-0.44, and every release from there was rejected as out of
+  bounds (#54).
 - The screw-assembly `--run-dir` help now lists every file in the run folder.
 
 ## [0.3.0] - 2026-09-28
