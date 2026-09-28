@@ -28,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parameters (`screw_domain.block_for`), and `run_batch.sh` passes mission
   options through. The `planning` extra installs `up-fast-downward` only where
   it has wheels, plus `up-pyperplan`.
+- Replanning around failures (#15): refinement failures report
+  `cannot_reach`, `ik_unreachable`, `release_infeasible`, `lookahead_failed`
+  `(gripper, handle)` and `blocks(body, body)` from a collision;
+  `to_pddl(blocked=...)` rules out bindings; `repair.plan_execute_repair` plans
+  from the world state, executes, blocks what failed through a policy and
+  replans (bounded). Screw assembly: `--replan ROUNDS`, `--inject-failure`, and a
+  failed block resets the grasp tracker to its start.
 
 ### Changed
 
@@ -37,6 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tests/test_grasp_release_screw.py`, seeded, on the screw-assembly cell, is
   the real-scene check of `grasp()` and `release()` (new `nightly-grasp-release`
   job) (#54).
+- Refiner failure facts renamed for #15: `unreachable` -> `ik_unreachable`,
+  `phase_failed` -> `cannot_reach` (or `release_infeasible` for a release phase).
 
 ### Fixed
 
