@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `run_plan` gained `before_step` / `after_step` hooks. `PathPlaybackBackend`
   plays time-parameterized paths (to a viewer or headless). Screw assembly runs on
   it, with `--backend none|mock|playback` (default: planning only).
+- Refiner interface (#10, ADR-0001), `long_tamp.tasks.refiner`: a `Refiner`
+  binds a `RefinementStep` (a grasp sequence, frozen arms, optional `Lookahead`)
+  to geometry and returns a `Refinement`, which on failure carries ground facts
+  for the task planner (`refinement_failed(step)`, `unreachable(gripper, handle)`,
+  `phase_failed(...)`, `lookahead_failed(...)`). `GraspSequenceRefiner` wraps
+  `run_block_with_recovery` and the phase-target lookahead; screw assembly uses it.
+  `run_block_with_recovery` results gained a structured `failure` field.
 
 ## [0.2.0] - 2026-09-28
 

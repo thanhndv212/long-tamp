@@ -3,7 +3,8 @@
 
 A long-horizon, multi-arm TAMP example built from generic primitives (see
 README.md and build_scene.py). The mission is a chain of short *blocks*,
-each planned with ``run_block_with_recovery()``:
+each refined by a ``GraspSequenceRefiner`` (``run_block_with_recovery()``
+plus a lookahead, see ``long_tamp.tasks.refiner``):
 
   Bootstrap   ur10_right picks the driver (a cordless drill) off its dock.
   Per part i  A0  ur10_left grasps part i from the staging row.
@@ -44,12 +45,9 @@ CONFIG = HERE / "config" / "screw_assembly_config.yaml"
 
 from long_tamp.config.yaml_loader import YamlTaskLoader  # noqa: E402
 from long_tamp.tasks import ManipulationTask  # noqa: E402
-from long_tamp.tasks.block_recovery import (  # noqa: E402
-    make_lookahead_hints_factory,
-    run_block_with_recovery,
-)
 from long_tamp.tasks.grasp_sequence import GraspSequencePlanner  # noqa: E402
 from long_tamp.tasks.mission_checkpoint import MissionCheckpoint  # noqa: E402
+from long_tamp.tasks.refiner import GraspSequenceRefiner  # noqa: E402
 from long_tamp.tasks.task_planning import (  # noqa: E402
     CapabilityRegistry,
     CompositeWorldState,
@@ -72,6 +70,7 @@ from screw_domain import (  # noqa: E402
     blocks_by_label,
     build_plan_document,
     descriptors,
+    refinement_step,
 )
 
 # Planning keeps the fingers frozen open (a grasp is a rigid TCP constraint);
@@ -318,34 +317,12 @@ def run_block(
         r = run_home_move(task, planner, q, *block["move"], verbose=verbose)
         phase_results = r.get("phase_results", [])
     else:
-        hints_factory = None
-        if "lookahead" in block:
-            hints_factory = make_lookahead_hints_factory(
-                planner,
-                block["seq"],
-                q,
-                q_scene_init=task.q_init,
-                per_phase_frozen_arms=block["frozen"],
-                phase_pair=block["lookahead"]["pair"],
-                also_protect=block["lookahead"]["also"],
-                # Path-check the clamp move too: a clamp target the arm
-                # can't reach by path gets redrawn in the real plan, which
-                # voids the hints and costs a block replan.
-                verify_paths=True,
-                verbose=verbose,
-            )
-        r = run_block_with_recovery(
-            planner,
-            block["seq"],
-            q,
-            q_scene_init=task.q_init,
-            per_phase_frozen_arms=block["frozen"],
-            label=block["label"],
-            hints_factory=hints_factory,
-            max_replans=max_replans,
-            verbose=verbose,
+        refiner = ctx.get("refiner") or GraspSequenceRefiner(
+            planner, q_scene_init=task.q_init, max_replans=max_replans, verbose=verbose
         )
-        phase_results = planner.phase_results
+        refined = refiner.refine(refinement_step(block), q)
+        r = refined.as_dict()
+        phase_results = refined.phases
     record = {
         "label": block["label"],
         "success": r["success"],
