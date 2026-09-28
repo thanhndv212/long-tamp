@@ -42,7 +42,7 @@ feasibility before any geometry runs; missions skip steps whose effect already h
       (written only by completed execution, e.g. `screwed(part, hole)`)
 - [x] [#4](https://github.com/thanhndv212/long-tamp/issues/4) Runtime effect guard: a transaction is skipped when its effect already holds
       (replaces the in-memory completed set)
-- [ ] [#5](https://github.com/thanhndv212/long-tamp/issues/5) Screw-assembly domain and mission expressed as a TaskPlan (`plan_block`,
+- [x] [#5](https://github.com/thanhndv212/long-tamp/issues/5) Screw-assembly domain and mission expressed as a TaskPlan (`plan_block`,
       `home_move` capabilities)
 - [ ] [#6](https://github.com/thanhndv212/long-tamp/issues/6) Initial-state scenario harness (V4), ≥4 screw-assembly scenarios, TWIN regrasp
       from ≥3 initial grasp states

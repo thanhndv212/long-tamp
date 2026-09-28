@@ -1,0 +1,102 @@
+{
+ "parts": [
+  4
+ ],
+ "completed": 10,
+ "attempted": 10,
+ "replanning_blocks": 0,
+ "planning_blocks": 140,
+ "recovered_failures": 16,
+ "failure_episodes": 16,
+ "seconds_median": 1023.57,
+ "seconds_min": 788.28,
+ "seconds_max": 1474.08,
+ "seeds": [
+  {
+   "seed": 1,
+   "success": true,
+   "seconds": 1035.92,
+   "blocks": 19,
+   "resumes": 3,
+   "replans": 0
+  },
+  {
+   "seed": 2,
+   "success": true,
+   "seconds": 788.28,
+   "blocks": 19,
+   "resumes": 2,
+   "replans": 0
+  },
+  {
+   "seed": 3,
+   "success": true,
+   "seconds": 844.58,
+   "blocks": 19,
+   "resumes": 1,
+   "replans": 0
+  },
+  {
+   "seed": 4,
+   "success": true,
+   "seconds": 931.52,
+   "blocks": 19,
+   "resumes": 8,
+   "replans": 0
+  },
+  {
+   "seed": 5,
+   "success": true,
+   "seconds": 1011.21,
+   "blocks": 19,
+   "resumes": 1,
+   "replans": 0
+  },
+  {
+   "seed": 6,
+   "success": true,
+   "seconds": 1010.37,
+   "blocks": 19,
+   "resumes": 0,
+   "replans": 0
+  },
+  {
+   "seed": 7,
+   "success": true,
+   "seconds": 1404.28,
+   "blocks": 19,
+   "resumes": 1,
+   "replans": 0
+  },
+  {
+   "seed": 8,
+   "success": true,
+   "seconds": 1474.08,
+   "blocks": 19,
+   "resumes": 2,
+   "replans": 0
+  },
+  {
+   "seed": 9,
+   "success": true,
+   "seconds": 1140.17,
+   "blocks": 19,
+   "resumes": 3,
+   "replans": 0
+  },
+  {
+   "seed": 10,
+   "success": true,
+   "seconds": 1187.9,
+   "blocks": 19,
+   "resumes": 2,
+   "replans": 0
+  }
+ ],
+ "date": "2026-09-28",
+ "environment": "hpp-agimus-arm64 (source-built HPP), 11 cores / 16 GB; two batches of 3 run concurrently",
+ "command": "bash run_batch.sh 10 3 batch_v3",
+ "scene": "four-part screw assembly",
+ "source_commit": "feature/5-screw-assembly-taskplan @ 270a851 (before the part_done guards)",
+ "gate": "PASS vs 2026-09-28-dev-baseline-source-built.json"
+}
