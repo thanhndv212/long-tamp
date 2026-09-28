@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-28
+
+Milestone M1: state model and effect-based resume. Capabilities declare
+preconditions and effects, plans are checked before any geometry runs, and a
+mission skips work whose effect already holds in the world, so it resumes after a
+restart and starts from partly done states. The screw-assembly example runs as a
+TaskPlan. Validated with the screw-assembly batch gate (10/10 missions, 0 %
+replanning, 100 % recovery) and 7/7 initial-state scenarios.
+
 ### Added
 
 - Initial-state scenarios, validation level V4 (#6):
@@ -295,5 +304,6 @@ First public release, on PyPI as `long-tamp`.
   in ~18s as the *second* phase of a multi-grasp sequence but failed 6/6 draws when built as
   the *only* phase of a single-gripper session. Not root-caused.
 
-[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/thanhndv212/long-tamp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/thanhndv212/long-tamp/releases/tag/v0.1.0
