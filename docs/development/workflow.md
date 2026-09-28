@@ -19,6 +19,7 @@ flowchart LR
   I --> J[Close issue, tick roadmap]
   J -->|milestone done| K[Milestone gate on dev]
   K --> L[Release PR dev to main, tag]
+  L --> M[Back-merge main to dev]
 ```
 
 ## Branches
@@ -115,11 +116,18 @@ Never skip, disable or quarantine a test to get green.
 
 ## 8. Release
 
-Each completed milestone is a minor release (`0.x.0`): on `dev`, bump the version and
-move `CHANGELOG` `[Unreleased]` into a dated section; open the release PR `dev → main`
-with the milestone's V3 (and V4) result files linked; merge it with a merge commit; tag
-`vX.Y.Z` on `main`, which triggers trusted publishing; write the GitHub release notes
-from the changelog; close the milestone. Patch releases (`0.x.y`) carry fixes only.
+Each completed milestone is a minor release (`0.x.0`). Patch releases (`0.x.y`) carry
+fixes only. In order:
+
+1. On `dev` (through a PR): bump the version (`pyproject.toml`, `version.py`,
+   `__init__.py`, `package.xml`) and move `CHANGELOG` `[Unreleased]` into a dated section.
+2. Release PR `dev → main`, with the milestone's V3 (and V4) result files linked; merge it
+   with a **merge commit**.
+3. Tag `vX.Y.Z` on `main`. That runs `release.yml`; approve the `pypi` deployment.
+4. Publish the GitHub release (notes from the changelog); close the milestone.
+5. **Back-merge:** PR `main → dev`, merged with a merge commit (no file changes). It gives
+   `dev` the release merge commit, so `dev` always contains `main` and `main` only trails
+   `dev`. Skipping it leaves the two "1 ahead, 1 behind" each other after every release.
 
 ## Definition of done
 
