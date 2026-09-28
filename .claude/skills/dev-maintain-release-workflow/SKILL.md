@@ -250,7 +250,10 @@ First release: `0.1.0` (2026-09-27, see `docs/plans/release-0.1.0.md`). When cut
    required reviewers on that GitHub environment before enabling publication.
 6. **Release notes**: move `CHANGELOG.md`'s Unreleased entries into the dated release
    section at release time, and use them for the GitHub release notes.
-7. Before the *first* public release specifically: do one more `git log --all --name-only`
+7. **Back-merge**: open a PR `main → dev` and merge it with a merge commit (it changes no
+   files). Without it, `dev` lacks the release merge commit and the branches read "1 ahead,
+   1 behind" after every release. See `docs/development/workflow.md` §Release.
+8. Before the *first* public release specifically: do one more `git log --all --name-only`
    sweep across `long_tamp`'s history (all branches, `git branch -a`) for anything
    SpaceLab-tagged that a future contributor's branch might have reintroduced since the
    original scrub.
