@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A release that failed on an unlucky draw had no way back: its pregrasp came from
+  a single generation call, and the pregrasp -> free step was retried only from the
+  pregrasp already reached. The release now runs in up to
+  `1 + _MAX_GENERATION_RETRIES` rounds, each redrawing the pregrasp from the held
+  configuration, and commits nothing before a round succeeds. This made the TWIN
+  grasp/release test fail about one run in three to six (#54).
+- The screw-assembly `--run-dir` help now lists every file in the run folder.
+
 ## [0.3.0] - 2026-09-28
 
 Milestone M2: executor contract and refiner interface. Planned motion runs on

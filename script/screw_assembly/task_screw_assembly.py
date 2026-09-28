@@ -549,8 +549,8 @@ def main() -> int:
         "--run-dir",
         type=Path,
         help="the run's folder: mission.json (run log), checkpoint.json (resume "
-        "point), run.log, phases/, trajectory.json. Default: "
-        "runs/seed<S>_<timestamp>/",
+        "point), facts.json (recorded facts), events.jsonl (event stream), "
+        "trajectory.json, run.log, phases/. Default: runs/seed<S>_<timestamp>/",
     )
     ap.add_argument(
         "--resume",
