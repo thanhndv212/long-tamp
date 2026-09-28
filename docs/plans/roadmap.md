@@ -78,7 +78,7 @@ resumes from world state, not from a block index.
 - [x] [#14](https://github.com/thanhndv212/long-tamp/issues/14) Unified Planning adapter (Fast Downward) producing plan skeletons → TaskPlan
 - [x] [#15](https://github.com/thanhndv212/long-tamp/issues/15) Structured refiner failure facts (`CanNotReach`, `IKUnreachable`,
       `ReleaseEdgeInfeasible`, `Blocks`) and a block → replan loop
-- [ ] [#16](https://github.com/thanhndv212/long-tamp/issues/16) Screw-assembly domain with real choices: clamp slot, part order, driving arm
+- [x] [#16](https://github.com/thanhndv212/long-tamp/issues/16) Screw-assembly domain with real choices: clamp slot, part order, driving arm
 
 **Exit test:** an N-part screw-assembly goal is planned automatically; an injected
 `CanNotReach` triggers a re-clamp and the mission completes.

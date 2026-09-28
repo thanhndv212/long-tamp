@@ -96,6 +96,24 @@ part; anything else blocks the failed step), and `--inject-failure
 clamp_and_screw:clamp=fixtures/clamp1` makes that step fail once, as if unreachable, to
 test it.
 
+## Running Fast Downward directly
+
+`FastDownwardPlanner` runs [Fast Downward](https://github.com/aibasel/downward) on the
+exported PDDL as it is: Fast Downward reads quantifiers, negative preconditions and
+conditional effects, so nothing is compiled away (planning the 4-part screw mission takes
+milliseconds). It finds `fast-downward.py` from its `executable` argument, then
+`LONG_TAMP_FAST_DOWNWARD`, then `PATH`, then the copy bundled with `up-fast-downward`.
+Where no wheel exists (Linux aarch64), build it from source:
+
+```bash
+git clone --depth 1 https://github.com/aibasel/downward.git && cd downward
+./build.py -j2 release
+export LONG_TAMP_FAST_DOWNWARD=$PWD/fast-downward.py
+```
+
+`default_planner()` returns a `FastDownwardPlanner` when an executable is found, else a
+`UnifiedPlanningPlanner`; the screw assembly's `--planner up` uses it.
+
 ## From a goal to a TaskPlan
 
 `long_tamp.tasks.task_planning.skeleton` closes the loop:

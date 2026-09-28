@@ -104,6 +104,10 @@ python3 task_screw_assembly.py --check           # load the scene, validate the 
 python3 task_screw_assembly.py --seed 1          # run, then open the Viser result view
 python3 task_screw_assembly.py --seed 1 --no-viewer # run without keeping a viewer open
 python3 task_screw_assembly.py --seed 1 --planner up  # a task planner orders the blocks (planning extra)
+# M3 exit test: a spare clamp, clamp 1 "cannot reach" part 1 once, the planner re-clamps
+python3 build_scene.py --parts 1 --clamps 2
+python3 task_screw_assembly.py --seed 1 --planner up --replan 3 \
+    --inject-failure clamp_and_screw:clamp=fixtures/clamp1
 python3 task_screw_assembly.py --seed 1 --run-dir runs/<folder> --resume   # continue it
 python3 replay.py runs/<folder>/trajectory.json --loop   # watch it (viser, port 8081)
 ```
