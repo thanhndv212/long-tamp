@@ -35,6 +35,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from the world state, executes, blocks what failed through a policy and
   replans (bounded). Screw assembly: `--replan ROUNDS`, `--inject-failure`, and a
   failed block resets the grasp tracker to its start.
+- Screw assembly with real choices (#16): `build_scene.py --clamps M` adds spare
+  jig clamps that take any part's seat (the default scene is unchanged), the
+  planning domain reads the (clamp, seat) choices from the scene, the goal asks
+  for every part screwed in any clamp, and part order is free. With a spare
+  clamp, an injected `cannot_reach` on a clamp replans the part into another one
+  (the M3 exit test). Either arm driving is left to #60 (the cell is built for
+  ur10_right to drive).
+- `FastDownwardPlanner` runs Fast Downward (https://github.com/aibasel/downward)
+  directly on the exported PDDL, with no compilation step; `default_planner`
+  prefers it when an executable is found (`LONG_TAMP_FAST_DOWNWARD`, `PATH`, or
+  the one bundled with `up-fast-downward`). `UnifiedPlanningPlanner("auto")`
+  warns when it falls back to pyperplan, which is slow and can hang on larger
+  problems.
 
 ### Changed
 

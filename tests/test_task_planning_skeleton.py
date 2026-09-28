@@ -150,7 +150,9 @@ def test_the_hand_order_expands_to_the_hand_written_blocks(n_parts):
     document = screw_domain.planned_document(_hand_skeleton(n_parts), n_parts)
     TaskPlan.from_dict(document, _registry(screw_domain.descriptors(n_parts).values()))
     planned = [
-        screw_domain.block_for(t["children"][0]["capability"], t["children"][0]["parameters"])
+        screw_domain.block_for(
+            t["children"][0]["capability"], t["children"][0]["parameters"]
+        )
         for t in screw_domain.transactions(document)
     ]
     assert planned == screw_domain.build_mission(n_parts)
@@ -159,8 +161,14 @@ def test_the_hand_order_expands_to_the_hand_written_blocks(n_parts):
 # ------------------------------------------------------------------- planner
 
 
-@pytest.fixture(params=["fast-downward", "pyperplan"])
+@pytest.fixture(params=["fast-downward-direct", "fast-downward", "pyperplan"])
 def engine(request):
+    from long_tamp.tasks.task_planning.skeleton import FastDownwardPlanner
+
+    if request.param == "fast-downward-direct":
+        if FastDownwardPlanner.find() is None:
+            pytest.skip("no Fast Downward executable")
+        return request.param
     pytest.importorskip("unified_planning")
     module = {"fast-downward": "up_fast_downward", "pyperplan": "up_pyperplan"}
     pytest.importorskip(module[request.param])
@@ -168,8 +176,13 @@ def engine(request):
 
 
 def _planner(engine):
-    from long_tamp.tasks.task_planning.skeleton import UnifiedPlanningPlanner
+    from long_tamp.tasks.task_planning.skeleton import (
+        FastDownwardPlanner,
+        UnifiedPlanningPlanner,
+    )
 
+    if engine == "fast-downward-direct":
+        return FastDownwardPlanner()
     return UnifiedPlanningPlanner(engine)
 
 
@@ -180,7 +193,9 @@ def test_an_n_part_goal_is_planned_into_a_valid_task_plan(n_parts, engine):
     TaskPlan.from_dict(document, _registry(screw_domain.descriptors(n_parts).values()))
     labels = [t["label"] for t in screw_domain.transactions(document)]
     # Same blocks as the hand-written mission, in an order the planner chose.
-    assert sorted(labels) == sorted(b["label"] for b in screw_domain.build_mission(n_parts))
+    assert sorted(labels) == sorted(
+        b["label"] for b in screw_domain.build_mission(n_parts)
+    )
 
 
 def test_a_partly_done_mission_is_planned_from_its_world_state(engine):
@@ -215,3 +230,14 @@ def test_an_unreachable_goal_raises(engine):
     )
     with pytest.raises(NoPlanFound):
         _planner(engine).solve(export)
+
+
+def test_auto_warns_when_it_falls_back_to_pyperplan(monkeypatch):
+    pytest.importorskip("unified_planning")
+    pytest.importorskip("up_pyperplan")
+    from long_tamp.tasks.task_planning.skeleton import UnifiedPlanningPlanner
+
+    planner = UnifiedPlanningPlanner()
+    monkeypatch.setattr(planner, "engine_name", lambda: "pyperplan")
+    with pytest.warns(UserWarning, match="pyperplan"):
+        planner.solve(screw_domain.pddl_problem(1))

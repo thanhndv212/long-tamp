@@ -71,6 +71,7 @@ from screw_domain import (  # noqa: E402
     blocks_by_label,
     build_plan_document,
     block_for,
+    clamp_seats,
     descriptors,
     pddl_problem,
     planned_document,
@@ -524,8 +525,12 @@ def run_with_repair(
 
     state = {"q": q_start, "result": None, "seconds": 0.0, "blocks": [], "skipped": []}
 
+    clamps = clamp_seats(task.task_config.VALID_PAIRS)
+
     def plan(blocked):
-        return plan_from_goal(n_parts, world_atoms(planner, recorded), blocked=blocked)
+        return plan_from_goal(
+            n_parts, world_atoms(planner, recorded), blocked=blocked, clamps=clamps
+        )
 
     def execute(document):
         result = run_mission(
@@ -574,21 +579,22 @@ def plan_from_goal(
     state: list[str],
     engine: str = "auto",
     blocked: list[tuple[str, dict[str, str]]] | None = None,
+    clamps: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Plan the mission from ``state`` with a task planner (``--planner up``):
     the goal (``screw_domain.mission_goal``) as PDDL, a skeleton from Unified
     Planning, then a TaskPlan document (validated when the session loads it)."""
-    from long_tamp.tasks.task_planning.skeleton import UnifiedPlanningPlanner
+    from long_tamp.tasks.task_planning.skeleton import default_planner, planner_name
 
     t0 = time.time()
-    task_planner = UnifiedPlanningPlanner(engine)
-    name = task_planner.engine_name()
-    steps = task_planner.solve(pddl_problem(n_parts, state, blocked))
+    task_planner = default_planner(engine)
+    name = planner_name(task_planner)
+    steps = task_planner.solve(pddl_problem(n_parts, state, blocked, clamps))
     print(
         f"task planner ({name}): {len(steps)} steps in {time.time() - t0:.2f}s",
         flush=True,
     )
-    return planned_document(steps, n_parts, state, generator=f"unified-planning/{name}")
+    return planned_document(steps, n_parts, state, generator=name)
 
 
 def run_mission(
@@ -828,7 +834,11 @@ def main() -> int:
                 n_parts,
                 q_start=q_start,
                 document=(
-                    plan_from_goal(n_parts, world_atoms(planner, recorded))
+                    plan_from_goal(
+                        n_parts,
+                        world_atoms(planner, recorded),
+                        clamps=clamp_seats(task.task_config.VALID_PAIRS),
+                    )
                     if args.planner == "up"
                     else None
                 ),

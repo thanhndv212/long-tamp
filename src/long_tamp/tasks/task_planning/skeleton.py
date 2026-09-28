@@ -17,7 +17,14 @@ removed; the plan is mapped back). It is an optional dependency
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import warnings
 from collections.abc import Callable, Iterable, Sequence
+from pathlib import Path
 from typing import Any, Protocol
 
 from .pddl import PddlExport, from_pddl_plan
@@ -92,6 +99,13 @@ class UnifiedPlanningPlanner:
             ) from error
         get_environment().credits_stream = None
         name = self.engine_name()
+        if self.engine == "auto" and name == "pyperplan":
+            warnings.warn(
+                "Unified Planning fell back to pyperplan, which is slow and "
+                "can hang on larger problems; use FastDownwardPlanner or "
+                "install up-fast-downward",
+                stacklevel=2,
+            )
         problem = PDDLReader().parse_problem_string(export.domain, export.problem)
         with OneshotPlanner(name=name) as planner:
             map_backs = []
@@ -114,6 +128,101 @@ class UnifiedPlanningPlanner:
             for a in plan.actions
         ]
         return from_pddl_plan(export, actions)
+
+
+class FastDownwardPlanner:
+    """Run Fast Downward (https://github.com/aibasel/downward) on the export.
+
+    Fast Downward reads the exported PDDL as is (quantifiers, negative
+    preconditions, conditional effects), so nothing is compiled away. The
+    executable (``fast-downward.py`` from a source build, or the one bundled
+    with ``up-fast-downward``) is found from ``executable``, the
+    ``LONG_TAMP_FAST_DOWNWARD`` environment variable, ``PATH``, then the
+    ``up_fast_downward`` package. ``alias`` is a Fast Downward search alias.
+    """
+
+    def __init__(
+        self,
+        executable: str | None = None,
+        alias: str = "lama-first",
+        timeout: float = 120.0,
+    ) -> None:
+        self.executable = executable or self.find()
+        if self.executable is None:
+            raise FileNotFoundError(
+                "Fast Downward not found: build it (github.com/aibasel/downward) "
+                "and set LONG_TAMP_FAST_DOWNWARD to its fast-downward.py, or "
+                "pip install long-tamp[planning]"
+            )
+        self.alias = alias
+        self.timeout = timeout
+
+    @staticmethod
+    def find() -> str | None:
+        candidates = [os.environ.get("LONG_TAMP_FAST_DOWNWARD")]
+        candidates += [shutil.which(n) for n in ("fast-downward.py", "fast-downward")]
+        try:
+            import up_fast_downward
+
+            bundled = Path(up_fast_downward.__file__).parent / "downward"
+            candidates.append(str(bundled / "fast-downward.py"))
+        except ImportError:
+            pass
+        return next((c for c in candidates if c and Path(c).exists()), None)
+
+    def solve(self, export: PddlExport) -> list[Step]:
+        with tempfile.TemporaryDirectory(prefix="long-tamp-fd-") as tmp:
+            domain, problem = Path(tmp) / "domain.pddl", Path(tmp) / "problem.pddl"
+            plan = Path(tmp) / "sas_plan"
+            domain.write_text(export.domain)
+            problem.write_text(export.problem)
+            command = [self.executable]
+            if self.executable.endswith(".py"):
+                command.insert(0, sys.executable)
+            command += ["--plan-file", str(plan), "--alias", self.alias]
+            command += [str(domain), str(problem)]
+            try:
+                run = subprocess.run(
+                    command,
+                    cwd=tmp,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout,
+                )
+            except subprocess.TimeoutExpired as error:
+                raise NoPlanFound(
+                    f"fast-downward: timeout after {self.timeout}s"
+                ) from error
+            if not plan.exists():
+                tail = (run.stdout + run.stderr).strip().splitlines()[-3:]
+                raise NoPlanFound(
+                    f"fast-downward exit {run.returncode}: {' | '.join(tail)}"
+                )
+            actions = [
+                line.strip()
+                for line in plan.read_text().splitlines()
+                if line.strip() and not line.startswith(";")
+            ]
+        return from_pddl_plan(export, actions)
+
+
+def default_planner(engine: str = "auto") -> TaskPlanner:
+    """Fast Downward run directly when it can be found (``engine`` "auto" or
+    "fast-downward-direct"), else Unified Planning (``engine`` names its
+    engine, "auto" picks one)."""
+    if engine in ("auto", "fast-downward-direct") and FastDownwardPlanner.find():
+        return FastDownwardPlanner()
+    return UnifiedPlanningPlanner(
+        "auto" if engine == "fast-downward-direct" else engine
+    )
+
+
+def planner_name(planner: TaskPlanner) -> str:
+    if isinstance(planner, FastDownwardPlanner):
+        return "fast-downward (direct)"
+    if isinstance(planner, UnifiedPlanningPlanner):
+        return f"unified-planning/{planner.engine_name()}"
+    return type(planner).__name__
 
 
 def _transaction(
@@ -179,9 +288,12 @@ def skeleton_document(
 
 __all__ = [
     "Expand",
+    "FastDownwardPlanner",
     "NoPlanFound",
     "Step",
     "TaskPlanner",
     "UnifiedPlanningPlanner",
+    "default_planner",
+    "planner_name",
     "skeleton_document",
 ]

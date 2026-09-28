@@ -36,10 +36,24 @@ adds, per capability, preconditions over static facts you put in `init` (which g
 grasp which handle, which holes belong to which part). They exist only in the export; the
 capabilities' run-time preconditions are unchanged.
 
-## Planning it
+## Planners
 
-With the `planning` extra (`pip install long-tamp[planning]`: Unified Planning and its
-Fast Downward engine):
+All planners implement `TaskPlanner.solve(export) -> skeleton`; `default_planner()` picks
+one.
+
+| Planner | Runs | Use it |
+|---|---|---|
+| `FastDownwardPlanner` | Fast Downward on the exported PDDL as is | **the default**: fast (milliseconds here), reads quantifiers and negative/conditional features natively |
+| `UnifiedPlanningPlanner("fast-downward")` | Unified Planning, then its Fast Downward engine | when you want Unified Planning's problem API or its other engines |
+| `UnifiedPlanningPlanner("pyperplan")` | Unified Planning compiles the problem down to STRIPS, pyperplan solves it | last resort where no Fast Downward binary exists: pure Python, but slow, and the compilation can blow up on quantified problems (it warns when chosen) |
+
+Getting Fast Downward: `pip install long-tamp[planning]` brings its binary through
+`up-fast-downward` on Linux x86-64 and macOS; elsewhere build it from source (below).
+Other planners (e.g. PDDLStream, roadmap M6) plug in behind the same interface.
+
+## Planning it through Unified Planning
+
+With the `planning` extra:
 
 ```python
 from unified_planning.io import PDDLReader
@@ -95,6 +109,24 @@ Screw assembly: `task_screw_assembly.py --planner up --replan 3` runs this loop 
 part; anything else blocks the failed step), and `--inject-failure
 clamp_and_screw:clamp=fixtures/clamp1` makes that step fail once, as if unreachable, to
 test it.
+
+## Running Fast Downward directly
+
+`FastDownwardPlanner` runs [Fast Downward](https://github.com/aibasel/downward) on the
+exported PDDL as it is: Fast Downward reads quantifiers, negative preconditions and
+conditional effects, so nothing is compiled away (planning the 4-part screw mission takes
+milliseconds). It finds `fast-downward.py` from its `executable` argument, then
+`LONG_TAMP_FAST_DOWNWARD`, then `PATH`, then the copy bundled with `up-fast-downward`.
+Where no wheel exists (Linux aarch64), build it from source:
+
+```bash
+git clone --depth 1 https://github.com/aibasel/downward.git && cd downward
+./build.py -j2 release
+export LONG_TAMP_FAST_DOWNWARD=$PWD/fast-downward.py
+```
+
+`default_planner()` returns a `FastDownwardPlanner` when an executable is found, else a
+`UnifiedPlanningPlanner`; the screw assembly's `--planner up` uses it.
 
 ## From a goal to a TaskPlan
 

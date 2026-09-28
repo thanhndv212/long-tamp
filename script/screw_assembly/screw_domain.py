@@ -420,8 +420,14 @@ STATIC_PRECONDITIONS: dict[str, tuple[str, ...]] = {
 }
 
 
-def static_facts(n_parts: int) -> list[str]:
-    """The facts ``STATIC_PRECONDITIONS`` refer to, for ``n_parts`` parts."""
+def static_facts(
+    n_parts: int, clamp_seats: list[tuple[str, str]] | None = None
+) -> list[str]:
+    """The facts ``STATIC_PRECONDITIONS`` refer to, for ``n_parts`` parts.
+
+    ``clamp_seats`` are the (clamp, seat) pairs the scene allows (its
+    ``valid_pairs``; see ``clamp_seats``); by default clamp i takes part i.
+    """
     facts = [
         f"can_grasp({RIGHT}/gripper, driver/h_grip)",
         f"screw_tool({RIGHT}/gripper, driver/h_grip)",
@@ -432,21 +438,36 @@ def static_facts(n_parts: int) -> list[str]:
         facts += [
             f"can_grasp({LEFT}/gripper, {p}/h_grasp)",
             f"carry_handle({p}, {p}/h_grasp)",
-            f"clamp_takes(fixtures/clamp{i}, {p}/h_seat)",
             f"seat_of({p}, {p}/h_seat)",
             f"first_hole({p}, {p}/h_hole1)",
             f"second_hole({p}, {p}/h_hole2)",
         ]
+    if clamp_seats is None:
+        clamp_seats = [(f"fixtures/clamp{i}", f"part{i}/h_seat") for i in range(1, n_parts + 1)]
+    facts += [f"clamp_takes({clamp}, {seat})" for clamp, seat in clamp_seats]
     return facts
 
 
+def clamp_seats(valid_pairs: dict[str, list[str]]) -> list[tuple[str, str]]:
+    """The (clamp, seat) pairs a scene's ``valid_pairs`` allow (#16): with
+    spare clamps (``build_scene.py --clamps``), any clamp takes any seat."""
+    return [
+        (gripper, handle)
+        for gripper, handles in sorted(valid_pairs.items())
+        if gripper.startswith("fixtures/clamp")
+        for handle in handles
+    ]
+
+
 def mission_goal(n_parts: int) -> list[str]:
-    """Every part clamped and screwed, released, and the driver back on its dock."""
+    """Every part screwed (so clamped, in any clamp), released, and the
+    driver back on its dock."""
     goal = []
     for i in range(1, n_parts + 1):
         p = f"part{i}"
         goal += [
-            f"holds(fixtures/clamp{i}, {p}/h_seat)",
+            # Screwed implies clamped (only clamp_and_screw screws, and it
+            # clamps the part for good), in whichever clamp (#16).
             f"screwed({p}, {p}/h_hole1)",
             f"screwed({p}, {p}/h_hole2)",
         ]
@@ -460,17 +481,19 @@ def pddl_problem(
     n_parts: int,
     state: list[str] | None = None,
     blocked: list[tuple[str, dict[str, str]]] | None = None,
+    clamps: list[tuple[str, str]] | None = None,
 ) -> PddlExport:
     """The mission as PDDL: the capabilities, ``state`` (default: nothing
     held, nothing screwed) plus the static facts, and ``mission_goal``.
 
     Home moves have no effects, so they are not actions: a plan found for
     this problem is the mission's grasp/clamp/release/rack skeleton.
-    ``blocked`` rules out bindings earlier attempts failed on (``repair_policy``).
+    ``blocked`` rules out bindings earlier attempts failed on (``repair_policy``);
+    ``clamps`` are the scene's (clamp, seat) pairs (``clamp_seats``).
     """
     return to_pddl(
         descriptors(n_parts),
-        init=[*static_facts(n_parts), *(state or [])],
+        init=[*static_facts(n_parts, clamps), *(state or [])],
         goal=mission_goal(n_parts),
         domain_name="screw-assembly",
         problem_name=f"screw-assembly-{n_parts}",
