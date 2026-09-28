@@ -1,0 +1,27 @@
+[
+ {
+  "scenario": "nominal",
+  "seed": 1,
+  "pass": true,
+  "reason": "",
+  "skipped": []
+ },
+ {
+  "scenario": "left_holds_ball",
+  "seed": 1,
+  "pass": true,
+  "reason": "",
+  "skipped": [
+   "Grasp ball/handle with panda_left/gripper"
+  ]
+ },
+ {
+  "scenario": "both_hold",
+  "seed": 1,
+  "pass": true,
+  "reason": "",
+  "skipped": [
+   "Grasp ball/handle with panda_left/gripper"
+  ]
+ }
+]

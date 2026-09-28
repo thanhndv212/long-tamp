@@ -51,3 +51,18 @@ def test_two_grippers_on_one_handle_are_rejected():
     )
     with pytest.raises(PlanValidationError, match=r"not holds\(_, ball/handle\)"):
         TaskPlan.from_dict(document, _registry())
+
+
+def test_every_regrasp_scenario_start_is_accepted():
+    """V4 (script/twin/scenarios.py): the same regrasp plan from each start."""
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[1] / "script" / "twin" / "scenarios.py"
+    spec_ = importlib.util.spec_from_file_location("twin_scenarios", path)
+    twin_scenarios = importlib.util.module_from_spec(spec_)
+    spec_.loader.exec_module(twin_scenarios)
+
+    for name, spec in twin_scenarios.SCENARIOS.items():
+        document = twin_bt_session._build_regrasp_plan_document()
+        document["initial_state"] = [f"holds({g}, {h})" for g, h in spec["setup"]]
+        TaskPlan.from_dict(document, _registry())

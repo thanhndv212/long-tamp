@@ -59,6 +59,7 @@ from long_tamp.tasks.task_planning import (  # noqa: E402
     TaskPlanningSession,
 )
 from long_tamp.tasks.task_planning.predicates import holds  # noqa: E402
+from long_tamp.tasks.task_planning.runner import run_plan  # noqa: E402
 from screw_domain import (  # noqa: E402
     LEFT,
     RECORDED_PREDICATES,
@@ -439,40 +440,6 @@ def mission_session(
     return TaskPlanningSession(plan, registry, world_state=world, recorded=recorded)
 
 
-def run_node(session: TaskPlanningSession, node: dict[str, Any], skipped: list) -> bool:
-    """Run a plan node the way its compiled BehaviorTree runs it.
-
-    sequence: every child in order; fallback: children until one succeeds;
-    condition: its capability's verdict; transaction: complete (effect holds
-    in the world) -> skip, not ready (preconditions) -> fail, else execute.
-    """
-    kind, label = node["type"], node.get("label", node["id"])
-    if kind == "sequence":
-        return all(run_node(session, child, skipped) for child in node["children"])
-    if kind == "fallback":
-        return any(run_node(session, child, skipped) for child in node["children"])
-    if kind == "condition":
-        value = json.loads(session.evaluate_condition(node["id"])).get("value", False)
-        if value:
-            skipped.append(label)
-            print(f"\n=== {label}: yes, skipping what it guards")
-        return bool(value)
-    done = json.loads(session.is_step_complete(node["id"]))
-    if done.get("complete"):
-        skipped.append(label)
-        print(f"\n=== {label} === skipped ({done['reason']})")
-        return True
-    ready = json.loads(session.check_precondition(node["id"]))
-    if not ready.get("ready"):
-        print(
-            f"\n=== {label} === not ready: "
-            f"{ready.get('unsatisfied') or ready.get('message')}"
-        )
-        return False
-    result = json.loads(session.execute_step(node["id"]))
-    return result["status"] == "success"
-
-
 def run_mission(
     task: ScrewAssemblyTask,
     planner: GraspSequencePlanner,
@@ -505,8 +472,13 @@ def run_mission(
     }
     session = mission_session(task, planner, ctx, recorded, max_replans, verbose)
     t_mission = time.time()
-    skipped: list[str] = []
-    success = run_node(session, session.plan.document["root"], skipped)
+    run = run_plan(
+        session,
+        on_skip=lambda label, why: print(f"\n=== {label} === skipped ({why})"),
+    )
+    if not run.success:
+        print(f"\n=== {run.failed_step} stopped the mission: {run.message}")
+    success, skipped = run.success, run.skipped
     return {
         "success": success,
         "seconds": round(time.time() - t_mission, 2),

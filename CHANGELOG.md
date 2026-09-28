@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Initial-state scenarios, validation level V4 (#6):
+  `script/screw_assembly/scenarios.py` (4 scenarios) and `script/twin/scenarios.py`
+  (3) plan part of the mission to reach a start state, then run the unchanged plan
+  and check that the work already done is skipped, not planned again.
+- `task_planning.runner.run_plan(session)`: runs a plan synchronously with the
+  compiled BehaviorTree's semantics (sequence, fallback, retry, condition,
+  transaction with the effect guard, precondition check and attempt budget);
+  screw assembly and the scenarios run on it.
 - Screw assembly runs as a TaskPlan (#5): `script/screw_assembly/screw_domain.py`
   declares the mission as capabilities with preconditions and effects (`holds`
   observed from the grasp tracker, `screwed` recorded in the run folder's

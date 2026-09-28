@@ -149,9 +149,10 @@ def build_twin_session(options_json: str = "{}") -> Any:
     plan = TaskPlan.from_dict(document, registry)
     # The grasp tracker is the world state: TaskStepReady checks real
     # preconditions, and a transaction whose effect already holds is skipped.
-    return HostSession(
-        plan, registry, world_state=GraspTrackerState(seq_planner)
-    )
+    session = HostSession(plan, registry, world_state=GraspTrackerState(seq_planner))
+    # For scenario setups (scenarios.py): plan grasps before the mission runs.
+    session.seq_planner, session.state = seq_planner, state
+    return session
 
 
 def build_twin_regrasp_session(options_json: str = "{}") -> Any:
@@ -274,9 +275,10 @@ def build_twin_regrasp_session(options_json: str = "{}") -> Any:
     plan = TaskPlan.from_dict(document, registry)
     # The grasp tracker is the world state: TaskStepReady checks real
     # preconditions, and a transaction whose effect already holds is skipped.
-    return HostSession(
-        plan, registry, world_state=GraspTrackerState(seq_planner)
-    )
+    session = HostSession(plan, registry, world_state=GraspTrackerState(seq_planner))
+    # For scenario setups (scenarios.py): plan grasps before the mission runs.
+    session.seq_planner, session.state = seq_planner, state
+    return session
 
 
 def _build_regrasp_plan_document() -> dict[str, Any]:

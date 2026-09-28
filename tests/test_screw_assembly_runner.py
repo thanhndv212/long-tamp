@@ -20,10 +20,10 @@ from long_tamp.tasks.task_planning import (
     TaskPlanningSession,
 )
 from long_tamp.tasks.task_planning.predicates import Literal, holds
+from long_tamp.tasks.task_planning.runner import run_plan
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "script/screw_assembly"))
 import screw_domain  # noqa: E402
-import task_screw_assembly  # noqa: E402
 
 
 class _Mission:
@@ -63,11 +63,8 @@ class _Mission:
         return {}
 
     def go(self):
-        skipped = []
-        ok = task_screw_assembly.run_node(
-            self.session, self.session.plan.document["root"], skipped
-        )
-        return ok, skipped
+        run = run_plan(self.session)
+        return run.success, run.skipped
 
 
 LABELS = [b["label"] for b in screw_domain.build_mission(2)]
