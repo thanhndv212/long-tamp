@@ -72,6 +72,8 @@ resumes from world state, not from a block index.
 
 ## M3 — Automatic task planning (0.4.0)
 
+**Released as 0.4.0 on 2026-09-29.**
+
 [Milestone 3](https://github.com/thanhndv212/long-tamp/milestone/3)
 
 - [x] [#13](https://github.com/thanhndv212/long-tamp/issues/13) PDDL domain/problem export from the capability registry and a goal

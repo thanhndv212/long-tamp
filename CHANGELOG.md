@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-29
+
+Milestone M3: automatic task planning. Capabilities, a world state and a goal
+export to PDDL; a classical planner (Fast Downward, run directly, or any Unified
+Planning engine) turns the goal into a plan skeleton that becomes a validated
+TaskPlan; refinement failures come back as facts (`cannot_reach`,
+`ik_unreachable`, `release_infeasible`, `lookahead_failed`, `blocks`) and a
+bounded loop blocks what failed and replans. The screw assembly now has real
+choices (spare clamps, free part order): with an injected `cannot_reach` it
+replans the part into another clamp and completes (the M3 exit test). Validated
+with the screw-assembly batch gate on planner-ordered missions (10/10, median
+772 s, source-built HPP).
+
 ### Added
 
 - PDDL export (#13), `long_tamp.tasks.task_planning.pddl`: `to_pddl(descriptors,
@@ -429,7 +442,8 @@ First public release, on PyPI as `long-tamp`.
   in ~18s as the *second* phase of a multi-grasp sequence but failed 6/6 draws when built as
   the *only* phase of a single-gripper session. Not root-caused.
 
-[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/thanhndv212/long-tamp/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/thanhndv212/long-tamp/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/thanhndv212/long-tamp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/thanhndv212/long-tamp/releases/tag/v0.1.0
