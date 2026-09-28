@@ -1,0 +1,78 @@
+{
+ "parts": [
+  4
+ ],
+ "completed": 7,
+ "attempted": 7,
+ "replanning_blocks": 0,
+ "planning_blocks": 98,
+ "recovered_failures": 8,
+ "failure_episodes": 8,
+ "seconds_median": 1127.0,
+ "seconds_min": 854.32,
+ "seconds_max": 1348.1,
+ "seeds": [
+  {
+   "seed": 2,
+   "success": true,
+   "seconds": 893.91,
+   "blocks": 19,
+   "resumes": 1,
+   "replans": 0
+  },
+  {
+   "seed": 3,
+   "success": true,
+   "seconds": 1348.1,
+   "blocks": 19,
+   "resumes": 1,
+   "replans": 0
+  },
+  {
+   "seed": 4,
+   "success": true,
+   "seconds": 854.32,
+   "blocks": 19,
+   "resumes": 0,
+   "replans": 0
+  },
+  {
+   "seed": 7,
+   "success": true,
+   "seconds": 1127.0,
+   "blocks": 19,
+   "resumes": 5,
+   "replans": 0
+  },
+  {
+   "seed": 8,
+   "success": true,
+   "seconds": 1182.24,
+   "blocks": 19,
+   "resumes": 1,
+   "replans": 0
+  },
+  {
+   "seed": 9,
+   "success": true,
+   "seconds": 1221.75,
+   "blocks": 19,
+   "resumes": 1,
+   "replans": 0
+  },
+  {
+   "seed": 10,
+   "success": true,
+   "seconds": 969.78,
+   "blocks": 19,
+   "resumes": 3,
+   "replans": 0
+  }
+ ],
+ "date": "2026-09-28",
+ "environment": "hpp-agimus-arm64 (source-built HPP), 11 cores / 16 GB; two batches of 3 run concurrently",
+ "command": "bash run_batch.sh 10 3 batch_v3",
+ "scene": "four-part screw assembly",
+ "source_commit": "dev @ 19c9a78 (script/screw_assembly)",
+ "note": "seeds 1, 5, 6 were OOM-killed mid-mission (exit 137) by concurrent viewer replays (#35), not planning failures"
+}
