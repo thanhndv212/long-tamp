@@ -1,0 +1,58 @@
+{
+  "date": "2026-09-28",
+  "environment": "hpp-agimus-arm64 (source-built HPP); Fast Downward built from source (aibasel/downward @ 9b81c7e)",
+  "command": "build_scene.py --parts 1 --clamps 2; task_screw_assembly.py --seed 1 --planner up --replan 3 --inject-failure clamp_and_screw:clamp=fixtures/clamp1",
+  "source_commit": "feature/16-domain-choices @ 4e53319",
+  "result": {
+    "success": true,
+    "task_replans": 1,
+    "blocked": [
+      [
+        "clamp_and_screw",
+        {
+          "clamp": "fixtures/clamp1",
+          "seat": "part1/h_seat"
+        }
+      ]
+    ],
+    "seconds": 152.45,
+    "skipped": []
+  },
+  "blocks": [
+    {
+      "label": "bootstrap: pick driver",
+      "success": true,
+      "seconds": 13.45
+    },
+    {
+      "label": "ur10_right home (bootstrap)",
+      "success": true,
+      "seconds": 0.33
+    },
+    {
+      "label": "part1 A0: grasp",
+      "success": true,
+      "seconds": 33.93
+    },
+    {
+      "label": "part1 A: clamp + screw (in clamp2)",
+      "success": true,
+      "seconds": 86.01
+    },
+    {
+      "label": "ur10_right home (part1)",
+      "success": true,
+      "seconds": 1.85
+    },
+    {
+      "label": "part1 B: release",
+      "success": true,
+      "seconds": 1.55
+    },
+    {
+      "label": "return: rack driver",
+      "success": true,
+      "seconds": 15.29
+    }
+  ]
+}
