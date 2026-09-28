@@ -3,6 +3,13 @@ name: Publish to PyPI
 on:
   push:
     tags: ["v*"]
+  # Dry run: build, then hand the artifact to a job that downloads and checks
+  # it the way publish would. Publishing only ever runs for a pushed tag. Runs
+  # on every PR that changes this file (e.g. action bumps), and on demand once
+  # this trigger is on the default branch.
+  pull_request:
+    paths: [".github/workflows/release.yml"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -16,11 +23,13 @@ jobs:
         with:
           fetch-depth: 0
       - name: Require a commit already on main
+        if: github.event_name == 'push'
         run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Check that the tag matches the package version
+        if: github.event_name == 'push'
         run: |
           python - <<'PY'
           import os
@@ -43,7 +52,22 @@ jobs:
           name: release-distributions
           path: dist/
 
+  verify-artifact:
+    # Dry run only: the same artifact handoff publish relies on.
+    if: github.event_name != 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-distributions
+          path: dist/
+      - run: ls -l dist/
+      - run: python3 -m pip install twine && python3 -m twine check dist/*
+
   publish:
+    if: github.event_name == 'push'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
