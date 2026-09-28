@@ -22,6 +22,7 @@ from typing import Any
 
 from long_tamp.tasks.refiner import Lookahead, RefinementStep
 from long_tamp.tasks.task_planning import CapabilityDescriptor
+from long_tamp.tasks.task_planning.pddl import PddlExport, to_pddl
 
 LEFT, RIGHT = "ur10_left", "ur10_right"
 DRIVER_TIP = "driver/tip"
@@ -395,3 +396,77 @@ def transactions(document: dict[str, Any]) -> list[dict[str, Any]]:
 
 def blocks_by_label(n_parts: int) -> dict[str, dict[str, Any]]:
     return {block["label"]: block for block in build_mission(n_parts)}
+
+
+# --- The mission as a planning problem (M3, #13) ------------------------------
+
+#: Export-only preconditions over static facts (``static_facts``): which
+#: gripper grasps which handle, which clamp takes which part's seat, which
+#: holes are the part's, which tool drives screws and where it is docked.
+#: They bound what a planner may bind each parameter to; the capabilities'
+#: run-time preconditions are unchanged.
+STATIC_PRECONDITIONS: dict[str, tuple[str, ...]] = {
+    "grasp": ("can_grasp(?gripper, ?handle)",),
+    "clamp_and_screw": (
+        "clamp_takes(?clamp, ?seat)",
+        "seat_of(?part, ?seat)",
+        "carry_handle(?part, ?held)",
+        "first_hole(?part, ?hole1)",
+        "second_hole(?part, ?hole2)",
+        "screw_tool(?tool_gripper, ?tool)",
+    ),
+    "rack": ("docks(?gripper, ?dock, ?dock_handle)",),
+}
+
+
+def static_facts(n_parts: int) -> list[str]:
+    """The facts ``STATIC_PRECONDITIONS`` refer to, for ``n_parts`` parts."""
+    facts = [
+        f"can_grasp({RIGHT}/gripper, driver/h_grip)",
+        f"screw_tool({RIGHT}/gripper, driver/h_grip)",
+        f"docks({RIGHT}/gripper, fixtures/rack_hold, driver/h_rack)",
+    ]
+    for i in range(1, n_parts + 1):
+        p = f"part{i}"
+        facts += [
+            f"can_grasp({LEFT}/gripper, {p}/h_grasp)",
+            f"carry_handle({p}, {p}/h_grasp)",
+            f"clamp_takes(fixtures/clamp{i}, {p}/h_seat)",
+            f"seat_of({p}, {p}/h_seat)",
+            f"first_hole({p}, {p}/h_hole1)",
+            f"second_hole({p}, {p}/h_hole2)",
+        ]
+    return facts
+
+
+def mission_goal(n_parts: int) -> list[str]:
+    """Every part clamped and screwed, released, and the driver back on its dock."""
+    goal = []
+    for i in range(1, n_parts + 1):
+        p = f"part{i}"
+        goal += [
+            f"holds(fixtures/clamp{i}, {p}/h_seat)",
+            f"screwed({p}, {p}/h_hole1)",
+            f"screwed({p}, {p}/h_hole2)",
+        ]
+    return goal + [
+        f"not holds({LEFT}/gripper, _)",
+        "holds(fixtures/rack_hold, driver/h_rack)",
+    ]
+
+
+def pddl_problem(n_parts: int, state: list[str] | None = None) -> PddlExport:
+    """The mission as PDDL: the capabilities, ``state`` (default: nothing
+    held, nothing screwed) plus the static facts, and ``mission_goal``.
+
+    Home moves have no effects, so they are not actions: a plan found for
+    this problem is the mission's grasp/clamp/release/rack skeleton.
+    """
+    return to_pddl(
+        descriptors(n_parts),
+        init=[*static_facts(n_parts), *(state or [])],
+        goal=mission_goal(n_parts),
+        domain_name="screw-assembly",
+        problem_name=f"screw-assembly-{n_parts}",
+        static_preconditions=STATIC_PRECONDITIONS,
+    )
