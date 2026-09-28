@@ -45,16 +45,16 @@ def test_an_unreachable_phase_is_reported_as_a_fact():
     assert "unreachable" in r.message
     assert r.facts == [
         "refinement_failed(part1_A:_clamp_+_screw)",
-        "unreachable(tool/g_tip, part/h_hole1)",
+        "ik_unreachable(tool/g_tip, part/h_hole1)",
     ]
     for fact in r.facts:
         parse_atom(fact)  # ground atoms in the TaskPlan predicate language
 
 
-def test_a_stuck_phase_is_reported_as_phase_failed():
+def test_a_stuck_phase_is_reported_as_cannot_reach():
     r = _refine(FakePlanner(collisions=5), max_replans=0, resume_limit=2)
     assert not r.success
-    assert r.facts[-1] == "phase_failed(tool/g_tip, part/h_hole1)"
+    assert r.facts[-1] == "cannot_reach(tool/g_tip, part/h_hole1)"
 
 
 def test_recovery_options_reach_the_ladder():
@@ -89,10 +89,25 @@ def test_failure_facts(failure, expected):
     assert facts[1:] == expected
 
 
-def test_a_release_phase_names_no_handle():
-    step = RefinementStep("r", (("arm/g", None),))
-    facts = failure_facts(step, {"kind": "stuck", "phase_idx": 0, "edge": EDGE})
-    assert facts[1] == "phase_failed(arm/g, none)"
+def test_a_failed_release_names_the_handle_it_held():
+    step = RefinementStep("r", (("tip", "part/h_hole1"), ("tip", None)))
+    facts = failure_facts(step, {"kind": "stuck", "phase_idx": 1, "edge": EDGE})
+    assert facts[1] == "release_infeasible(tip, part/h_hole1)"
+    alone = RefinementStep("r", (("arm/g", None),))
+    facts = failure_facts(alone, {"kind": "stuck", "phase_idx": 0, "edge": EDGE})
+    assert facts[1] == "release_infeasible(arm/g, none)"
+
+
+def test_a_collision_is_reported_as_blocks():
+    error = (
+        "TransitionPlanner.computePath failed for transit edge x: Collision "
+        "between object panda_right/panda_link6_0 and ground/ground_base_0"
+    )
+    failure = {"kind": "stuck", "phase_idx": 0, "edge": EDGE, "error": error}
+    facts = failure_facts(STEP, failure)
+    assert facts[-1] == "blocks(panda_right/panda_link6, ground/ground_base)"
+    for fact in facts:
+        parse_atom(fact)
 
 
 def test_screw_assembly_blocks_become_refinement_steps():

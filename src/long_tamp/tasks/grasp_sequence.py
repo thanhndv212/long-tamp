@@ -306,6 +306,92 @@ class GraspSequencePlanner:
         edge_21, edge_10 = release_edges[0], release_edges[1]
         edge_01 = self.grasp_tracker.get_approach_edge_from_released(gripper)
 
+        # Steps 1-2 (``_plan_release_edges``), in rounds. A round fails when
+        # no pregrasp can be generated, or when the pregrasp it reached can't
+        # be left (every _10 attempt starts from that same pregrasp), so the
+        # next round redraws the pregrasp from q_current. Nothing is committed
+        # before the tracker update below, so a redraw is safe (#54).
+        rounds = 1 + self._MAX_GENERATION_RETRIES
+        for round_idx in range(rounds):
+            try:
+                edges = self._plan_release_edges(
+                    gripper,
+                    released_handle,
+                    edge_21,
+                    edge_10,
+                    edge_01,
+                    q_start,
+                    verbose,
+                )
+                break
+            except Exception as e:  # noqa: BLE001 - every round-level failure
+                if round_idx == rounds - 1:
+                    raise
+                logger.warning(
+                    "Release of '%s' failed (round %d of %d): %s; redrawing "
+                    "the pregrasp",
+                    released_handle,
+                    round_idx + 1,
+                    rounds,
+                    e,
+                )
+        q_start = edges["q_start"]
+        path21, path10, path_direct = (
+            edges["path21"],
+            edges["path10"],
+            edges["path_direct"],
+        )
+        used_direct = edges["used_direct"]
+        t_gen1, t_plan1 = edges["t_gen1"], edges["t_plan1"]
+        t_gen2, t_plan2 = edges["t_gen2"], edges["t_plan2"]
+        t_gen_direct, t_plan_direct = edges["t_gen_direct"], edges["t_plan_direct"]
+
+        # Update grasp state: gripper is now free
+        self.grasp_tracker.update_grasp(gripper, None)
+        if verbose:
+            logger.info("✓ Released '%s' from '%s'", released_handle, gripper)
+
+        direct_edge = edge_21[:-3] if used_direct else None
+        phase_info = self._build_release_phase_info(
+            q_start=q_start,
+            used_direct=used_direct,
+            path21=path21,
+            path10=path10,
+            path_direct=path_direct,
+            edge_21=edge_21,
+            edge_10=edge_10,
+            direct_edge=direct_edge,
+            t_gen1=t_gen1,
+            t_plan1=t_plan1,
+            t_gen2=t_gen2,
+            t_plan2=t_plan2,
+            t_gen_direct=t_gen_direct,
+            t_plan_direct=t_plan_direct,
+        )
+        return q_start, phase_info
+
+    def _plan_release_edges(
+        self,
+        gripper: str,
+        released_handle: str,
+        edge_21: str,
+        edge_10: str,
+        edge_01: str,
+        q_start: list,
+        verbose: bool,
+    ) -> dict:
+        """One round of a release: grasped -> pregrasp -> free.
+
+        Generates a pregrasp and plans _21 to it (``_plan_release_pregrasp_edge``),
+        then plans _10 from its end, or the direct release edge if _21 failed.
+        Raises ``RuntimeError`` when the round fails; commits nothing (the
+        caller updates the grasp tracker).
+
+        Returns:
+            ``q_start`` (the released configuration), ``path21``, ``path10``,
+            ``path_direct``, ``used_direct`` and the ``t_gen*``/``t_plan*``
+            timings.
+        """
         # Step 1: generate q_pregrasp via the forward approach edge and plan
         # edge_21 (with pregrasp regeneration on plan failure).
         path21, q_pregrasp, t_gen1, t_plan1, plan_err_21 = (
@@ -400,29 +486,19 @@ class GraspSequencePlanner:
             # Placeholders so the rest of the code path is consistent
             path10 = None
 
-        # Update grasp state: gripper is now free
-        self.grasp_tracker.update_grasp(gripper, None)
-        if verbose:
-            logger.info("✓ Released '%s' from '%s'", released_handle, gripper)
-
-        direct_edge = edge_21[:-3] if used_direct else None
-        phase_info = self._build_release_phase_info(
-            q_start=q_start,
-            used_direct=used_direct,
-            path21=path21,
-            path10=path10,
-            path_direct=path_direct,
-            edge_21=edge_21,
-            edge_10=edge_10,
-            direct_edge=direct_edge,
-            t_gen1=t_gen1,
-            t_plan1=t_plan1,
-            t_gen2=t_gen2,
-            t_plan2=t_plan2,
-            t_gen_direct=t_gen_direct,
-            t_plan_direct=t_plan_direct,
-        )
-        return q_start, phase_info
+        return {
+            "q_start": q_start,
+            "path21": path21,
+            "path10": path10,
+            "path_direct": path_direct,
+            "used_direct": used_direct,
+            "t_gen1": t_gen1,
+            "t_plan1": t_plan1,
+            "t_gen2": t_gen2,
+            "t_plan2": t_plan2,
+            "t_gen_direct": t_gen_direct,
+            "t_plan_direct": t_plan_direct,
+        }
 
     def _setup_release_phase_graph(
         self,
@@ -503,6 +579,16 @@ class GraspSequencePlanner:
             logger.debug("Release edge sequence: %s", release_edges)
         return release_edges
 
+    def _config_valid(self, q: list) -> tuple[bool, str]:
+        """Collision-free and within bounds; ``(True, "")`` without a checker."""
+        checker = getattr(self.config_gen, "is_config_valid", None)
+        if checker is None:
+            return True, ""
+        try:
+            return checker(list(q))
+        except Exception as e:  # noqa: BLE001 - a check that can't run
+            return True, f"not checked: {e}"
+
     def _project_onto_release_source_state(
         self, q_current: list, verbose: bool
     ) -> list:
@@ -527,7 +613,19 @@ class GraspSequencePlanner:
                 max_iterations=10000,
                 error_threshold=1e-4,
             )
-            if success:
+            valid, report = self._config_valid(q_projected) if success else (True, "")
+            if success and not valid:
+                # The projection only enforces the state's constraints; it can
+                # move an arm into collision (a Panda link into the ground,
+                # #54), which then fails every release attempt from it.
+                logger.warning(
+                    "Projection onto '%s' gave an invalid configuration (%s); "
+                    "keeping the unprojected one (%s)",
+                    source_state,
+                    report,
+                    "valid" if self._config_valid(q_current)[0] else "also invalid",
+                )
+            elif success:
                 q_current = list(q_projected)
                 if verbose:
                     logger.debug(

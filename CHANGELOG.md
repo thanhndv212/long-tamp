@@ -8,6 +8,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-29
+
+Milestone M3: automatic task planning. Capabilities, a world state and a goal
+export to PDDL; a classical planner (Fast Downward, run directly, or any Unified
+Planning engine) turns the goal into a plan skeleton that becomes a validated
+TaskPlan; refinement failures come back as facts (`cannot_reach`,
+`ik_unreachable`, `release_infeasible`, `lookahead_failed`, `blocks`) and a
+bounded loop blocks what failed and replans. The screw assembly now has real
+choices (spare clamps, free part order): with an injected `cannot_reach` it
+replans the part into another clamp and completes (the M3 exit test). Validated
+with the screw-assembly batch gate on planner-ordered missions (10/10, median
+772 s, source-built HPP).
+
+### Added
+
+- PDDL export (#13), `long_tamp.tasks.task_planning.pddl`: `to_pddl(descriptors,
+  init, goal)` writes a domain (one action per capability with effects; wildcards
+  as `exists`/`forall`) and a problem any classical planner reads, with a
+  reversible renaming of names like `ur10_left/gripper`; `static_preconditions`
+  bound parameters with export-only facts. `from_pddl_plan` maps a plan back to
+  capability calls. `screw_domain.pddl_problem(n)` exports the screw-assembly
+  mission; Fast Downward (through Unified Planning, new `planning` extra) plans
+  it for 1, 2 and 4 parts and from partly done states, and every plan is checked
+  step by step against long_tamp's own semantics.
+- Plans from a goal (#14), `long_tamp.tasks.task_planning.skeleton`:
+  `UnifiedPlanningPlanner` solves a PDDL export into a skeleton (Fast Downward,
+  else pyperplan after Unified Planning compiles the problem down to STRIPS) and
+  `skeleton_document` turns it into a TaskPlan document validated like a
+  hand-written one. The screw assembly plans its mission from the world state
+  with `--planner up`; each step's block is rebuilt from its capability and
+  parameters (`screw_domain.block_for`), and `run_batch.sh` passes mission
+  options through. The `planning` extra installs `up-fast-downward` only where
+  it has wheels, plus `up-pyperplan`.
+- Replanning around failures (#15): refinement failures report
+  `cannot_reach`, `ik_unreachable`, `release_infeasible`, `lookahead_failed`
+  `(gripper, handle)` and `blocks(body, body)` from a collision;
+  `to_pddl(blocked=...)` rules out bindings; `repair.plan_execute_repair` plans
+  from the world state, executes, blocks what failed through a policy and
+  replans (bounded). Screw assembly: `--replan ROUNDS`, `--inject-failure`, and a
+  failed block resets the grasp tracker to its start.
+- Screw assembly with real choices (#16): `build_scene.py --clamps M` adds spare
+  jig clamps that take any part's seat (the default scene is unchanged), the
+  planning domain reads the (clamp, seat) choices from the scene, the goal asks
+  for every part screwed in any clamp, and part order is free. With a spare
+  clamp, an injected `cannot_reach` on a clamp replans the part into another one
+  (the M3 exit test). Either arm driving is left to #60 (the cell is built for
+  ur10_right to drive).
+- `FastDownwardPlanner` runs Fast Downward (https://github.com/aibasel/downward)
+  directly on the exported PDDL, with no compilation step; `default_planner`
+  prefers it when an executable is found (`LONG_TAMP_FAST_DOWNWARD`, `PATH`, or
+  the one bundled with `up-fast-downward`). `UnifiedPlanningPlanner("auto")`
+  warns when it falls back to pyperplan, which is slow and can hang on larger
+  problems.
+
+### Changed
+
+- CI: TWIN is no longer checked in CI. Its handover location is random and
+  often infeasible (a 5 cm ball between two Panda hands), so its checks passed
+  or failed by chance; the scripts and tests stay as an example to run by hand.
+  `tests/test_grasp_release_screw.py`, seeded, on the screw-assembly cell, is
+  the real-scene check of `grasp()` and `release()` (new `nightly-grasp-release`
+  job) (#54).
+- Refiner failure facts renamed for #15: `unreachable` -> `ik_unreachable`,
+  `phase_failed` -> `cannot_reach` (or `release_infeasible` for a release phase).
+
+### Fixed
+
+- Releases recover from more failures (#54): a release now runs in up to
+  `1 + _MAX_GENERATION_RETRIES` rounds, each redrawing its pregrasp from the held
+  configuration (before, the pregrasp was drawn once, and the pregrasp -> free
+  step only retried from the pregrasp already reached); nothing is committed
+  before a round succeeds. The held configuration is projected onto the grasp's
+  constraints only when the projection stays collision-free.
+- TWIN: the ball's y bound widens to +-0.6 m. A dual-arm hold could leave the
+  ball at y = -0.43..-0.44, and every release from there was rejected as out of
+  bounds (#54).
+- The screw-assembly `--run-dir` help now lists every file in the run folder.
+
 ## [0.3.0] - 2026-09-28
 
 Milestone M2: executor contract and refiner interface. Planned motion runs on
@@ -364,7 +442,8 @@ First public release, on PyPI as `long-tamp`.
   in ~18s as the *second* phase of a multi-grasp sequence but failed 6/6 draws when built as
   the *only* phase of a single-gripper session. Not root-caused.
 
-[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/thanhndv212/long-tamp/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/thanhndv212/long-tamp/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/thanhndv212/long-tamp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/thanhndv212/long-tamp/releases/tag/v0.1.0

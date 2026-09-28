@@ -40,7 +40,7 @@ hole 2 unreachable, and no retry of the hole-2 phase can fix that. So block A ru
 
 Both sit behind the refiner interface (`long_tamp.tasks.refiner.GraspSequenceRefiner`,
 ADR-0001): `screw_domain.refinement_step(block)` turns a block into a `RefinementStep`, and
-a failed refinement reports facts such as `unreachable(driver/tip, part1/h_hole2)`.
+a failed refinement reports facts such as `ik_unreachable(driver/tip, part1/h_hole2)`.
 
 **The mission is a TaskPlan.** `screw_domain.py` holds the block definitions and expresses
 the mission as a `long_tamp` TaskPlan: one transaction per block, in order, each naming its
@@ -103,6 +103,11 @@ python3 build_scene.py --parts 4                 # regenerate generated/ and con
 python3 task_screw_assembly.py --check           # load the scene, validate the start
 python3 task_screw_assembly.py --seed 1          # run, then open the Viser result view
 python3 task_screw_assembly.py --seed 1 --no-viewer # run without keeping a viewer open
+python3 task_screw_assembly.py --seed 1 --planner up  # a task planner orders the blocks (planning extra)
+# M3 exit test: a spare clamp, clamp 1 "cannot reach" part 1 once, the planner re-clamps
+python3 build_scene.py --parts 1 --clamps 2
+python3 task_screw_assembly.py --seed 1 --planner up --replan 3 \
+    --inject-failure clamp_and_screw:clamp=fixtures/clamp1
 python3 task_screw_assembly.py --seed 1 --run-dir runs/<folder> --resume   # continue it
 python3 replay.py runs/<folder>/trajectory.json --loop   # watch it (viser, port 8081)
 ```

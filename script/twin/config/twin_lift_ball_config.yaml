@@ -116,10 +116,13 @@ joint_groups:
 # Freeflyer bounds applied to every object root joint (the ball). The z
 # upper bound leaves room above the lift: a dual-arm hold could end a phase
 # at z = 0.905 with the old 0.9 bound, and the next edge then rejected its
-# own start configuration as out of bounds (#28).
+# own start configuration as out of bounds (#28). Likewise in y: the two
+# grasp constraints can leave the held ball at y = -0.43..-0.44, and with a
+# +-0.4 bound every release from there failed ("init config invalid:
+# ball/root_joint ... out of range", #54).
 # ---------------------------------------------------------------------------
 freeflyer_bounds:
-  translation: [[0.0, 1.1], [-0.4, 0.4], [0.0, 1.2]]
+  translation: [[0.0, 1.1], [-0.6, 0.6], [0.0, 1.2]]
   quaternion:  [[-1.0001, 1.0001], [-1.0001, 1.0001],
                 [-1.0001, 1.0001], [-1.0001, 1.0001]]
 

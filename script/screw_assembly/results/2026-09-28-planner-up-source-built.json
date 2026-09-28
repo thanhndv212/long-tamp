@@ -1,0 +1,104 @@
+{
+  "parts": [
+    4
+  ],
+  "completed": 10,
+  "attempted": 10,
+  "replanning_blocks": 0,
+  "planning_blocks": 140,
+  "recovered_failures": 9,
+  "failure_episodes": 9,
+  "seconds_median": 795.61,
+  "seconds_min": 492.05,
+  "seconds_max": 957.21,
+  "seeds": [
+    {
+      "seed": 1,
+      "success": true,
+      "seconds": 627.56,
+      "blocks": 19,
+      "resumes": 1,
+      "replans": 0
+    },
+    {
+      "seed": 2,
+      "success": true,
+      "seconds": 942.56,
+      "blocks": 19,
+      "resumes": 0,
+      "replans": 0
+    },
+    {
+      "seed": 3,
+      "success": true,
+      "seconds": 878.77,
+      "blocks": 19,
+      "resumes": 0,
+      "replans": 0
+    },
+    {
+      "seed": 4,
+      "success": true,
+      "seconds": 957.21,
+      "blocks": 19,
+      "resumes": 2,
+      "replans": 0
+    },
+    {
+      "seed": 5,
+      "success": true,
+      "seconds": 796.01,
+      "blocks": 19,
+      "resumes": 1,
+      "replans": 0
+    },
+    {
+      "seed": 6,
+      "success": true,
+      "seconds": 492.05,
+      "blocks": 19,
+      "resumes": 1,
+      "replans": 0
+    },
+    {
+      "seed": 7,
+      "success": true,
+      "seconds": 590.52,
+      "blocks": 19,
+      "resumes": 3,
+      "replans": 0
+    },
+    {
+      "seed": 8,
+      "success": true,
+      "seconds": 575.71,
+      "blocks": 19,
+      "resumes": 3,
+      "replans": 0
+    },
+    {
+      "seed": 9,
+      "success": true,
+      "seconds": 795.2,
+      "blocks": 19,
+      "resumes": 2,
+      "replans": 0
+    },
+    {
+      "seed": 10,
+      "success": true,
+      "seconds": 824.67,
+      "blocks": 19,
+      "resumes": 0,
+      "replans": 0
+    }
+  ],
+  "date": "2026-09-28",
+  "environment": "hpp-agimus-arm64 (source-built HPP), 11 cores / 16 GB; one batch of 3",
+  "command": "bash run_batch.sh 10 3 batch_v3 --planner up",
+  "scene": "four-part screw assembly",
+  "planner": "unified-planning/pyperplan (Fast Downward has no Linux aarch64 wheel); 14 steps in 3.0-4.0 s per mission",
+  "source_commit": "feature/14-up-planner @ 1ea5277",
+  "gate": "PASS vs 2026-09-28-taskplan-source-built.json",
+  "order_seed1": "driver, part1, part3, part4, part2, rack before part2 release"
+}

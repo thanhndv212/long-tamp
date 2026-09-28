@@ -22,6 +22,8 @@ from typing import Any
 
 from long_tamp.tasks.refiner import Lookahead, RefinementStep
 from long_tamp.tasks.task_planning import CapabilityDescriptor
+from long_tamp.tasks.task_planning.pddl import PddlExport, to_pddl
+from long_tamp.tasks.task_planning.skeleton import skeleton_document
 
 LEFT, RIGHT = "ur10_left", "ur10_right"
 DRIVER_TIP = "driver/tip"
@@ -395,3 +397,268 @@ def transactions(document: dict[str, Any]) -> list[dict[str, Any]]:
 
 def blocks_by_label(n_parts: int) -> dict[str, dict[str, Any]]:
     return {block["label"]: block for block in build_mission(n_parts)}
+
+
+# --- The mission as a planning problem (M3, #13) ------------------------------
+
+#: Export-only preconditions over static facts (``static_facts``): which
+#: gripper grasps which handle, which clamp takes which part's seat, which
+#: holes are the part's, which tool drives screws and where it is docked.
+#: They bound what a planner may bind each parameter to; the capabilities'
+#: run-time preconditions are unchanged.
+STATIC_PRECONDITIONS: dict[str, tuple[str, ...]] = {
+    "grasp": ("can_grasp(?gripper, ?handle)",),
+    "clamp_and_screw": (
+        "clamp_takes(?clamp, ?seat)",
+        "seat_of(?part, ?seat)",
+        "carry_handle(?part, ?held)",
+        "first_hole(?part, ?hole1)",
+        "second_hole(?part, ?hole2)",
+        "screw_tool(?tool_gripper, ?tool)",
+    ),
+    "rack": ("docks(?gripper, ?dock, ?dock_handle)",),
+}
+
+
+def static_facts(
+    n_parts: int, clamp_seats: list[tuple[str, str]] | None = None
+) -> list[str]:
+    """The facts ``STATIC_PRECONDITIONS`` refer to, for ``n_parts`` parts.
+
+    ``clamp_seats`` are the (clamp, seat) pairs the scene allows (its
+    ``valid_pairs``; see ``clamp_seats``); by default clamp i takes part i.
+    """
+    facts = [
+        f"can_grasp({RIGHT}/gripper, driver/h_grip)",
+        f"screw_tool({RIGHT}/gripper, driver/h_grip)",
+        f"docks({RIGHT}/gripper, fixtures/rack_hold, driver/h_rack)",
+    ]
+    for i in range(1, n_parts + 1):
+        p = f"part{i}"
+        facts += [
+            f"can_grasp({LEFT}/gripper, {p}/h_grasp)",
+            f"carry_handle({p}, {p}/h_grasp)",
+            f"seat_of({p}, {p}/h_seat)",
+            f"first_hole({p}, {p}/h_hole1)",
+            f"second_hole({p}, {p}/h_hole2)",
+        ]
+    if clamp_seats is None:
+        clamp_seats = [(f"fixtures/clamp{i}", f"part{i}/h_seat") for i in range(1, n_parts + 1)]
+    facts += [f"clamp_takes({clamp}, {seat})" for clamp, seat in clamp_seats]
+    return facts
+
+
+def clamp_seats(valid_pairs: dict[str, list[str]]) -> list[tuple[str, str]]:
+    """The (clamp, seat) pairs a scene's ``valid_pairs`` allow (#16): with
+    spare clamps (``build_scene.py --clamps``), any clamp takes any seat."""
+    return [
+        (gripper, handle)
+        for gripper, handles in sorted(valid_pairs.items())
+        if gripper.startswith("fixtures/clamp")
+        for handle in handles
+    ]
+
+
+def mission_goal(n_parts: int) -> list[str]:
+    """Every part screwed (so clamped, in any clamp), released, and the
+    driver back on its dock."""
+    goal = []
+    for i in range(1, n_parts + 1):
+        p = f"part{i}"
+        goal += [
+            # Screwed implies clamped (only clamp_and_screw screws, and it
+            # clamps the part for good), in whichever clamp (#16).
+            f"screwed({p}, {p}/h_hole1)",
+            f"screwed({p}, {p}/h_hole2)",
+        ]
+    return goal + [
+        f"not holds({LEFT}/gripper, _)",
+        "holds(fixtures/rack_hold, driver/h_rack)",
+    ]
+
+
+def pddl_problem(
+    n_parts: int,
+    state: list[str] | None = None,
+    blocked: list[tuple[str, dict[str, str]]] | None = None,
+    clamps: list[tuple[str, str]] | None = None,
+) -> PddlExport:
+    """The mission as PDDL: the capabilities, ``state`` (default: nothing
+    held, nothing screwed) plus the static facts, and ``mission_goal``.
+
+    Home moves have no effects, so they are not actions: a plan found for
+    this problem is the mission's grasp/clamp/release/rack skeleton.
+    ``blocked`` rules out bindings earlier attempts failed on (``repair_policy``);
+    ``clamps`` are the scene's (clamp, seat) pairs (``clamp_seats``).
+    """
+    return to_pddl(
+        descriptors(n_parts),
+        init=[*static_facts(n_parts, clamps), *(state or [])],
+        goal=mission_goal(n_parts),
+        domain_name="screw-assembly",
+        problem_name=f"screw-assembly-{n_parts}",
+        static_preconditions=STATIC_PRECONDITIONS,
+        blocked=blocked or (),
+    )
+
+
+def repair_policy(failure: dict[str, Any]) -> list[tuple[str, dict[str, str]]]:
+    """What to block after a failed step, from the facts its refiner reported.
+
+    - ``cannot_reach`` / ``ik_unreachable`` of a jig clamp on a part's seat:
+      that clamp can't take that part here, so block the pair for any
+      clamp-and-screw step (the planner then picks another clamp);
+    - otherwise, block the failed step's own binding.
+    """
+    from long_tamp.tasks.task_planning.predicates import parse_atom
+
+    blocks = []
+    for fact in failure.get("facts", []):
+        atom = parse_atom(fact)
+        if atom.name in ("cannot_reach", "ik_unreachable") and atom.args[0].startswith(
+            "fixtures/clamp"
+        ):
+            blocks.append(
+                ("clamp_and_screw", {"clamp": atom.args[0], "seat": atom.args[1]})
+            )
+    if blocks:
+        return blocks
+    params = {k: str(v) for k, v in failure.get("parameters", {}).items() if k != "block"}
+    return [(failure["capability"], params)] if params else []
+
+
+# --- From a transaction to its block, and from a skeleton to a plan (#14) ------
+
+
+def _arm(gripper: str) -> str:
+    return gripper.split("/")[0]
+
+
+def _other(arm: str) -> str:
+    return LEFT if arm == RIGHT else RIGHT
+
+
+def block_for(capability: str, parameters: dict[str, Any]) -> dict[str, Any]:
+    """The geometric block a transaction runs, from its capability and parameters.
+
+    The inverse of ``_step``: ``block_for(*_step(i, block)) == block`` for every
+    ``build_mission`` block, so a plan built by a task planner (whose steps
+    aren't in ``build_mission``, e.g. part 1 in clamp 2) runs the same way.
+    The arm a phase doesn't move is frozen.
+    """
+    label = parameters["block"]
+    if capability == "home":
+        return {"label": label, "move": (parameters["arm"], "driver")}
+    if capability == "grasp":
+        gripper = parameters["gripper"]
+        return {
+            "label": label,
+            "seq": [(gripper, parameters["handle"])],
+            "frozen": {0: [_other(_arm(gripper))]},
+        }
+    if capability == "release":
+        gripper = parameters["gripper"]
+        return {
+            "label": label,
+            "seq": [(gripper, None)],
+            "frozen": {0: [_other(_arm(gripper))]},
+        }
+    if capability == "rack":
+        other = _other(_arm(parameters["gripper"]))
+        return {
+            "label": label,
+            "seq": [
+                (parameters["dock"], parameters["dock_handle"]),
+                (parameters["gripper"], None),
+            ],
+            "frozen": {0: [other], 1: [other]},
+        }
+    if capability == "clamp_and_screw":
+        # Phase 0 moves the holder's arm (it carries the part into the
+        # clamp); the screw phases move the tool arm.
+        holder, tool = _arm(parameters["holder"]), _arm(parameters["tool_gripper"])
+        return {
+            "label": label,
+            "seq": [
+                (parameters["clamp"], parameters["seat"]),
+                (DRIVER_TIP, parameters["hole1"]),
+                (DRIVER_TIP, None),
+                (DRIVER_TIP, parameters["hole2"]),
+                (DRIVER_TIP, None),
+            ],
+            "frozen": {0: [tool], 1: [holder], 2: [holder], 3: [holder], 4: [holder]},
+            # The clamp candidate must leave hole 1 (phase 1) AND hole 2
+            # (phase 3) reachable.
+            "lookahead": {"pair": (0, 1), "also": (3,)},
+        }
+    raise ValueError(f"no block for capability {capability!r}")
+
+
+def expand_step(
+    index: int, capability: str, parameters: dict[str, Any], held: dict[str, str]
+) -> list[tuple[str, dict[str, Any], str]]:
+    """A skeleton step as transactions: labels and ``block`` filled in, and a
+    move home for the tool arm after the pickup and after each part's
+    screws (those moves have no effects, so a planner never plans them).
+
+    ``held`` (gripper -> handle, updated here) names what a release lets go.
+    """
+    p = dict(parameters)
+    out: list[tuple[str, dict[str, Any], str]] = []
+
+    def add(cap: str, params: dict[str, Any], label: str) -> None:
+        out.append((cap, {**params, "block": label}, label))
+
+    def home(tag: str, arm: str) -> None:
+        add("home", {"arm": arm}, f"{arm} home ({tag})")
+
+    if capability == "grasp":
+        held[p["gripper"]] = p["handle"]
+        if p["handle"] == "driver/h_grip":
+            add("grasp", p, "bootstrap: pick driver")
+            home("bootstrap", _arm(p["gripper"]))
+        else:
+            add("grasp", p, f"{p['handle'].split('/')[0]} A0: grasp")
+    elif capability == "clamp_and_screw":
+        part, clamp = p["part"], p["clamp"]
+        slot = clamp.split("/")[-1]
+        default = f"clamp{part.removeprefix('part')}"
+        suffix = "" if slot == default else f" (in {slot})"
+        add("clamp_and_screw", p, f"{part} A: clamp + screw{suffix}")
+        home(part, _arm(p["tool_gripper"]))
+    elif capability == "release":
+        what = held.pop(p["gripper"], "")
+        add("release", p, f"{what.split('/')[0] or p['gripper']} B: release")
+    elif capability == "rack":
+        held.pop(p["gripper"], None)
+        add("rack", p, "return: rack driver")
+    else:
+        raise ValueError(f"unexpected skeleton step {capability!r}")
+    return out
+
+
+def planned_document(
+    steps: list[tuple[str, dict[str, Any]]],
+    n_parts: int,
+    state: list[str] | None = None,
+    generator: str = "unified-planning",
+) -> dict[str, Any]:
+    """A TaskPlan document for a planner's skeleton (see ``pddl_problem``).
+
+    ``state`` is the start the skeleton was planned from; it is also the
+    plan's ``initial_state``, so the document is validated from there.
+    """
+    held: dict[str, str] = {}
+    for atom in state or []:
+        if atom.startswith("holds("):
+            gripper, handle = atom[len("holds(") : -1].split(", ")
+            held[gripper] = handle
+    return skeleton_document(
+        steps,
+        mission_id=f"ScrewAssembly{n_parts}",
+        expand=lambda index, cap, params: expand_step(index, cap, params, held),
+        initial_state=state or [],
+        scene={"id": "screw-assembly", "parts": n_parts},
+        generator=generator,
+        label=f"Screw assembly, {n_parts} part(s) (planned)",
+    )

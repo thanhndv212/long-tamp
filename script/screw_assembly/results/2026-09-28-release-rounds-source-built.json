@@ -1,0 +1,103 @@
+{
+  "parts": [
+    4
+  ],
+  "completed": 10,
+  "attempted": 10,
+  "replanning_blocks": 0,
+  "planning_blocks": 140,
+  "recovered_failures": 12,
+  "failure_episodes": 12,
+  "seconds_median": 720.25,
+  "seconds_min": 519.04,
+  "seconds_max": 984.72,
+  "seeds": [
+    {
+      "seed": 1,
+      "success": true,
+      "seconds": 944.47,
+      "blocks": 19,
+      "resumes": 1,
+      "replans": 0
+    },
+    {
+      "seed": 2,
+      "success": true,
+      "seconds": 899.96,
+      "blocks": 19,
+      "resumes": 3,
+      "replans": 0
+    },
+    {
+      "seed": 3,
+      "success": true,
+      "seconds": 964.88,
+      "blocks": 19,
+      "resumes": 1,
+      "replans": 0
+    },
+    {
+      "seed": 4,
+      "success": true,
+      "seconds": 984.72,
+      "blocks": 19,
+      "resumes": 3,
+      "replans": 0
+    },
+    {
+      "seed": 5,
+      "success": true,
+      "seconds": 611.19,
+      "blocks": 19,
+      "resumes": 0,
+      "replans": 0
+    },
+    {
+      "seed": 6,
+      "success": true,
+      "seconds": 629.36,
+      "blocks": 19,
+      "resumes": 1,
+      "replans": 0
+    },
+    {
+      "seed": 7,
+      "success": true,
+      "seconds": 732.75,
+      "blocks": 19,
+      "resumes": 0,
+      "replans": 0
+    },
+    {
+      "seed": 8,
+      "success": true,
+      "seconds": 519.04,
+      "blocks": 19,
+      "resumes": 2,
+      "replans": 0
+    },
+    {
+      "seed": 9,
+      "success": true,
+      "seconds": 556.08,
+      "blocks": 19,
+      "resumes": 2,
+      "replans": 0
+    },
+    {
+      "seed": 10,
+      "success": true,
+      "seconds": 707.75,
+      "blocks": 19,
+      "resumes": 3,
+      "replans": 0
+    }
+  ],
+  "date": "2026-09-28",
+  "environment": "hpp-agimus-arm64 (source-built HPP), 11 cores / 16 GB; one batch of 3",
+  "command": "bash run_batch.sh 10 3 batch_v3",
+  "scene": "four-part screw assembly",
+  "source_commit": "fix/54-twin-release-flaky @ 8c40add (release rounds)",
+  "gate": "PASS vs 2026-09-28-taskplan-source-built.json",
+  "note": "release redraws triggered in this batch: 0"
+}
