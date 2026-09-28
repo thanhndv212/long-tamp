@@ -41,6 +41,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (kill during or after a chosen step, then `--resume`), checked from the event
   stream. Documented as part of V4.
 
+### Fixed
+
+- Screw assembly: a mission killed after a part's clamp + screw block but before
+  its release skipped the release on resume, ending with ur10_left still holding
+  the clamped part. The `part_done` / `all_parts_done` guards now also require the
+  carrying arm to have let go (the guard is labelled "partN assembled"). Found by
+  the kill-and-resume check (#12).
+
 ## [0.2.0] - 2026-09-28
 
 Milestone M1: state model and effect-based resume. Capabilities declare
