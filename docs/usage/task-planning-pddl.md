@@ -59,5 +59,34 @@ state)` with `STATIC_PRECONDITIONS`, `static_facts(n)` and `mission_goal(n)`. Fa
 plans 1, 2 and 4 parts, and from partly done states (e.g. part 1 finished, driver in
 hand) plans only the remaining work (`tests/test_task_planning_pddl.py`). Home moves have
 no effects, so they aren't actions: a skeleton is the grasp / clamp and screw / release /
-rack sequence. Building a TaskPlan from it and planning through Unified Planning in code
-is [#14](https://github.com/thanhndv212/long-tamp/issues/14).
+rack sequence.
+
+## From a goal to a TaskPlan
+
+`long_tamp.tasks.task_planning.skeleton` closes the loop:
+
+```python
+from long_tamp.tasks.task_planning import TaskPlan
+from long_tamp.tasks.task_planning.skeleton import UnifiedPlanningPlanner, skeleton_document
+
+steps = UnifiedPlanningPlanner().solve(export)     # [(capability, parameters), ...]
+document = skeleton_document(steps, mission_id="Demo", expand=expand)
+plan = TaskPlan.from_dict(document, registry)       # the same validation as a hand-written plan
+```
+
+- `UnifiedPlanningPlanner(engine="auto")` uses Fast Downward if its package is installed,
+  else pyperplan. When the engine can't read the problem's features (pyperplan: plain
+  STRIPS), Unified Planning compiles them away first (quantifiers, disjunctions,
+  conditional effects, negative conditions) and the plan is mapped back.
+  `up-fast-downward` ships wheels for Linux x86-64 and macOS only; elsewhere (e.g. Linux
+  aarch64) the `planning` extra installs pyperplan alone.
+- `skeleton_document` makes one transaction per step. `expand(index, capability,
+  parameters)` fills in implementation parameters and labels, and may insert steps the
+  planner doesn't see (effect-less moves). `NoPlanFound` is raised when the goal can't be
+  reached.
+
+The screw assembly plans its own mission this way: `python3 task_screw_assembly.py
+--planner up` plans the goal from the current world state (`screw_domain.expand_step`
+adds the labels and the home moves), and every step runs the block `block_for(capability,
+parameters)` rebuilds from it, so a plan the hand-written one never contained (another
+part order, another clamp) runs the same way.
