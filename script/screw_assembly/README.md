@@ -103,6 +103,7 @@ python3 build_scene.py --parts 4                 # regenerate generated/ and con
 python3 task_screw_assembly.py --check           # load the scene, validate the start
 python3 task_screw_assembly.py --seed 1          # run, then open the Viser result view
 python3 task_screw_assembly.py --seed 1 --no-viewer # run without keeping a viewer open
+python3 task_screw_assembly.py --seed 1 --planner up  # a task planner orders the blocks (planning extra)
 python3 task_screw_assembly.py --seed 1 --run-dir runs/<folder> --resume   # continue it
 python3 replay.py runs/<folder>/trajectory.json --loop   # watch it (viser, port 8081)
 ```

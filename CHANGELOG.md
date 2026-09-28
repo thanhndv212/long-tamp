@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mission; Fast Downward (through Unified Planning, new `planning` extra) plans
   it for 1, 2 and 4 parts and from partly done states, and every plan is checked
   step by step against long_tamp's own semantics.
+- Plans from a goal (#14), `long_tamp.tasks.task_planning.skeleton`:
+  `UnifiedPlanningPlanner` solves a PDDL export into a skeleton (Fast Downward,
+  else pyperplan after Unified Planning compiles the problem down to STRIPS) and
+  `skeleton_document` turns it into a TaskPlan document validated like a
+  hand-written one. The screw assembly plans its mission from the world state
+  with `--planner up`; each step's block is rebuilt from its capability and
+  parameters (`screw_domain.block_for`), and `run_batch.sh` passes mission
+  options through. The `planning` extra installs `up-fast-downward` only where
+  it has wheels, plus `up-pyperplan`.
 
 ### Changed
 
