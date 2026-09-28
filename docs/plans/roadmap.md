@@ -55,6 +55,8 @@ change; the 10-seed batch gate passes.
 
 ## M2 — Executor contract and refiner interface (0.3.0)
 
+**Released as 0.3.0 on 2026-09-28.**
+
 [Milestone 2](https://github.com/thanhndv212/long-tamp/milestone/2)
 
 - [x] [#8](https://github.com/thanhndv212/long-tamp/issues/8) Executor contract: statuses `SUCCESS/FAILURE/RUNNING/BUSY`, heartbeats with
