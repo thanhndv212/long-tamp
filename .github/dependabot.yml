@@ -1,0 +1,10 @@
+version: 2
+updates:
+  # Keep workflow actions current; Python dependencies are pinned by HPP's wheels,
+  # so they are updated deliberately rather than by bot.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels: ["type:chore", "area:ci", "skip-changelog"]
+    target-branch: dev

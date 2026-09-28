@@ -159,7 +159,10 @@ class GraspSequencePlanner:
             graph_constraints: Optional list of global constraints
             freeze_joint_substrings: Joint-name substrings locked at q_init on
                 every phase, regardless of frozen_arms_mode. See
-                _execute_phase.
+                _execute_phase. ``None`` (default) inherits the patterns
+                ``task.setup(freeze_joint_substrings=...)`` froze, recorded on
+                ``graph_builder.frozen_joint_substrings``; pass ``[]`` to freeze
+                nothing.
             auto_save_dir: If set, automatically save paths to this directory
                           after each successful phase. Files are named
                           phase_NN_edge_MM.path (binary format).
@@ -170,6 +173,13 @@ class GraspSequencePlanner:
         self.task_config = task_config
         self.backend = backend.lower()
         self.graph_constraints = graph_constraints
+        if freeze_joint_substrings is None:
+            # Phase graphs are rebuilt from the frozen arms only; without the
+            # task's own patterns, the moving arm's frozen joints (fingers)
+            # would take random values in every generated config (#28).
+            freeze_joint_substrings = getattr(
+                graph_builder, "frozen_joint_substrings", None
+            )
         self.freeze_joint_substrings = (
             list(freeze_joint_substrings) if freeze_joint_substrings else []
         )

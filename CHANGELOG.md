@@ -8,7 +8,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-28
+
+Milestone M1: state model and effect-based resume. Capabilities declare
+preconditions and effects, plans are checked before any geometry runs, and a
+mission skips work whose effect already holds in the world, so it resumes after a
+restart and starts from partly done states. The screw-assembly example runs as a
+TaskPlan. Validated with the screw-assembly batch gate (10/10 missions, 0 %
+replanning, 100 % recovery) and 7/7 initial-state scenarios.
+
 ### Added
+
+- Initial-state scenarios, validation level V4 (#6):
+  `script/screw_assembly/scenarios.py` (4 scenarios) and `script/twin/scenarios.py`
+  (3) plan part of the mission to reach a start state, then run the unchanged plan
+  and check that the work already done is skipped, not planned again.
+- `task_planning.runner.run_plan(session)`: runs a plan synchronously with the
+  compiled BehaviorTree's semantics (sequence, fallback, retry, condition,
+  transaction with the effect guard, precondition check and attempt budget);
+  screw assembly and the scenarios run on it.
+- Screw assembly runs as a TaskPlan (#5): `script/screw_assembly/screw_domain.py`
+  declares the mission as capabilities with preconditions and effects (`holds`
+  observed from the grasp tracker, `screwed` recorded in the run folder's
+  `facts.json`) and one transaction per block; `task_screw_assembly.py` runs it
+  step by step through a `TaskPlanningSession`. `--resume` now restores the world
+  state and skips steps whose effects hold, instead of resuming from a block index.
+- Plan simulation treats a transaction whose declared effects already hold as
+  complete, matching the run-time effect guard, so one plan validates from any
+  start state the guard can handle.
+- Plan diagrams (#7): `task_planning.visualize.to_mermaid(plan)` and
+  `to_dot(plan)` render a TaskPlan (fallback alternatives as dashed `else` edges,
+  attempt budgets, optionally each step's grounded effects with `registry=`).
+- Effect-based completion (#4, ADR-0002): with a `world_state`, a transaction
+  is complete exactly when its grounded effects hold in the world. A step whose
+  effect already holds is skipped without running (`effect already holds`), and
+  one whose effect was undone runs again; `is_step_complete` reports the reason.
+  Steps without declared effects, and sessions without a world state, keep the
+  in-memory record. The TWIN sessions use the grasp tracker as their world state.
+- World-state providers (#3, ADR-0002): `GraspTrackerState(planner)` reports
+  observed `holds(gripper, handle)` atoms from the planner's grasp tracker
+  (re-read on every call, since the planner replaces it on resume/reset); `RecordedFacts`
+  holds facts no sensor shows afterwards (e.g. `screwed(part, hole)`), persisted
+  atomically and reloaded on restart; `CompositeWorldState` merges sources into a
+  session's `world_state=`. A session built with `recorded=` writes a step's
+  grounded effects on the recorded predicates only when the step completes.
+- Capability preconditions and effects (#2, ADR-0002): `CapabilityDescriptor`
+  takes `preconditions=` and `effects=` as literals over the step's parameters
+  (`"not holds(?gripper, _)"`, `"holds(?gripper, ?handle)"`), parsed and checked
+  against `required_parameters` at construction
+  (`long_tamp.tasks.task_planning.predicates`). A plan may declare an
+  `initial_state`; `TaskPlan.from_dict` then simulates every branch and rejects a
+  plan whose preconditions can fail, naming the step, literal and state, before
+  any geometry runs. Sessions take an optional `world_state=` callable, and
+  `TaskStepReady` then evaluates the step's preconditions against it. Both TWIN
+  missions declare real literals and are checked this way.
 
 - `long_tamp.grasping`: a grasp planner, separate from motion planning.
   `GraspPlanner` samples, evaluates and ranks parallel-jaw grasps on an object's
@@ -23,9 +76,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `script/grasp_planning/`: `plan_grasps.py` (rank grasps, check an object's
   handles, emit SRDF) and `validate_closure.py` (check closures against the real
   Robotiq meshes with pinocchio + coal).
+- Screw-assembly batch gate: `script/screw_assembly/summarize.py --gate --baseline
+  <results.json>` exits non-zero unless every mission completed, the replanning
+  trigger rate is < 2 %, the recovery rate is > 95 % and the median time is
+  ≤ 1.25× the baseline; `--json` records a result file in the committed schema.
+- Contributor process: `CONTRIBUTING.md`, `docs/development/workflow.md` (issue →
+  PR → release lifecycle, definition of done), `docs/development/validation.md`
+  (validation levels V0–V4 on the screw-assembly mission), `docs/plans/roadmap.md`
+  (milestones M1–M6), architecture decision records under `docs/adr/`, PR and issue
+  templates, a pre-commit config mirroring the lint job, and Dependabot for actions.
+- CI: a `docs` job (`mkdocs build --strict`, which now also fails on pages missing
+  from the nav) and a `changelog` job on pull requests (library or example changes
+  need a `CHANGELOG.md` entry unless labelled `skip-changelog`).
 
 ### Fixed
 
+- The mission viewer played every completed block, then the whole mission again,
+  in real time even with no browser connected (#35). Batch runs (which also
+  started a viewer) lingered after each mission replaying it, grew to ~7 GB per
+  process, and six in parallel exhausted a 16 GB container: the OOM killer took
+  down running missions. Playback now happens only while a browser is connected
+  (paths are still recorded for later), and `run_batch.sh` runs with `--no-viewer`.
+- Joints frozen by `task.setup(freeze_joint_substrings=...)` (e.g. gripper
+  fingers) were only kept frozen on idle arms: phase graphs rebuild the locked
+  joints from the frozen *arms*, so the moving arm's "frozen" fingers took random
+  widths in every generated configuration unless `GraspSequencePlanner` was also
+  given the patterns (#28). On TWIN, a finger closing to 14.8 mm inside the 25 mm
+  ball made the grasp pose collide, the cause of the long-standing flaky TWIN
+  checks. `GraspSequencePlanner` now inherits the patterns `setup()` froze (pass
+  `freeze_joint_substrings=[]` to opt out); this also fixes the templates and
+  `interactive_grasp_sequence_builder`, which never passed them. The TWIN fingers
+  are frozen fully open (0.04, clear of the ball by ≥ 15 mm; 0.025 was flush), and
+  the regrasp scenario is back to `max_attempts=3`.
+- The screw-assembly mission hung before its first block whenever nobody
+  opened the viewer (#29). `MissionViewer` passed `open=True` to pyhpp_viser,
+  which opens a browser and blocks until a client connects, which never happens
+  on a headless machine; the nightly mission job timed out every run. The viewer
+  now only serves the scene and prints its URL (`open_browser=True` restores the
+  old behaviour), and the nightly job runs with `--no-viewer`.
+- Broken links in the docs site: links from included root files (README,
+  ARCHITECTURE) and from `docs/` to files outside it now use absolute GitHub URLs;
+  archived legacy pages point at the pages' current locations.
 - The Robotiq fingers never closed on the drill in the screw-assembly viewer:
   planned paths keep them frozen open, and native playback showed exactly that
   (pads 24 mm off the handle). `MissionViewer(closures=...)` now closes them to the
@@ -33,6 +124,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `replay.py` used a fixed `finger_joint = 0.6` for every object, which put the
   pads 6.8 mm into the drill handle; it now uses the same closures (0.496 on the
   drill, 0.567 on a part's tab).
+
+### Deprecated
+
+- `CapabilityDescriptor(effects=("grasp_state",))`: bare state tags now belong
+  in the new `writes=` field. They are moved there automatically, with a
+  `DeprecationWarning`; `effects` declares literals.
 
 ## [0.1.0] - 2026-09-27
 
@@ -207,5 +304,6 @@ First public release, on PyPI as `long-tamp`.
   in ~18s as the *second* phase of a multi-grasp sequence but failed 6/6 draws when built as
   the *only* phase of a single-gripper session. Not root-caused.
 
-[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/thanhndv212/long-tamp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/thanhndv212/long-tamp/releases/tag/v0.1.0

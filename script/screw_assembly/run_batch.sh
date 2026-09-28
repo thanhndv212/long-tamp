@@ -16,7 +16,7 @@ cd "$HERE"
 mkdir -p "$OUT"
 seq 1 "$N" | xargs -P "$PAR" -I{} bash -c '
   s=$(printf %03d {})
-  PYTHONFAULTHANDLER=1 python3 -u task_screw_assembly.py --seed {} \
+  PYTHONFAULTHANDLER=1 python3 -u task_screw_assembly.py --seed {} --no-viewer \
     --summary "'"$OUT"'/seed_$s.json" > "'"$OUT"'/seed_$s.log" 2>&1
   echo "seed {} exit $?"
 '

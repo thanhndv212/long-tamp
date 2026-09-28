@@ -1221,7 +1221,7 @@ if planner.solve():
 4. **Critical differences:** Random sampling, constraint creation, graph building
 5. **Choose based on:** Performance needs, complexity, development time
 
-**For complete API reference, see:** [pyhpp_api_documentation.md](pyhpp_api_documentation.md)
+**For complete API reference, see:** [pyhpp_api_documentation.md](../../hpp_python_interface/pyhpp_api_documentation.md)
 
 ---
 

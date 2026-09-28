@@ -59,18 +59,18 @@ The primary entry points are:
 Files of interest (client side):
 
 - HPP core client wrappers:
-  - [hpp/src/hpp-corbaserver/src/hpp/corbaserver/client.py](hpp/src/hpp-corbaserver/src/hpp/corbaserver/client.py)
-  - [hpp/src/hpp-corbaserver/src/hpp/corbaserver/robot.py](hpp/src/hpp-corbaserver/src/hpp/corbaserver/robot.py)
-  - [hpp/src/hpp-corbaserver/src/hpp/corbaserver/problem_solver.py](hpp/src/hpp-corbaserver/src/hpp/corbaserver/problem_solver.py)
+  - hpp/src/hpp-corbaserver/src/hpp/corbaserver/client.py (`hpp/src/hpp-corbaserver/src/hpp/corbaserver/client.py` in an HPP source checkout)
+  - hpp/src/hpp-corbaserver/src/hpp/corbaserver/robot.py (`hpp/src/hpp-corbaserver/src/hpp/corbaserver/robot.py` in an HPP source checkout)
+  - hpp/src/hpp-corbaserver/src/hpp/corbaserver/problem_solver.py (`hpp/src/hpp-corbaserver/src/hpp/corbaserver/problem_solver.py` in an HPP source checkout)
 - HPP manipulation client wrappers:
-  - [hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/client.py](hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/client.py)
-  - [hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/robot.py](hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/robot.py)
-  - [hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/problem_solver.py](hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/problem_solver.py)
-  - [hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/constraint_graph.py](hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/constraint_graph.py)
-  - [hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/constraint_graph_factory.py](hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/constraint_graph_factory.py)
+  - hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/client.py (`hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/client.py` in an HPP source checkout)
+  - hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/robot.py (`hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/robot.py` in an HPP source checkout)
+  - hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/problem_solver.py (`hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/problem_solver.py` in an HPP source checkout)
+  - hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/constraint_graph.py (`hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/constraint_graph.py` in an HPP source checkout)
+  - hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/constraint_graph_factory.py (`hpp/src/hpp-manipulation-corba/src/hpp/corbaserver/manipulation/constraint_graph_factory.py` in an HPP source checkout)
 - Gepetto client wrappers:
-  - [hpp/src/gepetto-viewer-corba/src/gepetto/corbaserver/client.py](hpp/src/gepetto-viewer-corba/src/gepetto/corbaserver/client.py)
-  - [hpp/src/gepetto-viewer-corba/src/gepetto/corbaserver/tools.py](hpp/src/gepetto-viewer-corba/src/gepetto/corbaserver/tools.py)
+  - hpp/src/gepetto-viewer-corba/src/gepetto/corbaserver/client.py (`hpp/src/gepetto-viewer-corba/src/gepetto/corbaserver/client.py` in an HPP source checkout)
+  - hpp/src/gepetto-viewer-corba/src/gepetto/corbaserver/tools.py (`hpp/src/gepetto-viewer-corba/src/gepetto/corbaserver/tools.py` in an HPP source checkout)
 
 ### Connection model
 
@@ -1281,7 +1281,7 @@ gui.createWindow("window")
 
 ### 6.2 Drawing helpers
 
-The module [hpp/src/gepetto-viewer-corba/src/gepetto/corbaserver/tools.py](hpp/src/gepetto-viewer-corba/src/gepetto/corbaserver/tools.py) provides helpers like `Vector6`, `Linear`, `Angular`.
+The module hpp/src/gepetto-viewer-corba/src/gepetto/corbaserver/tools.py (`hpp/src/gepetto-viewer-corba/src/gepetto/corbaserver/tools.py` in an HPP source checkout) provides helpers like `Vector6`, `Linear`, `Angular`.
 
 ---
 
@@ -1292,7 +1292,7 @@ If you are migrating to PyHPP:
 - Replace string-based selection (`selectPathPlanner("BiRRTPlanner")`) by constructing bound objects and setting them on a `pyhpp.core.Problem` / `pyhpp.core.ProblemSolver`.
 - Replace string constraint names by Python-wrapped constraint objects (`Transformation`, `Implicit`, etc.) and direct method calls.
 
-See also: [hpp/src/long_tamp/doc/comparison_corba_vs_pyhpp.md](hpp/src/long_tamp/doc/comparison_corba_vs_pyhpp.md)
+See also: hpp/src/long_tamp/doc/comparison_corba_vs_pyhpp.md (`hpp/src/long_tamp/doc/comparison_corba_vs_pyhpp.md` in an HPP source checkout)
 
 ---
 

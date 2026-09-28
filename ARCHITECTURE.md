@@ -17,7 +17,7 @@ dependency of the planning logic.
 
 The package can be installed and used with plain `pip install -e .` and
 run as ordinary Python scripts (`python script/.../task_my_task.py`) — see
-[README.md](README.md) for installation. This document is about *how the
+[README.md](https://github.com/thanhndv212/long-tamp/blob/main/README.md) for installation. This document is about *how the
 code is put together*, not how to deploy it.
 
 ## Design goals

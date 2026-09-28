@@ -47,6 +47,14 @@ markdown_extensions:
   - pymdownx.tabbed:
       alternate_style: true
 
+# `mkdocs build --strict` (CI `docs` job) fails on these, so a page missing from
+# `nav` or a broken link is caught in the PR that introduces it.
+validation:
+  omitted_files: warn
+  absolute_links: info
+  unrecognized_links: info
+  anchors: info
+
 plugins:
   - search
   - include-markdown
@@ -64,7 +72,16 @@ nav:
       - Phase-target lookahead: features/phase-target-lookahead.md
       - Transit edge robustness: features/transit-edge-robustness.md
       - Logging verbosity: features/logging-verbosity.md
+  - Development:
+      - Workflow: development/workflow.md
+      - Validation (screw assembly): development/validation.md
+      - Architecture decisions:
+          - adr/README.md
+          - "0001 Planner / refiner / executor": adr/0001-planner-refiner-executor.md
+          - "0002 Effects as runtime guards": adr/0002-effects-as-runtime-guards.md
+          - "0003 Screw assembly reference track": adr/0003-screw-assembly-reference-track.md
   - Plans:
+      - Roadmap: plans/roadmap.md
       - "Roadmap: PyPI as the default install": plans/pypi-install-roadmap.md
       - "0.1.0 release draft": plans/release-0.1.0.md
   - Bugs (upstream HPP):

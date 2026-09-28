@@ -41,6 +41,46 @@ from typing import Any
 _TWIN_SCRIPT_DIR = Path(__file__).resolve().parent
 
 
+def _descriptors() -> dict[str, Any]:
+    """The TWIN capabilities' contracts: pure data, no HPP needed.
+
+    A gripper holds at most one handle and a handle is held by at most one
+    gripper; ``release`` empties the gripper; ``empty`` tests exactly that.
+    """
+    from long_tamp.tasks.task_planning.capabilities import CapabilityDescriptor
+
+    return {
+        "grasp": CapabilityDescriptor(
+            capability_id="grasp",
+            version="1.0",
+            required_parameters={"gripper": str, "handle": str},
+            preconditions=("not holds(?gripper, _)", "not holds(_, ?handle)"),
+            effects=("holds(?gripper, ?handle)",),
+            writes=("grasp_state",),
+            max_attempts=3,
+            max_timeout=300.0,
+            restartable=True,
+        ),
+        "release": CapabilityDescriptor(
+            capability_id="release",
+            version="1.0",
+            required_parameters={"gripper": str},
+            preconditions=("holds(?gripper, _)",),
+            effects=("not holds(?gripper, _)",),
+            writes=("grasp_state",),
+            max_attempts=3,
+            max_timeout=300.0,
+            restartable=True,
+        ),
+        "empty": CapabilityDescriptor(
+            capability_id="empty",
+            version="1.0",
+            required_parameters={"gripper": str},
+            preconditions=("not holds(?gripper, _)",),
+        ),
+    }
+
+
 def build_twin_session(options_json: str = "{}") -> Any:
     """Build a real ``HostSession`` driving TWIN's bimanual lift-ball scene.
 
@@ -56,11 +96,9 @@ def build_twin_session(options_json: str = "{}") -> Any:
     import task_lift_ball as twin  # local import: path-dependent, see above
 
     from long_tamp.tasks.grasp_sequence import GraspSequencePlanner
-    from long_tamp.tasks.task_planning.capabilities import (
-        CapabilityDescriptor,
-        CapabilityRegistry,
-    )
+    from long_tamp.tasks.task_planning.capabilities import CapabilityRegistry
     from long_tamp.tasks.task_planning.host import HostSession
+    from long_tamp.tasks.task_planning.world_state import GraspTrackerState
     from long_tamp.tasks.task_planning.model import TaskPlan
 
     task = twin.LiftBallTask(backend="pyhpp")
@@ -102,35 +140,19 @@ def build_twin_session(options_json: str = "{}") -> Any:
         state["q_current"] = result["final_config"]
         return {"gripper": parameters["gripper"]}
 
+    descriptors = _descriptors()
     registry = CapabilityRegistry()
-    registry.register(
-        CapabilityDescriptor(
-            capability_id="grasp",
-            version="1.0",
-            required_parameters={"gripper": str, "handle": str},
-            effects=("grasp_state",),
-            max_attempts=3,
-            max_timeout=300.0,
-            restartable=True,
-        ),
-        grasp_impl,
-    )
-    registry.register(
-        CapabilityDescriptor(
-            capability_id="release",
-            version="1.0",
-            required_parameters={"gripper": str},
-            effects=("grasp_state",),
-            max_attempts=3,
-            max_timeout=300.0,
-            restartable=True,
-        ),
-        release_impl,
-    )
+    registry.register(descriptors["grasp"], grasp_impl)
+    registry.register(descriptors["release"], release_impl)
 
     document = _build_plan_document(twin.GRASP_SEQUENCE)
     plan = TaskPlan.from_dict(document, registry)
-    return HostSession(plan, registry)
+    # The grasp tracker is the world state: TaskStepReady checks real
+    # preconditions, and a transaction whose effect already holds is skipped.
+    session = HostSession(plan, registry, world_state=GraspTrackerState(seq_planner))
+    # For scenario setups (scenarios.py): plan grasps before the mission runs.
+    session.seq_planner, session.state = seq_planner, state
+    return session
 
 
 def build_twin_regrasp_session(options_json: str = "{}") -> Any:
@@ -170,18 +192,14 @@ def build_twin_regrasp_session(options_json: str = "{}") -> Any:
     ``panda_left/gripper`` regrasping ``ball/handle`` (this function's
     actual choice) sidesteps both: its first grasp reliably reaches the
     target standalone (2/2 real runs, ~90-95s of RRT planning each). The
-    regrasp step (release, then grasp the same target again) does hit a
-    real snag of its own, though a *known* one: it lands on the exact
-    ``f_12`` pregrasp -> grasp waypoint collision already documented as
-    intermittently flaky in ``tests/test_grasp_release_use_case_twin.py``
-    (``panda_left/panda_*finger_*`` vs ``ball/base_link_0``) -- observed
-    100% of regrasp draws across two independent verification runs before
-    the ``grasp`` capability's ``max_attempts`` below was raised from 3 to
-    8 to give the BT-level ``RetryUntilSuccessful`` more real budget
-    against it (consistent with how the *first* grasp above also sometimes
-    needs several draws, just never zero for zero). This is a pre-existing
-    scene-asset clearance question, not a compiler/session bug -- see that
-    test's own docstring for why it's tracked but not fixed here.
+    regrasp step (release, then grasp the same target again) used to hit
+    the ``f_12`` pregrasp -> grasp collision (``panda_left/panda_*finger_*``
+    vs ``ball/base_link_0``) on most draws, and ran with ``max_attempts=8``
+    to compensate. Root cause (#28): phase graphs didn't keep the moving
+    arm's fingers frozen, so each target drew random finger widths, some
+    closing inside the ball. ``GraspSequencePlanner`` now inherits the
+    frozen patterns from ``task.setup()``, and the regrasp uses the
+    standard budget of 3.
 
     The plan IR expresses the forced cycle as a ``fallback``: an ``empty``
     *condition* checking whether the gripper currently holds nothing (false
@@ -198,11 +216,9 @@ def build_twin_regrasp_session(options_json: str = "{}") -> Any:
     import task_lift_ball as twin  # local import: path-dependent, see above
 
     from long_tamp.tasks.grasp_sequence import GraspSequencePlanner
-    from long_tamp.tasks.task_planning.capabilities import (
-        CapabilityDescriptor,
-        CapabilityRegistry,
-    )
+    from long_tamp.tasks.task_planning.capabilities import CapabilityRegistry
     from long_tamp.tasks.task_planning.host import HostSession
+    from long_tamp.tasks.task_planning.world_state import GraspTrackerState
     from long_tamp.tasks.task_planning.model import TaskPlan
 
     task = twin.LiftBallTask(backend="pyhpp")
@@ -249,48 +265,20 @@ def build_twin_regrasp_session(options_json: str = "{}") -> Any:
             seq_planner.grasp_tracker.current_grasps.get(parameters["gripper"]) is None
         )
 
+    descriptors = _descriptors()
     registry = CapabilityRegistry()
-    registry.register(
-        CapabilityDescriptor(
-            capability_id="grasp",
-            version="1.0",
-            required_parameters={"gripper": str, "handle": str},
-            effects=("grasp_state",),
-            # Higher than create_twin_session's grasp (3): this scenario's
-            # regrasp step deterministically re-lands on ball/handle's known
-            # flaky f_12 waypoint (see this function's docstring) -- more
-            # BT-level RetryUntilSuccessful budget compensates for real
-            # target-generation variance on that specific marginal edge.
-            max_attempts=8,
-            max_timeout=300.0,
-            restartable=True,
-        ),
-        grasp_impl,
-    )
-    registry.register(
-        CapabilityDescriptor(
-            capability_id="release",
-            version="1.0",
-            required_parameters={"gripper": str},
-            effects=("grasp_state",),
-            max_attempts=3,
-            max_timeout=300.0,
-            restartable=True,
-        ),
-        release_impl,
-    )
-    registry.register(
-        CapabilityDescriptor(
-            capability_id="empty",
-            version="1.0",
-            required_parameters={"gripper": str},
-        ),
-        empty_impl,
-    )
+    registry.register(descriptors["grasp"], grasp_impl)
+    registry.register(descriptors["release"], release_impl)
+    registry.register(descriptors["empty"], empty_impl)
 
     document = _build_regrasp_plan_document()
     plan = TaskPlan.from_dict(document, registry)
-    return HostSession(plan, registry)
+    # The grasp tracker is the world state: TaskStepReady checks real
+    # preconditions, and a transaction whose effect already holds is skipped.
+    session = HostSession(plan, registry, world_state=GraspTrackerState(seq_planner))
+    # For scenario setups (scenarios.py): plan grasps before the mission runs.
+    session.seq_planner, session.state = seq_planner, state
+    return session
 
 
 def _build_regrasp_plan_document() -> dict[str, Any]:
@@ -308,6 +296,9 @@ def _build_regrasp_plan_document() -> dict[str, Any]:
         "mission_id": "TwinRegrasp",
         "scene": {"id": "twin-lift-ball", "robots": ["panda_left"]},
         "provenance": {"kind": "human", "generator": "twin-bt-regrasp-adapter"},
+        # TWIN starts with both grippers free; TaskPlan.from_dict simulates
+        # the plan from here and rejects it if a precondition can fail.
+        "initial_state": [],
         "root": {
             "type": "sequence",
             "id": "root",
@@ -418,6 +409,7 @@ def _build_plan_document(grasp_sequence: list[tuple[str, str]]) -> dict[str, Any
         "mission_id": "TwinLiftBall",
         "scene": {"id": "twin-lift-ball", "robots": ["panda_left", "panda_right"]},
         "provenance": {"kind": "human", "generator": "twin-bt-adapter"},
+        "initial_state": [],
         "root": {
             "type": "sequence",
             "id": "root",

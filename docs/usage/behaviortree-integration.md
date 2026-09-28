@@ -94,6 +94,66 @@ and be unique across the whole tree.
   `constraints.max_attempts` / `max_timeout` are capped at the descriptor's own limits, never
   raised.
 
+### Preconditions and effects
+
+Capabilities declare what a step needs and what it achieves, as literals over its
+parameters (`long_tamp.tasks.task_planning.predicates`, see ADR-0002):
+
+```python
+CapabilityDescriptor(
+    "grasp", "1.0", {"gripper": str, "handle": str},
+    preconditions=("not holds(?gripper, _)", "not holds(_, ?handle)"),
+    effects=("holds(?gripper, ?handle)",),
+    writes=("grasp_state",),        # state tags the step touches (was `effects` before 0.2)
+    restartable=True,
+)
+```
+
+`?name` binds to the step parameter `name`, `_` matches anything, and `not` negates. A
+negative effect deletes every matching atom (`not holds(?gripper, _)` empties the
+gripper). For a capability used as a `condition`, the preconditions are what it tests.
+
+A plan may declare an optional **`initial_state`**: a list of ground atoms
+(`["holds(left, ball)"]`, closed world). When present, `TaskPlan.from_dict` simulates every
+branch of the plan from it (a failed step leaves the state unchanged; a `fallback` explores
+each child from the states where the previous ones failed) and rejects the plan if an
+operation can be reached with a precondition false, naming the step, the literal and the
+state. Without `initial_state`, only the syntax and parameter binding are checked.
+
+At run time, a session built with `world_state=` (a callable returning the current ground
+atoms) makes `TaskStepReady` evaluate the step's grounded preconditions against the world;
+the response lists any `unsatisfied` literals. Without it, `TaskStepReady` only checks that
+the step exists.
+
+The same session answers **"is this step done?"** from the world too (`TaskStepComplete`,
+`execute_step`): a transaction whose operation declares effects is complete exactly when
+all its grounded effects hold. A step whose effect already holds is skipped without
+running (`status: "skipped"`, `message: "effect already holds"`), so a mission started
+from a partly done state, or restarted, picks up where the world is. A step whose effect
+was undone after it ran (a part slipped out) runs again. Steps without declared effects,
+and sessions without `world_state=`, fall back to the in-memory record of steps completed
+in this run. `is_step_complete` reports the `reason` (`effect_holds`,
+`effect_not_holding`, `completed_this_run`, `not_completed`).
+
+The world state comes from two kinds of sources (`task_planning/world_state.py`), and
+nothing else may feed it:
+
+- **observed** predicates, read live from the world model: `GraspTrackerState(planner)`
+  reports `holds(gripper, handle)` from the planner's grasp tracker (pass the planner, not
+  the tracker: the planner replaces its tracker object on resume/reset);
+- **recorded** facts, which no sensor shows once a step is over (a screw driven in):
+  `RecordedFacts(path, predicates={"screwed"})` holds them, persisted atomically to `path`.
+  A session built with `recorded=` writes a step's grounded effects on those predicates
+  **only when the step completes**; failed steps and plan validation never write.
+
+```python
+recorded = RecordedFacts(run_dir / "facts.json", predicates={"screwed", "racked"})
+world = CompositeWorldState(GraspTrackerState(planner), recorded)
+session = TaskPlanningSession(plan, registry, world_state=world, recorded=recorded)
+```
+
+Planner bookkeeping (a plan computed, an attempt count) is never a predicate.
+
 `TaskPlan.from_dict(document, registry)` normalizes (NFC, sorted keys, finite numbers only),
 validates, and returns a frozen `TaskPlan` whose `.document` property is a **defensive deep
 copy** — callers can't mutate the validated IR in place. `plan_fingerprint` hashes the
@@ -107,7 +167,7 @@ maps IR nodes deterministically:
 
 | IR node | Compiled BT shape |
 |---|---|
-| `transaction` | `Fallback[ TaskStepComplete, Sequence[ TaskStepReady, RetryUntilSuccessful(num_attempts=effective)[ ExecuteTaskStep ] ] ]` — already-complete short-circuits, not-ready fails without consuming a retry |
+| `transaction` | `Fallback[ TaskStepComplete, Sequence[ TaskStepReady, RetryUntilSuccessful(num_attempts=effective)[ ExecuteTaskStep ] ] ]` — already-complete (effect holds in the world, see §3) short-circuits, not-ready fails without consuming a retry |
 | `retry` | `RetryUntilSuccessful(num_attempts=effective)` wrapping the compiled child |
 | `operation` | `ExecuteTaskStep` |
 | `condition` | `TaskCapabilityCondition` |
@@ -117,6 +177,32 @@ Every compiled node keeps a `source_map` entry back to its IR path. The resultin
 `CompiledBehaviorTree.artifact_fingerprint` is a SHA-256 over `{plan_fingerprint,
 compiler_version, xml, source_map}` — the C++ side and any stored checkpoint can both assert
 they're looking at the exact plan+compiler combination that produced a given run.
+
+### Plan diagrams
+
+`long_tamp.tasks.task_planning.visualize` renders a validated plan as Mermaid
+(`to_mermaid(plan)`) or Graphviz (`to_dot(plan)`), to review a plan (a generated one
+especially) before running it. Sequences are `→`, fallbacks `?` hexagons whose alternatives
+are dashed `else` edges, conditions diamonds, and transactions show their capability call
+and attempt budget; pass `registry=` to also show each step's grounded effects (`⇒`). The
+TWIN regrasp plan (`script/twin/twin_bt_session.py`):
+
+```mermaid
+flowchart TD
+    root["→ TWIN regrasp"]
+    grasp_handle1["Grasp ball/handle with panda_left/gripper<br/>grasp(panda_left/gripper, ball/handle) ×3<br/>⇒ holds(panda_left/gripper, ball/handle)"]
+    already_cycled{{"? Already released and regrasped ball/handle"}}
+    gripper_empty{"panda_left/gripper currently holds nothing?"}
+    release_then_regrasp["→ Release ball/handle, regrasp ball/handle"]
+    release_gripper["Release panda_left/gripper<br/>release(panda_left/gripper) ×3<br/>⇒ not holds(panda_left/gripper, _)"]
+    grasp_handle1_again["Regrasp ball/handle with panda_left/gripper<br/>grasp(panda_left/gripper, ball/handle) ×3<br/>⇒ holds(panda_left/gripper, ball/handle)"]
+    root --> grasp_handle1
+    root --> already_cycled
+    already_cycled --> gripper_empty
+    already_cycled -.->|else| release_then_regrasp
+    release_then_regrasp --> release_gripper
+    release_then_regrasp --> grasp_handle1_again
+```
 
 ## 5. C++ host and the CPython bridge
 
@@ -220,9 +306,10 @@ without touching HPP at all.
 
 ## 9. Adding a capability or a new mission
 
-1. Write a `CapabilityDescriptor` (id, version, `required_parameters`, `effects`,
-   `max_attempts`, `max_timeout`, and `restartable=True` if it will back a `transaction`) and
-   a plain callable `dict -> dict` implementation.
+1. Write a `CapabilityDescriptor` (id, version, `required_parameters`, `preconditions`,
+   `effects`, `writes`, `max_attempts`, `max_timeout`, and `restartable=True` if it will back
+   a `transaction`; see §3 "Preconditions and effects") and a plain callable `dict -> dict`
+   implementation.
 2. `registry.register(descriptor, implementation)` into a fresh `CapabilityRegistry` — do
    this before constructing any `TaskPlanningSession`/`HostSession`; the registry freezes
    (`RuntimeError` on further `register`/`bind`) the moment a session is constructed.
@@ -294,8 +381,8 @@ bimanual scene, both grasps completed. Nothing below is broken — this is the g
   future model-proposed) plan; nothing in this repo *searches* for one. Real TAMP
   integration needs a predicate/effects layer a symbolic planner reads and writes, plus
   "stream" functions bridging PDDLStream-style continuous sampling requests to
-  `ConfigGenerator`/`grasp()`. `CapabilityDescriptor.effects` is still just documentation —
-  unused by anything beyond `snapshot()`'s JSON output.
+  `ConfigGenerator`/`grasp()`. The predicate layer exists since 0.2 (§3: preconditions,
+  effects, plan-time simulation); the symbolic search on top of it is roadmap M3.
 
 **Not done by design — the risk/reward didn't justify it yet:**
 

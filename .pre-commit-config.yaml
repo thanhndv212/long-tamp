@@ -1,0 +1,24 @@
+# Mirrors the enforcing `lint` job in .github/workflows/lint.yml.
+#   pip install pre-commit && pre-commit install
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--select, F]
+        files: ^src/
+  - repo: https://github.com/psf/black
+    rev: 24.8.0
+    hooks:
+      - id: black
+        files: ^src/
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml
+        args: [--unsafe]
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+        files: ^src/
+      - id: trailing-whitespace
+        files: ^src/

@@ -2,7 +2,7 @@
 
 How the `long_tamp` HPP planning library is wired into the ROS 2 workspace
 (`ros2_ws_agimusxads`) and driven by the DBT executive to run full assembly missions. For the
-plain-Python library API, see [`standalone-usage.md`](standalone-usage.md) — everything here
+plain-Python library API, see [`standalone-usage.md`](../../usage/standalone-usage.md) — everything here
 sits on top of it.
 
 ## 1. The big picture
@@ -77,7 +77,7 @@ constructs `PlannerTask` (a `ManipulationTask` subclass) with `backend=self._bac
 `PlanningEngine.run_plan_sequence()` constructs a `GraspSequencePlanner` and calls
 `plan_sequence(grasp_sequence=list(zip(grippers, handles)), q_init=..., frozen_arms_mode=...,
 timeout_per_edge=...)` — this is exactly the standalone API from
-[`standalone-usage.md` §6](standalone-usage.md#6-multi-phase-grasp-sequences-graspsequenceplanner).
+[`standalone-usage.md` §6](../../usage/standalone-usage.md#6-multi-phase-grasp-sequences-graspsequenceplanner).
 Result `Path` objects are converted to `JointTrajectory` via
 `trajectory_utils.hpp_path_to_joint_trajectories()`.
 
@@ -208,7 +208,7 @@ reference for "plan one grasp and execute it" without the DBT layer.
 ## 9. Which HPP-library features are exposed through ROS/DBT — and which aren't
 
 This matters because several `long_tamp` features described in
-[`standalone-usage.md`](standalone-usage.md) are **not** reachable from ROS at all:
+[`standalone-usage.md`](../../usage/standalone-usage.md) are **not** reachable from ROS at all:
 
 | Feature | Exposed via ROS? |
 |---|---|

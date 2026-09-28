@@ -21,12 +21,10 @@ into, against a real PyHPP scene, without needing a C++ build. One piece
 of that surface it does have to reproduce by hand: a compiled
 ``transaction`` wraps its ``ExecuteTaskStep`` in
 ``RetryUntilSuccessful(num_attempts=<capability's max_attempts>)`` (see
-``compiler.py``'s §4 mapping) -- ``grasp`` is registered with
-``max_attempts=8`` in this scenario specifically (see
-``build_twin_regrasp_session()``'s docstring for why), ``release`` with
-the usual 3 -- so a single unlucky target-generation draw is expected to
-fail sometimes and get retried by the tree, not treated as a test
-failure -- see ``_execute_step_retrying()`` below.
+``compiler.py``'s §4 mapping) -- ``grasp`` and ``release`` are registered
+with ``max_attempts=3`` -- so a single unlucky target-generation draw is
+expected to fail sometimes and get retried by the tree, not treated as a
+test failure -- see ``_execute_step_retrying()`` below.
 
 Requires the real PyHPP backend, same as ``test_grasp_release_use_case_twin.py``
 -- skips cleanly otherwise.
@@ -83,7 +81,7 @@ class TestTwinRegraspBtSession:
         setup = json.loads(session.setup())
         assert setup["status"] == "success"
 
-        grasp1 = _execute_step_retrying(session, "grasp-handle1", attempts=8)
+        grasp1 = _execute_step_retrying(session, "grasp-handle1", attempts=3)
         assert grasp1["status"] == "success", grasp1.get("message")
 
         not_empty = json.loads(session.evaluate_condition("gripper-empty"))
@@ -102,7 +100,7 @@ class TestTwinRegraspBtSession:
             "returned success without effect"
         )
 
-        grasp2 = _execute_step_retrying(session, "grasp-handle1-again", attempts=8)
+        grasp2 = _execute_step_retrying(session, "grasp-handle1-again", attempts=3)
         assert grasp2["status"] == "success", grasp2.get("message")
 
         after = json.loads(session.evaluate_condition("gripper-empty"))

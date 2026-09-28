@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Callable, Iterable
 from typing import Any
 
 from .capabilities import CapabilityRegistry
-from .model import TaskPlan
+from .model import TaskPlan, grounded_literals
+from .predicates import holds, parse_state
+from .world_state import RecordedFacts
+
+#: Returns the current world as ground atoms (``"holds(left, ball)"`` strings or
+#: ``Atom``s): observed predicates and recorded facts, never planner bookkeeping.
+WorldState = Callable[[], Iterable[Any]]
 
 
 def _response(**values: Any) -> str:
@@ -15,12 +22,27 @@ def _response(**values: Any) -> str:
 
 
 class TaskPlanningSession:
-    """Dispatch validated operation nodes through a trusted registry."""
+    """Dispatch validated operation nodes through a trusted registry.
 
-    def __init__(self, plan: TaskPlan, registry: CapabilityRegistry) -> None:
+    With ``world_state``, ``check_precondition`` evaluates a step's grounded
+    preconditions against the world; without it, it only checks that the step
+    exists (the pre-0.2 behaviour). With ``recorded`` (a ``RecordedFacts``),
+    a step that completes writes its grounded effects on the recorded
+    predicates there; failed steps and plan validation never do.
+    """
+
+    def __init__(
+        self,
+        plan: TaskPlan,
+        registry: CapabilityRegistry,
+        world_state: WorldState | None = None,
+        recorded: RecordedFacts | None = None,
+    ) -> None:
         registry.freeze()
         self.plan = plan
         self.registry = registry
+        self.world_state = world_state
+        self.recorded = recorded
         self._nodes = self._index_nodes(plan.document["root"])
         self._completed: set[str] = set()
         self._stop_requested = threading.Event()
@@ -47,11 +69,62 @@ class TaskPlanningSession:
         return self.plan.canonical_json
 
     def check_precondition(self, step_id: str) -> str:
-        exists = step_id in self._nodes
-        return _response(status="success" if exists else "failure", ready=exists)
+        node = self._nodes.get(step_id)
+        if node is None or self.world_state is None:
+            exists = node is not None
+            return _response(status="success" if exists else "failure", ready=exists)
+        if node["type"] == "transaction":
+            node = node["children"][0]
+        if node["type"] not in {"operation", "condition"}:
+            return _response(status="success", ready=True, unsatisfied=[])
+        descriptor = self.registry.descriptor(node["capability"])
+        preconditions, _ = grounded_literals(node, descriptor)
+        try:
+            state = parse_state(self.world_state())
+        except Exception as error:  # noqa: BLE001 - world-state provider boundary
+            return _response(status="failure", ready=False, message=str(error))
+        unsatisfied = [str(p) for p in preconditions if not holds(p, state)]
+        ready = not unsatisfied
+        return _response(
+            status="success" if ready else "failure",
+            ready=ready,
+            unsatisfied=unsatisfied,
+        )
+
+    def _completion(self, step_id: str) -> tuple[bool, str]:
+        """Whether ``step_id`` is done, and why (ADR-0002).
+
+        With a world state and declared effects, a step is done exactly when
+        all its grounded effects hold in the world, whatever happened earlier
+        in this run: an undone effect makes it run again. Otherwise the
+        in-memory record of steps completed in this run decides. Raises if
+        the world state can't be read.
+        """
+        node = self._nodes.get(step_id)
+        if node is not None and node["type"] == "transaction":
+            node = node["children"][0]
+        if (
+            self.world_state is not None
+            and node is not None
+            and node["type"] == "operation"
+        ):
+            descriptor = self.registry.descriptor(node["capability"])
+            _, effects = grounded_literals(node, descriptor)
+            if effects:
+                state = parse_state(self.world_state())
+                if all(holds(effect, state) for effect in effects):
+                    return True, "effect_holds"
+                return False, "effect_not_holding"
+        if step_id in self._completed:
+            return True, "completed_this_run"
+        return False, "not_completed"
 
     def is_step_complete(self, step_id: str) -> str:
-        return _response(status="success", complete=step_id in self._completed)
+        try:
+            complete, reason = self._completion(step_id)
+        except Exception as error:  # noqa: BLE001 - world-state provider boundary
+            return _response(status="failure", complete=False, message=str(error))
+        return _response(status="success", complete=complete, reason=reason)
 
     def evaluate_condition(self, step_id: str) -> str:
         node = self._nodes.get(step_id)
@@ -94,10 +167,21 @@ class TaskPlanningSession:
         whose single child capability is not registered as
         ``restartable=True`` (see ``model.py``).
         """
-        if step_id in self._completed:
+        try:
+            complete, reason = self._completion(step_id)
+        except Exception as error:  # noqa: BLE001 - world-state provider boundary
             return _response(
-                status="skipped", step_id=step_id, message="already complete"
+                status="failure",
+                step_id=step_id,
+                message=f"world state unavailable: {error}",
             )
+        if complete:
+            message = (
+                "effect already holds"
+                if reason == "effect_holds"
+                else "already complete"
+            )
+            return _response(status="skipped", step_id=step_id, message=message)
         if self._stop_requested.is_set():
             return _response(
                 status="cancelled", step_id=step_id, message="stop requested"
@@ -126,6 +210,10 @@ class TaskPlanningSession:
             metrics = implementation(dict(executable.get("parameters", {})))
         except Exception as error:  # noqa: BLE001 - capability boundary
             return _response(status="retry", step_id=step_id, message=str(error))
+        if self.recorded is not None:
+            descriptor = self.registry.descriptor(executable["capability"])
+            _, effects = grounded_literals(executable, descriptor)
+            self.recorded.apply(effects)
         self._completed.add(step_id)
         return _response(
             status="success",
