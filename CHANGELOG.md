@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- PDDL export (#13), `long_tamp.tasks.task_planning.pddl`: `to_pddl(descriptors,
+  init, goal)` writes a domain (one action per capability with effects; wildcards
+  as `exists`/`forall`) and a problem any classical planner reads, with a
+  reversible renaming of names like `ur10_left/gripper`; `static_preconditions`
+  bound parameters with export-only facts. `from_pddl_plan` maps a plan back to
+  capability calls. `screw_domain.pddl_problem(n)` exports the screw-assembly
+  mission; Fast Downward (through Unified Planning, new `planning` extra) plans
+  it for 1, 2 and 4 parts and from partly done states, and every plan is checked
+  step by step against long_tamp's own semantics.
+
 ### Changed
 
 - CI: TWIN is no longer checked in CI. Its handover location is random and
