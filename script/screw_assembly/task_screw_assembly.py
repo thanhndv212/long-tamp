@@ -50,14 +50,29 @@ from long_tamp.tasks.block_recovery import (  # noqa: E402
 )
 from long_tamp.tasks.grasp_sequence import GraspSequencePlanner  # noqa: E402
 from long_tamp.tasks.mission_checkpoint import MissionCheckpoint  # noqa: E402
+from long_tamp.tasks.task_planning import (  # noqa: E402
+    CapabilityRegistry,
+    CompositeWorldState,
+    GraspTrackerState,
+    RecordedFacts,
+    TaskPlan,
+    TaskPlanningSession,
+)
+from long_tamp.tasks.task_planning.predicates import holds  # noqa: E402
+from screw_domain import (  # noqa: E402
+    LEFT,
+    RECORDED_PREDICATES,
+    RIGHT,
+    blocks_by_label,
+    build_plan_document,
+    descriptors,
+)
 
 # Planning keeps the fingers frozen open (a grasp is a rigid TCP constraint);
 # how far they close on each handle comes from the grasp planner, see
 # finger_closures().
 FREEZE_JOINT_SUBSTRINGS = ["finger_joint", "knuckle_joint"]
 
-LEFT, RIGHT = "ur10_left", "ur10_right"
-DRIVER_TIP = "driver/tip"
 ARM_JOINTS = (
     "shoulder_pan_joint",
     "shoulder_lift_joint",
@@ -66,70 +81,6 @@ ARM_JOINTS = (
     "wrist_2_joint",
     "wrist_3_joint",
 )
-
-# Home retreat for the driver arm (the same idea as agimus_spacelab's
-# home-retreat policy): parked where it stopped, ur10_right boxed in
-# ur10_left twice per part -- live, the lookahead's clamp targets kept
-# failing to path-plan (hint chain broken, 15 times) and the driver's path
-# to hole 1 failed 45 resumes on "ur10_left/wrist_1 vs ur10_right's
-# gripper". So it retreats, still holding the driver, after the pickup
-# and after each part's screws.
-HOME_MOVE = {"move": (RIGHT, "driver")}
-
-
-def build_mission(n_parts: int) -> list[dict[str, Any]]:
-    """The mission as a list of blocks, each a dict the runner consumes."""
-    blocks: list[dict[str, Any]] = [
-        {
-            "label": "bootstrap: pick driver",
-            "seq": [(f"{RIGHT}/gripper", "driver/h_grip")],
-            "frozen": {0: [LEFT]},
-        },
-        {"label": "ur10_right home (bootstrap)", **HOME_MOVE},
-    ]
-    for i in range(1, n_parts + 1):
-        p = f"part{i}"
-        blocks += [
-            {
-                "label": f"{p} A0: grasp",
-                "seq": [(f"{LEFT}/gripper", f"{p}/h_grasp")],
-                "frozen": {0: [RIGHT]},
-            },
-            {
-                "label": f"{p} A: clamp + screw",
-                "seq": [
-                    (f"fixtures/clamp{i}", f"{p}/h_seat"),
-                    (DRIVER_TIP, f"{p}/h_hole1"),
-                    (DRIVER_TIP, None),
-                    (DRIVER_TIP, f"{p}/h_hole2"),
-                    (DRIVER_TIP, None),
-                ],
-                # Phase 0 moves ur10_left (it carries the part into the
-                # clamp); the screw phases move ur10_right (driver).
-                "frozen": {0: [RIGHT], 1: [LEFT], 2: [LEFT], 3: [LEFT], 4: [LEFT]},
-                # Clamp candidate must leave hole 1 (phase 1) AND hole 2
-                # (phase 3) reachable: the clamp pose fixes ur10_left
-                # around the part for both.
-                "lookahead": {"pair": (0, 1), "also": (3,)},
-            },
-            {"label": f"ur10_right home ({p})", **HOME_MOVE},
-            {
-                "label": f"{p} B: release",
-                "seq": [(f"{LEFT}/gripper", None)],
-                "frozen": {0: [RIGHT]},
-            },
-        ]
-    blocks.append(
-        {
-            "label": "return: rack driver",
-            "seq": [
-                ("fixtures/rack_hold", "driver/h_rack"),
-                (f"{RIGHT}/gripper", None),
-            ],
-            "frozen": {0: [LEFT], 1: [LEFT]},
-        }
-    )
-    return blocks
 
 
 class ScrewAssemblyTask(ManipulationTask):
@@ -335,76 +286,32 @@ def run_home_move(
     }
 
 
-def run_mission(
+def run_block(
     task: ScrewAssemblyTask,
     planner: GraspSequencePlanner,
-    n_parts: int,
+    ctx: dict[str, Any],
+    index: int,
+    block: dict[str, Any],
     max_replans: int = 10,
     verbose: bool = True,
-    trajectory: list[dict[str, Any]] | None = None,
-    checkpoint: MissionCheckpoint | None = None,
-    start_block: int = 0,
-    q_start: list[float] | None = None,
-    live_viewer=None,
 ) -> dict[str, Any]:
-    """Run the mission block by block from ``start_block`` (at ``q_start``).
+    """Plan one block from ``ctx["q"]``, then log and record it.
 
-    If ``trajectory`` is a list, each successful block's motion is sampled
-    into it (see sample_phases). If ``checkpoint`` is given, every block is
-    logged to it and each success advances its resume point.
+    ``ctx`` carries the mission's running state: ``q`` (updated only on
+    success), ``records`` (one per block), ``trajectory``, ``checkpoint``,
+    ``live_viewer`` and ``n_parts``.
     """
-    q = list(q_start if q_start is not None else task.q_init)
-    records = []
-    t_mission = time.time()
-
-    def save_trajectory() -> None:
-        # After every block, like the run log, so a killed run keeps its
-        # motion and a resume can append to it.
-        if checkpoint is not None and trajectory is not None:
-            write_trajectory(checkpoint.dir / "trajectory.json", trajectory, n_parts)
-
-    for index, block in enumerate(build_mission(n_parts)):
-        if index < start_block:
-            continue
-        if checkpoint is not None:
-            checkpoint.phase_dump_dir(index, block["label"])
-        if "move" in block:
-            t0 = time.time()
-            print(f"\n=== {block['label']} ===", flush=True)
-            r = run_home_move(task, planner, q, *block["move"], verbose=verbose)
-            records.append(
-                {
-                    "label": block["label"],
-                    "success": r["success"],
-                    "replans": 0,
-                    "resumes": r["resumes"],
-                    "seconds": round(time.time() - t0, 2),
-                    "message": r["message"],
-                }
-            )
-            print(
-                f"--- {block['label']}: {'ok' if r['success'] else 'FAILED'} "
-                f"({records[-1]['seconds']}s, {r['resumes']} retries) {r['message']}",
-                flush=True,
-            )
-            if checkpoint is not None:
-                checkpoint.record(
-                    index,
-                    block["label"],
-                    r,
-                    records[-1]["seconds"],
-                    r["final_config"],
-                    planner.grasp_tracker.current_grasps,
-                )
-            if not r["success"]:
-                break
-            if trajectory is not None:
-                trajectory += sample_phases(task, r["phase_results"], block["label"])
-                save_trajectory()
-            if live_viewer is not None:
-                live_viewer.completed(r["phase_results"])
-            q = r["final_config"]
-            continue
+    q = ctx["q"]
+    checkpoint, trajectory = ctx["checkpoint"], ctx["trajectory"]
+    live_viewer = ctx["live_viewer"]
+    if checkpoint is not None:
+        checkpoint.phase_dump_dir(index, block["label"])
+    t0 = time.time()
+    print(f"\n=== {block['label']} ===", flush=True)
+    if "move" in block:
+        r = run_home_move(task, planner, q, *block["move"], verbose=verbose)
+        phase_results = r.get("phase_results", [])
+    else:
         hints_factory = None
         if "lookahead" in block:
             hints_factory = make_lookahead_hints_factory(
@@ -421,8 +328,6 @@ def run_mission(
                 verify_paths=True,
                 verbose=verbose,
             )
-        t0 = time.time()
-        print(f"\n=== {block['label']} ===", flush=True)
         r = run_block_with_recovery(
             planner,
             block["seq"],
@@ -434,45 +339,180 @@ def run_mission(
             max_replans=max_replans,
             verbose=verbose,
         )
-        records.append(
-            {
-                "label": block["label"],
-                "success": r["success"],
-                "replans": r["replans"],
-                "resumes": r["resumes"],
-                "seconds": round(time.time() - t0, 2),
-                "message": r["message"],
-            }
+        phase_results = planner.phase_results
+    record = {
+        "label": block["label"],
+        "success": r["success"],
+        "replans": r["replans"],
+        "resumes": r["resumes"],
+        "seconds": round(time.time() - t0, 2),
+        "message": r["message"],
+    }
+    ctx["records"].append(record)
+    if "move" in block:
+        detail = f"{r['resumes']} retries) {r['message']}"
+    else:
+        detail = f"{r['resumes']} resumes, {r['replans']} replans)"
+    print(
+        f"--- {block['label']}: {'ok' if r['success'] else 'FAILED'} "
+        f"({record['seconds']}s, {detail}",
+        flush=True,
+    )
+    if checkpoint is not None:
+        checkpoint.record(
+            index,
+            block["label"],
+            r,
+            record["seconds"],
+            r["final_config"],
+            planner.grasp_tracker.current_grasps,
         )
-        print(
-            f"--- {block['label']}: {'ok' if r['success'] else 'FAILED'} "
-            f"({records[-1]['seconds']}s, {r['resumes']} resumes, "
-            f"{r['replans']} replans)",
-            flush=True,
-        )
-        if checkpoint is not None:
-            checkpoint.record(
-                index,
-                block["label"],
-                r,
-                records[-1]["seconds"],
-                r["final_config"],
-                planner.grasp_tracker.current_grasps,
-            )
-        if not r["success"]:
-            break
+    if r["success"]:
         if trajectory is not None:
-            trajectory += sample_phases(task, planner.phase_results, block["label"])
-            save_trajectory()
+            trajectory += sample_phases(task, phase_results, block["label"])
+            # After every block, like the run log, so a killed run keeps its
+            # motion and a resume can append to it.
+            if checkpoint is not None:
+                write_trajectory(
+                    checkpoint.dir / "trajectory.json", trajectory, ctx["n_parts"]
+                )
         if live_viewer is not None:
-            live_viewer.completed(planner.phase_results)
-        q = r["final_config"]
+            live_viewer.completed(phase_results)
+        ctx["q"] = r["final_config"]
+    return r
+
+
+def mission_session(
+    task: ScrewAssemblyTask,
+    planner: GraspSequencePlanner,
+    ctx: dict[str, Any],
+    recorded: RecordedFacts,
+    max_replans: int = 10,
+    verbose: bool = True,
+) -> TaskPlanningSession:
+    """The mission's TaskPlan, bound to this scene (one capability per block kind).
+
+    Every capability runs its block through ``run_block``; a failed block
+    raises, leaving ``ctx["q"]`` unchanged (the transaction contract). The
+    world state is the grasp tracker plus the recorded facts, so a step whose
+    effect already holds (after a resume, or from a scenario start) is
+    skipped.
+    """
+    n_parts = ctx["n_parts"]
+    blocks = blocks_by_label(n_parts)
+    index = {label: i for i, label in enumerate(blocks)}
+
+    def run(parameters: dict[str, Any]) -> dict[str, Any]:
+        label = parameters["block"]
+        r = run_block(
+            task,
+            planner,
+            ctx,
+            index[label],
+            blocks[label],
+            max_replans=max_replans,
+            verbose=verbose,
+        )
+        if not r["success"]:
+            raise RuntimeError(f"{label}: {r['message']}")
+        return {"replans": r["replans"], "resumes": r["resumes"]}
+
+    world = CompositeWorldState(GraspTrackerState(planner), recorded)
+
+    def check(descriptor):
+        """A guard condition: true when its literals hold in the world."""
+
+        def evaluate(parameters: dict[str, Any]) -> bool:
+            state = world()
+            return all(
+                holds(literal.ground(parameters), state)
+                for literal in descriptor.precondition_literals
+            )
+
+        return evaluate
+
+    registry = CapabilityRegistry()
+    for name, descriptor in descriptors(n_parts).items():
+        is_guard = name in ("part_done", "all_parts_done")
+        registry.register(descriptor, check(descriptor) if is_guard else run)
+    plan = TaskPlan.from_dict(build_plan_document(n_parts), registry)
+    return TaskPlanningSession(plan, registry, world_state=world, recorded=recorded)
+
+
+def run_node(session: TaskPlanningSession, node: dict[str, Any], skipped: list) -> bool:
+    """Run a plan node the way its compiled BehaviorTree runs it.
+
+    sequence: every child in order; fallback: children until one succeeds;
+    condition: its capability's verdict; transaction: complete (effect holds
+    in the world) -> skip, not ready (preconditions) -> fail, else execute.
+    """
+    kind, label = node["type"], node.get("label", node["id"])
+    if kind == "sequence":
+        return all(run_node(session, child, skipped) for child in node["children"])
+    if kind == "fallback":
+        return any(run_node(session, child, skipped) for child in node["children"])
+    if kind == "condition":
+        value = json.loads(session.evaluate_condition(node["id"])).get("value", False)
+        if value:
+            skipped.append(label)
+            print(f"\n=== {label}: yes, skipping what it guards")
+        return bool(value)
+    done = json.loads(session.is_step_complete(node["id"]))
+    if done.get("complete"):
+        skipped.append(label)
+        print(f"\n=== {label} === skipped ({done['reason']})")
+        return True
+    ready = json.loads(session.check_precondition(node["id"]))
+    if not ready.get("ready"):
+        print(
+            f"\n=== {label} === not ready: "
+            f"{ready.get('unsatisfied') or ready.get('message')}"
+        )
+        return False
+    result = json.loads(session.execute_step(node["id"]))
+    return result["status"] == "success"
+
+
+def run_mission(
+    task: ScrewAssemblyTask,
+    planner: GraspSequencePlanner,
+    n_parts: int,
+    max_replans: int = 10,
+    verbose: bool = True,
+    trajectory: list[dict[str, Any]] | None = None,
+    checkpoint: MissionCheckpoint | None = None,
+    q_start: list[float] | None = None,
+    live_viewer=None,
+    recorded: RecordedFacts | None = None,
+) -> dict[str, Any]:
+    """Run the mission's TaskPlan from ``q_start`` (default: the scene start).
+
+    Steps run in plan order through a TaskPlanningSession; a step whose
+    effect already holds in the world (grasp tracker + ``recorded`` facts) is
+    skipped, which is how ``--resume`` continues a run. If ``trajectory`` is a
+    list, each completed block's motion is sampled into it; if ``checkpoint``
+    is given, every block is logged to it.
+    """
+    if recorded is None:
+        recorded = RecordedFacts(None, predicates=RECORDED_PREDICATES)
+    ctx: dict[str, Any] = {
+        "q": list(q_start if q_start is not None else task.q_init),
+        "records": [],
+        "trajectory": trajectory,
+        "checkpoint": checkpoint,
+        "live_viewer": live_viewer,
+        "n_parts": n_parts,
+    }
+    session = mission_session(task, planner, ctx, recorded, max_replans, verbose)
+    t_mission = time.time()
+    skipped: list[str] = []
+    success = run_node(session, session.plan.document["root"], skipped)
     return {
-        "success": all(b["success"] for b in records)
-        and len(records) == len(build_mission(n_parts)) - start_block,
+        "success": success,
         "seconds": round(time.time() - t_mission, 2),
-        "blocks": records,
-        "final_config": q,
+        "blocks": ctx["records"],
+        "skipped": skipped,
+        "final_config": ctx["q"],
     }
 
 
@@ -505,7 +545,8 @@ def main() -> int:
     ap.add_argument(
         "--resume",
         action="store_true",
-        help="continue the run in --run-dir from its last completed block",
+        help="continue the run in --run-dir: restore its configuration, grasps and "
+        "recorded facts, then run the plan; steps whose effects hold are skipped",
     )
     ap.add_argument(
         "--check",
@@ -535,17 +576,21 @@ def main() -> int:
     )
     traj_path = run_dir / "trajectory.json"
     trajectory: list[dict[str, Any]] = []
-    start_block, q_start = 0, None
+    q_start = None
+    # Recorded facts (screws driven) live in the run folder, next to the
+    # checkpoint, so a resumed run knows what earlier attempts achieved.
+    recorded = RecordedFacts(run_dir / "facts.json", predicates=RECORDED_PREDICATES)
     if args.resume:
         point = checkpoint.load()
         if point is not None:
-            labels = [b["label"] for b in build_mission(n_parts)]
-            MissionCheckpoint.expect_label(point, labels)
             MissionCheckpoint.restore_grasps(planner.grasp_tracker, point["held"])
-            start_block, q_start = point["next_block"], point["q"]
+            q_start = point["q"]
             if traj_path.exists():
                 trajectory = json.loads(traj_path.read_text())["segments"]
-            print(f"resuming at block {start_block} ({labels[start_block]!r})")
+            print(
+                f"resuming from the world state after {point['last_label']!r}: "
+                "steps whose effects hold will be skipped"
+            )
     print(f"run folder: {run_dir}")
 
     import atexit
@@ -576,9 +621,9 @@ def main() -> int:
             max_replans=args.max_replans,
             trajectory=trajectory,
             checkpoint=checkpoint,
-            start_block=start_block,
             q_start=q_start,
             live_viewer=live_viewer,
+            recorded=recorded,
         )
     except BaseException:
         if live_viewer is not None:

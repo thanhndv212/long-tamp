@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Screw assembly runs as a TaskPlan (#5): `script/screw_assembly/screw_domain.py`
+  declares the mission as capabilities with preconditions and effects (`holds`
+  observed from the grasp tracker, `screwed` recorded in the run folder's
+  `facts.json`) and one transaction per block; `task_screw_assembly.py` runs it
+  step by step through a `TaskPlanningSession`. `--resume` now restores the world
+  state and skips steps whose effects hold, instead of resuming from a block index.
+- Plan simulation treats a transaction whose declared effects already hold as
+  complete, matching the run-time effect guard, so one plan validates from any
+  start state the guard can handle.
 - Plan diagrams (#7): `task_planning.visualize.to_mermaid(plan)` and
   `to_dot(plan)` render a TaskPlan (fallback alternatives as dashed `else` edges,
   attempt budgets, optionally each step's grounded effects with `registry=`).
