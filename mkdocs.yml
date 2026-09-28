@@ -68,6 +68,7 @@ nav:
       - Standalone usage: usage/standalone-usage.md
       - BehaviorTree.CPP integration: usage/behaviortree-integration.md
       - Refiner: usage/refiner.md
+      - Automatic task planning: usage/task-planning-pddl.md
       - Execution backends: usage/execution.md
       - Mission events: usage/events.md
   - Features:
