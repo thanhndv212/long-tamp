@@ -75,6 +75,7 @@ from screw_domain import (  # noqa: E402
     pddl_problem,
     planned_document,
     refinement_step,
+    repair_policy,
 )
 
 # Planning keeps the fingers frozen open (a grasp is a rigid TCP constraint);
@@ -421,6 +422,22 @@ def mission_session(
         label = block["label"]
         index = ctx.setdefault("block_index", 0)
         ctx["block_index"] = index + 1
+        binding = {k: v for k, v in parameters.items() if k != "block"}
+        if _injected(ctx, capability, binding):
+            # --inject-failure: fail as if its first phase couldn't be
+            # reached, without planning (the M3 exit test).
+            gripper, handle = block["seq"][0]
+            ctx["failure"] = {
+                "step": label,
+                "capability": capability,
+                "parameters": binding,
+                "facts": [
+                    f"refinement_failed({label.replace(' ', '_')})",
+                    f"cannot_reach({gripper}, {handle})",
+                ],
+            }
+            print(f"\n=== {label} === INJECTED FAILURE: cannot_reach({gripper}, {handle})")
+            raise RuntimeError(f"{label}: injected failure")
         r = run_block(
             task,
             planner,
@@ -431,6 +448,17 @@ def mission_session(
             verbose=verbose,
         )
         if not r["success"]:
+            # The transaction contract: a failed block leaves the world as it
+            # was. Undo whatever its phases committed to the grasp tracker.
+            reset = getattr(planner, "reset_grasp_tracker_to_call_start", None)
+            if reset is not None and "seq" in block:
+                reset()
+            ctx["failure"] = {
+                "step": label,
+                "capability": capability,
+                "parameters": binding,
+                "facts": list(r.get("facts", [])),
+            }
             raise RuntimeError(f"{label}: {r['message']}")
         executor = ctx.get("executor")
         if executor is not None:
@@ -460,6 +488,81 @@ def mission_session(
     return TaskPlanningSession(plan, registry, world_state=world, recorded=recorded)
 
 
+def _injected(ctx: dict[str, Any], capability: str, binding: dict[str, Any]) -> bool:
+    """Whether ``--inject-failure`` targets this step (each spec fires once)."""
+    for spec in ctx.get("inject", []):
+        if spec["fired"] or spec["capability"] != capability:
+            continue
+        if all(str(binding.get(k)) == v for k, v in spec["match"].items()):
+            spec["fired"] = True
+            return True
+    return False
+
+
+def parse_injection(text: str) -> dict[str, Any]:
+    """``capability:key=value,key=value`` -> an injection spec."""
+    capability, _, rest = text.partition(":")
+    match = dict(item.split("=", 1) for item in rest.split(",") if item)
+    return {"capability": capability, "match": match, "fired": False}
+
+
+def run_with_repair(
+    task: ScrewAssemblyTask,
+    planner: GraspSequencePlanner,
+    n_parts: int,
+    q_start: list[float] | None,
+    recorded: RecordedFacts,
+    rounds: int,
+    mission: dict[str, Any],
+) -> dict[str, Any]:
+    """Plan, run, and replan around failures (``--replan``, issue #15).
+
+    Every round plans the goal from the current world state with the blocked
+    bindings so far, and runs it from where the last round stopped.
+    """
+    from long_tamp.tasks.task_planning.repair import plan_execute_repair
+
+    state = {"q": q_start, "result": None, "seconds": 0.0, "blocks": [], "skipped": []}
+
+    def plan(blocked):
+        return plan_from_goal(n_parts, world_atoms(planner, recorded), blocked=blocked)
+
+    def execute(document):
+        result = run_mission(
+            task, planner, n_parts, q_start=state["q"], document=document, **mission
+        )
+        state["q"] = result["final_config"]
+        state["seconds"] += result["seconds"]
+        state["blocks"] += result["blocks"]
+        state["skipped"] += result["skipped"]
+        state["result"] = result
+        return result["failure"]
+
+    def on_replan(failure, blocked):
+        print(
+            f"\n=== replanning: {failure['step']} failed "
+            f"({', '.join(failure.get('facts', [])[1:]) or 'no facts'}); "
+            f"blocking {blocked}",
+            flush=True,
+        )
+
+    outcome = plan_execute_repair(
+        plan, execute, repair_policy, max_rounds=rounds, on_replan=on_replan
+    )
+    result = dict(state["result"])
+    result.update(
+        success=outcome.success,
+        seconds=round(state["seconds"], 2),
+        blocks=state["blocks"],
+        skipped=state["skipped"],
+        task_replans=len(outcome.rounds) - 1,
+        blocked=outcome.blocked,
+    )
+    if not outcome.success:
+        print(f"\n=== repair gave up: {outcome.message}")
+    return result
+
+
 def world_atoms(planner: GraspSequencePlanner, recorded: RecordedFacts) -> list[str]:
     """The world state as ground atoms: held grasps plus recorded facts."""
     state = CompositeWorldState(GraspTrackerState(planner), recorded)()
@@ -467,7 +570,10 @@ def world_atoms(planner: GraspSequencePlanner, recorded: RecordedFacts) -> list[
 
 
 def plan_from_goal(
-    n_parts: int, state: list[str], engine: str = "auto"
+    n_parts: int,
+    state: list[str],
+    engine: str = "auto",
+    blocked: list[tuple[str, dict[str, str]]] | None = None,
 ) -> dict[str, Any]:
     """Plan the mission from ``state`` with a task planner (``--planner up``):
     the goal (``screw_domain.mission_goal``) as PDDL, a skeleton from Unified
@@ -477,7 +583,7 @@ def plan_from_goal(
     t0 = time.time()
     task_planner = UnifiedPlanningPlanner(engine)
     name = task_planner.engine_name()
-    steps = task_planner.solve(pddl_problem(n_parts, state))
+    steps = task_planner.solve(pddl_problem(n_parts, state, blocked))
     print(
         f"task planner ({name}): {len(steps)} steps in {time.time() - t0:.2f}s",
         flush=True,
@@ -499,6 +605,7 @@ def run_mission(
     backend=None,
     on_event=None,
     document: dict[str, Any] | None = None,
+    inject: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Run the mission's TaskPlan from ``q_start`` (default: the scene start).
 
@@ -524,6 +631,7 @@ def run_mission(
         "live_viewer": live_viewer,
         "n_parts": n_parts,
         "backend_displays": getattr(backend, "display", None) is not None,
+        "inject": inject if inject is not None else [],
     }
     session = mission_session(
         task, planner, ctx, recorded, max_replans, verbose, document=document
@@ -547,6 +655,7 @@ def run_mission(
         "skipped": skipped,
         "executed": len(run.executions),
         "final_config": ctx["q"],
+        "failure": None if run.success else ctx.get("failure"),
     }
 
 
@@ -590,6 +699,23 @@ def main() -> int:
         "state; needs the 'planning' extra)",
     )
     ap.add_argument(
+        "--replan",
+        type=int,
+        default=0,
+        metavar="ROUNDS",
+        help="with --planner up: when a step fails, block what failed "
+        "(screw_domain.repair_policy) and replan from the world state, up to "
+        "ROUNDS plans in all (default 0: no replanning)",
+    )
+    ap.add_argument(
+        "--inject-failure",
+        action="append",
+        default=[],
+        metavar="CAPABILITY:KEY=VALUE,...",
+        help="fail the first matching step once, as if its first phase were "
+        "unreachable, e.g. clamp_and_screw:clamp=fixtures/clamp1 (testing)",
+    )
+    ap.add_argument(
         "--viewer-port",
         type=int,
         default=8081,
@@ -616,6 +742,8 @@ def main() -> int:
     args = ap.parse_args()
     if args.resume and args.run_dir is None:
         ap.error("--resume needs --run-dir")
+    if args.replan and args.planner != "up":
+        ap.error("--replan needs --planner up")
     run_dir = args.run_dir or HERE / "runs" / (
         f"seed{args.seed}_{time.strftime('%Y%m%d_%H%M%S')}"
     )
@@ -678,24 +806,34 @@ def main() -> int:
         )
         atexit.register(live_viewer.close)
     try:
-        result = run_mission(
-            task,
-            planner,
-            n_parts,
+        inject = [parse_injection(spec) for spec in args.inject_failure]
+        mission = dict(
             max_replans=args.max_replans,
             trajectory=trajectory,
             checkpoint=checkpoint,
-            q_start=q_start,
             live_viewer=live_viewer,
             recorded=recorded,
             backend=make_backend(args.backend, task, live_viewer),
             on_event=events,
-            document=(
-                plan_from_goal(n_parts, world_atoms(planner, recorded))
-                if args.planner == "up"
-                else None
-            ),
+            inject=inject,
         )
+        if args.replan:
+            result = run_with_repair(
+                task, planner, n_parts, q_start, recorded, args.replan, mission
+            )
+        else:
+            result = run_mission(
+                task,
+                planner,
+                n_parts,
+                q_start=q_start,
+                document=(
+                    plan_from_goal(n_parts, world_atoms(planner, recorded))
+                    if args.planner == "up"
+                    else None
+                ),
+                **mission,
+            )
     except BaseException:
         if live_viewer is not None:
             live_viewer.close()

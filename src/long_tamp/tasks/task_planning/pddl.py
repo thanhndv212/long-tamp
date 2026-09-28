@@ -27,6 +27,12 @@ object, and a parameter that only appears in effects is unconstrained. So
 facts (``can_grasp(?gripper, ?handle)``, ``hole_of(?part, ?hole)``) given in
 ``init`` and changed by no action. They exist only in the export: the
 capabilities' run-time preconditions are unchanged.
+
+``blocked`` rules out bindings a refinement failed on (issue #15): a
+``(capability, {parameter: value, ...})`` pair adds a precondition
+``(not (blocked_<capability>__<parameters> ?p ...))`` to the action and the
+blocked values to ``init``, so a planner can't choose that binding again
+(e.g. part 1 into clamp 1), whatever the other parameters.
 """
 
 from __future__ import annotations
@@ -77,6 +83,10 @@ class _Names:
 def _sanitize(name: str) -> str:
     out = re.sub(r"[^A-Za-z0-9_-]", "__", name)
     return out if out[:1].isalpha() else f"o_{out}"
+
+
+def _blocked_predicate(capability: str, keys: tuple[str, ...]) -> str:
+    return f"blocked_{capability}__{'__'.join(keys)}"
 
 
 def _literals(texts: Iterable[str]) -> list[Literal]:
@@ -146,6 +156,7 @@ def to_pddl(
     problem_name: str = "mission",
     objects: Iterable[str] = (),
     static_preconditions: Mapping[str, Iterable[str]] | None = None,
+    blocked: Iterable[tuple[str, Mapping[str, str]]] = (),
 ) -> PddlExport:
     """A PDDL domain for ``descriptors`` and a problem from ``init`` to ``goal``.
 
@@ -154,9 +165,22 @@ def to_pddl(
     Capabilities without effects (guard conditions) are not actions. Objects
     are every constant in ``init``, ``goal``, the capabilities' literals and
     ``objects``. ``static_preconditions`` maps capability ids to extra
-    preconditions over static facts (see the module docstring).
+    preconditions over static facts, ``blocked`` bindings a planner must avoid
+    (see the module docstring).
     """
     static_preconditions = dict(static_preconditions or {})
+    # capability -> parameter-name signatures blocked, and the blocked facts.
+    block_signatures: dict[str, list[tuple[str, ...]]] = {}
+    block_facts: list[Atom] = []
+    for capability, binding in blocked:
+        keys = tuple(sorted(binding))
+        if not keys:
+            raise ValueError(f"blocked {capability}: empty binding")
+        signatures = block_signatures.setdefault(capability, [])
+        if keys not in signatures:
+            signatures.append(keys)
+        predicate = _blocked_predicate(capability, keys)
+        block_facts.append(Atom(predicate, tuple(str(binding[k]) for k in keys)))
     items = descriptors.values() if isinstance(descriptors, Mapping) else descriptors
     names = _Names()
     requirements = {":strips"}
@@ -206,6 +230,19 @@ def to_pddl(
             text, needs = _effect(literal, names)
             eff.append(text)
             requirements |= needs
+        for keys in block_signatures.pop(descriptor.capability_id, []):
+            missing = [k for k in keys if k not in used]
+            if missing:
+                raise ValueError(
+                    f"blocked {descriptor.capability_id}: {missing} are not "
+                    f"planning parameters (used: {used})"
+                )
+            predicate = _blocked_predicate(descriptor.capability_id, keys)
+            atom = Atom(predicate, tuple(f"?{k}" for k in keys))
+            note(atom, in_domain=True)
+            text, needs = _condition(Literal(atom, positive=False), names)
+            pre.append(text)
+            requirements |= needs
         actions.append(
             f"  (:action {action}\n"
             f"    :parameters ({' '.join('?' + p for p in used)})\n"
@@ -213,12 +250,18 @@ def to_pddl(
             f"    :effect {_conjunction(eff)})"
         )
 
+    if block_signatures:
+        raise ValueError(
+            f"blocked bindings for unknown or effect-less capabilities: "
+            f"{sorted(block_signatures)}"
+        )
     if static_preconditions:
         raise ValueError(
             f"static preconditions for unknown or effect-less capabilities: "
             f"{sorted(static_preconditions)}"
         )
     init_atoms = [a if isinstance(a, Atom) else parse_atom(str(a)) for a in init]
+    init_atoms += block_facts
     goal_literals = _literals(goal)
     for atom in init_atoms:
         note(atom)

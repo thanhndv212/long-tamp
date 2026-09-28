@@ -61,6 +61,41 @@ hand) plans only the remaining work (`tests/test_task_planning_pddl.py`). Home m
 no effects, so they aren't actions: a skeleton is the grasp / clamp and screw / release /
 rack sequence.
 
+## Replanning around failures
+
+When a step can't be refined, its facts say why (see [the refiner](refiner.md)).
+`long_tamp.tasks.task_planning.repair.plan_execute_repair(plan, execute, policy)` turns
+them into *blocked bindings* and plans again from the current world state:
+
+```python
+from long_tamp.tasks.task_planning.repair import plan_execute_repair
+
+def plan(blocked):          # blocked: [(capability, {parameter: value}), ...]
+    export = to_pddl(descriptors, world_state(), goal, blocked=blocked)
+    return skeleton_document(planner.solve(export), "Mission", expand)
+
+def execute(document):      # None on success, else the failure
+    ...                     # {"step", "capability", "parameters", "facts"}
+
+outcome = plan_execute_repair(plan, execute, policy, max_rounds=3)
+```
+
+- `to_pddl(..., blocked=[("clamp_and_screw", {"clamp": "fixtures/clamp1", "seat":
+  "part1/h_seat"})])` adds `(not (blocked_clamp_and_screw__clamp__seat ?clamp ?seat))`
+  to the action and the blocked values to the problem, so a planner can't choose that
+  pair again, whatever the other parameters.
+- The policy maps a failure to bindings to block (the default blocks the failed step's
+  own binding). The loop stops on success, after `max_rounds` plans, when the policy has
+  nothing new to block, or when no plan avoids the blocks (`NoPlanFound`).
+- Each round plans from the world state the previous one left, so completed steps are
+  not redone.
+
+Screw assembly: `task_screw_assembly.py --planner up --replan 3` runs this loop with
+`screw_domain.repair_policy` (a clamp that can't reach a part's seat is blocked for that
+part; anything else blocks the failed step), and `--inject-failure
+clamp_and_screw:clamp=fixtures/clamp1` makes that step fail once, as if unreachable, to
+test it.
+
 ## From a goal to a TaskPlan
 
 `long_tamp.tasks.task_planning.skeleton` closes the loop:

@@ -456,12 +456,17 @@ def mission_goal(n_parts: int) -> list[str]:
     ]
 
 
-def pddl_problem(n_parts: int, state: list[str] | None = None) -> PddlExport:
+def pddl_problem(
+    n_parts: int,
+    state: list[str] | None = None,
+    blocked: list[tuple[str, dict[str, str]]] | None = None,
+) -> PddlExport:
     """The mission as PDDL: the capabilities, ``state`` (default: nothing
     held, nothing screwed) plus the static facts, and ``mission_goal``.
 
     Home moves have no effects, so they are not actions: a plan found for
     this problem is the mission's grasp/clamp/release/rack skeleton.
+    ``blocked`` rules out bindings earlier attempts failed on (``repair_policy``).
     """
     return to_pddl(
         descriptors(n_parts),
@@ -470,7 +475,33 @@ def pddl_problem(n_parts: int, state: list[str] | None = None) -> PddlExport:
         domain_name="screw-assembly",
         problem_name=f"screw-assembly-{n_parts}",
         static_preconditions=STATIC_PRECONDITIONS,
+        blocked=blocked or (),
     )
+
+
+def repair_policy(failure: dict[str, Any]) -> list[tuple[str, dict[str, str]]]:
+    """What to block after a failed step, from the facts its refiner reported.
+
+    - ``cannot_reach`` / ``ik_unreachable`` of a jig clamp on a part's seat:
+      that clamp can't take that part here, so block the pair for any
+      clamp-and-screw step (the planner then picks another clamp);
+    - otherwise, block the failed step's own binding.
+    """
+    from long_tamp.tasks.task_planning.predicates import parse_atom
+
+    blocks = []
+    for fact in failure.get("facts", []):
+        atom = parse_atom(fact)
+        if atom.name in ("cannot_reach", "ik_unreachable") and atom.args[0].startswith(
+            "fixtures/clamp"
+        ):
+            blocks.append(
+                ("clamp_and_screw", {"clamp": atom.args[0], "seat": atom.args[1]})
+            )
+    if blocks:
+        return blocks
+    params = {k: str(v) for k, v in failure.get("parameters", {}).items() if k != "block"}
+    return [(failure["capability"], params)] if params else []
 
 
 # --- From a transaction to its block, and from a skeleton to a plan (#14) ------
