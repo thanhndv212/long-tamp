@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - run: python -m pip install -e ".[hpp,dev]" pytest-timeout
+      - run: python -m pip install -e ".[hpp,dev,sim]" pytest-timeout
       - name: Record resolved wheel versions
         run: python -m pip freeze | tee wheel-versions.txt
       - run: timeout --kill-after=30s 20m python -m pytest tests -m "not slow_planning" --timeout=300 --timeout-method=thread --junitxml=test-results.xml
