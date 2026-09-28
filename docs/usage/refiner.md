@@ -44,11 +44,14 @@ planner can plan around the failure instead of retrying it:
 | Fact | Meaning |
 |---|---|
 | `refinement_failed(<step>)` | always present on failure |
-| `unreachable(<gripper>, <handle>)` | the phase can't be reached from the step's earlier commitments (solver-only failures, no collisions) |
-| `phase_failed(<gripper>, <handle>)` | the phase kept failing up to the resume limit |
+| `cannot_reach(<gripper>, <handle>)` | the grasp phase kept failing up to the resume limit |
+| `ik_unreachable(<gripper>, <handle>)` | the phase's constraints can't be solved from the step's earlier commitments (solver-only failures, no collisions) |
+| `release_infeasible(<gripper>, <handle>)` | letting go of `<handle>` kept failing (`none` if the step never grasped it) |
 | `lookahead_failed(<gripper>, <handle>)` | the lookahead's hinted target for this phase was redrawn |
+| `blocks(<body>, <body>)` | the last failure was these two bodies colliding, e.g. `blocks(panda_right/panda_link6, ground/ground_base)` |
 
-A release phase reports `none` as its handle.
+A [repair loop](task-planning-pddl.md#replanning-around-failures) turns these into
+bindings the task planner must avoid, and replans.
 
 The interface (`Refiner`, `RefinementStep`, `Refinement`) is kept small and will be
 frozen only once a second implementation exists (ADR-0001).
