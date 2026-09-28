@@ -36,10 +36,24 @@ adds, per capability, preconditions over static facts you put in `init` (which g
 grasp which handle, which holes belong to which part). They exist only in the export; the
 capabilities' run-time preconditions are unchanged.
 
-## Planning it
+## Planners
 
-With the `planning` extra (`pip install long-tamp[planning]`: Unified Planning and its
-Fast Downward engine):
+All planners implement `TaskPlanner.solve(export) -> skeleton`; `default_planner()` picks
+one.
+
+| Planner | Runs | Use it |
+|---|---|---|
+| `FastDownwardPlanner` | Fast Downward on the exported PDDL as is | **the default**: fast (milliseconds here), reads quantifiers and negative/conditional features natively |
+| `UnifiedPlanningPlanner("fast-downward")` | Unified Planning, then its Fast Downward engine | when you want Unified Planning's problem API or its other engines |
+| `UnifiedPlanningPlanner("pyperplan")` | Unified Planning compiles the problem down to STRIPS, pyperplan solves it | last resort where no Fast Downward binary exists: pure Python, but slow, and the compilation can blow up on quantified problems (it warns when chosen) |
+
+Getting Fast Downward: `pip install long-tamp[planning]` brings its binary through
+`up-fast-downward` on Linux x86-64 and macOS; elsewhere build it from source (below).
+Other planners (e.g. PDDLStream, roadmap M6) plug in behind the same interface.
+
+## Planning it through Unified Planning
+
+With the `planning` extra:
 
 ```python
 from unified_planning.io import PDDLReader
