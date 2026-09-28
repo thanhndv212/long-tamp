@@ -9,6 +9,8 @@ default, after ``--delay`` seconds) or right after a step completes
 folder and checks, from the restarted run's events:
 
 - the mission completes;
+- every step is done, before the kill or after the restart (a guard must not
+  skip work that was never done);
 - no step completed before the kill is planned again: each is skipped because
   its effect holds in the world (grasp tracker + recorded facts), or because
   a guard condition skips the part it belongs to. Home moves declare no
@@ -28,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -107,10 +110,29 @@ def first_run(args: argparse.Namespace, run_dir: Path) -> dict[str, Any]:
     return {"exit": code, "killed": code == -signal.SIGKILL}
 
 
+def plan_steps(events: list[dict[str, Any]]) -> list[str]:
+    """The mission's step ids, from the part count in its root node's name."""
+    sys.path.insert(0, str(HERE))
+    import screw_domain
+
+    root = next(e for e in events if e["ir_id"] == "mission")
+    n_parts = int(re.search(r"(\d+) part", root["name"]).group(1))
+    document = screw_domain.build_plan_document(n_parts)
+    return [step["id"] for step in screw_domain.transactions(document)]
+
+
 def check_resume(
-    before: list[dict[str, Any]], after: list[dict[str, Any]]
+    before: list[dict[str, Any]],
+    after: list[dict[str, Any]],
+    steps: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Compare what completed before the kill with what the restart planned."""
+    """Compare what completed before the kill with what the restart did.
+
+    Passes when the restarted run completes, plans no step (with effects)
+    that had completed before the kill, and -- given the plan's ``steps`` --
+    leaves no step undone: each completed before the kill or in the restart.
+    A guard that skips work never done fails that last check.
+    """
     completed = [
         e["ir_id"]
         for e in before
@@ -135,6 +157,12 @@ def check_resume(
             if e["role"] == "condition" and e["status"] == "SUCCESS"
         }
     )
+    done_after = {
+        e["ir_id"]
+        for e in after
+        if e["role"] == "transaction" and e["status"] == "SUCCESS"
+    }
+    never_done = [s for s in steps or () if s not in completed and s not in done_after]
     finished = bool(after) and (after[-1]["role"], after[-1]["status"]) == (
         "sequence",
         "SUCCESS",
@@ -145,8 +173,9 @@ def check_resume(
         "skipped_by_guard": guards,
         "planned_again": redone,
         "homes_rerun": homes,
+        "never_done": never_done,
         "resumed_run_completed": finished,
-        "pass": finished and not redone,
+        "pass": finished and not redone and not never_done,
     }
 
 
@@ -191,7 +220,7 @@ def main() -> int:
         )
     after = _events(run_dir / "events.jsonl")[len(before) :]
     summary.update(resume_exit=code, resume_seconds=round(time.time() - t1, 1))
-    summary.update(check_resume(before, after))
+    summary.update(check_resume(before, after, plan_steps(before)))
     summary["pass"] = summary["pass"] and code == 0
     print(json.dumps(summary, indent=2))
     if args.json:

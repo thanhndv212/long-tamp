@@ -34,6 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the Python runner produce the same transitions. Screw assembly writes
   `events.jsonl` in its run folder. The fake host session gained a
   `"shape": "composite"` option.
+- Kill-and-resume test (#12): `tests/test_kill_resume.py` SIGKILLs a mission
+  mid-step and restarts it; the restarted run skips the completed steps from the
+  recorded world state, redoes the interrupted one and completes.
+  `script/screw_assembly/kill_resume.py` does the same on the screw-assembly mission
+  (kill during or after a chosen step, then `--resume`), checked from the event
+  stream. Documented as part of V4.
 
 ## [0.2.0] - 2026-09-28
 

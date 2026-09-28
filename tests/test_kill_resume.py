@@ -112,3 +112,26 @@ def test_screw_check_fails_when_the_resumed_run_does_not_finish():
     check = _load_kill_resume().check_resume
     after = [_ev("b02-grasp", "execute", "FAILURE"), _ev("mission", "sequence", "FAILURE")]
     assert not check([], after)["pass"]
+
+
+def test_screw_check_fails_when_a_guard_skips_work_never_done():
+    """The bug this check found: killed after b03, the part guard skipped
+    part 1's release (b05), which had never run."""
+    check = _load_kill_resume().check_resume
+    steps = ["b03-clamp_and_screw", "b04-home", "b05-release", "b06-rack"]
+    before = [_ev("b03-clamp_and_screw", "transaction", "SUCCESS")]
+    after = [
+        _ev("part1-done", "condition", "SUCCESS"),
+        _ev("b06-rack", "transaction", "SUCCESS"),
+        _ev("mission", "sequence", "SUCCESS"),
+    ]
+    result = check(before, after, steps)
+    assert not result["pass"]
+    assert result["never_done"] == ["b04-home", "b05-release"]
+
+
+def test_screw_plan_steps_come_from_the_mission_name():
+    steps = _load_kill_resume().plan_steps(
+        [{"ir_id": "mission", "name": "Screw assembly, 1 part(s)"}]
+    )
+    assert steps[0] == "b00-grasp" and steps[-1] == "b06-rack" and len(steps) == 7

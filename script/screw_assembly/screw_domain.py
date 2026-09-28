@@ -201,8 +201,11 @@ def _step(index: int, block: dict[str, Any]) -> tuple[str, dict[str, str]]:
 def descriptors(n_parts: int) -> dict[str, CapabilityDescriptor]:
     """``DESCRIPTORS`` plus the mission's two guard conditions.
 
-    ``part_done`` holds once a part is clamped and both holes are screwed;
-    ``all_parts_done`` once every part is. They guard the part blocks and the
+    ``part_done`` holds once a part is clamped, both holes are screwed and
+    the arm that carried it has let go; ``all_parts_done`` once every part
+    is. The release belongs in it: a run killed after the screws but before
+    the release must still release the part on resume (found by
+    ``kill_resume.py``, #12). They guard the part blocks and the
     driver pickup, whose own effects are undone later in the mission (the
     part is released, the driver racked), so a resumed or scenario run skips
     finished work instead of redoing it (without them, a run resumed after a
@@ -215,17 +218,27 @@ def descriptors(n_parts: int) -> dict[str, CapabilityDescriptor]:
             f"holds(fixtures/clamp{i}, {p}/h_seat)",
             f"screwed({p}, {p}/h_hole1)",
             f"screwed({p}, {p}/h_hole2)",
+            f"not holds({LEFT}/gripper, {p}/h_grasp)",
         ]
     return {
         **DESCRIPTORS,
         "part_done": CapabilityDescriptor(
             "part_done",
             "1.0",
-            {"part": str, "clamp": str, "seat": str, "hole1": str, "hole2": str},
+            {
+                "part": str,
+                "clamp": str,
+                "seat": str,
+                "hole1": str,
+                "hole2": str,
+                "holder": str,
+                "held": str,
+            },
             preconditions=(
                 "holds(?clamp, ?seat)",
                 "screwed(?part, ?hole1)",
                 "screwed(?part, ?hole2)",
+                "not holds(?holder, ?held)",
             ),
         ),
         "all_parts_done": CapabilityDescriptor(
@@ -304,7 +317,7 @@ def build_plan_document(
                     {
                         "type": "condition",
                         "id": f"{p}-done",
-                        "label": f"{p} clamped and screwed",
+                        "label": f"{p} assembled",
                         "capability": "part_done",
                         "parameters": {
                             "part": p,
@@ -312,6 +325,8 @@ def build_plan_document(
                             "seat": f"{p}/h_seat",
                             "hole1": f"{p}/h_hole1",
                             "hole2": f"{p}/h_hole2",
+                            "holder": f"{LEFT}/gripper",
+                            "held": f"{p}/h_grasp",
                         },
                     },
                     {

@@ -63,7 +63,7 @@ change; the 10-seed batch gate passes.
 - [ ] [#10](https://github.com/thanhndv212/long-tamp/issues/10) `Refiner` interface over `run_block_with_recovery()` and the phase-target lookahead
 - [x] [#11](https://github.com/thanhndv212/long-tamp/issues/11) Structured JSONL event stream from the executor; the BehaviorTree.CPP host emits
       the same stream (IR ids stamped on compiled nodes)
-- [ ] [#12](https://github.com/thanhndv212/long-tamp/issues/12) Resume from world state after the process is killed mid-mission
+- [x] [#12](https://github.com/thanhndv212/long-tamp/issues/12) Resume from world state after the process is killed mid-mission
 
 **Exit test:** batch gate passes on the Python executor; a mission killed mid-run
 resumes from world state, not from a block index.

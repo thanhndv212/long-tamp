@@ -90,10 +90,35 @@ def test_resume_after_part1_released_skips_the_whole_part():
     mission = _Mission(2, held, facts)
     ok, skipped = mission.go()
     assert ok
-    assert "part1 clamped and screwed" in skipped
+    assert "part1 assembled" in skipped
     assert not any(label.startswith("part1") for label in mission.ran)
     assert "bootstrap: pick driver" in skipped  # driver already in hand
     assert mission.ran[0] == "ur10_right home (bootstrap)"
+
+
+def test_resume_after_the_screws_but_before_the_release_still_releases():
+    """Killed after part 1's clamp + screw block, before its release
+    (``kill_resume.py --kill-after b03-clamp_and_screw``, #12): part 1 is
+    clamped and screwed, but ur10_left still holds it, so the part is not
+    done -- its release (block B) must run, and no block with an effect
+    before it."""
+    held = {
+        "ur10_right/gripper": "driver/h_grip",
+        "ur10_left/gripper": "part1/h_grasp",
+        "fixtures/clamp1": "part1/h_seat",
+    }
+    facts = ["screwed(part1, part1/h_hole1)", "screwed(part1, part1/h_hole2)"]
+    mission = _Mission(1, held, facts)
+    ok, skipped = mission.go()
+    assert ok
+    assert mission.ran == [
+        "ur10_right home (bootstrap)",  # home moves have no effects: they rerun
+        "ur10_right home (part1)",
+        "part1 B: release",
+        "return: rack driver",
+    ]
+    assert "part1 assembled" not in skipped
+    assert mission.grasp_tracker.current_grasps["ur10_left/gripper"] is None
 
 
 def test_a_finished_mission_runs_nothing():
