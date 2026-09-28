@@ -27,6 +27,7 @@ set(BUILD_TESTING "${_agimus_build_testing}")
 
 add_executable(
   agimus_taskplan_bt
+  src/event_logger.cpp
   src/main.cpp
   src/python_session.cpp
   src/task_nodes.cpp)
@@ -64,6 +65,13 @@ if(BUILD_TESTING)
             --options {"fault":"missing_method"})
   set_tests_properties(taskplan_bt_fault_missing_method PROPERTIES WILL_FAIL TRUE)
 
+  # The C++ host's event stream matches the Python runner's, transition for
+  # transition (same schema, same IR ids, roles, names and statuses).
+  add_test(
+    NAME taskplan_bt_events
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_events.py
+            $<TARGET_FILE:agimus_taskplan_bt>)
+
   add_test(NAME taskplan_bt_unknown_factory
            COMMAND agimus_taskplan_bt --factory not_allowlisted)
   set_tests_properties(taskplan_bt_unknown_factory PROPERTIES WILL_FAIL TRUE)
@@ -74,6 +82,7 @@ if(BUILD_TESTING)
     taskplan_bt_fault_malformed_json
     taskplan_bt_fault_missing_method
     taskplan_bt_unknown_factory
+    taskplan_bt_events
     PROPERTIES ENVIRONMENT "PYTHONPATH=${PROJECT_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
 
   # Opt-in only: unlike the fake-session cases above, this drives a real

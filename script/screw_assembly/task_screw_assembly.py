@@ -56,6 +56,7 @@ from long_tamp.tasks.task_planning import (  # noqa: E402
     TaskPlan,
     TaskPlanningSession,
 )
+from long_tamp.tasks.task_planning.events import JsonlEventWriter  # noqa: E402
 from long_tamp.tasks.task_planning.predicates import holds  # noqa: E402
 from long_tamp.execution import (  # noqa: E402
     ExecutionCommand,
@@ -459,6 +460,7 @@ def run_mission(
     live_viewer=None,
     recorded: RecordedFacts | None = None,
     backend=None,
+    on_event=None,
 ) -> dict[str, Any]:
     """Run the mission's TaskPlan from ``q_start`` (default: the scene start).
 
@@ -469,7 +471,8 @@ def run_mission(
     effect already holds in the world (grasp tracker + ``recorded`` facts) is
     skipped, which is how ``--resume`` continues a run. If ``trajectory`` is a
     list, each completed block's motion is sampled into it; if ``checkpoint``
-    is given, every block is logged to it.
+    is given, every block is logged to it. ``on_event`` receives the
+    mission's event stream (``long_tamp.tasks.task_planning.events``).
     """
     if recorded is None:
         recorded = RecordedFacts(None, predicates=RECORDED_PREDICATES)
@@ -487,6 +490,7 @@ def run_mission(
         session,
         backend=backend,
         on_skip=lambda label, why: print(f"\n=== {label} === skipped ({why})"),
+        on_event=on_event,
     )
     ctx["executor"] = executor
     t_mission = time.time()
@@ -601,6 +605,10 @@ def main() -> int:
 
     import atexit
 
+    # The event stream, appended to on --resume, so one file covers the run.
+    events = JsonlEventWriter(run_dir / "events.jsonl")
+    atexit.register(events.close)
+
     closures = finger_closures()
     for row in closures.report():
         if row["handle"].startswith(("driver", "part1")):
@@ -631,6 +639,7 @@ def main() -> int:
             live_viewer=live_viewer,
             recorded=recorded,
             backend=make_backend(args.backend, task, live_viewer),
+            on_event=events,
         )
     except BaseException:
         if live_viewer is not None:

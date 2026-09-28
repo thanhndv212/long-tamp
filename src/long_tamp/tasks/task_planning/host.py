@@ -44,16 +44,29 @@ def create_fake_session(options_json: str = "{}") -> HostSession:
     - ``"missing_method"``: ``get_report`` is replaced with a
       non-callable, exercising ``PyCallable_Check`` failure in
       ``PythonSession::call`` (process exit code 2).
+
+    ``"shape": "composite"`` builds a plan using every composite instead of
+    a single transaction -- a ``sequence`` of a ``fallback`` guarded by a
+    (false) ``condition`` and a ``retry`` around a transaction whose first
+    attempt fails -- so the C++ host and the Python runner can be compared
+    on every node type (``examples/behaviortree/check_events.py``).
     """
 
     options = json.loads(options_json)
     fault = options.get("fault")
     registry = CapabilityRegistry()
+    calls: dict[str, int] = {}
 
     def move_impl(parameters: dict) -> dict:
         if fault == "capability_raises":
             raise RuntimeError("synthetic capability failure for fault-path testing")
         return {"target": parameters["target"], "distance": 1.0}
+
+    def flaky_move_impl(parameters: dict) -> dict:
+        calls["flaky"] = calls.get("flaky", 0) + 1
+        if calls["flaky"] == 1:
+            raise RuntimeError("synthetic first-attempt failure")
+        return move_impl(parameters)
 
     registry.register(
         CapabilityDescriptor(
@@ -85,12 +98,77 @@ def create_fake_session(options_json: str = "{}") -> HostSession:
             ],
         },
     }
+    if options.get("shape") == "composite":
+        registry.register(
+            CapabilityDescriptor("at", "1.0", {"target": str}),
+            lambda parameters: False,
+        )
+        registry.register(
+            CapabilityDescriptor(
+                "flaky_move",
+                "1.0",
+                {"target": str},
+                writes=("robot_pose",),
+                restartable=True,
+                max_attempts=2,
+            ),
+            flaky_move_impl,
+        )
+        document["root"] = _composite_root()
     session = HostSession(TaskPlan.from_dict(document, registry), registry)
     if fault == "malformed_json_response":
         session.execute_step = lambda step_id: "not-json"  # type: ignore[method-assign]
     elif fault == "missing_method":
         session.get_report = None  # type: ignore[method-assign]
     return session
+
+
+def _move(
+    node_id: str, target: str, attempts: int = 1, capability: str = "move"
+) -> dict:
+    return {
+        "type": "transaction",
+        "id": node_id,
+        "label": node_id.replace("-", " ").capitalize(),
+        "restart_state": ["q_current"],
+        "children": [
+            {
+                "type": "operation",
+                "id": f"{node_id}.execute",
+                "capability": capability,
+                "parameters": {"target": target},
+                "constraints": {"max_attempts": attempts},
+            }
+        ],
+    }
+
+
+def _composite_root() -> dict:
+    return {
+        "type": "sequence",
+        "id": "mission",
+        "children": [
+            {
+                "type": "fallback",
+                "id": "reach-a",
+                "children": [
+                    {
+                        "type": "condition",
+                        "id": "at-a",
+                        "capability": "at",
+                        "parameters": {"target": "a"},
+                    },
+                    _move("move-a", "a"),
+                ],
+            },
+            {
+                "type": "retry",
+                "id": "retry-flaky",
+                "max_attempts": 2,
+                "child": _move("move-flaky", "b", attempts=2, capability="flaky_move"),
+            },
+        ],
+    }
 
 
 def create_twin_session(options_json: str = "{}") -> HostSession:

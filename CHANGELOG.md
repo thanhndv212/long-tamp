@@ -31,6 +31,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `phase_failed(...)`, `lookahead_failed(...)`). `GraspSequenceRefiner` wraps
   `run_block_with_recovery` and the phase-target lookahead; screw assembly uses it.
   `run_block_with_recovery` results gained a structured `failure` field.
+- Mission event stream (#11), schema `long-tamp.events/1`
+  (`docs/usage/events.md`): one JSONL event per status change of a plan node.
+  `run_plan(..., on_event=)` and `PlanExecutor(..., on_event=)` emit it (the
+  executor adds `motion` events with execution metrics), `JsonlEventWriter`
+  writes it, and the C++ host writes the same stream with `--events <path>`.
+  The compiler stamps `_ir_id` / `_ir_role` on every BT element it emits for an
+  IR node (`COMPILER_VERSION` 1.1). The `taskplan_bt_events` CTest checks the host
+  and the Python runner produce the same transitions. Screw assembly writes
+  `events.jsonl` in its run folder. The fake host session gained a
+  `"shape": "composite"` option.
 
 ## [0.2.0] - 2026-09-28
 
