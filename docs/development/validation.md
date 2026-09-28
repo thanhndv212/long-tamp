@@ -89,6 +89,22 @@ python scenarios.py --all --seed 1
 Every scenario's start state is also checked without HPP in the test suite: the same plan
 must pass the load-time check from it.
 
+### Kill and resume
+
+Part of V4 from M2 on: kill the mission with SIGKILL and restart it with `--resume`; the
+restarted run must complete without planning any step that completed before the kill.
+
+```bash
+cd script/screw_assembly
+python build_scene.py --parts 1
+python kill_resume.py --seed 1 --json results/$(date +%F)-kill-resume-during.json
+python kill_resume.py --seed 2 --kill-after b03-clamp_and_screw
+python build_scene.py --parts 2
+python kill_resume.py --seed 3 --kill-during b07-clamp_and_screw
+```
+
+`tests/test_kill_resume.py` runs the same check in CI on a small mission without HPP.
+
 ## Baselines are per environment
 
 Timing depends heavily on the environment. The same mission ran with a median of

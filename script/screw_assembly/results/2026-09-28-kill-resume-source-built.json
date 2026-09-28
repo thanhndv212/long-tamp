@@ -1,0 +1,94 @@
+{
+  "date": "2026-09-28",
+  "environment": "hpp-agimus-arm64 (source-built HPP), 11 cores / 16 GB",
+  "backend": "mock",
+  "runs": [
+    {
+      "seed": 1,
+      "kill": "5s into b03-clamp_and_screw",
+      "exit": -9,
+      "killed": true,
+      "resume_exit": 0,
+      "resume_seconds": 173.9,
+      "completed_before_kill": [
+        "b00-grasp",
+        "b01-home",
+        "b02-grasp"
+      ],
+      "skipped_by_effect": [
+        "b00-grasp",
+        "b02-grasp"
+      ],
+      "skipped_by_guard": [],
+      "planned_again": [],
+      "homes_rerun": [
+        "b01-home"
+      ],
+      "never_done": [],
+      "resumed_run_completed": true,
+      "pass": true,
+      "parts": 1
+    },
+    {
+      "seed": 2,
+      "kill": "after b03-clamp_and_screw",
+      "exit": -9,
+      "killed": true,
+      "resume_exit": 0,
+      "resume_seconds": 20.0,
+      "completed_before_kill": [
+        "b00-grasp",
+        "b01-home",
+        "b02-grasp",
+        "b03-clamp_and_screw"
+      ],
+      "skipped_by_effect": [
+        "b00-grasp",
+        "b02-grasp",
+        "b03-clamp_and_screw"
+      ],
+      "skipped_by_guard": [],
+      "planned_again": [],
+      "homes_rerun": [
+        "b01-home"
+      ],
+      "never_done": [],
+      "resumed_run_completed": true,
+      "pass": true,
+      "parts": 1
+    },
+    {
+      "seed": 3,
+      "kill": "5s into b07-clamp_and_screw",
+      "exit": -9,
+      "killed": true,
+      "resume_exit": 0,
+      "resume_seconds": 248.5,
+      "completed_before_kill": [
+        "b00-grasp",
+        "b01-home",
+        "b02-grasp",
+        "b03-clamp_and_screw",
+        "b04-home",
+        "b05-release",
+        "b06-grasp"
+      ],
+      "skipped_by_effect": [
+        "b00-grasp",
+        "b06-grasp"
+      ],
+      "skipped_by_guard": [
+        "part1-done"
+      ],
+      "planned_again": [],
+      "homes_rerun": [
+        "b01-home"
+      ],
+      "never_done": [],
+      "resumed_run_completed": true,
+      "pass": true,
+      "parts": 2
+    }
+  ],
+  "source_commit": "feature/12-kill-resume @ b17926c"
+}

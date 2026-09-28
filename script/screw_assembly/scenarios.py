@@ -60,7 +60,7 @@ SCENARIOS: dict[str, dict[str, Any]] = {
             "part1 B: release",
         ],
         "facts": ["screwed(part1, part1/h_hole1)", "screwed(part1, part1/h_hole2)"],
-        "skip": [_PICK, "part1 clamped and screwed"],
+        "skip": [_PICK, "part1 assembled"],
         "atoms": [
             "holds(ur10_right/gripper, driver/h_grip)",
             "holds(fixtures/clamp1, part1/h_seat)",

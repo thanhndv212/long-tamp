@@ -119,6 +119,7 @@ its log and its resume point (`long_tamp.tasks.mission_checkpoint.MissionCheckpo
 | `checkpoint.json` | resume point: configuration and held grasps after the last completed block |
 | `facts.json` | recorded facts (`screwed(part, hole)`) written by completed blocks |
 | `trajectory.json` | the planned motion, sampled at 20 Hz of path time, for `replay.py` |
+| `events.jsonl` | the mission event stream ([Mission events](../../docs/usage/events.md)); resumes append |
 | `run.log` | full DEBUG log |
 | `phases/` | per-phase planner dumps, one subfolder per block |
 
@@ -126,6 +127,20 @@ All of it is rewritten after every block, so a killed run keeps an accurate reco
 `--resume` restores the configuration, grasps and recorded facts, then runs the whole plan:
 steps whose effects already hold are skipped, so it continues from the world state rather
 than from a block index (home moves re-run; they take well under a second).
+
+**Kill and resume check.** `kill_resume.py` runs the mission, kills it with SIGKILL at a
+chosen point (no cleanup, like a crash or an OOM kill), restarts it with `--resume` in the
+same folder, and checks from the event stream that the restarted run completes without
+planning any step that had completed before the kill:
+
+```bash
+python3 kill_resume.py --seed 1                                   # 5 s into b03 (clamp + screw)
+python3 kill_resume.py --seed 1 --kill-after b03-clamp_and_screw  # right after it
+python3 kill_resume.py --seed 1 --kill-during b07-clamp_and_screw # part 2 (2-part scene)
+```
+
+A kill between a block's checkpoint write and its recorded-facts write (milliseconds apart)
+would leave the two out of step; the kill points above never fall there.
 
 `replay.py` plays a trajectory in viser without planning, at recorded speed (`--speed`,
 `--loop`). It runs in its own process because, while HPP plans, the planner process
