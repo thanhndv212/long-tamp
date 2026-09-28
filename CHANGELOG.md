@@ -65,6 +65,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The mission viewer played every completed block, then the whole mission again,
+  in real time even with no browser connected (#35). Batch runs (which also
+  started a viewer) lingered after each mission replaying it, grew to ~7 GB per
+  process, and six in parallel exhausted a 16 GB container: the OOM killer took
+  down running missions. Playback now happens only while a browser is connected
+  (paths are still recorded for later), and `run_batch.sh` runs with `--no-viewer`.
 - Joints frozen by `task.setup(freeze_joint_substrings=...)` (e.g. gripper
   fingers) were only kept frozen on idle arms: phase graphs rebuild the locked
   joints from the frozen *arms*, so the moving arm's "frozen" fingers took random

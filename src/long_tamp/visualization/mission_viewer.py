@@ -123,9 +123,31 @@ class MissionViewer:
         if close_after is not None and q is not None:
             self._animate(q, fingers, *close_after)
 
+    @staticmethod
+    def _skip_segment(segment, fingers):
+        """A segment's end state for the finger overlay, without playing it."""
+        _, open_before, close_after = segment
+        if open_before is not None:
+            fingers.pop(open_before[0], None)
+        if close_after is not None:
+            fingers[close_after[0]] = dict(close_after[1])
+
+    def _watched(self):
+        """Whether a browser is connected to the viewer.
+
+        Playback runs in real time; with nobody watching it only costs time
+        and memory (#35). Without a viser server to ask, assume watched.
+        """
+        server = getattr(getattr(self.backend, "viewer", None), "viewer", None)
+        if server is None or not hasattr(server, "get_clients"):
+            return True
+        return len(server.get_clients()) > 0
+
     # -- lifecycle ----------------------------------------------------------
 
     def completed(self, phases):
+        """Record completed phases' paths; play them if someone is watching."""
+        watched = self._watched()
         for phase in phases:
             if not phase.get("complete", True) or phase.get("skipped"):
                 continue
@@ -135,7 +157,8 @@ class MissionViewer:
                 pid = path if isinstance(path, int) else self.backend.store_path(path)
                 self.path_ids.append(pid)
                 if self.closures is None:
-                    self.backend.play_path(pid)
+                    if watched:
+                        self.backend.play_path(pid)
                     continue
                 segment = (
                     pid,
@@ -143,7 +166,10 @@ class MissionViewer:
                     close_after if k == len(paths) - 1 else None,
                 )
                 self._segments.append(segment)
-                self._play_segment(segment, self._fingers)
+                if watched:
+                    self._play_segment(segment, self._fingers)
+                else:
+                    self._skip_segment(segment, self._fingers)
 
     def _play_all(self, full):
         if self.closures is None:
@@ -170,11 +196,18 @@ class MissionViewer:
     def finish(self):
         if not self.path_ids:
             return
+        # The end-of-mission replay is ~as long as the mission itself: only
+        # for a connected browser. At a terminal the prompt below still lets
+        # someone connect and replay.
+        watched, interactive = self._watched(), sys.stdin.isatty()
+        if not watched and not interactive:
+            return
         full = None
         if self.closures is None:
             full = self.backend.concatenate_paths(self.path_ids)
-        self._play_all(full)
-        if not sys.stdin.isatty():
+        if watched:
+            self._play_all(full)
+        if not interactive:
             return
         while True:
             choice = input(
