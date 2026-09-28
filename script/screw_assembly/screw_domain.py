@@ -1,7 +1,8 @@
 """The screw-assembly mission as blocks and as a TaskPlan (pure Python, no HPP).
 
 ``build_mission(n)`` is the geometric definition: a chain of short blocks, each
-a grasp sequence planned with ``run_block_with_recovery()`` (or a home move).
+a grasp sequence refined with ``GraspSequenceRefiner`` (or a home move);
+``refinement_step(block)`` turns a block into the refiner's step.
 ``build_plan_document(n)`` expresses the same mission as a TaskPlan: one
 transaction per block, in the same order, each naming its block. The
 capabilities in ``DESCRIPTORS`` declare what each block needs and achieves
@@ -19,6 +20,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from long_tamp.tasks.refiner import Lookahead, RefinementStep
 from long_tamp.tasks.task_planning import CapabilityDescriptor
 
 LEFT, RIGHT = "ur10_left", "ur10_right"
@@ -162,6 +164,26 @@ DESCRIPTORS: dict[str, CapabilityDescriptor] = {
         restartable=True,
     ),
 }
+
+
+def refinement_step(block: dict[str, Any]) -> RefinementStep:
+    """``block`` (a grasp-sequence block, not a home move) as a refiner step."""
+    lookahead = None
+    if "lookahead" in block:
+        lookahead = Lookahead(
+            pair=tuple(block["lookahead"]["pair"]),
+            also=tuple(block["lookahead"]["also"]),
+            # Path-check the clamp move too: a clamp target the arm can't
+            # reach by path gets redrawn in the real plan, which voids the
+            # hints and costs a block replan.
+            verify_paths=True,
+        )
+    return RefinementStep(
+        label=block["label"],
+        sequence=tuple(block["seq"]),
+        frozen=block["frozen"],
+        lookahead=lookahead,
+    )
 
 
 def _step(index: int, block: dict[str, Any]) -> tuple[str, dict[str, str]]:
