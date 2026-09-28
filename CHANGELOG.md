@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-28
+
+Milestone M2: executor contract and refiner interface. Planned motion runs on
+pluggable execution backends under a supervised contract (heartbeats,
+duration-scaled deadlines, BUSY retries, pause/stop/breakpoints); a Python
+executor runs TaskPlans on it; refinement sits behind a `Refiner` interface that
+reports failures as facts; the Python executor and the BehaviorTree.CPP host write
+the same event stream; and a mission killed mid-run resumes from world state.
+Validated with the screw-assembly batch gate on the executor and on the refiner
+(10/10 missions each, 0 % replanning, 100 % recovery), kill-and-resume at three
+kill points, and 4/4 initial-state scenarios.
+
 ### Added
 
 - Execution contract (#8, ADR-0004), `long_tamp.execution`, ROS-free: backends
@@ -352,6 +364,7 @@ First public release, on PyPI as `long-tamp`.
   in ~18s as the *second* phase of a multi-grasp sequence but failed 6/6 draws when built as
   the *only* phase of a single-gripper session. Not root-caused.
 
-[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/thanhndv212/long-tamp/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/thanhndv212/long-tamp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/thanhndv212/long-tamp/releases/tag/v0.1.0
