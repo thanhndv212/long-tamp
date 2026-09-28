@@ -70,7 +70,10 @@ from screw_domain import (  # noqa: E402
     RIGHT,
     blocks_by_label,
     build_plan_document,
+    block_for,
     descriptors,
+    pddl_problem,
+    planned_document,
     refinement_step,
 )
 
@@ -394,6 +397,7 @@ def mission_session(
     recorded: RecordedFacts,
     max_replans: int = 10,
     verbose: bool = True,
+    document: dict[str, Any] | None = None,
 ) -> TaskPlanningSession:
     """The mission's TaskPlan, bound to this scene (one capability per block kind).
 
@@ -404,17 +408,25 @@ def mission_session(
     skipped.
     """
     n_parts = ctx["n_parts"]
-    blocks = blocks_by_label(n_parts)
-    index = {label: i for i, label in enumerate(blocks)}
+    def runner(capability: str):
+        def run(parameters: dict[str, Any]) -> dict[str, Any]:
+            return run_step(capability, parameters)
 
-    def run(parameters: dict[str, Any]) -> dict[str, Any]:
-        label = parameters["block"]
+        return run
+
+    def run_step(capability: str, parameters: dict[str, Any]) -> dict[str, Any]:
+        # The block comes from the step itself, so a planner-built plan (e.g.
+        # part 1 in clamp 2) runs the same way as the hand-written one.
+        block = block_for(capability, parameters)
+        label = block["label"]
+        index = ctx.setdefault("block_index", 0)
+        ctx["block_index"] = index + 1
         r = run_block(
             task,
             planner,
             ctx,
-            index[label],
-            blocks[label],
+            index,
+            block,
             max_replans=max_replans,
             verbose=verbose,
         )
@@ -443,9 +455,34 @@ def mission_session(
     registry = CapabilityRegistry()
     for name, descriptor in descriptors(n_parts).items():
         is_guard = name in ("part_done", "all_parts_done")
-        registry.register(descriptor, check(descriptor) if is_guard else run)
-    plan = TaskPlan.from_dict(build_plan_document(n_parts), registry)
+        registry.register(descriptor, check(descriptor) if is_guard else runner(name))
+    plan = TaskPlan.from_dict(document or build_plan_document(n_parts), registry)
     return TaskPlanningSession(plan, registry, world_state=world, recorded=recorded)
+
+
+def world_atoms(planner: GraspSequencePlanner, recorded: RecordedFacts) -> list[str]:
+    """The world state as ground atoms: held grasps plus recorded facts."""
+    state = CompositeWorldState(GraspTrackerState(planner), recorded)()
+    return sorted(str(atom) for atom in state)
+
+
+def plan_from_goal(
+    n_parts: int, state: list[str], engine: str = "auto"
+) -> dict[str, Any]:
+    """Plan the mission from ``state`` with a task planner (``--planner up``):
+    the goal (``screw_domain.mission_goal``) as PDDL, a skeleton from Unified
+    Planning, then a TaskPlan document (validated when the session loads it)."""
+    from long_tamp.tasks.task_planning.skeleton import UnifiedPlanningPlanner
+
+    t0 = time.time()
+    task_planner = UnifiedPlanningPlanner(engine)
+    name = task_planner.engine_name()
+    steps = task_planner.solve(pddl_problem(n_parts, state))
+    print(
+        f"task planner ({name}): {len(steps)} steps in {time.time() - t0:.2f}s",
+        flush=True,
+    )
+    return planned_document(steps, n_parts, state, generator=f"unified-planning/{name}")
 
 
 def run_mission(
@@ -461,6 +498,7 @@ def run_mission(
     recorded: RecordedFacts | None = None,
     backend=None,
     on_event=None,
+    document: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run the mission's TaskPlan from ``q_start`` (default: the scene start).
 
@@ -473,6 +511,8 @@ def run_mission(
     list, each completed block's motion is sampled into it; if ``checkpoint``
     is given, every block is logged to it. ``on_event`` receives the
     mission's event stream (``long_tamp.tasks.task_planning.events``).
+    ``document`` is the TaskPlan to run (default: the hand-written
+    ``build_plan_document``; see ``plan_from_goal``).
     """
     if recorded is None:
         recorded = RecordedFacts(None, predicates=RECORDED_PREDICATES)
@@ -485,7 +525,9 @@ def run_mission(
         "n_parts": n_parts,
         "backend_displays": getattr(backend, "display", None) is not None,
     }
-    session = mission_session(task, planner, ctx, recorded, max_replans, verbose)
+    session = mission_session(
+        task, planner, ctx, recorded, max_replans, verbose, document=document
+    )
     executor = PlanExecutor(
         session,
         backend=backend,
@@ -538,6 +580,14 @@ def main() -> int:
         help="what executes each block's motion after it is planned: none "
         "(planning only, the default), mock (instant, for testing the pipeline) "
         "or playback (plays the paths in real time, in the viewer if it is on)",
+    )
+    ap.add_argument(
+        "--planner",
+        choices=("none", "up"),
+        default="none",
+        help="how the block order is decided: none (the hand-written plan, the "
+        "default) or up (a task planner plans the goal from the current world "
+        "state; needs the 'planning' extra)",
     )
     ap.add_argument(
         "--viewer-port",
@@ -640,6 +690,11 @@ def main() -> int:
             recorded=recorded,
             backend=make_backend(args.backend, task, live_viewer),
             on_event=events,
+            document=(
+                plan_from_goal(n_parts, world_atoms(planner, recorded))
+                if args.planner == "up"
+                else None
+            ),
         )
     except BaseException:
         if live_viewer is not None:
