@@ -7,4 +7,8 @@ updates:
     schedule:
       interval: monthly
     labels: ["type:chore", "area:ci", "skip-changelog"]
+    # One PR per month for all action bumps, not one per action.
+    groups:
+      github-actions:
+        patterns: ["*"]
     target-branch: dev

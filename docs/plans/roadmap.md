@@ -31,6 +31,8 @@ keep the V3 batch gate green ([validation](../development/validation.md)).
 
 ## M1 — State model and effect-based resume (0.2.0)
 
+**Released as 0.2.0 on 2026-09-28.**
+
 [Milestone 1](https://github.com/thanhndv212/long-tamp/milestone/1)
 
 Capabilities declare what they need and what they achieve; plans are checked for
@@ -53,15 +55,17 @@ change; the 10-seed batch gate passes.
 
 ## M2 — Executor contract and refiner interface (0.3.0)
 
+**Released as 0.3.0 on 2026-09-28.**
+
 [Milestone 2](https://github.com/thanhndv212/long-tamp/milestone/2)
 
-- [ ] [#8](https://github.com/thanhndv212/long-tamp/issues/8) Executor contract: statuses `SUCCESS/FAILURE/RUNNING/BUSY`, heartbeats with
+- [x] [#8](https://github.com/thanhndv212/long-tamp/issues/8) Executor contract: statuses `SUCCESS/FAILURE/RUNNING/BUSY`, heartbeats with
       inactivity timeouts, duration-scaled execution timeouts, pause/resume/breakpoints
-- [ ] [#9](https://github.com/thanhndv212/long-tamp/issues/9) Python executor for TaskPlans (default), with mock and trajectory-playback backends
-- [ ] [#10](https://github.com/thanhndv212/long-tamp/issues/10) `Refiner` interface over `run_block_with_recovery()` and the phase-target lookahead
-- [ ] [#11](https://github.com/thanhndv212/long-tamp/issues/11) Structured JSONL event stream from the executor; the BehaviorTree.CPP host emits
+- [x] [#9](https://github.com/thanhndv212/long-tamp/issues/9) Python executor for TaskPlans (default), with mock and trajectory-playback backends
+- [x] [#10](https://github.com/thanhndv212/long-tamp/issues/10) `Refiner` interface over `run_block_with_recovery()` and the phase-target lookahead
+- [x] [#11](https://github.com/thanhndv212/long-tamp/issues/11) Structured JSONL event stream from the executor; the BehaviorTree.CPP host emits
       the same stream (IR ids stamped on compiled nodes)
-- [ ] [#12](https://github.com/thanhndv212/long-tamp/issues/12) Resume from world state after the process is killed mid-mission
+- [x] [#12](https://github.com/thanhndv212/long-tamp/issues/12) Resume from world state after the process is killed mid-mission
 
 **Exit test:** batch gate passes on the Python executor; a mission killed mid-run
 resumes from world state, not from a block index.

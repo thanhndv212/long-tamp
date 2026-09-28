@@ -67,6 +67,9 @@ nav:
       - Overview: usage/README.md
       - Standalone usage: usage/standalone-usage.md
       - BehaviorTree.CPP integration: usage/behaviortree-integration.md
+      - Refiner: usage/refiner.md
+      - Execution backends: usage/execution.md
+      - Mission events: usage/events.md
   - Features:
       - Overview: features/README.md
       - Phase-target lookahead: features/phase-target-lookahead.md
@@ -80,6 +83,7 @@ nav:
           - "0001 Planner / refiner / executor": adr/0001-planner-refiner-executor.md
           - "0002 Effects as runtime guards": adr/0002-effects-as-runtime-guards.md
           - "0003 Screw assembly reference track": adr/0003-screw-assembly-reference-track.md
+          - "0004 Execution contract": adr/0004-execution-contract.md
   - Plans:
       - Roadmap: plans/roadmap.md
       - "Roadmap: PyPI as the default install": plans/pypi-install-roadmap.md

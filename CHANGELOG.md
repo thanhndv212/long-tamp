@@ -8,6 +8,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-28
+
+Milestone M2: executor contract and refiner interface. Planned motion runs on
+pluggable execution backends under a supervised contract (heartbeats,
+duration-scaled deadlines, BUSY retries, pause/stop/breakpoints); a Python
+executor runs TaskPlans on it; refinement sits behind a `Refiner` interface that
+reports failures as facts; the Python executor and the BehaviorTree.CPP host write
+the same event stream; and a mission killed mid-run resumes from world state.
+Validated with the screw-assembly batch gate on the executor and on the refiner
+(10/10 missions each, 0 % replanning, 100 % recovery), kill-and-resume at three
+kill points, and 4/4 initial-state scenarios.
+
+### Added
+
+- Execution contract (#8, ADR-0004), `long_tamp.execution`, ROS-free: backends
+  implement a polled `start` / `poll` / `cancel` protocol with `Feedback`
+  heartbeats; `run_command` supervises a command (BUSY retried with backoff,
+  cancelled on heartbeat silence or past a deadline scaled by the command's
+  duration and a minimum real-time factor, with the reason reported);
+  `ExecutionControl` pauses, resumes, stops and sets breakpoints at step
+  boundaries; `MockBackend` produces every status for tests.
+- Python TaskPlan executor (#9): `PlanExecutor(session, backend).run()` plans
+  each step through the session and executes the motion its capability submitted
+  (`executor.submit(command)`) on the backend under `run_command`, with
+  pause/stop/breakpoints at step boundaries; a failed execution fails its step.
+  `run_plan` gained `before_step` / `after_step` hooks. `PathPlaybackBackend`
+  plays time-parameterized paths (to a viewer or headless). Screw assembly runs on
+  it, with `--backend none|mock|playback` (default: planning only).
+- Refiner interface (#10, ADR-0001), `long_tamp.tasks.refiner`: a `Refiner`
+  binds a `RefinementStep` (a grasp sequence, frozen arms, optional `Lookahead`)
+  to geometry and returns a `Refinement`, which on failure carries ground facts
+  for the task planner (`refinement_failed(step)`, `unreachable(gripper, handle)`,
+  `phase_failed(...)`, `lookahead_failed(...)`). `GraspSequenceRefiner` wraps
+  `run_block_with_recovery` and the phase-target lookahead; screw assembly uses it.
+  `run_block_with_recovery` results gained a structured `failure` field.
+- Mission event stream (#11), schema `long-tamp.events/1`
+  (`docs/usage/events.md`): one JSONL event per status change of a plan node.
+  `run_plan(..., on_event=)` and `PlanExecutor(..., on_event=)` emit it (the
+  executor adds `motion` events with execution metrics), `JsonlEventWriter`
+  writes it, and the C++ host writes the same stream with `--events <path>`.
+  The compiler stamps `_ir_id` / `_ir_role` on every BT element it emits for an
+  IR node (`COMPILER_VERSION` 1.1). The `taskplan_bt_events` CTest checks the host
+  and the Python runner produce the same transitions. Screw assembly writes
+  `events.jsonl` in its run folder. The fake host session gained a
+  `"shape": "composite"` option.
+- Kill-and-resume test (#12): `tests/test_kill_resume.py` SIGKILLs a mission
+  mid-step and restarts it; the restarted run skips the completed steps from the
+  recorded world state, redoes the interrupted one and completes.
+  `script/screw_assembly/kill_resume.py` does the same on the screw-assembly mission
+  (kill during or after a chosen step, then `--resume`), checked from the event
+  stream. Documented as part of V4.
+
+### Fixed
+
+- Screw assembly: a mission killed after a part's clamp + screw block but before
+  its release skipped the release on resume, ending with ur10_left still holding
+  the clamped part. The `part_done` / `all_parts_done` guards now also require the
+  carrying arm to have let go (the guard is labelled "partN assembled"). Found by
+  the kill-and-resume check (#12).
+
 ## [0.2.0] - 2026-09-28
 
 Milestone M1: state model and effect-based resume. Capabilities declare
@@ -304,6 +364,7 @@ First public release, on PyPI as `long-tamp`.
   in ~18s as the *second* phase of a multi-grasp sequence but failed 6/6 draws when built as
   the *only* phase of a single-gripper session. Not root-caused.
 
-[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/thanhndv212/long-tamp/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/thanhndv212/long-tamp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/thanhndv212/long-tamp/releases/tag/v0.1.0

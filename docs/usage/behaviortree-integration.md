@@ -173,7 +173,11 @@ maps IR nodes deterministically:
 | `condition` | `TaskCapabilityCondition` |
 | `sequence` / `fallback` | `Sequence` / `Fallback` |
 
-Every compiled node keeps a `source_map` entry back to its IR path. The resulting
+Every compiled node keeps a `source_map` entry back to its IR path, and every BT element
+emitted for an IR node carries `_ir_id` (the IR node's id) and `_ir_role` (its part in that
+node: `transaction`, `complete`, `ready`, `precondition`, `attempts`, `execute` for a
+transaction's elements, else the node type). BehaviorTree.CPP keeps both as non-port
+attributes (`node.config().other_attributes`); the event stream uses them (§7). The resulting
 `CompiledBehaviorTree.artifact_fingerprint` is a SHA-256 over `{plan_fingerprint,
 compiler_version, xml, source_map}` — the C++ side and any stored checkpoint can both assert
 they're looking at the exact plan+compiler combination that produced a given run.
@@ -266,8 +270,12 @@ source ~/devel/hpp/dockers/hpp-arm64/config.sh
 Bounded conformance tests (no real PyHPP; safe anywhere, including CI):
 
 ```bash
-ctest --test-dir build-bt --output-on-failure -R 'taskplan_bt_fake'
+ctest --test-dir build-bt --output-on-failure -R 'taskplan_bt_(fake|fault|events)'
 ```
+
+`taskplan_bt_events` runs the fake session on the host and on the Python runner, one
+transaction and a plan with every composite, each successful and failing, and checks that
+both write the same event stream.
 
 Real-mission CTest cases (TWIN's bimanual lift-ball) — need the real PyHPP backend and a
 couple of minutes each, so they're opt-in via a separate CMake option, not part of the
@@ -285,8 +293,12 @@ Run the host directly against your own mission factory (bypasses any supervisor 
 useful for a single attempt or debugging a specific `--options` payload):
 
 ```bash
-./build-bt/examples/behaviortree/agimus_taskplan_bt --factory create_twin_session
+./build-bt/examples/behaviortree/agimus_taskplan_bt --factory create_twin_session \
+  --events run/events.jsonl
 ```
+
+`--events <path>` appends the mission's event stream: one JSON line per status change of a
+plan node, in the same schema the Python executor writes ([Mission events](events.md)).
 
 For a real, long-running PyHPP mission you'll typically also want a process supervisor
 (attempt/total timeouts, checkpoint-resume, bounded restart backoff on crash/timeout) and a

@@ -1,7 +1,8 @@
 """The screw-assembly mission as blocks and as a TaskPlan (pure Python, no HPP).
 
 ``build_mission(n)`` is the geometric definition: a chain of short blocks, each
-a grasp sequence planned with ``run_block_with_recovery()`` (or a home move).
+a grasp sequence refined with ``GraspSequenceRefiner`` (or a home move);
+``refinement_step(block)`` turns a block into the refiner's step.
 ``build_plan_document(n)`` expresses the same mission as a TaskPlan: one
 transaction per block, in the same order, each naming its block. The
 capabilities in ``DESCRIPTORS`` declare what each block needs and achieves
@@ -19,6 +20,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from long_tamp.tasks.refiner import Lookahead, RefinementStep
 from long_tamp.tasks.task_planning import CapabilityDescriptor
 
 LEFT, RIGHT = "ur10_left", "ur10_right"
@@ -164,6 +166,26 @@ DESCRIPTORS: dict[str, CapabilityDescriptor] = {
 }
 
 
+def refinement_step(block: dict[str, Any]) -> RefinementStep:
+    """``block`` (a grasp-sequence block, not a home move) as a refiner step."""
+    lookahead = None
+    if "lookahead" in block:
+        lookahead = Lookahead(
+            pair=tuple(block["lookahead"]["pair"]),
+            also=tuple(block["lookahead"]["also"]),
+            # Path-check the clamp move too: a clamp target the arm can't
+            # reach by path gets redrawn in the real plan, which voids the
+            # hints and costs a block replan.
+            verify_paths=True,
+        )
+    return RefinementStep(
+        label=block["label"],
+        sequence=tuple(block["seq"]),
+        frozen=block["frozen"],
+        lookahead=lookahead,
+    )
+
+
 def _step(index: int, block: dict[str, Any]) -> tuple[str, dict[str, str]]:
     """The capability and parameters that stand for ``block``."""
     label = block["label"]
@@ -201,8 +223,11 @@ def _step(index: int, block: dict[str, Any]) -> tuple[str, dict[str, str]]:
 def descriptors(n_parts: int) -> dict[str, CapabilityDescriptor]:
     """``DESCRIPTORS`` plus the mission's two guard conditions.
 
-    ``part_done`` holds once a part is clamped and both holes are screwed;
-    ``all_parts_done`` once every part is. They guard the part blocks and the
+    ``part_done`` holds once a part is clamped, both holes are screwed and
+    the arm that carried it has let go; ``all_parts_done`` once every part
+    is. The release belongs in it: a run killed after the screws but before
+    the release must still release the part on resume (found by
+    ``kill_resume.py``, #12). They guard the part blocks and the
     driver pickup, whose own effects are undone later in the mission (the
     part is released, the driver racked), so a resumed or scenario run skips
     finished work instead of redoing it (without them, a run resumed after a
@@ -215,17 +240,27 @@ def descriptors(n_parts: int) -> dict[str, CapabilityDescriptor]:
             f"holds(fixtures/clamp{i}, {p}/h_seat)",
             f"screwed({p}, {p}/h_hole1)",
             f"screwed({p}, {p}/h_hole2)",
+            f"not holds({LEFT}/gripper, {p}/h_grasp)",
         ]
     return {
         **DESCRIPTORS,
         "part_done": CapabilityDescriptor(
             "part_done",
             "1.0",
-            {"part": str, "clamp": str, "seat": str, "hole1": str, "hole2": str},
+            {
+                "part": str,
+                "clamp": str,
+                "seat": str,
+                "hole1": str,
+                "hole2": str,
+                "holder": str,
+                "held": str,
+            },
             preconditions=(
                 "holds(?clamp, ?seat)",
                 "screwed(?part, ?hole1)",
                 "screwed(?part, ?hole2)",
+                "not holds(?holder, ?held)",
             ),
         ),
         "all_parts_done": CapabilityDescriptor(
@@ -304,7 +339,7 @@ def build_plan_document(
                     {
                         "type": "condition",
                         "id": f"{p}-done",
-                        "label": f"{p} clamped and screwed",
+                        "label": f"{p} assembled",
                         "capability": "part_done",
                         "parameters": {
                             "part": p,
@@ -312,6 +347,8 @@ def build_plan_document(
                             "seat": f"{p}/h_seat",
                             "hole1": f"{p}/h_hole1",
                             "hole2": f"{p}/h_hole2",
+                            "holder": f"{LEFT}/gripper",
+                            "held": f"{p}/h_grasp",
                         },
                     },
                     {

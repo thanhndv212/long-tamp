@@ -145,9 +145,13 @@ class MissionViewer:
 
     # -- lifecycle ----------------------------------------------------------
 
-    def completed(self, phases):
-        """Record completed phases' paths; play them if someone is watching."""
-        watched = self._watched()
+    def completed(self, phases, play=True):
+        """Record completed phases' paths; play them if someone is watching.
+
+        ``play=False`` only records (for the final replay), e.g. when an
+        execution backend already drives the viewer.
+        """
+        watched = play and self._watched()
         for phase in phases:
             if not phase.get("complete", True) or phase.get("skipped"):
                 continue

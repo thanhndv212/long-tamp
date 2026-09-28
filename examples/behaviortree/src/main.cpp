@@ -1,3 +1,4 @@
+#include "event_logger.hpp"
 #include "python_session.hpp"
 #include "task_nodes.hpp"
 
@@ -13,6 +14,7 @@ int main(int argc, char** argv)
 {
   std::string factory_name = "create_fake_session";
   std::string options = "{}";
+  std::string events_path;
   for(int index = 1; index + 1 < argc; ++index)
   {
     if(std::string(argv[index]) == "--factory")
@@ -22,6 +24,10 @@ int main(int argc, char** argv)
     else if(std::string(argv[index]) == "--options")
     {
       options = argv[index + 1];
+    }
+    else if(std::string(argv[index]) == "--events")
+    {
+      events_path = argv[index + 1];
     }
   }
 
@@ -40,6 +46,11 @@ int main(int argc, char** argv)
     auto tree = factory.createTreeFromText(session->call("get_behavior_tree_xml"));
     BT::printTreeRecursively(tree.rootNode());
     BT::TreeObserver observer(tree);
+    std::unique_ptr<JsonlEventLogger> events;
+    if(!events_path.empty())
+    {
+      events = std::make_unique<JsonlEventLogger>(tree.rootNode(), events_path);
+    }
     const auto status = tree.tickWhileRunning();
     std::cout << "Task plan status: " << BT::toStr(status) << '\n';
     std::cout << "Session report: " << session->call("get_report") << '\n';

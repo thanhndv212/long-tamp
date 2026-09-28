@@ -3,7 +3,8 @@
 
 A long-horizon, multi-arm TAMP example built from generic primitives (see
 README.md and build_scene.py). The mission is a chain of short *blocks*,
-each planned with ``run_block_with_recovery()``:
+each refined by a ``GraspSequenceRefiner`` (``run_block_with_recovery()``
+plus a lookahead, see ``long_tamp.tasks.refiner``):
 
   Bootstrap   ur10_right picks the driver (a cordless drill) off its dock.
   Per part i  A0  ur10_left grasps part i from the staging row.
@@ -44,12 +45,9 @@ CONFIG = HERE / "config" / "screw_assembly_config.yaml"
 
 from long_tamp.config.yaml_loader import YamlTaskLoader  # noqa: E402
 from long_tamp.tasks import ManipulationTask  # noqa: E402
-from long_tamp.tasks.block_recovery import (  # noqa: E402
-    make_lookahead_hints_factory,
-    run_block_with_recovery,
-)
 from long_tamp.tasks.grasp_sequence import GraspSequencePlanner  # noqa: E402
 from long_tamp.tasks.mission_checkpoint import MissionCheckpoint  # noqa: E402
+from long_tamp.tasks.refiner import GraspSequenceRefiner  # noqa: E402
 from long_tamp.tasks.task_planning import (  # noqa: E402
     CapabilityRegistry,
     CompositeWorldState,
@@ -58,8 +56,14 @@ from long_tamp.tasks.task_planning import (  # noqa: E402
     TaskPlan,
     TaskPlanningSession,
 )
+from long_tamp.tasks.task_planning.events import JsonlEventWriter  # noqa: E402
 from long_tamp.tasks.task_planning.predicates import holds  # noqa: E402
-from long_tamp.tasks.task_planning.runner import run_plan  # noqa: E402
+from long_tamp.execution import (  # noqa: E402
+    ExecutionCommand,
+    MockBackend,
+    PathPlaybackBackend,
+    PlanExecutor,
+)
 from screw_domain import (  # noqa: E402
     LEFT,
     RECORDED_PREDICATES,
@@ -67,6 +71,7 @@ from screw_domain import (  # noqa: E402
     blocks_by_label,
     build_plan_document,
     descriptors,
+    refinement_step,
 )
 
 # Planning keeps the fingers frozen open (a grasp is a rigid TCP constraint);
@@ -313,34 +318,12 @@ def run_block(
         r = run_home_move(task, planner, q, *block["move"], verbose=verbose)
         phase_results = r.get("phase_results", [])
     else:
-        hints_factory = None
-        if "lookahead" in block:
-            hints_factory = make_lookahead_hints_factory(
-                planner,
-                block["seq"],
-                q,
-                q_scene_init=task.q_init,
-                per_phase_frozen_arms=block["frozen"],
-                phase_pair=block["lookahead"]["pair"],
-                also_protect=block["lookahead"]["also"],
-                # Path-check the clamp move too: a clamp target the arm
-                # can't reach by path gets redrawn in the real plan, which
-                # voids the hints and costs a block replan.
-                verify_paths=True,
-                verbose=verbose,
-            )
-        r = run_block_with_recovery(
-            planner,
-            block["seq"],
-            q,
-            q_scene_init=task.q_init,
-            per_phase_frozen_arms=block["frozen"],
-            label=block["label"],
-            hints_factory=hints_factory,
-            max_replans=max_replans,
-            verbose=verbose,
+        refiner = ctx.get("refiner") or GraspSequenceRefiner(
+            planner, q_scene_init=task.q_init, max_replans=max_replans, verbose=verbose
         )
-        phase_results = planner.phase_results
+        refined = refiner.refine(refinement_step(block), q)
+        r = refined.as_dict()
+        phase_results = refined.phases
     record = {
         "label": block["label"],
         "success": r["success"],
@@ -378,9 +361,30 @@ def run_block(
                     checkpoint.dir / "trajectory.json", trajectory, ctx["n_parts"]
                 )
         if live_viewer is not None:
-            live_viewer.completed(phase_results)
+            # With a playback backend the backend drives the viewer; record only.
+            live_viewer.completed(phase_results, play=not ctx.get("backend_displays"))
         ctx["q"] = r["final_config"]
+        ctx["last_phases"] = phase_results
     return r
+
+
+def block_commands(
+    task: ScrewAssemblyTask, label: str, phases: list[dict[str, Any]]
+) -> list[ExecutionCommand]:
+    """The motion a block produced, one command per completed path."""
+    commands = []
+    for phase in phases:
+        if not phase.get("complete", True) or phase.get("skipped"):
+            continue
+        for path in phase.get("paths", []):
+            if path is None:
+                continue
+            if isinstance(path, int):
+                path = task.planner.get_path(path)
+            commands.append(
+                ExecutionCommand(step_id=label, duration=path.length(), payload=path)
+            )
+    return commands
 
 
 def mission_session(
@@ -416,6 +420,10 @@ def mission_session(
         )
         if not r["success"]:
             raise RuntimeError(f"{label}: {r['message']}")
+        executor = ctx.get("executor")
+        if executor is not None:
+            for command in block_commands(task, label, ctx.get("last_phases", [])):
+                executor.submit(command)
         return {"replans": r["replans"], "resumes": r["resumes"]}
 
     world = CompositeWorldState(GraspTrackerState(planner), recorded)
@@ -451,14 +459,20 @@ def run_mission(
     q_start: list[float] | None = None,
     live_viewer=None,
     recorded: RecordedFacts | None = None,
+    backend=None,
+    on_event=None,
 ) -> dict[str, Any]:
     """Run the mission's TaskPlan from ``q_start`` (default: the scene start).
+
+    The plan runs on a ``PlanExecutor``: each step plans its block, then its
+    motion executes on ``backend`` (``None``: planning only, the default).
 
     Steps run in plan order through a TaskPlanningSession; a step whose
     effect already holds in the world (grasp tracker + ``recorded`` facts) is
     skipped, which is how ``--resume`` continues a run. If ``trajectory`` is a
     list, each completed block's motion is sampled into it; if ``checkpoint``
-    is given, every block is logged to it.
+    is given, every block is logged to it. ``on_event`` receives the
+    mission's event stream (``long_tamp.tasks.task_planning.events``).
     """
     if recorded is None:
         recorded = RecordedFacts(None, predicates=RECORDED_PREDICATES)
@@ -469,13 +483,18 @@ def run_mission(
         "checkpoint": checkpoint,
         "live_viewer": live_viewer,
         "n_parts": n_parts,
+        "backend_displays": getattr(backend, "display", None) is not None,
     }
     session = mission_session(task, planner, ctx, recorded, max_replans, verbose)
-    t_mission = time.time()
-    run = run_plan(
+    executor = PlanExecutor(
         session,
+        backend=backend,
         on_skip=lambda label, why: print(f"\n=== {label} === skipped ({why})"),
+        on_event=on_event,
     )
+    ctx["executor"] = executor
+    t_mission = time.time()
+    run = executor.run()
     if not run.success:
         print(f"\n=== {run.failed_step} stopped the mission: {run.message}")
     success, skipped = run.success, run.skipped
@@ -484,11 +503,22 @@ def run_mission(
         "seconds": round(time.time() - t_mission, 2),
         "blocks": ctx["records"],
         "skipped": skipped,
+        "executed": len(run.executions),
         "final_config": ctx["q"],
     }
 
 
 from long_tamp.visualization.mission_viewer import MissionViewer
+
+
+def make_backend(name: str, task: ScrewAssemblyTask, live_viewer=None):
+    """The execution backend for ``--backend``."""
+    if name == "mock":
+        return MockBackend(rtf=1000.0)
+    if name == "playback":
+        display = (lambda q: task.planner.viewer(q)) if live_viewer else None
+        return PathPlaybackBackend(display=display)
+    return None
 
 
 def main() -> int:
@@ -500,6 +530,14 @@ def main() -> int:
         "--no-viewer",
         action="store_true",
         help="run without the live Viser viewer or path playback",
+    )
+    ap.add_argument(
+        "--backend",
+        choices=("none", "mock", "playback"),
+        default="none",
+        help="what executes each block's motion after it is planned: none "
+        "(planning only, the default), mock (instant, for testing the pipeline) "
+        "or playback (plays the paths in real time, in the viewer if it is on)",
     )
     ap.add_argument(
         "--viewer-port",
@@ -567,6 +605,10 @@ def main() -> int:
 
     import atexit
 
+    # The event stream, appended to on --resume, so one file covers the run.
+    events = JsonlEventWriter(run_dir / "events.jsonl")
+    atexit.register(events.close)
+
     closures = finger_closures()
     for row in closures.report():
         if row["handle"].startswith(("driver", "part1")):
@@ -596,6 +638,8 @@ def main() -> int:
             q_start=q_start,
             live_viewer=live_viewer,
             recorded=recorded,
+            backend=make_backend(args.backend, task, live_viewer),
+            on_event=events,
         )
     except BaseException:
         if live_viewer is not None:
