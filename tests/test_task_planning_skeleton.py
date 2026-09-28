@@ -159,8 +159,14 @@ def test_the_hand_order_expands_to_the_hand_written_blocks(n_parts):
 # ------------------------------------------------------------------- planner
 
 
-@pytest.fixture(params=["fast-downward", "pyperplan"])
+@pytest.fixture(params=["fast-downward-direct", "fast-downward", "pyperplan"])
 def engine(request):
+    from long_tamp.tasks.task_planning.skeleton import FastDownwardPlanner
+
+    if request.param == "fast-downward-direct":
+        if FastDownwardPlanner.find() is None:
+            pytest.skip("no Fast Downward executable")
+        return request.param
     pytest.importorskip("unified_planning")
     module = {"fast-downward": "up_fast_downward", "pyperplan": "up_pyperplan"}
     pytest.importorskip(module[request.param])
@@ -168,8 +174,13 @@ def engine(request):
 
 
 def _planner(engine):
-    from long_tamp.tasks.task_planning.skeleton import UnifiedPlanningPlanner
+    from long_tamp.tasks.task_planning.skeleton import (
+        FastDownwardPlanner,
+        UnifiedPlanningPlanner,
+    )
 
+    if engine == "fast-downward-direct":
+        return FastDownwardPlanner()
     return UnifiedPlanningPlanner(engine)
 
 
