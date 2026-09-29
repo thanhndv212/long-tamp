@@ -749,6 +749,7 @@ def make_backend(
     speed: float = math.inf,
     drift: list[tuple[str, str, float]] | None = None,
     grasp: str = "weld",
+    record: bool = False,
 ):
     """The execution backend for ``--backend``."""
     if name == "mock":
@@ -773,6 +774,7 @@ def make_backend(
             skills={"screw": ScrewDriving(hole_error=hole_error)},
             from_qpos=to_qpos.inverse,
             grasp=grasp,
+            record=(run_dir or HERE / "runs") / "sim" if record else None,
             **contact,
         )
         return DriftInjector(backend, drift) if drift else backend
@@ -908,6 +910,12 @@ def main() -> int:
         help="with --backend mujoco: how grasps hold objects: weld (the "
         "default) or contact (the Robotiq fingers close and hold them by "
         "friction)",
+    )
+    ap.add_argument(
+        "--sim-record",
+        action="store_true",
+        help="with --backend mujoco: record the simulation to <run folder>/sim, "
+        "for view_mujoco.py",
     )
     ap.add_argument(
         "--plan-ahead",
@@ -1076,6 +1084,7 @@ def main() -> int:
                 hole_error=tuple(v / 1000.0 for v in args.hole_error),
                 speed=args.sim_speed,
                 grasp=args.grasp,
+                record=args.sim_record,
                 drift=[parse_drift(spec) for spec in args.inject_drift],
             ),
             plan_ahead=args.plan_ahead,

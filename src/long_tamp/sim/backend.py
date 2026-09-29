@@ -132,6 +132,8 @@ class MuJoCoBackend:
         pads: dict[str, tuple[Any, Any]] | None = None,
         grip_time: float = 0.6,
         clock: Callable[[], float] = time.monotonic,
+        record: str | Path | None = None,
+        record_fps: float = 30.0,
     ) -> None:
         import mujoco
 
@@ -153,6 +155,15 @@ class MuJoCoBackend:
         self.from_qpos = from_qpos
         self._skill = None
         self.clock = clock
+        #: Folder the simulation is recorded to (``qpos`` at ``record_fps``
+        #: frames per simulated second, one ``.npz`` chunk per command), for
+        #: replay in MuJoCo's viewer; ``None``: not recorded.
+        self.record = Path(record) if record is not None else None
+        self._frame_dt = 1.0 / record_fps
+        self._clock_sim = 0.0  # simulated seconds since the first command
+        self._next_frame = 0.0
+        self._recorded: list[tuple[float, np.ndarray]] = []
+        self._chunks = 0
         if grasp not in ("weld", "contact"):
             raise ValueError(f"grasp must be 'weld' or 'contact', not {grasp!r}")
         if grasp == "contact" and (grip is None or not fingers):
@@ -899,6 +910,26 @@ class MuJoCoBackend:
         return float(np.max(error, initial=0.0))
 
     def poll(self) -> tuple[ExecutionStatus, Feedback | None]:
+        status, feedback = self._poll()
+        if status is not ExecutionStatus.RUNNING:
+            self._flush_frames()
+        return status, feedback
+
+    def _flush_frames(self) -> None:
+        """Write the frames recorded since the last chunk."""
+        if self.record is None or not self._recorded:
+            return
+        self.record.mkdir(parents=True, exist_ok=True)
+        self._chunks += 1
+        times, qpos = zip(*self._recorded)
+        np.savez_compressed(
+            self.record / f"chunk_{self._chunks:05d}.npz",
+            time=np.array(times),
+            qpos=np.array(qpos),
+        )
+        self._recorded = []
+
+    def _poll(self) -> tuple[ExecutionStatus, Feedback | None]:
         if self._path is None:
             return ExecutionStatus.FAILURE, Feedback(message="nothing started")
         if self.cancelled:
@@ -973,6 +1004,10 @@ class MuJoCoBackend:
                 self._drive(name, ahead, qvel_ref)
         self.mujoco.mj_step(self.model, data)
         self._t += self.model.opt.timestep
+        self._clock_sim += self.model.opt.timestep
+        if self.record is not None and self._clock_sim >= self._next_frame:
+            self._recorded.append((self._clock_sim, data.qpos.copy()))
+            self._next_frame += self._frame_dt
         if not np.isfinite(data.qpos).all():
             return f"simulation diverged at t={self._t:.3f}"
         for name, (_, closure, grip_pos) in self._gripped.items():

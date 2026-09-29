@@ -58,6 +58,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Known limit: execution is open loop. On the two-part mission, objects sit up to 3 mm
     from the plan in the fingers; part 1's screws go in, part 2's first misses the 2 mm
     alignment tolerance by 0.5 mm. Welds stay the default for missions.
+- Replay a MuJoCo mission in MuJoCo's viewer: `MuJoCoBackend(record=folder)` saves `qpos` at
+  30 frames per simulated second (one chunk per command), `task_screw_assembly.py
+  --sim-record` records into the run folder, and `script/screw_assembly/view_mujoco.py` replays
+  it (`mjpython` on macOS). The planning container has no display; the replay needs only
+  `mujoco`.
 - Drift check and planning ahead (#20), `long_tamp.execution`.
   - **Drift check.** Before a step's motion runs, `PlanExecutor` asks the backend how far
     the robot is from where the plan starts (`start_error`). Beyond

@@ -232,3 +232,24 @@ def test_a_backend_without_the_skill_plays_its_approach(backend):
     assert result.status is ExecutionStatus.SUCCESS
     assert result.facts == ()
     assert result.metrics["drift"] < 0.005
+
+
+def test_the_simulation_can_be_recorded_for_replay(tmp_path):
+    (tmp_path / "arm.urdf").write_text(ARM)
+    (tmp_path / "box.urdf").write_text(BOX)
+    (tmp_path / "tiny.yaml").write_text(CONFIG)
+    export = export_mjcf(tmp_path / "tiny.yaml", tmp_path / "mjcf")
+    backend = MuJoCoBackend(
+        export, lambda q: np.asarray(q, float), speed=math.inf, record=tmp_path / "sim"
+    )
+    target = REST.copy()
+    target[0] = 0.8
+    for a, b in ((REST, target), (target, REST)):  # a chunk per command
+        assert run(backend, Line(a, b, 1.0, carry=True)).status is ExecutionStatus.SUCCESS
+    chunks = sorted((tmp_path / "sim").glob("chunk_*.npz"))
+    assert len(chunks) == 2
+    with np.load(chunks[1]) as data:
+        assert data["qpos"].shape[1] == backend.model.nq
+        # 30 frames per simulated second, one clock across commands
+        assert np.all(np.diff(data["time"]) == pytest.approx(1 / 30, abs=0.003))
+        assert data["time"][0] > 1.0
