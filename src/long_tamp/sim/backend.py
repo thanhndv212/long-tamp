@@ -55,6 +55,7 @@ import numpy as np
 
 from long_tamp.execution.contract import ExecutionCommand, ExecutionStatus, Feedback
 from long_tamp.execution.playback import _t0
+from long_tamp.tasks.task_planning.skills import SkillCommand
 
 from .mjcf import MjcfExport
 
@@ -93,6 +94,8 @@ class MuJoCoBackend:
         grasp_tolerance: float = 0.02,
         max_acceleration: float = 3.0,
         torque_margin: float = 0.8,
+        skills: dict[str, Callable[[MuJoCoBackend, SkillCommand], Any]] | None = None,
+        from_qpos: Callable[[np.ndarray, Any], np.ndarray] | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         import mujoco
@@ -106,6 +109,14 @@ class MuJoCoBackend:
         self.max_tracking_error = max_tracking_error
         self.grasp_tolerance = grasp_tolerance
         self.torque_margin = torque_margin
+        #: Skill controllers by skill name: ``factory(backend, command)``
+        #: returns an object whose ``poll()`` runs the skill (see
+        #: ``long_tamp.sim.skills``). Other skills play their approach path.
+        self.skills = dict(skills or {})
+        #: Maps MuJoCo ``qpos`` back to a planner configuration
+        #: (``QposMap.inverse``), for replanning from the observed state.
+        self.from_qpos = from_qpos
+        self._skill = None
         self.clock = clock
         self.model, self._objects, self._actuated = self._build(
             path, timestep, contacts
@@ -114,6 +125,9 @@ class MuJoCoBackend:
         self._qadr = self.model.jnt_qposadr[self._actuated]
         self._vadr = self.model.jnt_dofadr[self._actuated]
         self._followers = self._mimic_followers()
+        #: Extra joint torques added to the controller's command (a skill's
+        #: force feed-forward, see ``wrench_torques``); reset every command.
+        self.feedforward = np.zeros(len(self._actuated))
         self._vlim = self._velocity_limits()
         self._vlim = np.where(np.isfinite(self._vlim), self._vlim, 1e6)
         self._alim = np.full(len(self._actuated), float(max_acceleration))
@@ -542,7 +556,12 @@ class MuJoCoBackend:
         for i, group in enumerate(self._followers):
             for dof, multiplier in group:  # followers' loads, seen by the leader
                 bias[i] += multiplier * data.qfrc_bias[dof]
-        command = inertia * omega**2 * error + damping * qvel_ref[self._vadr] + bias
+        command = (
+            inertia * omega**2 * error
+            + damping * qvel_ref[self._vadr]
+            + bias
+            + self.feedforward
+        )
         passive = damping * data.qvel[self._vadr]  # what the damping takes away
         data.ctrl[:] = np.clip(command, passive - self._effort, passive + self._effort)
 
@@ -578,6 +597,18 @@ class MuJoCoBackend:
             for name, c in self._carried.items()
         }
         self._failure = self._attach(self._carried, start)
+        self._skill = None
+        self.feedforward[:] = 0.0
+        if isinstance(payload, SkillCommand):
+            factory = self.skills.get(payload.name)
+            if factory is not None:
+                self._duration = self._length
+                self._scale = 1.0
+                self._t = 0.0
+                self._tracking = 0.0
+                self._started = self.clock()
+                self._skill = factory(self, payload)
+                return ExecutionStatus.RUNNING
         self._times, self._grid = self._retime()
         self._duration = float(self._times[-1])
         # A (near) zero-length path still takes a moment rest to rest; its
@@ -612,15 +643,13 @@ class MuJoCoBackend:
             return ExecutionStatus.FAILURE, Feedback(
                 message=self._failure, metrics=self._metrics()
             )
-        mujoco, model, data = self.mujoco, self.model, self.data
+        if self._skill is not None:
+            return self._skill.poll()
+        model = self.model
         moving = self._duration
         end = moving + self.settle
-        if math.isinf(self.speed):
-            target = end
-        else:
-            target = min(end, (self.clock() - self._started) * self.speed)
+        target = self.sim_target(end)
         dt = model.opt.timestep
-        kinematic = [n for n, c in self._carried.items() if c is None]
         while self._t < target:
             ref = self._reference(self._path_time(self._t))
             ahead = self._reference(self._path_time(self._t + dt))
@@ -628,30 +657,13 @@ class MuJoCoBackend:
                 return ExecutionStatus.FAILURE, Feedback(
                     message=f"path evaluation failed at t={self._t:.3f}"
                 )
-            qvel_ref = np.zeros(model.nv)
-            mujoco.mj_differentiatePos(model, qvel_ref, dt, ref, ahead)
+            qvel_ref = self.velocity(ref, ahead)
             if self._t >= moving:
                 qvel_ref[:] = 0.0
-            self._set_ctrl(ref, qvel_ref)
-            for name in kinematic:
-                self._drive(name, ahead, qvel_ref)
-            mujoco.mj_step(model, data)
-            self._t += dt
-            if not np.isfinite(data.qpos).all():
+            error = self.control_step(ref, qvel_ref, ahead)
+            if error:
                 return ExecutionStatus.FAILURE, Feedback(
-                    message=f"simulation diverged at t={self._t:.3f}"
-                )
-            self._tracking = max(self._tracking, self._joint_error(ref))
-            if (
-                self.max_tracking_error is not None
-                and self._tracking > self.max_tracking_error
-            ):
-                return ExecutionStatus.FAILURE, Feedback(
-                    message=(
-                        f"tracking error {self._tracking:.3f} rad exceeds "
-                        f"{self.max_tracking_error:g} at t={self._t:.2f} s"
-                    ),
-                    metrics=self._metrics(),
+                    message=error, metrics=self._metrics()
                 )
         metrics = self._metrics()
         if self._t >= end:
@@ -669,6 +681,116 @@ class MuJoCoBackend:
             )
         progress = min(1.0, self._t / end) if end > 0 else 1.0
         return ExecutionStatus.RUNNING, Feedback(progress=progress, metrics=metrics)
+
+    # -- the control loop, shared with skill controllers ------------------
+
+    def sim_target(self, end: float) -> float:
+        """How far (simulated seconds into the command) this poll may run."""
+        if math.isinf(self.speed):
+            return end
+        return min(end, (self.clock() - self._started) * self.speed)
+
+    def velocity(self, qpos: np.ndarray, ahead: np.ndarray) -> np.ndarray:
+        """The joint velocity going from ``qpos`` to ``ahead`` in one step."""
+        qvel = np.zeros(self.model.nv)
+        self.mujoco.mj_differentiatePos(
+            self.model, qvel, self.model.opt.timestep, qpos, ahead
+        )
+        return qvel
+
+    def control_step(
+        self, qpos_ref: np.ndarray, qvel_ref: np.ndarray, ahead: np.ndarray
+    ) -> str:
+        """Track the reference for one physics step; "" or a failure message."""
+        data = self.data
+        self._set_ctrl(qpos_ref, qvel_ref)
+        for name, carrier in self._carried.items():
+            if carrier is None:
+                self._drive(name, ahead, qvel_ref)
+        self.mujoco.mj_step(self.model, data)
+        self._t += self.model.opt.timestep
+        if not np.isfinite(data.qpos).all():
+            return f"simulation diverged at t={self._t:.3f}"
+        self._tracking = max(self._tracking, self._joint_error(qpos_ref))
+        if (
+            self.max_tracking_error is not None
+            and self._tracking > self.max_tracking_error
+        ):
+            return (
+                f"tracking error {self._tracking:.3f} rad exceeds "
+                f"{self.max_tracking_error:g} at t={self._t:.2f} s"
+            )
+        return ""
+
+    def planned_qpos(self, s: float) -> np.ndarray | None:
+        """The planned configuration (MuJoCo ``qpos``) at path parameter ``s``."""
+        return self._reference(s)
+
+    def body_position(self, qpos: np.ndarray, body: int) -> np.ndarray:
+        """Where ``body`` is at configuration ``qpos`` (kinematics only)."""
+        self._scratch.qpos[:] = qpos
+        self.mujoco.mj_kinematics(self.model, self._scratch)
+        return self._scratch.xpos[body].copy()
+
+    def wrench_torques(self, body: int, wrench: np.ndarray) -> np.ndarray:
+        """Driven-joint torques that exert ``wrench`` (force, torque; world
+        frame) at ``body``'s centre of mass, through what carries it:
+        ``J^T w`` (the counterpart of ``data.xfrc_applied[body]``)."""
+        mujoco, model, data = self.mujoco, self.model, self.data
+        link = body
+        for name, obj in self._objects.items():
+            eq = self._weld(name)
+            if obj == body and data.eq_active[eq]:
+                link = int(model.eq_obj1id[eq])  # a welded object: its carrier
+        jacp = np.zeros((3, model.nv))
+        jacr = np.zeros((3, model.nv))
+        # At the centre of mass: where MuJoCo applies xfrc_applied.
+        mujoco.mj_jac(model, data, jacp, jacr, data.xipos[body], link)
+        torques = jacp.T @ wrench[:3] + jacr.T @ wrench[3:]
+        return torques[self._vadr]
+
+    # -- drift -------------------------------------------------------------
+
+    def start_error(self, command: ExecutionCommand) -> float | None:
+        """How far the simulation is from where ``command``'s path starts:
+        the largest driven-joint error [rad], or ``None`` before the first
+        command (the simulation starts wherever that command starts)."""
+        if not self._initialized:
+            return None
+        path = command.payload
+        if self.get_path is not None and not hasattr(path, "eval"):
+            path = self.get_path(path)
+        if path is None or not hasattr(path, "eval"):
+            return None
+        q, ok = path.eval(_t0(path))
+        if not ok:
+            return None
+        return self._joint_error(self.to_qpos(q))
+
+    def observed_config(self, like: Any) -> np.ndarray | None:
+        """The simulation's state as a planner configuration (``like`` fills
+        what MuJoCo doesn't map), or ``None`` without ``from_qpos``."""
+        if self.from_qpos is None:
+            return None
+        return self.from_qpos(self.data.qpos.copy(), like)
+
+    def disturb(self, joint: str, delta: float) -> None:
+        """Move one joint by ``delta`` right now, as if the robot were bumped
+        (the drift the executor checks for before running a cached plan)."""
+        j = self.mujoco.mj_name2id(self.model, self.mujoco.mjtObj.mjOBJ_JOINT, joint)
+        if j < 0:
+            raise KeyError(joint)
+        self.data.qpos[self.model.jnt_qposadr[j]] += delta
+        self.data.qvel[:] = 0.0
+        self.mujoco.mj_forward(self.model, self.data)
+
+    def carried_by_robot(self) -> dict[str, int]:
+        """Objects a robot link carries in this command: name -> body id."""
+        return {
+            name: self._objects[name]
+            for name, carrier in self._carried.items()
+            if carrier not in (0, None)
+        }
 
     def _drive(self, name: str, qpos_ref: np.ndarray, qvel_ref: np.ndarray) -> None:
         model = self.model

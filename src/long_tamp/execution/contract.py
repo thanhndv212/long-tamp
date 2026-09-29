@@ -47,12 +47,15 @@ class Feedback:
 
     ``metrics`` are numbers the backend measures (a simulator's tracking error,
     for example); the last ones reported end up in the command's result and
-    its ``motion`` event.
+    its ``motion`` event. ``facts`` likewise.
     """
 
     progress: float | None = None
     message: str = ""
     metrics: dict[str, float] | None = None
+    #: Ground atoms the command established (a skill's postconditions) or,
+    #: on failure, why it failed (e.g. ``screw_misaligned(driver, part1/h_hole1)``).
+    facts: tuple[str, ...] = ()
 
 
 class ExecutionBackend(Protocol):
@@ -79,6 +82,7 @@ class ExecutionPolicy:
     - ``busy_retries`` / ``busy_backoff``: how often, and how far apart, to retry
       a ``BUSY`` start before failing with reason ``busy``.
     - ``poll_interval``: seconds between polls.
+    - ``max_start_drift``: see below (``PlanExecutor``'s drift check).
     """
 
     inactivity_timeout: float = 30.0
@@ -87,6 +91,10 @@ class ExecutionPolicy:
     busy_retries: int = 10
     busy_backoff: float = 1.0
     poll_interval: float = 0.1
+    #: Before a step's motion runs: how far [rad] the robot may be from where
+    #: its (cached) plan starts, per ``backend.start_error``; beyond it the
+    #: step is replanned from the observed state. ``None``: no check.
+    max_start_drift: float | None = None
 
     def deadline(self, command: ExecutionCommand) -> float | None:
         if command.duration is None:
@@ -110,3 +118,5 @@ class ExecutionResult:
     busy_retries: int = 0
     #: The last metrics the backend reported (``Feedback.metrics``).
     metrics: dict[str, float] = field(default_factory=dict)
+    #: The last facts the backend reported (``Feedback.facts``).
+    facts: tuple[str, ...] = ()

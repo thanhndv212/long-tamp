@@ -9,7 +9,7 @@ from typing import Any
 
 from .capabilities import CapabilityRegistry
 from .model import TaskPlan, grounded_literals
-from .predicates import holds, parse_state
+from .predicates import apply_effects, holds, parse_state
 from .world_state import RecordedFacts
 
 #: Returns the current world as ground atoms (``"holds(left, ball)"`` strings or
@@ -28,7 +28,9 @@ class TaskPlanningSession:
     preconditions against the world; without it, it only checks that the step
     exists (the pre-0.2 behaviour). With ``recorded`` (a ``RecordedFacts``),
     a step that completes writes its grounded effects on the recorded
-    predicates there; failed steps and plan validation never do.
+    predicates there; failed steps and plan validation never do. An executor
+    that runs a step's motion after planning it sets ``defer_recording`` and
+    calls ``commit_effects`` once the motion has executed.
     """
 
     def __init__(
@@ -45,6 +47,11 @@ class TaskPlanningSession:
         self.recorded = recorded
         self._nodes = self._index_nodes(plan.document["root"])
         self._completed: set[str] = set()
+        #: With ``defer_recording``, a completed step's recorded effects wait
+        #: for ``commit_effects`` (its motion executed), set by an executor
+        #: that runs motion after planning.
+        self.defer_recording = False
+        self._uncommitted: dict[str, dict[str, Any]] = {}
         self._stop_requested = threading.Event()
 
     @classmethod
@@ -80,7 +87,7 @@ class TaskPlanningSession:
         descriptor = self.registry.descriptor(node["capability"])
         preconditions, _ = grounded_literals(node, descriptor)
         try:
-            state = parse_state(self.world_state())
+            state = self._state()
         except Exception as error:  # noqa: BLE001 - world-state provider boundary
             return _response(status="failure", ready=False, message=str(error))
         unsatisfied = [str(p) for p in preconditions if not holds(p, state)]
@@ -111,7 +118,7 @@ class TaskPlanningSession:
             descriptor = self.registry.descriptor(node["capability"])
             _, effects = grounded_literals(node, descriptor)
             if effects:
-                state = parse_state(self.world_state())
+                state = self._state()
                 if all(holds(effect, state) for effect in effects):
                     return True, "effect_holds"
                 return False, "effect_not_holding"
@@ -210,10 +217,10 @@ class TaskPlanningSession:
             metrics = implementation(dict(executable.get("parameters", {})))
         except Exception as error:  # noqa: BLE001 - capability boundary
             return _response(status="retry", step_id=step_id, message=str(error))
-        if self.recorded is not None:
-            descriptor = self.registry.descriptor(executable["capability"])
-            _, effects = grounded_literals(executable, descriptor)
-            self.recorded.apply(effects)
+        if self.defer_recording:
+            self._uncommitted[step_id] = executable
+        else:
+            self._record(executable)
         self._completed.add(step_id)
         return _response(
             status="success",
@@ -221,6 +228,32 @@ class TaskPlanningSession:
             message="completed",
             metrics=metrics if isinstance(metrics, dict) else {},
         )
+
+    def _state(self) -> frozenset:
+        """The world state, plus the recorded effects of steps planned but not
+        yet executed (``defer_recording``): what the plan expects, so a step
+        planned ahead of execution sees its predecessors' effects."""
+        state = parse_state(self.world_state())
+        if self.recorded is None or not self._uncommitted:
+            return state
+        for executable in self._uncommitted.values():
+            descriptor = self.registry.descriptor(executable["capability"])
+            _, effects = grounded_literals(executable, descriptor)
+            own = [e for e in effects if e.atom.name in self.recorded.predicates]
+            state = apply_effects(state, own)
+        return state
+
+    def _record(self, executable: dict[str, Any]) -> None:
+        if self.recorded is not None:
+            descriptor = self.registry.descriptor(executable["capability"])
+            _, effects = grounded_literals(executable, descriptor)
+            self.recorded.apply(effects)
+
+    def commit_effects(self, step_id: str) -> None:
+        """Record a deferred step's effects: its motion has now executed."""
+        executable = self._uncommitted.pop(step_id, None)
+        if executable is not None:
+            self._record(executable)
 
     def request_stop(self) -> str:
         self._stop_requested.set()

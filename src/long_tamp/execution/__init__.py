@@ -19,6 +19,8 @@ from .control import ExecutionControl
 from .executor import PlanExecutor, StepExecution
 from .mock import MockBackend
 from .playback import PathPlaybackBackend
+from .process import ProcessBackend
+from .sampled import SampledPath
 from .supervisor import run_command
 
 __all__ = [
@@ -32,6 +34,8 @@ __all__ = [
     "MockBackend",
     "PathPlaybackBackend",
     "PlanExecutor",
+    "ProcessBackend",
+    "SampledPath",
     "StepExecution",
     "run_command",
 ]

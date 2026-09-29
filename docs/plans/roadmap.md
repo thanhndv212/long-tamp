@@ -91,8 +91,8 @@ resumes from world state, not from a block index.
 
 - [x] [#17](https://github.com/thanhndv212/long-tamp/issues/17) MuJoCo scene export (MJCF from the example's URDFs)
 - [x] [#18](https://github.com/thanhndv212/long-tamp/issues/18) MuJoCo execution backend: trajectory tracking controller, gripper actuation
-- [ ] [#19](https://github.com/thanhndv212/long-tamp/issues/19) Skill capabilities (pre/post conditions, start/end poses) and a screwing skill stub
-- [ ] [#20](https://github.com/thanhndv212/long-tamp/issues/20) Drift check before executing a cached plan; replan from observed state;
+- [x] [#19](https://github.com/thanhndv212/long-tamp/issues/19) Skill capabilities (pre/post conditions, start/end poses) and a screwing skill stub
+- [x] [#20](https://github.com/thanhndv212/long-tamp/issues/20) Drift check before executing a cached plan; replan from observed state;
       plan-ahead in a planner process
 
 **Exit test:** a full two-part mission executes in simulation with tracking control;
