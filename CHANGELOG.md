@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Skills (#19), `long_tamp.tasks.task_planning.skills`. A `SkillSpec` declares a step that
+  ends in controller-level behaviour: pre- and postconditions, failure facts, start and end
+  poses. `descriptor()` turns it into a capability.
+  - A `SkillCommand` is the payload a backend runs, and it is also its approach path, so
+    backends without the skill play it.
+  - `long_tamp.sim.ScrewDriving` is a screwing stub for the MuJoCo backend: a compliant
+    approach, an alignment check, a virtual screw with force feed-forward, and a torque
+    threshold. It reports `screwed(part, hole)`, `screw_misaligned` or `screw_no_contact`.
+  - The screw assembly sends each screw insertion as a skill; `--hole-error` models a
+    perception error.
+  - `Feedback` and `ExecutionResult` carry `facts`.
+  - With a backend, a step's recorded effects are written only after its motion executed
+    (they used to be written when it was planned).
+  - Docs: `docs/usage/skills.md`.
 - MuJoCo export (#17), `long_tamp.sim.mjcf`: `export_mjcf(config, out_dir)` writes a
   task's scene as one self-contained MJCF (HPP's body and joint names, objects free at
   their initial pose, Robotiq mimic joints as equalities, COLLADA meshes converted);

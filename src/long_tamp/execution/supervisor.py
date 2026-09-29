@@ -39,6 +39,7 @@ def run_command(
     retries = 0
 
     metrics: dict[str, float] = {}
+    facts: list[str] = []
 
     def done(status, reason="", message="", feedback=0):
         return ExecutionResult(
@@ -49,6 +50,7 @@ def run_command(
             feedback_count=feedback,
             busy_retries=retries,
             metrics=dict(metrics),
+            facts=tuple(facts),
         )
 
     while True:
@@ -79,6 +81,8 @@ def run_command(
             last_heartbeat = now
             if feedback.metrics:
                 metrics.update(feedback.metrics)
+            if feedback.facts:
+                facts[:] = feedback.facts
         if status is ExecutionStatus.SUCCESS:
             message = feedback.message if feedback is not None else ""
             return done(status, message=message, feedback=heartbeats)

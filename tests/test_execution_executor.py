@@ -188,3 +188,59 @@ def test_stop_at_a_boundary_ends_the_run():
     assert not run.success and run.failed_step == "release-1"
     assert run.message == "stopped"
     assert planned == [("grasp", "ball")]
+
+
+def _screw_plan(backend):
+    """One step whose effect is a recorded fact, with one motion."""
+    from long_tamp.tasks.task_planning import RecordedFacts
+
+    holder = {}
+
+    def screw(p):
+        holder["executor"].submit(ExecutionCommand("screw", duration=1.0))
+        return {}
+
+    registry = CapabilityRegistry()
+    registry.register(
+        CapabilityDescriptor(
+            "screw",
+            "1.0",
+            {"part": str},
+            effects=("screwed(?part)",),
+            restartable=True,
+        ),
+        screw,
+    )
+    document = {
+        "schema_version": "1.0",
+        "mission_id": "screw-demo",
+        "scene": {"id": "fake"},
+        "provenance": {"kind": "human", "generator": "test"},
+        "root": {
+            "type": "sequence",
+            "id": "root",
+            "children": [_transaction("screw-1", "screw", part="p1")],
+        },
+    }
+    recorded = RecordedFacts(None, predicates={"screwed"})
+    session = TaskPlanningSession(
+        TaskPlan.from_dict(document, registry), registry, recorded=recorded
+    )
+    executor = PlanExecutor(
+        session, backend=backend, policy=ExecutionPolicy(poll_interval=0.001)
+    )
+    holder["executor"] = executor
+    return executor, recorded
+
+
+def test_recorded_facts_wait_for_the_motion_to_execute():
+    executor, recorded = _screw_plan(MockBackend(rtf=1000.0))
+    assert executor.run().success
+    assert {str(a) for a in recorded()} == {"screwed(p1)"}
+
+
+def test_a_failed_execution_records_nothing():
+    executor, recorded = _screw_plan(MockBackend(fail_at=0.0, message="stripped"))
+    run = executor.run()
+    assert not run.success
+    assert recorded() == frozenset()  # planned, but the screw was never driven

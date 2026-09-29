@@ -1,0 +1,46 @@
+{
+  "date": "2026-09-29",
+  "validation": "V2 smoke missions: the screw skill in the MuJoCo backend (#19)",
+  "environment": "hpp-agimus-arm64 (source-built HPP), MuJoCo 3.11",
+  "scene": "two-part screw assembly (build_scene.py --parts 2)",
+  "runs": [
+    {
+      "command": "task_screw_assembly.py --seed 1 --no-viewer --backend mujoco",
+      "success": true,
+      "execution": {
+        "commands": 37,
+        "failed": 0,
+        "sim_seconds": 111.49,
+        "max_tracking_error": 0.01525,
+        "max_drift": 1e-05,
+        "max_object_drift": 3e-05,
+        "max_start_drift": 0.00061,
+        "screws_driven": 4,
+        "max_screw_lateral_error": 5e-05
+      }
+    },
+    {
+      "command": "task_screw_assembly.py --seed 1 --no-viewer --backend mujoco --hole-error 0 5 0",
+      "success": false,
+      "execution": {
+        "commands": 9,
+        "failed": 1,
+        "sim_seconds": 34.92,
+        "max_tracking_error": 0.01525,
+        "max_drift": 1e-05,
+        "max_object_drift": 3e-05,
+        "max_start_drift": 1e-05,
+        "screws_driven": 0,
+        "max_screw_lateral_error": 0.00514
+      },
+      "failure": {
+        "step": "part1 A: clamp + screw",
+        "facts": [
+          "screw_misaligned(driver, part1/h_hole1)"
+        ],
+        "message": "screw_misaligned(driver, part1/h_hole1): 5.1 mm off the hole's axis (tolerance 2.0 mm)"
+      },
+      "recorded_facts": "none (no screw recorded as driven)"
+    }
+  ]
+}

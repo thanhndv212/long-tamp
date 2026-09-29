@@ -47,12 +47,15 @@ class Feedback:
 
     ``metrics`` are numbers the backend measures (a simulator's tracking error,
     for example); the last ones reported end up in the command's result and
-    its ``motion`` event.
+    its ``motion`` event. ``facts`` likewise.
     """
 
     progress: float | None = None
     message: str = ""
     metrics: dict[str, float] | None = None
+    #: Ground atoms the command established (a skill's postconditions) or,
+    #: on failure, why it failed (e.g. ``screw_misaligned(driver, part1/h_hole1)``).
+    facts: tuple[str, ...] = ()
 
 
 class ExecutionBackend(Protocol):
@@ -110,3 +113,5 @@ class ExecutionResult:
     busy_retries: int = 0
     #: The last metrics the backend reported (``Feedback.metrics``).
     metrics: dict[str, float] = field(default_factory=dict)
+    #: The last facts the backend reported (``Feedback.facts``).
+    facts: tuple[str, ...] = ()
