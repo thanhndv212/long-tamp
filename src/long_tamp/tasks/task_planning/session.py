@@ -9,7 +9,7 @@ from typing import Any
 
 from .capabilities import CapabilityRegistry
 from .model import TaskPlan, grounded_literals
-from .predicates import holds, parse_state
+from .predicates import apply_effects, holds, parse_state
 from .world_state import RecordedFacts
 
 #: Returns the current world as ground atoms (``"holds(left, ball)"`` strings or
@@ -87,7 +87,7 @@ class TaskPlanningSession:
         descriptor = self.registry.descriptor(node["capability"])
         preconditions, _ = grounded_literals(node, descriptor)
         try:
-            state = parse_state(self.world_state())
+            state = self._state()
         except Exception as error:  # noqa: BLE001 - world-state provider boundary
             return _response(status="failure", ready=False, message=str(error))
         unsatisfied = [str(p) for p in preconditions if not holds(p, state)]
@@ -118,7 +118,7 @@ class TaskPlanningSession:
             descriptor = self.registry.descriptor(node["capability"])
             _, effects = grounded_literals(node, descriptor)
             if effects:
-                state = parse_state(self.world_state())
+                state = self._state()
                 if all(holds(effect, state) for effect in effects):
                     return True, "effect_holds"
                 return False, "effect_not_holding"
@@ -228,6 +228,20 @@ class TaskPlanningSession:
             message="completed",
             metrics=metrics if isinstance(metrics, dict) else {},
         )
+
+    def _state(self) -> frozenset:
+        """The world state, plus the recorded effects of steps planned but not
+        yet executed (``defer_recording``): what the plan expects, so a step
+        planned ahead of execution sees its predecessors' effects."""
+        state = parse_state(self.world_state())
+        if self.recorded is None or not self._uncommitted:
+            return state
+        for executable in self._uncommitted.values():
+            descriptor = self.registry.descriptor(executable["capability"])
+            _, effects = grounded_literals(executable, descriptor)
+            own = [e for e in effects if e.atom.name in self.recorded.predicates]
+            state = apply_effects(state, own)
+        return state
 
     def _record(self, executable: dict[str, Any]) -> None:
         if self.recorded is not None:

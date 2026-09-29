@@ -95,6 +95,7 @@ class MuJoCoBackend:
         max_acceleration: float = 3.0,
         torque_margin: float = 0.8,
         skills: dict[str, Callable[[MuJoCoBackend, SkillCommand], Any]] | None = None,
+        from_qpos: Callable[[np.ndarray, Any], np.ndarray] | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         import mujoco
@@ -112,6 +113,9 @@ class MuJoCoBackend:
         #: returns an object whose ``poll()`` runs the skill (see
         #: ``long_tamp.sim.skills``). Other skills play their approach path.
         self.skills = dict(skills or {})
+        #: Maps MuJoCo ``qpos`` back to a planner configuration
+        #: (``QposMap.inverse``), for replanning from the observed state.
+        self.from_qpos = from_qpos
         self._skill = None
         self.clock = clock
         self.model, self._objects, self._actuated = self._build(
@@ -744,6 +748,41 @@ class MuJoCoBackend:
         mujoco.mj_jac(model, data, jacp, jacr, data.xipos[body], link)
         torques = jacp.T @ wrench[:3] + jacr.T @ wrench[3:]
         return torques[self._vadr]
+
+    # -- drift -------------------------------------------------------------
+
+    def start_error(self, command: ExecutionCommand) -> float | None:
+        """How far the simulation is from where ``command``'s path starts:
+        the largest driven-joint error [rad], or ``None`` before the first
+        command (the simulation starts wherever that command starts)."""
+        if not self._initialized:
+            return None
+        path = command.payload
+        if self.get_path is not None and not hasattr(path, "eval"):
+            path = self.get_path(path)
+        if path is None or not hasattr(path, "eval"):
+            return None
+        q, ok = path.eval(_t0(path))
+        if not ok:
+            return None
+        return self._joint_error(self.to_qpos(q))
+
+    def observed_config(self, like: Any) -> np.ndarray | None:
+        """The simulation's state as a planner configuration (``like`` fills
+        what MuJoCo doesn't map), or ``None`` without ``from_qpos``."""
+        if self.from_qpos is None:
+            return None
+        return self.from_qpos(self.data.qpos.copy(), like)
+
+    def disturb(self, joint: str, delta: float) -> None:
+        """Move one joint by ``delta`` right now, as if the robot were bumped
+        (the drift the executor checks for before running a cached plan)."""
+        j = self.mujoco.mj_name2id(self.model, self.mujoco.mjtObj.mjOBJ_JOINT, joint)
+        if j < 0:
+            raise KeyError(joint)
+        self.data.qpos[self.model.jnt_qposadr[j]] += delta
+        self.data.qvel[:] = 0.0
+        self.mujoco.mj_forward(self.model, self.data)
 
     def carried_by_robot(self) -> dict[str, int]:
         """Objects a robot link carries in this command: name -> body id."""
