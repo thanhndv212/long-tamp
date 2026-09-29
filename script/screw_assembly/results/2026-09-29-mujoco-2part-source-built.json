@@ -1,0 +1,20 @@
+{
+  "date": "2026-09-29",
+  "validation": "V2 smoke mission on the MuJoCo backend (#18)",
+  "environment": "hpp-agimus-arm64 (source-built HPP), MuJoCo 3.11",
+  "command": "build_scene.py --parts 2; task_screw_assembly.py --seed 1 --no-viewer --backend mujoco",
+  "scene": "two-part screw assembly",
+  "planner": "hand-written TaskPlan, default (STP) time parameterization",
+  "success": true,
+  "seconds": 394.12,
+  "execution": {
+    "commands": 37,
+    "failed": 0,
+    "sim_seconds": 112.97,
+    "max_tracking_error": 0.01525,
+    "max_drift": 1e-05,
+    "max_object_drift": 5e-05,
+    "max_start_drift": 1e-05
+  },
+  "notes": "grasps are welds; every path retimed (time_scale 1.0-2.2 on real motions); carriers are wrist links"
+}

@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import ctypes
 import json
+import math
 import random
 import sys
 import time
@@ -410,6 +411,7 @@ def mission_session(
     skipped.
     """
     n_parts = ctx["n_parts"]
+
     def runner(capability: str):
         def run(parameters: dict[str, Any]) -> dict[str, Any]:
             return run_step(capability, parameters)
@@ -437,7 +439,9 @@ def mission_session(
                     f"cannot_reach({gripper}, {handle})",
                 ],
             }
-            print(f"\n=== {label} === INJECTED FAILURE: cannot_reach({gripper}, {handle})")
+            print(
+                f"\n=== {label} === INJECTED FAILURE: cannot_reach({gripper}, {handle})"
+            )
             raise RuntimeError(f"{label}: injected failure")
         r = run_block(
             task,
@@ -660,6 +664,7 @@ def run_mission(
         "blocks": ctx["records"],
         "skipped": skipped,
         "executed": len(run.executions),
+        "execution": execution_summary(run.executions),
         "final_config": ctx["q"],
         "failure": None if run.success else ctx.get("failure"),
     }
@@ -668,14 +673,44 @@ def run_mission(
 from long_tamp.visualization.mission_viewer import MissionViewer
 
 
-def make_backend(name: str, task: ScrewAssemblyTask, live_viewer=None):
+def make_backend(
+    name: str, task: ScrewAssemblyTask, live_viewer=None, run_dir: Path | None = None
+):
     """The execution backend for ``--backend``."""
     if name == "mock":
         return MockBackend(rtf=1000.0)
     if name == "playback":
         display = (lambda q: task.planner.viewer(q)) if live_viewer else None
         return PathPlaybackBackend(display=display)
+    if name == "mujoco":
+        from long_tamp.sim import MuJoCoBackend, QposMap, export_mjcf
+
+        export = export_mjcf(CONFIG, (run_dir or HERE / "runs") / "mjcf")
+        to_qpos = QposMap(export.load(), task.robot.model())
+        return MuJoCoBackend(export, to_qpos, speed=math.inf)
     return None
+
+
+def execution_summary(executions) -> dict[str, Any] | None:
+    """What the backend measured over the mission (the MuJoCo backend's
+    tracking error and drift), from ``PlanRun.executions``."""
+    if not executions:
+        return None
+    metrics = [e.result.metrics for e in executions]
+
+    def worst(key):
+        values = [m[key] for m in metrics if key in m]
+        return max(values) if values else None
+
+    return {
+        "commands": len(executions),
+        "failed": sum(1 for e in executions if e.result.status.value != "success"),
+        "sim_seconds": round(sum(m.get("sim_seconds", 0.0) for m in metrics), 2),
+        "max_tracking_error": worst("tracking_error"),
+        "max_drift": worst("drift"),
+        "max_object_drift": worst("object_drift"),
+        "max_start_drift": worst("start_drift"),
+    }
 
 
 def main() -> int:
@@ -690,11 +725,12 @@ def main() -> int:
     )
     ap.add_argument(
         "--backend",
-        choices=("none", "mock", "playback"),
+        choices=("none", "mock", "playback", "mujoco"),
         default="none",
         help="what executes each block's motion after it is planned: none "
-        "(planning only, the default), mock (instant, for testing the pipeline) "
-        "or playback (plays the paths in real time, in the viewer if it is on)",
+        "(planning only, the default), mock (instant, for testing the pipeline), "
+        "playback (plays the paths in real time, in the viewer if it is on) or "
+        "mujoco (simulates them under tracking control; needs the sim extra)",
     )
     ap.add_argument(
         "--planner",
@@ -819,7 +855,7 @@ def main() -> int:
             checkpoint=checkpoint,
             live_viewer=live_viewer,
             recorded=recorded,
-            backend=make_backend(args.backend, task, live_viewer),
+            backend=make_backend(args.backend, task, live_viewer, run_dir),
             on_event=events,
             inject=inject,
         )

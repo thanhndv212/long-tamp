@@ -154,6 +154,8 @@ class PlanExecutor:
                 metrics["reason"] = outcome.reason
             if command.duration is not None:
                 metrics["duration"] = round(command.duration, 3)
+            for key, value in outcome.metrics.items():
+                metrics.setdefault(key, value)
         self.on_event(
             make_event(
                 node["id"],

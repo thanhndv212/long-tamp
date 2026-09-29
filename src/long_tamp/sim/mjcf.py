@@ -10,13 +10,16 @@ loads and writes one self-contained MJCF file:
   the config gives ``pose``); objects get a free joint at their
   ``initial_pose_xyzquat``;
 - ``<mimic>`` joints become joint equality constraints (MuJoCo's URDF parser
-  drops them before 3.14);
+  drops them before 3.14), and lose their own limits, which can contradict the
+  mimic (the leader's limits govern them);
 - meshes are resolved like the planner resolves them
   (``backends._urdf_paths``), converted to STL when MuJoCo can't read the
   format (COLLADA ``.dae``, via trimesh), and copied next to the MJCF under
   ``meshes/``;
 - a link named ``world`` becomes ``world_link`` (MuJoCo reserves the name
   and would otherwise drop every transform above it);
+- joint velocity limits (which MJCF has no field for) are kept as custom
+  numerics ``velocity_limit:<joint>``;
 - visual geometry is kept, in geom group 1 and without contacts, as MuJoCo's
   URDF import does.
 
@@ -42,6 +45,9 @@ from long_tamp.config.yaml_loader import YamlTaskLoader
 
 #: Mesh formats MuJoCo reads directly; anything else is converted to STL.
 NATIVE_MESH_FORMATS = {".stl", ".obj", ".msh"}
+
+#: Custom numeric holding a joint's URDF velocity limit: prefix + joint name.
+VELOCITY_LIMIT_PREFIX = "velocity_limit:"
 
 #: What a URDF link named "world" is called in MJCF (MuJoCo reserves the name).
 WORLD_LINK_RENAME = "world_link"
@@ -105,8 +111,9 @@ def _mesh_file(source: Path, mesh_dir: Path) -> Path:
 
 def _prepare_urdf(
     urdf: Path, mesh_dir: Path
-) -> tuple[str, list[tuple[str, str, float, float]]]:
-    """The URDF text MuJoCo should parse, and its mimic joints."""
+) -> tuple[str, list[tuple[str, str, float, float]], dict[str, float]]:
+    """The URDF text MuJoCo should parse, its mimic joints and its joints'
+    velocity limits."""
     tree = ET.parse(urdf)
     root = tree.getroot()
     for mesh in root.iter("mesh"):
@@ -124,6 +131,11 @@ def _prepare_urdf(
         for ref in root.iter(tag):
             if ref.get("link") == "world":
                 ref.set("link", WORLD_LINK_RENAME)
+    velocity_limits = {}
+    for joint in root.iter("joint"):
+        limit = joint.find("limit")
+        if limit is not None and float(limit.get("velocity", 0) or 0) > 0:
+            velocity_limits[joint.get("name")] = float(limit.get("velocity"))
     mimics = []
     for joint in root.iter("joint"):
         mimic = joint.find("mimic")
@@ -139,7 +151,7 @@ def _prepare_urdf(
     for old in root.findall("mujoco"):
         root.remove(old)
     root.insert(0, ET.fromstring(_COMPILER))
-    return ET.tostring(root, encoding="unicode"), mimics
+    return ET.tostring(root, encoding="unicode"), mimics, velocity_limits
 
 
 def _wxyz(xyzquat: Sequence[float]) -> tuple[list[float], list[float]]:
@@ -189,7 +201,7 @@ def export_mjcf(
         entries.append((name, "object", entry["urdf"], pose))
 
     for name, kind, urdf, pose in entries:
-        text, mimics = _prepare_urdf(Path(urdf), mesh_dir)
+        text, mimics, velocity_limits = _prepare_urdf(Path(urdf), mesh_dir)
         child = mujoco.MjSpec.from_string(text)
         prefix = f"{name}/"
         if kind == "object":
@@ -203,6 +215,12 @@ def export_mjcf(
         frame = world.worldbody.add_frame(pos=pos, quat=quat)
         world.attach(child, frame=frame, prefix=prefix)
         export.kinds[name] = kind
+        # MuJoCo has no joint velocity limit; keep the URDF's, for controllers.
+        for joint, limit in velocity_limits.items():
+            numeric = world.add_numeric()
+            numeric.name = f"{VELOCITY_LIMIT_PREFIX}{prefix}{joint}"
+            numeric.size = 1
+            numeric.data = [limit]
         # Newer MuJoCo (3.14) imports <mimic> itself; older versions drop it.
         imported = {eq.name1 for eq in child.equalities}
         for joint, parent, multiplier, offset in mimics:
@@ -217,6 +235,14 @@ def export_mjcf(
             eq.name2 = prefix + parent
             eq.data[:5] = [offset, multiplier, 0.0, 0.0, 0.0]
 
+    # A follower's own limits can contradict its mimic (the Robotiq URDF gives
+    # the inner fingers [0, 0.88] with multiplier -1; HPP's config overrides
+    # them); the leader's limits govern it.
+    followers = {joint for joint, _, _, _ in export.mimics}
+    for joint in world.joints:
+        if joint.name in followers:
+            joint.limited = mujoco.mjtLimited.mjLIMITED_FALSE
+
     world.compile()
     xml = world.to_xml()
     # Mesh files were given by absolute path; point them next to the MJCF so
@@ -227,33 +253,67 @@ def export_mjcf(
     return export
 
 
-def qpos_from_pinocchio(model: Any, pin_model: Any, pin_q: np.ndarray) -> np.ndarray:
-    """MuJoCo ``qpos`` for a configuration ``pin_q`` of ``pin_model``.
+class QposMap:
+    """Maps configurations of a Pinocchio model (HPP's device) to MuJoCo ``qpos``.
 
-    ``pin_model`` is HPP's device model. Joints are matched by name; a
-    Pinocchio free-flyer ``<obj>/root_joint`` maps to the MuJoCo free joint of
-    the same name (xyz, then the quaternion reordered from xyzw to wxyz).
-    MuJoCo joints with no Pinocchio match keep their reference position.
+    Joints are matched by name; a Pinocchio free-flyer ``<obj>/root_joint``
+    maps to the MuJoCo free joint of the same name (xyz, then the quaternion
+    reordered from xyzw to wxyz). MuJoCo joints with no Pinocchio match keep
+    their reference position. Built once, then cheap to call (every physics
+    step, in the MuJoCo backend).
     """
-    import mujoco
 
-    qpos = model.qpos0.copy()
-    for jid in range(1, pin_model.njoints):
-        name = pin_model.names[jid]
-        mj = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
-        if mj < 0:
-            continue
-        joint = pin_model.joints[jid]
-        q = pin_q[joint.idx_q : joint.idx_q + joint.nq]
-        adr = model.jnt_qposadr[mj]
-        if model.jnt_type[mj] == mujoco.mjtJoint.mjJNT_FREE:
-            qpos[adr : adr + 3] = q[:3]
-            qpos[adr + 3 : adr + 7] = [q[6], q[3], q[4], q[5]]
-        elif joint.nq == 1:
-            qpos[adr] = q[0]
-        elif joint.nq == 2:  # continuous joint: (cos, sin)
-            qpos[adr] = np.arctan2(q[1], q[0])
-    return qpos
+    def __init__(self, model: Any, pin_model: Any) -> None:
+        import mujoco
+
+        self._qpos0 = model.qpos0.copy()
+        scalar_src, scalar_dst, free_src, free_dst, planar_src, planar_dst = (
+            [] for _ in range(6)
+        )
+        for jid in range(1, pin_model.njoints):
+            mj = mujoco.mj_name2id(
+                model, mujoco.mjtObj.mjOBJ_JOINT, pin_model.names[jid]
+            )
+            if mj < 0:
+                continue
+            joint = pin_model.joints[jid]
+            adr = int(model.jnt_qposadr[mj])
+            if model.jnt_type[mj] == int(mujoco.mjtJoint.mjJNT_FREE):
+                free_src.append(joint.idx_q)
+                free_dst.append(adr)
+            elif joint.nq == 1:
+                scalar_src.append(joint.idx_q)
+                scalar_dst.append(adr)
+            elif joint.nq == 2:  # continuous joint: (cos, sin)
+                planar_src.append(joint.idx_q)
+                planar_dst.append(adr)
+        self._scalar = (np.array(scalar_src, int), np.array(scalar_dst, int))
+        self._planar = (np.array(planar_src, int), np.array(planar_dst, int))
+        # xyz qx qy qz qw -> xyz qw qx qy qz
+        order = np.array([0, 1, 2, 6, 3, 4, 5])
+        src = [s + order for s in free_src]
+        dst = [d + np.arange(7) for d in free_dst]
+        self._free = (
+            np.concatenate(src) if src else np.zeros(0, int),
+            np.concatenate(dst) if dst else np.zeros(0, int),
+        )
+
+    def __call__(self, pin_q: Any) -> np.ndarray:
+        q = np.asarray(pin_q, dtype=float)
+        qpos = self._qpos0.copy()
+        qpos[self._scalar[1]] = q[self._scalar[0]]
+        qpos[self._free[1]] = q[self._free[0]]
+        if len(self._planar[0]):
+            qpos[self._planar[1]] = np.arctan2(
+                q[self._planar[0] + 1], q[self._planar[0]]
+            )
+        return qpos
+
+
+def qpos_from_pinocchio(model: Any, pin_model: Any, pin_q: np.ndarray) -> np.ndarray:
+    """MuJoCo ``qpos`` for a configuration ``pin_q`` of ``pin_model`` (see
+    :class:`QposMap`, which does the same without rebuilding the map)."""
+    return QposMap(model, pin_model)(pin_q)
 
 
 def fk_mismatch(model: Any, pin_model: Any, pin_q: np.ndarray) -> dict[str, float]:

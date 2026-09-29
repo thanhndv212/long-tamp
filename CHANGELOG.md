@@ -17,6 +17,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   compares the two models' kinematics (screw-assembly cell: < 1e-7 on 60 bodies). CLI:
   `python -m long_tamp.sim.mjcf CONFIG -o OUT`. New `sim` extra (mujoco, trimesh,
   pycollada).
+- MuJoCo execution backend (#18), `long_tamp.sim.MuJoCoBackend`: runs planned paths in
+  the exported scene under tracking control, with the following behaviour.
+  - Torque motors with PD, gains scheduled on each joint's apparent inertia plus any
+    carried payload, gravity and Coriolis compensation, and net torque limited to the
+    URDF effort.
+  - Grasps are welds to the carrying link: a grasp snaps within 2 cm, or fails as
+    "grasp missed".
+  - Every path is retimed rest to rest within velocity and acceleration limits, and
+    stretched until inverse dynamics fits within 80 % of effort.
+  - Motion events report `tracking_error`, `drift`, `start_drift`, `object_drift`,
+    `grasp_error` and `time_scale`.
+  - The screw assembly runs on it with `--backend mujoco`; `--summary` adds an
+    `execution` block.
+  - A 2-part mission completes in simulation: 37 commands, worst tracking error
+    0.015 rad, object drift 0.05 mm.
+  - The export keeps the URDF velocity limits and frees mimic followers' own limits.
+  - `Feedback` and `ExecutionResult` carry `metrics`, which the executor adds to
+    `motion` events.
 
 ## [0.4.0] - 2026-09-29
 
