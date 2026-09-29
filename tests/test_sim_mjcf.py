@@ -35,7 +35,7 @@ def test_the_scene_keeps_hpp_names(export):
     for name in (
         "ur10_left/shoulder_pan_joint",
         "ur10_right/wrist_3_joint",
-        "ur10_right/finger_joint",
+        "ur10_right/robotiq_85_left_knuckle_joint",
     ):
         assert mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name) >= 0
     for name in ("ur10_left/tool0", "fixtures/base_link", "part1/base_link"):
@@ -56,7 +56,7 @@ def test_objects_are_free_at_their_initial_pose(export):
 
 def test_mimic_joints_become_equalities(export):
     model = export.load()
-    # 5 mimic joints per Robotiq 2F-85, two grippers.
+    # 5 mimic joints per Robotiq 2F-85 (PickNik), two grippers.
     assert len(export.mimics) == 10
     assert model.neq == 10
     assert all(model.eq_type[i] == mujoco.mjtEq.mjEQ_JOINT for i in range(model.neq))

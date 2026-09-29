@@ -206,14 +206,92 @@ class ParallelGripperModel:
 # Presets
 # ---------------------------------------------------------------------------
 
-#: Robotiq 2F-85 as merged into this repo's UR10 (ikea_table_prototype's
+#: Robotiq 2F-85 from PickNikRobotics/ros2_robotiq_gripper, as merged into
+#: this repo's UR10 (ikea_table_prototype's ``ur10_robotiq*.urdf``; gripper
+#: frame on ``gripper_tcp`` 0.15 m in front of ``robotiq_85_base_link``,
+#: turned so it approaches along Z and closes along Y like before). Driven by
+#: ``robotiq_85_left_knuckle_joint`` (0 open .. 0.8 closed). Stroke measured
+#: with :func:`calibrate_from_urdf` on the merged URDF, pad frames
+#: (``robotiq_85_{left,right}_finger_pad``) on the fingertips' inner faces,
+#: so ``pad_thickness`` is 0. Its HPP gripper frame uses +X approach / Y
+#: closing, so ``frame_rotation`` is I.
+ROBOTIQ_2F85 = ParallelGripperModel(
+    name="robotiq_2f85",
+    joints={
+        "robotiq_85_left_knuckle_joint": 1.0,
+        "robotiq_85_right_knuckle_joint": -1.0,
+        "robotiq_85_left_inner_knuckle_joint": 1.0,
+        "robotiq_85_right_inner_knuckle_joint": -1.0,
+        "robotiq_85_left_finger_tip_joint": -1.0,
+        "robotiq_85_right_finger_tip_joint": 1.0,
+    },
+    stroke=(
+        (0.00, 0.08492, -0.01967),
+        (0.05, 0.08048, -0.01787),
+        (0.10, 0.07588, -0.01618),
+        (0.15, 0.07111, -0.01461),
+        (0.20, 0.06618, -0.01316),
+        (0.25, 0.06112, -0.01183),
+        (0.30, 0.05593, -0.01063),
+        (0.35, 0.05063, -0.00957),
+        (0.40, 0.04523, -0.00863),
+        (0.45, 0.03975, -0.00783),
+        (0.50, 0.03418, -0.00718),
+        (0.55, 0.02857, -0.00666),
+        (0.60, 0.02290, -0.00628),
+        (0.65, 0.01721, -0.00604),
+        (0.70, 0.01150, -0.00595),
+        (0.75, 0.00578, -0.00600),
+        (0.80, 0.00008, -0.00619),
+    ),
+    # The fingertips' flat inner faces (collision mesh) span 38 mm along the
+    # approach (13 .. 51 mm up the fingertip), 22 mm across.
+    pad_length=0.038,
+    pad_width=0.022,
+    finger_thickness=0.02,
+    finger_width=0.027,
+    # robotiq_85_base_link's collision mesh spans 0..0.09 m along the
+    # approach axis, 0.15 m behind the TCP; 85 x 75 mm across.
+    palm_front=-0.06,
+    palm_size=(0.09, 0.085, 0.075),
+    default_squeeze=0.002,
+    # Foremost knuckle/finger collision-mesh point between the pads, per
+    # stroke row (calibrate_from_urdf inner_links: the knuckles, inner
+    # knuckles and fingers). Past q = 0.65 nothing lies between the pads;
+    # the last value is held.
+    inner_front=(
+        -0.04458,
+        -0.04312,
+        -0.04179,
+        -0.04062,
+        -0.03960,
+        -0.03876,
+        -0.03811,
+        -0.03771,
+        -0.03759,
+        -0.03785,
+        -0.03867,
+        -0.04046,
+        -0.04436,
+        -0.05552,
+        -0.05552,
+        -0.05552,
+        -0.05552,
+    ),
+    inner_width=0.039,
+    linkage_front=-0.025,
+    linkage_thickness=0.03,
+)
+
+#: Robotiq 2F-85 from ros-industrial/robotiq (joint ``finger_joint`` and its
+#: mimics), as this repo's UR10 carried it until #71 (ikea_table_prototype's
 #: ``ur10_robotiq*.urdf``, gripper frame on ``gripper_tcp`` 0.15 m in front
 #: of ``robotiq_arg2f_base_link``). Stroke measured with pinocchio forward
 #: kinematics of that URDF, pad inner faces (``*_inner_finger_pad``, 6.35 mm
 #: thick) -- see :func:`calibrate_from_urdf` to redo it. Its HPP gripper
 #: frame already uses +X approach / Y closing, so ``frame_rotation`` is I.
-ROBOTIQ_2F85 = ParallelGripperModel(
-    name="robotiq_2f85",
+ROBOTIQ_2F85_ROS_INDUSTRIAL = ParallelGripperModel(
+    name="robotiq_2f85_ros_industrial",
     joints={
         "finger_joint": 1.0,
         "left_inner_knuckle_joint": 1.0,

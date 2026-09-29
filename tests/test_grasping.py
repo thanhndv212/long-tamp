@@ -133,15 +133,16 @@ class TestGeometry:
 class TestGripperModel:
     def test_robotiq_width_roundtrip(self):
         g = ROBOTIQ_2F85
-        assert g.max_width == pytest.approx(0.086, abs=1e-3)
+        assert g.max_width == pytest.approx(0.0849, abs=1e-3)
         for w in (0.01, 0.03, 0.038, 0.07):
             assert g.width_at(g.q_for_width(w)) == pytest.approx(w, abs=1e-6)
         assert g.q_for_width(1.0) == pytest.approx(g.q_open)  # clamped
 
     def test_joint_values_follow_the_mimic_multipliers(self):
         values = ROBOTIQ_2F85.joint_values(0.5, "ur10_right")
-        assert values["ur10_right/finger_joint"] == 0.5
-        assert values["ur10_right/left_inner_finger_joint"] == -0.5
+        assert values["ur10_right/robotiq_85_left_knuckle_joint"] == 0.5
+        assert values["ur10_right/robotiq_85_right_knuckle_joint"] == -0.5
+        assert values["ur10_right/robotiq_85_left_finger_tip_joint"] == -0.5
         assert len(values) == 6
         assert PANDA_HAND.joint_values(0.05) == {
             "panda_finger_joint1": 0.025,
@@ -187,10 +188,9 @@ class TestGripperModel:
         stroke, _ = calibrate_from_urdf(
             IKEA / "ur10_robotiq.urdf",
             tcp_frame="gripper_tcp",
-            pad_frames=("left_inner_finger_pad", "right_inner_finger_pad"),
+            pad_frames=("robotiq_85_left_finger_pad", "robotiq_85_right_finger_pad"),
             joints=ROBOTIQ_2F85.joints,
             q_values=[row[0] for row in ROBOTIQ_2F85.stroke],
-            pad_thickness=0.00635,
         )
         np.testing.assert_allclose(stroke, ROBOTIQ_2F85.stroke, atol=2e-5)
 
@@ -321,7 +321,7 @@ class TestRealScenes:
         drill = closures.evaluation("ur10_right/gripper", "driver/h_grip")
         assert drill.feasible, drill.reasons
         assert drill.contact_width == pytest.approx(0.038, abs=1e-6)  # the handle proxy
-        assert drill.q == pytest.approx(0.496, abs=2e-3)
+        assert drill.q == pytest.approx(0.484, abs=2e-3)
         tab = closures.evaluation("ur10_left/gripper", "part1/h_grasp")
         assert tab.feasible and tab.contact_width == pytest.approx(0.03, abs=1e-6)
         # the table covers exactly the arm grippers' valid pairs
@@ -335,7 +335,9 @@ class TestRealScenes:
         values = closures.closed_values("ur10_right/gripper", "driver/h_grip")
         rank = {name: i for i, name in enumerate(values)}
         q = apply_joint_values(np.zeros(len(values)), rank, values)
-        assert q[rank["ur10_right/finger_joint"]] == pytest.approx(0.496, abs=2e-3)
+        assert q[rank["ur10_right/robotiq_85_left_knuckle_joint"]] == pytest.approx(
+            0.484, abs=2e-3
+        )
         assert set(closures.open_values("ur10_right/gripper").values()) == {0.0}
 
     def test_hand_written_handles_are_among_the_planned(self):
@@ -386,12 +388,12 @@ class TestCapabilities:
         closed = registry.implementation("close_gripper")(
             {"gripper": "ur10_right/gripper", "handle": "driver/h_grip"}
         )
-        assert closed["joint_values"]["ur10_right/finger_joint"] == pytest.approx(
-            0.496, abs=2e-3
-        )
+        assert closed["joint_values"][
+            "ur10_right/robotiq_85_left_knuckle_joint"
+        ] == pytest.approx(0.484, abs=2e-3)
         registry.implementation("open_gripper")({"gripper": "ur10_right/gripper"})
         assert [g for g, _ in actuated] == ["ur10_right/gripper"] * 2
-        assert actuated[1][1]["ur10_right/finger_joint"] == 0.0
+        assert actuated[1][1]["ur10_right/robotiq_85_left_knuckle_joint"] == 0.0
 
     def test_close_on_an_unusable_handle_fails(self, closures):
         registry = self._registry(closures, [])

@@ -83,7 +83,7 @@ from screw_domain import (  # noqa: E402
 # Planning keeps the fingers frozen open (a grasp is a rigid TCP constraint);
 # how far they close on each handle comes from the grasp planner, see
 # finger_closures().
-FREEZE_JOINT_SUBSTRINGS = ["finger_joint", "knuckle_joint"]
+FREEZE_JOINT_SUBSTRINGS = ["knuckle_joint", "finger_tip_joint"]
 
 ARM_JOINTS = (
     "shoulder_pan_joint",
@@ -834,7 +834,7 @@ def main() -> int:
         if row["handle"].startswith(("driver", "part1")):
             print(
                 f"grasp {row['gripper']} > {row['handle']}: close to "
-                f"{row['width'] * 1000:.1f} mm (finger_joint {row['q']:.3f})"
+                f"{row['width'] * 1000:.1f} mm (robotiq_85_left_knuckle_joint {row['q']:.3f})"
                 + ("" if row["feasible"] else f"  WARNING: {'; '.join(row['reasons'])}")
             )
     live_viewer = None
