@@ -763,7 +763,7 @@ def make_backend(
         # The simulation runs in its own process, like a robot controller:
         # stepping it from a thread would share the planner's interpreter
         # lock (see long_tamp.execution.process).
-        backend = ProcessBackend(
+        backend = ProcessBackend(  # closed at exit (see main)
             MuJoCoBackend,
             export,
             to_qpos,
@@ -1060,6 +1060,9 @@ def main() -> int:
         if live_viewer is not None:
             live_viewer.close()
         raise
+    backend = mission.get("backend")
+    if hasattr(backend, "close"):
+        backend.close()  # a simulation process: stop and reap it
     checkpoint.finish(result["success"], result["seconds"])
     write_trajectory(traj_path, trajectory, n_parts)
     result["seed"] = args.seed
