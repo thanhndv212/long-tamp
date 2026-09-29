@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The example cells' UR10 now comes from Universal Robots' own description package (#67).
+  - Source: `UniversalRobots/Universal_Robots_ROS2_Description` at a pinned commit, vendored
+    by `build_assets.py --only ur10-official` (URDF with relative mesh paths, meshes, BSD-3
+    LICENSE, SOURCE.md). It replaces the Gepetto/example-robot-data export, and so brings
+    UR's masses, inertias and joint limits.
+  - Kinematics: `tool0` relative to `base_link` is identical (6e-10 m), and every collision
+    mesh's world bounding box matches within 1 mm, so grasps and scenes are unchanged.
+  - The base geometry is now on `base_link_inertia`, and the SRDF's adjacent pair follows.
+
 ### Added
 
 - Drift check and planning ahead (#20), `long_tamp.execution`.
