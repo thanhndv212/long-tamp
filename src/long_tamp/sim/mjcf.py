@@ -298,6 +298,25 @@ class QposMap:
             np.concatenate(dst) if dst else np.zeros(0, int),
         )
 
+    def inverse(self, qpos: Any, pin_q: Any, objects: bool = False) -> np.ndarray:
+        """The planner configuration for MuJoCo ``qpos``: ``pin_q`` (a
+        configuration of the same model) with every mapped joint replaced.
+
+        Free joints (objects) are kept from ``pin_q`` unless ``objects``: a
+        planner starting from an observed configuration needs the objects
+        exactly where its constraints put them, not 10 µm off in simulation.
+        """
+        q = np.array(pin_q, dtype=float)
+        qpos = np.asarray(qpos, dtype=float)
+        q[self._scalar[0]] = qpos[self._scalar[1]]
+        if objects:
+            q[self._free[0]] = qpos[self._free[1]]
+        if len(self._planar[0]):
+            angle = qpos[self._planar[1]]
+            q[self._planar[0]] = np.cos(angle)
+            q[self._planar[0] + 1] = np.sin(angle)
+        return q
+
     def __call__(self, pin_q: Any) -> np.ndarray:
         q = np.asarray(pin_q, dtype=float)
         qpos = self._qpos0.copy()

@@ -23,17 +23,25 @@ Motion is passed out of band (``submit``) rather than through the session's
 JSON responses, which exist for the C++ host and can't carry path objects.
 Execution happens after planning, so the world state (e.g. the grasp tracker)
 already reflects a step when its motion runs; a failed execution stops the
-mission rather than rolling that back.
+mission rather than rolling that back. Recorded facts are the exception: with
+a backend, a step's recorded effects (a screw driven) are written only once
+its motion has executed.
 """
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from long_tamp.tasks.task_planning.events import MOTION_ROLE, EventSink, make_event
+from long_tamp.tasks.task_planning.events import (
+    DRIFT_ROLE,
+    MOTION_ROLE,
+    EventSink,
+    make_event,
+)
 from long_tamp.tasks.task_planning.runner import PlanRun, run_plan
 
 from .contract import (
@@ -44,6 +52,7 @@ from .contract import (
     ExecutionStatus,
 )
 from .control import ExecutionControl
+from .sampled import sampled
 from .supervisor import run_command
 
 
@@ -72,6 +81,21 @@ class _AttemptSession:
 
 
 class PlanExecutor:
+    """Runs a TaskPlan: each step is planned, then its motion executes.
+
+    - ``on_drift(node, observed)``: before a step's motion runs, the executor
+      asks the backend how far the robot is from where the plan starts
+      (``backend.start_error(command)``). Beyond ``policy.max_start_drift``
+      the cached plan is stale: ``on_drift`` replans the step from
+      ``observed`` (``backend.observed_config``) and returns its new
+      commands; without it, the step fails with reason ``drift``.
+    - ``plan_ahead``: plan step k+1 while step k's motion executes in a worker
+      thread. At the handoff the executor waits for step k's motion, commits
+      its recorded effects, checks drift, and only then starts step k+1's
+      motion. Paths are sampled (``SampledPath``) in the planning thread, so
+      the worker never evaluates a planner path while the planner plans.
+    """
+
     def __init__(
         self,
         session: Any,
@@ -82,16 +106,31 @@ class PlanExecutor:
         on_event: EventSink | None = None,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
+        on_drift: Callable[[dict[str, Any], Any], list[ExecutionCommand]] | None = None,
+        plan_ahead: bool = False,
     ) -> None:
         self.session = session
         self.backend = backend
         self.policy = policy or ExecutionPolicy()
         self.control = control or ExecutionControl()
         self.on_skip = on_skip
-        self.on_event = on_event
+        self._lock = threading.Lock()
+        self.on_event = self._locked(on_event) if on_event is not None else None
         self.clock, self.sleep = clock, sleep
+        self.on_drift = on_drift
+        self.plan_ahead = plan_ahead
         self._pending: list[ExecutionCommand] = []
         self._executions: list[StepExecution] = []
+        self._worker: threading.Thread | None = None
+        self._in_flight: tuple[dict[str, Any], str | None] | None = None
+        self._timing: dict[str, float] = {}
+
+    def _locked(self, sink: EventSink) -> EventSink:
+        def emit(event: dict[str, Any]) -> None:
+            with self._lock:
+                sink(event)
+
+        return emit
 
     def submit(self, command: ExecutionCommand) -> None:
         """Queue motion for the step being planned; called by capabilities."""
@@ -99,6 +138,18 @@ class PlanExecutor:
 
     def run(self) -> PlanRun:
         self._executions = []
+        self._timing = {
+            "execution": 0.0,
+            "idle_between_motions": 0.0,
+            "waited_for_motion": 0.0,
+            "drift_replans": 0,
+        }
+        self._last_motion_end: float | None = None
+        # Recorded facts (a screw driven) hold once the motion has executed,
+        # not when it was planned.
+        if self.backend is not None and hasattr(self.session, "commit_effects"):
+            self.session.defer_recording = True
+        t0 = self.clock()
         run = run_plan(
             _AttemptSession(self.session, self._pending.clear),
             on_skip=self.on_skip,
@@ -106,32 +157,150 @@ class PlanExecutor:
             after_step=self._after,
             on_event=self.on_event,
         )
+        # The last step's motion may still be running.
+        failed = self._join()
+        if failed is not None and run.success:
+            run.success = False
+            run.failed_step, run.message = failed
+        elif failed is not None:
+            run.failed_step, run.message = failed
+        self._timing["wall"] = self.clock() - t0
         run.executions = list(self._executions)
+        run.timing = {k: round(v, 3) for k, v in self._timing.items()}
         return run
 
     def _before(self, node: dict[str, Any]) -> bool:
         self._pending.clear()
+        # A failed motion in flight stops the plan at the next boundary.
+        if self._worker is not None and not self._worker.is_alive():
+            if self._in_flight is not None and self._in_flight[1] is not None:
+                return False
         return self.control.checkpoint(node["id"], "before")
 
     def _after(self, node: dict[str, Any], result: dict[str, Any]) -> str | None:
         commands, self._pending = self._pending, []
-        if self.backend is not None:
-            for command in commands:
-                self._emit(node, command, "RUNNING")
-                outcome = run_command(
-                    self.backend,
-                    command,
-                    self.policy,
-                    control=self.control,
-                    clock=self.clock,
-                    sleep=self.sleep,
-                )
-                self._executions.append(StepExecution(node["id"], command, outcome))
-                self._emit(node, command, outcome.status.name, "RUNNING", outcome)
-                if outcome.status is not ExecutionStatus.SUCCESS:
-                    return f"execution failed ({outcome.reason}): {outcome.message}"
+        if self.backend is None:
+            self.control.checkpoint(node["id"], "after")
+            return None
+        if self.plan_ahead:
+            commands = [
+                ExecutionCommand(c.step_id, c.duration, sampled(c.payload))
+                for c in commands
+            ]
+            failed = self._join()  # the previous step's motion
+            if failed is not None:
+                return f"{failed[0]}: {failed[1]}"
+        error, commands = self._check_drift(node, commands)
+        if error:
+            return error
+        if self.plan_ahead:
+            self._in_flight = (node, None)
+            self._worker = threading.Thread(
+                target=self._execute_async, args=(node, commands), daemon=True
+            )
+            self._worker.start()
+            return None
+        error = self._execute(node, commands)
+        if error:
+            return error
+        self._commit(node)
         self.control.checkpoint(node["id"], "after")
         return None
+
+    # -- drift -------------------------------------------------------------
+
+    def _check_drift(
+        self, node: dict[str, Any], commands: list[ExecutionCommand]
+    ) -> tuple[str, list[ExecutionCommand]]:
+        tolerance = self.policy.max_start_drift
+        start_error = getattr(self.backend, "start_error", None)
+        if tolerance is None or not commands or start_error is None:
+            return "", commands
+        drift = start_error(commands[0])
+        if drift is None or drift <= tolerance:
+            return "", commands
+        self._emit_drift(node, drift, tolerance)
+        if self.on_drift is None:
+            return (
+                f"execution failed (drift): the robot is {drift:.3f} rad from "
+                f"where the plan starts (tolerance {tolerance:g})"
+            ), []
+        observe = getattr(self.backend, "observed_config", None)
+        self._timing["drift_replans"] += 1
+        try:
+            replanned = self.on_drift(node, observe)
+        except Exception as error:  # noqa: BLE001 - replanning boundary
+            return f"execution failed (drift): replanning failed: {error}", []
+        if self.plan_ahead:
+            replanned = [
+                ExecutionCommand(c.step_id, c.duration, sampled(c.payload))
+                for c in replanned
+            ]
+        return "", list(replanned)
+
+    def _emit_drift(self, node: dict[str, Any], drift: float, tolerance: float) -> None:
+        if self.on_event is None:
+            return
+        self.on_event(
+            make_event(
+                node["id"],
+                DRIFT_ROLE,
+                node.get("label", node["id"]),
+                "FAILURE",
+                message="the robot drifted from where the plan starts: replanning",
+                metrics={"start_drift": round(drift, 5), "tolerance": tolerance},
+            )
+        )
+
+    # -- executing ---------------------------------------------------------
+
+    def _execute(self, node: dict[str, Any], commands: list[ExecutionCommand]) -> str:
+        for command in commands:
+            started = self.clock()
+            if self._last_motion_end is not None:
+                self._timing["idle_between_motions"] += started - self._last_motion_end
+            self._emit(node, command, "RUNNING")
+            outcome = run_command(
+                self.backend,
+                command,
+                self.policy,
+                control=self.control,
+                clock=self.clock,
+                sleep=self.sleep,
+            )
+            self._last_motion_end = self.clock()
+            self._timing["execution"] += self._last_motion_end - started
+            self._executions.append(StepExecution(node["id"], command, outcome))
+            self._emit(node, command, outcome.status.name, "RUNNING", outcome)
+            if outcome.status is not ExecutionStatus.SUCCESS:
+                return f"execution failed ({outcome.reason}): {outcome.message}"
+        return ""
+
+    def _execute_async(
+        self, node: dict[str, Any], commands: list[ExecutionCommand]
+    ) -> None:
+        self._in_flight = (node, self._execute(node, commands) or None)
+
+    def _join(self) -> tuple[str, str] | None:
+        """Wait for the motion in flight; commit its step, or return
+        (step, message) if it failed."""
+        if self._worker is None:
+            return None
+        waited = self.clock()
+        self._worker.join()
+        self._timing["waited_for_motion"] += self.clock() - waited
+        self._worker = None
+        node, error = self._in_flight
+        self._in_flight = None
+        if error:
+            return node["id"], error
+        self._commit(node)
+        self.control.checkpoint(node["id"], "after")
+        return None
+
+    def _commit(self, node: dict[str, Any]) -> None:
+        if getattr(self.session, "defer_recording", False):
+            self.session.commit_effects(node["id"])
 
     def _emit(
         self,
