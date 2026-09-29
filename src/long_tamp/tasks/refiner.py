@@ -135,14 +135,6 @@ def failure_facts(step: RefinementStep, failure: dict[str, Any] | None) -> list[
         a, b = (_constant(_body(n)) for n in collision.groups())
         facts.append(f"blocks({a}, {b})")
     return facts
-    predicate = FAILURE_PREDICATES.get(failure.get("kind", ""))
-    idx = failure.get("phase_idx")
-    if predicate and idx is not None and 0 <= idx < len(step.sequence):
-        gripper, handle = step.sequence[idx]
-        facts.append(
-            f"{predicate}({_constant(gripper)}, {_constant(handle or 'none')})"
-        )
-    return facts
 
 
 class GraspSequenceRefiner:

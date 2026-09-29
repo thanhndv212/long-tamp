@@ -47,6 +47,7 @@ requires_gepetto = pytest.mark.skipif(
 # Helpers
 # ===========================================================================
 
+
 def _make_backend(viewer_type: str = "auto") -> "PyHPPBackend":
     """Return a fresh, unloaded PyHPPBackend."""
     return PyHPPBackend(viewer_type=viewer_type)
@@ -77,6 +78,7 @@ def _load_minimal_robot(backend: "PyHPPBackend") -> bool:
 # ===========================================================================
 # 1. Unit tests — no robot required
 # ===========================================================================
+
 
 @requires_pyhpp
 class TestViewerImportFlags:
@@ -152,6 +154,7 @@ class TestSetupViewerUnavailableLibrary:
         if HAS_VISER:
             pytest.skip("pyhpp_viser is installed — cannot test missing-library path")
         import long_tamp.backends.pyhpp as _mod
+
         b = _make_backend()
         # Fake a loaded device so the robot-check passes
         b.device = object()
@@ -160,7 +163,9 @@ class TestSetupViewerUnavailableLibrary:
 
     def test_gepetto_import_error_when_unavailable(self, monkeypatch):
         if HAS_GEPETTO_VIEWER:
-            pytest.skip("gepetto-viewer is installed — cannot test missing-library path")
+            pytest.skip(
+                "gepetto-viewer is installed — cannot test missing-library path"
+            )
         b = _make_backend()
         b.device = object()
         with pytest.raises(ImportError, match="[Gg]epetto"):
@@ -170,6 +175,7 @@ class TestSetupViewerUnavailableLibrary:
 # ===========================================================================
 # 2. Integration tests — require a loadable robot
 # ===========================================================================
+
 
 @requires_pyhpp
 class TestViewerWithRobot:
@@ -193,6 +199,7 @@ class TestViewerWithRobot:
     def test_setup_viewer_viser(self):
         """setup_viewer('viser') installs a pyhpp_viser.Viewer."""
         from pyhpp_viser import Viewer as ViserViewer
+
         self.backend.setup_viewer("viser")
         assert self.backend.viewer is not None
         assert isinstance(self.backend.viewer, ViserViewer)
@@ -201,6 +208,7 @@ class TestViewerWithRobot:
     def test_setup_viewer_gepetto(self):
         """setup_viewer('gepetto') installs a gepetto viewer."""
         from pyhpp.gepetto.viewer import Viewer as GepettoViewer
+
         self.backend.setup_viewer("gepetto")
         assert self.backend.viewer is not None
         assert isinstance(self.backend.viewer, GepettoViewer)
@@ -210,6 +218,7 @@ class TestViewerWithRobot:
         """visualize() with viser viewer should not raise."""
         self.backend.setup_viewer("viser")
         import numpy as np
+
         q = np.zeros(self.backend.device.configSize())
         self.backend.visualize(q)  # must not raise
 
@@ -218,6 +227,7 @@ class TestViewerWithRobot:
         """visualize() with gepetto viewer should not raise."""
         self.backend.setup_viewer("gepetto")
         import numpy as np
+
         q = np.zeros(self.backend.device.configSize())
         self.backend.visualize(q)  # must not raise
 
@@ -225,6 +235,7 @@ class TestViewerWithRobot:
         """visualize() auto-initialises the viewer silently."""
         # viewer is None; visualize() must not crash
         import numpy as np
+
         q = np.zeros(self.backend.device.configSize())
         self.backend.visualize(q)  # must not raise
 
@@ -236,6 +247,7 @@ class TestViewerWithRobot:
 # ===========================================================================
 # 3. Viewer-type dispatch tests
 # ===========================================================================
+
 
 @requires_pyhpp
 class TestViewerTypeDispatch:
@@ -354,6 +366,7 @@ class TestViewerTypeDispatch:
 # 4. Visualize dispatch (unit — monkeypatched viewer)
 # ===========================================================================
 
+
 @requires_pyhpp
 class TestVisualizeDispatch:
     """visualize() calls viewer.display() for viser, viewer() for gepetto."""
@@ -386,6 +399,7 @@ class TestVisualizeDispatch:
 
     def test_viser_calls_display(self, monkeypatch):
         import numpy as np
+
         b, calls = self._backend_with_fake_viser(monkeypatch)
         q = np.array([1.0, 2.0, 3.0])
         b.visualize(q)
@@ -393,6 +407,7 @@ class TestVisualizeDispatch:
 
     def test_gepetto_calls_viewer_callable(self, monkeypatch):
         import numpy as np
+
         b, calls = self._backend_with_fake_gepetto(monkeypatch)
         q = [0.1, 0.2, 0.3]
         b.visualize(q)
@@ -403,6 +418,7 @@ class TestVisualizeDispatch:
 # ===========================================================================
 # 5. play_path dispatch (unit — monkeypatched viewer)
 # ===========================================================================
+
 
 @requires_pyhpp
 class TestPlayPathDispatch:

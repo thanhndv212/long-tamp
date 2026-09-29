@@ -213,9 +213,7 @@ class TestGenerationRetriesOnFailure:
         assert planner.phase_results[-1]["error_message"].startswith(
             "Target generation failed"
         )
-        assert planner.last_failure_info["error"].startswith(
-            "Target generation failed"
-        )
+        assert planner.last_failure_info["error"].startswith("Target generation failed")
 
     def test_resume_mode_uses_its_own_error_message_on_exhaustion(self):
         config_gen = _AlwaysFails()

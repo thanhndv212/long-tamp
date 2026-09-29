@@ -13,7 +13,6 @@ import sys
 import tempfile
 import os
 
-
 # =============================================================================
 # Test Interactive Menu (utils/interactive.py)
 # =============================================================================
@@ -248,9 +247,7 @@ class TestPathIO:
         from long_tamp.planning.path_io import replay_paths
 
         mock_planner = MagicMock()
-        mock_planner.play_path = MagicMock(
-            side_effect=[None, Exception("fail"), None]
-        )
+        mock_planner.play_path = MagicMock(side_effect=[None, Exception("fail"), None])
 
         result = replay_paths(mock_planner, [0, 1, 2], verbose=False)
         assert result["success"] is False

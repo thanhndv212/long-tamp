@@ -58,6 +58,8 @@ from long_tamp.tasks.task_planning import (  # noqa: E402
     TaskPlanningSession,
 )
 from long_tamp.tasks.task_planning.events import JsonlEventWriter  # noqa: E402
+from long_tamp.tasks.task_planning.skills import SkillCommand  # noqa: E402
+from long_tamp.sim.skills import SCREW  # noqa: E402
 from long_tamp.tasks.task_planning.predicates import holds  # noqa: E402
 from long_tamp.execution import (  # noqa: E402
     ExecutionCommand,
@@ -377,18 +379,40 @@ def run_block(
 def block_commands(
     task: ScrewAssemblyTask, label: str, phases: list[dict[str, Any]]
 ) -> list[ExecutionCommand]:
-    """The motion a block produced, one command per completed path."""
+    """The motion a block produced, one command per completed path.
+
+    Driving a screw is a skill: the planned insertion of the driver's tip into
+    a hole (the grasp edge ``_12``, from pregrasp to grasp) is sent as a
+    ``SkillCommand`` for the screw skill. A backend that runs skills (MuJoCo)
+    drives the screw; any other plays the path.
+    """
     commands = []
     for phase in phases:
         if not phase.get("complete", True) or phase.get("skipped"):
             continue
-        for path in phase.get("paths", []):
-            if path is None:
-                continue
+        paths = [p for p in phase.get("paths", []) if p is not None]
+        edges = list(phase.get("edges", []))
+        # A resumed phase planned only its last edges: align from the end.
+        edges = (
+            [None] * (len(paths) - len(edges)) + edges[-len(paths) :] if paths else []
+        )
+        for path, edge in zip(paths, edges):
             if isinstance(path, int):
                 path = task.planner.get_path(path)
+            payload = path
+            hole = phase.get("handle") or ""
+            if (
+                phase.get("gripper") == "driver/tip"
+                and edge is not None
+                and str(edge).endswith("_12")
+            ):
+                payload = SkillCommand(
+                    SCREW,
+                    {"tool": "driver", "part": hole.split("/")[0], "hole": hole},
+                    approach=path,
+                )
             commands.append(
-                ExecutionCommand(step_id=label, duration=path.length(), payload=path)
+                ExecutionCommand(step_id=label, duration=path.length(), payload=payload)
             )
     return commands
 
@@ -666,7 +690,9 @@ def run_mission(
         "executed": len(run.executions),
         "execution": execution_summary(run.executions),
         "final_config": ctx["q"],
-        "failure": None if run.success else ctx.get("failure"),
+        "failure": (
+            None if run.success else ctx.get("failure") or execution_failure(run)
+        ),
     }
 
 
@@ -674,7 +700,11 @@ from long_tamp.visualization.mission_viewer import MissionViewer
 
 
 def make_backend(
-    name: str, task: ScrewAssemblyTask, live_viewer=None, run_dir: Path | None = None
+    name: str,
+    task: ScrewAssemblyTask,
+    live_viewer=None,
+    run_dir: Path | None = None,
+    hole_error: tuple[float, float, float] = (0.0, 0.0, 0.0),
 ):
     """The execution backend for ``--backend``."""
     if name == "mock":
@@ -683,12 +713,31 @@ def make_backend(
         display = (lambda q: task.planner.viewer(q)) if live_viewer else None
         return PathPlaybackBackend(display=display)
     if name == "mujoco":
-        from long_tamp.sim import MuJoCoBackend, QposMap, export_mjcf
+        from long_tamp.sim import MuJoCoBackend, QposMap, ScrewDriving, export_mjcf
 
         export = export_mjcf(CONFIG, (run_dir or HERE / "runs") / "mjcf")
         to_qpos = QposMap(export.load(), task.robot.model())
-        return MuJoCoBackend(export, to_qpos, speed=math.inf)
+        return MuJoCoBackend(
+            export,
+            to_qpos,
+            speed=math.inf,
+            skills={"screw": ScrewDriving(hole_error=hole_error)},
+        )
     return None
+
+
+def execution_failure(run) -> dict[str, Any] | None:
+    """The failure facts of a step whose execution failed (a skill reporting
+    ``screw_misaligned``, say), in the shape planning failures have."""
+    failed = [e for e in run.executions if e.result.status.value != "success"]
+    if not failed:
+        return None
+    last = failed[-1]
+    return {
+        "step": last.command.step_id,
+        "facts": list(last.result.facts),
+        "message": last.result.message,
+    }
 
 
 def execution_summary(executions) -> dict[str, Any] | None:
@@ -710,6 +759,10 @@ def execution_summary(executions) -> dict[str, Any] | None:
         "max_drift": worst("drift"),
         "max_object_drift": worst("object_drift"),
         "max_start_drift": worst("start_drift"),
+        "screws_driven": sum(
+            1 for e in executions for f in e.result.facts if f.startswith("screwed(")
+        ),
+        "max_screw_lateral_error": worst("lateral_error"),
     }
 
 
@@ -731,6 +784,15 @@ def main() -> int:
         "(planning only, the default), mock (instant, for testing the pipeline), "
         "playback (plays the paths in real time, in the viewer if it is on) or "
         "mujoco (simulates them under tracking control; needs the sim extra)",
+    )
+    ap.add_argument(
+        "--hole-error",
+        type=float,
+        nargs=3,
+        default=(0.0, 0.0, 0.0),
+        metavar=("X", "Y", "Z"),
+        help="with --backend mujoco: where the real holes are relative to the "
+        "planned ones, in mm (a perception error for the screw skill)",
     )
     ap.add_argument(
         "--planner",
@@ -855,7 +917,13 @@ def main() -> int:
             checkpoint=checkpoint,
             live_viewer=live_viewer,
             recorded=recorded,
-            backend=make_backend(args.backend, task, live_viewer, run_dir),
+            backend=make_backend(
+                args.backend,
+                task,
+                live_viewer,
+                run_dir,
+                hole_error=tuple(v / 1000.0 for v in args.hole_error),
+            ),
             on_event=events,
             inject=inject,
         )

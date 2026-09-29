@@ -32,8 +32,9 @@ class _FakeBackend:
     (unsupported-backend warning).
     """
 
-    def __init__(self, has_record=True, has_viz=True, has_plain=True,
-                 record_raises=False):
+    def __init__(
+        self, has_record=True, has_viz=True, has_plain=True, record_raises=False
+    ):
         self.record_calls = []
         self.viz_calls = []
         self.plain_calls = []
@@ -48,9 +49,7 @@ class _FakeBackend:
     def _record(self, path, video_name, output_dir, framerate, dt, speed):
         if self._record_raises:
             raise RuntimeError("record boom")
-        self.record_calls.append(
-            (path, video_name, output_dir, framerate, dt, speed)
-        )
+        self.record_calls.append((path, video_name, output_dir, framerate, dt, speed))
         return (7, "/tmp/clip.mp4")
 
     def _viz(self, path, edge_name, visualizer, speed):
@@ -72,9 +71,17 @@ class TestPlaySinglePhasePath:
         planner.planner = _FakeBackend()
         with caplog.at_level(logging.INFO, logger="long_tamp"):
             result = planner._play_single_phase_path(
-                path="p0", edge_name="e0", phase=_phase(), idx=0,
-                record=True, visualizer=None, output_dir="/out",
-                video_prefix="pre", framerate=25, dt=0.01, speed=1.0,
+                path="p0",
+                edge_name="e0",
+                phase=_phase(),
+                idx=0,
+                record=True,
+                visualizer=None,
+                output_dir="/out",
+                video_prefix="pre",
+                framerate=25,
+                dt=0.01,
+                speed=1.0,
             )
         assert result == "/tmp/clip.mp4"
         assert len(planner.planner.record_calls) == 1
@@ -90,9 +97,17 @@ class TestPlaySinglePhasePath:
         planner = _make_planner()
         planner.planner = _FakeBackend()
         planner._play_single_phase_path(
-            path="p0", edge_name=None, phase=_phase(5), idx=2,
-            record=True, visualizer=None, output_dir="/out",
-            video_prefix=None, framerate=25, dt=0.01, speed=1.0,
+            path="p0",
+            edge_name=None,
+            phase=_phase(5),
+            idx=2,
+            record=True,
+            visualizer=None,
+            output_dir="/out",
+            video_prefix=None,
+            framerate=25,
+            dt=0.01,
+            speed=1.0,
         )
         vname = planner.planner.record_calls[0][1]
         assert vname == "phase_05_path_03"  # no prefix, no edge suffix
@@ -102,9 +117,17 @@ class TestPlaySinglePhasePath:
         planner.planner = _FakeBackend()
         with caplog.at_level(logging.INFO, logger="long_tamp"):
             result = planner._play_single_phase_path(
-                path="p0", edge_name="e0", phase=_phase(), idx=0,
-                record=False, visualizer="viz-obj", output_dir="/out",
-                video_prefix=None, framerate=25, dt=0.01, speed=2.0,
+                path="p0",
+                edge_name="e0",
+                phase=_phase(),
+                idx=0,
+                record=False,
+                visualizer="viz-obj",
+                output_dir="/out",
+                video_prefix=None,
+                framerate=25,
+                dt=0.01,
+                speed=2.0,
             )
         assert result is None  # nothing recorded
         assert planner.planner.record_calls == []
@@ -117,9 +140,17 @@ class TestPlaySinglePhasePath:
         planner.planner = _FakeBackend()
         with caplog.at_level(logging.INFO, logger="long_tamp"):
             result = planner._play_single_phase_path(
-                path="p0", edge_name="e0", phase=_phase(), idx=0,
-                record=False, visualizer=None, output_dir="/out",
-                video_prefix=None, framerate=25, dt=0.01, speed=1.0,
+                path="p0",
+                edge_name="e0",
+                phase=_phase(),
+                idx=0,
+                record=False,
+                visualizer=None,
+                output_dir="/out",
+                video_prefix=None,
+                framerate=25,
+                dt=0.01,
+                speed=1.0,
             )
         assert result is None
         assert planner.planner.record_calls == []
@@ -130,13 +161,20 @@ class TestPlaySinglePhasePath:
     def test_unsupported_backend_warning(self, caplog):
         planner = _make_planner()
         # Backend with none of the three methods
-        planner.planner = _FakeBackend(has_record=False, has_viz=False,
-                                       has_plain=False)
+        planner.planner = _FakeBackend(has_record=False, has_viz=False, has_plain=False)
         with caplog.at_level(logging.WARNING, logger="long_tamp"):
             result = planner._play_single_phase_path(
-                path="p0", edge_name="e0", phase=_phase(), idx=0,
-                record=False, visualizer=None, output_dir="/out",
-                video_prefix=None, framerate=25, dt=0.01, speed=1.0,
+                path="p0",
+                edge_name="e0",
+                phase=_phase(),
+                idx=0,
+                record=False,
+                visualizer=None,
+                output_dir="/out",
+                video_prefix=None,
+                framerate=25,
+                dt=0.01,
+                speed=1.0,
             )
         assert result is None
         assert "⚠ Backend does not support PathVector playback" in caplog.text
@@ -149,9 +187,17 @@ class TestPlaySinglePhasePath:
         planner = _make_planner()
         planner.planner = _FakeBackend()
         result = planner._play_single_phase_path(
-            path="p0", edge_name="e0", phase=_phase(), idx=0,
-            record=True, visualizer="viz-obj", output_dir="/out",
-            video_prefix=None, framerate=25, dt=0.01, speed=1.0,
+            path="p0",
+            edge_name="e0",
+            phase=_phase(),
+            idx=0,
+            record=True,
+            visualizer="viz-obj",
+            output_dir="/out",
+            video_prefix=None,
+            framerate=25,
+            dt=0.01,
+            speed=1.0,
         )
         assert result == "/tmp/clip.mp4"
         assert len(planner.planner.record_calls) == 1

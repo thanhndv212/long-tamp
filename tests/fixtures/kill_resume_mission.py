@@ -76,7 +76,9 @@ def main() -> int:
     }
     recorded = RecordedFacts(run_dir / "facts.json", predicates={"placed"})
     plan = TaskPlan.from_dict(document, registry)
-    session = TaskPlanningSession(plan, registry, world_state=recorded, recorded=recorded)
+    session = TaskPlanningSession(
+        plan, registry, world_state=recorded, recorded=recorded
+    )
     with JsonlEventWriter(run_dir / "events.jsonl") as events:
         run = run_plan(session, on_event=events)
     return 0 if run.success else 1

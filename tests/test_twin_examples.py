@@ -92,9 +92,15 @@ class TestMultiRobotLoading:
             pytest.skip("hpp_practicals package:// not resolvable in this environment")
 
         model = backend.device.model()
-        left_placement = model.jointPlacements[model.getJointId("ur5_left/shoulder_pan_joint")]
-        right_placement = model.jointPlacements[model.getJointId("ur5_right/shoulder_pan_joint")]
+        left_placement = model.jointPlacements[
+            model.getJointId("ur5_left/shoulder_pan_joint")
+        ]
+        right_placement = model.jointPlacements[
+            model.getJointId("ur5_right/shoulder_pan_joint")
+        ]
 
         # Both share the URDF-native z offset; only the right arm carries
         # the extra world-pose translation composed on top of it.
-        assert np.allclose(right_placement.translation - left_placement.translation, offset)
+        assert np.allclose(
+            right_placement.translation - left_placement.translation, offset
+        )

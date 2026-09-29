@@ -146,15 +146,11 @@ class TestBuildPhaseValidPairs:
         assert result == {"g1": ["h1"]}
 
     def test_held_grasps_preserved_plus_new_grasp(self):
-        result = GraphBuilder._build_phase_valid_pairs(
-            {"g1": "h1"}, ("g2", "h2")
-        )
+        result = GraphBuilder._build_phase_valid_pairs({"g1": "h1"}, ("g2", "h2"))
         assert result == {"g1": ["h1"], "g2": ["h2"]}
 
     def test_release_includes_currently_held_handle(self):
-        result = GraphBuilder._build_phase_valid_pairs(
-            {"g1": "h1"}, ("g1", None)
-        )
+        result = GraphBuilder._build_phase_valid_pairs({"g1": "h1"}, ("g1", None))
         assert result == {"g1": ["h1"]}
 
     def test_release_with_nothing_held_registers_gripper_with_no_handles(self):
@@ -165,9 +161,7 @@ class TestBuildPhaseValidPairs:
         assert result == {"g1": []}
 
     def test_duplicate_handle_not_added_twice(self):
-        result = GraphBuilder._build_phase_valid_pairs(
-            {"g1": "h1"}, ("g1", "h1")
-        )
+        result = GraphBuilder._build_phase_valid_pairs({"g1": "h1"}, ("g1", "h1"))
         assert result == {"g1": ["h1"]}
 
 
@@ -183,9 +177,7 @@ class TestLockNonphaseObjects:
 
     def test_no_nonphase_objects_returns_constraints_unchanged(self):
         gb = self._make_graph_builder()
-        result = gb._lock_nonphase_objects(
-            ["obj1"], ["obj1"], [0.0], ["existing"]
-        )
+        result = gb._lock_nonphase_objects(["obj1"], ["obj1"], [0.0], ["existing"])
         assert result == ["existing"]
 
     def test_no_q_init_returns_constraints_unchanged(self):
@@ -214,9 +206,7 @@ class TestLockNonphaseObjects:
     def test_locking_exception_returns_constraints_unchanged(self, monkeypatch):
         gb = self._make_graph_builder()
         fake_builder = MagicMock()
-        fake_builder.create_locked_joint_constraints.side_effect = RuntimeError(
-            "boom"
-        )
+        fake_builder.create_locked_joint_constraints.side_effect = RuntimeError("boom")
         monkeypatch.setattr(
             "long_tamp.planning.constraints.ConstraintBuilder",
             fake_builder,

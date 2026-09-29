@@ -78,8 +78,10 @@ def test_lookahead_hints_are_drawn_for_each_attempt():
     [
         (None, []),
         ({"kind": "no_resumable_state", "phase_idx": None, "edge": None}, []),
-        ({"kind": "hint_chain_broken", "phase_idx": 0, "edge": None},
-         ["lookahead_failed(arm/g, part/h_seat)"]),
+        (
+            {"kind": "hint_chain_broken", "phase_idx": 0, "edge": None},
+            ["lookahead_failed(arm/g, part/h_seat)"],
+        ),
         ({"kind": "stuck", "phase_idx": 9, "edge": EDGE}, []),  # out of range
     ],
 )
@@ -111,7 +113,9 @@ def test_a_collision_is_reported_as_blocks():
 
 
 def test_screw_assembly_blocks_become_refinement_steps():
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "script/screw_assembly"))
+    sys.path.insert(
+        0, str(Path(__file__).resolve().parents[1] / "script/screw_assembly")
+    )
     import screw_domain
 
     blocks = [b for b in screw_domain.build_mission(1) if "seq" in b]

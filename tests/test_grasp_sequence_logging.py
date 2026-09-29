@@ -136,9 +136,7 @@ class TestFinalizePhaseResultLogging:
             edge_sequence=["e01", "e12"],
             phase_paths=["path0", "path1"],
             phase_geometric_paths=[],
-            edge_stats_list=[
-                {"gen_time": 0.1, "plan_time": 0.2, "total_time": 0.3}
-            ],
+            edge_stats_list=[{"gen_time": 0.1, "plan_time": 0.2, "total_time": 0.3}],
             q_start=[0.0],
             q_pregrasp_for_cache=None,
             skip_phases=None,
@@ -162,9 +160,7 @@ class TestFinalizePhaseResultLogging:
             edge_sequence=["e01"],
             phase_paths=["path0"],
             phase_geometric_paths=[],
-            edge_stats_list=[
-                {"gen_time": 0.1, "plan_time": 0.2, "total_time": 0.3}
-            ],
+            edge_stats_list=[{"gen_time": 0.1, "plan_time": 0.2, "total_time": 0.3}],
             q_start=[0.0],
             q_pregrasp_for_cache=None,
             skip_phases=None,

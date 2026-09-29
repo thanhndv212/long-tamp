@@ -68,9 +68,7 @@ def _load_cgf():
         pass
     _stub_pyhpp_constraints()
     _stub_numpy()
-    spec = importlib.util.spec_from_file_location(
-        "constraint_graph_factory", _CGF_PATH
-    )
+    spec = importlib.util.spec_from_file_location("constraint_graph_factory", _CGF_PATH)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -228,9 +226,7 @@ class TestPrunedRecursion(unittest.TestCase):
         from itertools import permutations
 
         def all_or_nothing(grasps):
-            return all(g is None for g in grasps) or all(
-                g is not None for g in grasps
-            )
+            return all(g is None for g in grasps) or all(g is not None for g in grasps)
 
         n = 3
         targets = [(None,) * n, *permutations(range(n))]
@@ -242,9 +238,7 @@ class TestPrunedRecursion(unittest.TestCase):
         stays visible rather than being discovered as a bug."""
 
         def all_or_nothing(grasps):
-            return all(g is None for g in grasps) or all(
-                g is not None for g in grasps
-            )
+            return all(g is None for g in grasps) or all(g is not None for g in grasps)
 
         n = 3
         partial = [(None,) * n, tuple(range(n))]
@@ -269,9 +263,7 @@ class TestPrunedRecursion(unittest.TestCase):
         for n in (4, 6, 8):
             current = {f"g{i}": None for i in range(n)}
             filt = self._sequential(n, current, ("g0", "h0"))
-            pruned = _run(
-                self.Pruned, n, filt, (filt.current_grasps, filt.next_grasps)
-            )
+            pruned = _run(self.Pruned, n, filt, (filt.current_grasps, filt.next_grasps))
             self.assertEqual(len(pruned.created_states), 2)
             counts[n] = pruned.recurse_calls
 

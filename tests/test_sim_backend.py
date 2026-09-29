@@ -78,7 +78,10 @@ class Line:
                 reach * math.sin(pan),
                 0.7 - 0.5 * math.sin(lift),
             ]
-            q[5:9] = [math.cos(pan / 2), 0, 0, math.sin(pan / 2)]  # yaw only
+            # Rz(pan) * Ry(lift), as (w, x, y, z)
+            cz, sz = math.cos(pan / 2), math.sin(pan / 2)
+            cy, sy = math.cos(lift / 2), math.sin(lift / 2)
+            q[5:9] = [cz * cy, -sz * sy, cz * sy, sz * cy]
         return q, True
 
 
@@ -159,3 +162,73 @@ def test_a_grasp_far_from_the_object_misses(backend):
     assert result.status is ExecutionStatus.FAILURE
     assert "grasp missed" in result.message
     assert result.metrics["grasp_error"] == pytest.approx(0.3, abs=0.01)
+
+
+# ------------------------------------------------------------------- skills
+
+from long_tamp.sim import SCREW, ScrewDriving  # noqa: E402
+from long_tamp.tasks.task_planning.skills import SkillCommand  # noqa: E402
+
+PARAMETERS = {"tool": "box", "part": "part1", "hole": "part1/h_hole1"}
+
+
+def _screw_backend(tmp_path, **params):
+    (tmp_path / "arm.urdf").write_text(ARM)
+    (tmp_path / "box.urdf").write_text(BOX)
+    (tmp_path / "tiny.yaml").write_text(CONFIG)
+    export = export_mjcf(tmp_path / "tiny.yaml", tmp_path / "mjcf")
+    return MuJoCoBackend(
+        export,
+        lambda q: np.asarray(q, float),
+        speed=math.inf,
+        skills={"screw": ScrewDriving(**params)},
+    )
+
+
+def _screw(backend):
+    down = REST.copy()
+    down[1] = 0.06  # the tip (carrying the "driver") goes ~3 cm down
+    command = SkillCommand(SCREW, dict(PARAMETERS), Line(REST, down, 1.0, carry=True))
+    return run(backend, command)
+
+
+def test_the_screw_skill_drives_a_screw_and_reports_its_postcondition(tmp_path):
+    result = _screw(_screw_backend(tmp_path))
+    assert result.status is ExecutionStatus.SUCCESS, result.message
+    assert result.facts == ("screwed(part1, part1/h_hole1)",)
+    m = result.metrics
+    assert m["screw_torque"] == pytest.approx(2.0, rel=0.01)
+    assert m["screw_depth"] >= 0.0079
+    assert m["lateral_error"] < 0.001
+    assert m["contact_force"] == 15.0
+
+
+def test_a_hole_off_the_planned_axis_fails_as_misaligned(tmp_path):
+    result = _screw(_screw_backend(tmp_path, hole_error=(0.0, 0.005, 0.0)))
+    assert result.status is ExecutionStatus.FAILURE
+    assert result.facts == ("screw_misaligned(box, part1/h_hole1)",)
+    assert result.metrics["lateral_error"] == pytest.approx(0.005, abs=0.001)
+
+
+def test_a_hole_out_of_reach_fails_as_no_contact(tmp_path):
+    # The real hole is 5 cm further along the approach than planned.
+    down = REST.copy()
+    down[1] = 0.06
+    line = Line(REST, down, 1.0, carry=True)
+    start = np.array(line.eval(0.0)[0][2:5])
+    end = np.array(line.eval(1.0)[0][2:5])
+    axis = (end - start) / np.linalg.norm(end - start)
+    backend = _screw_backend(tmp_path, hole_error=tuple(0.05 * axis))
+    result = _screw(backend)
+    assert result.status is ExecutionStatus.FAILURE
+    assert result.facts == ("screw_no_contact(box, part1/h_hole1)",)
+
+
+def test_a_backend_without_the_skill_plays_its_approach(backend):
+    down = REST.copy()
+    down[1] = 0.06
+    command = SkillCommand(SCREW, dict(PARAMETERS), Line(REST, down, 1.0, carry=True))
+    result = run(backend, command)  # no "screw" controller registered
+    assert result.status is ExecutionStatus.SUCCESS
+    assert result.facts == ()
+    assert result.metrics["drift"] < 0.005

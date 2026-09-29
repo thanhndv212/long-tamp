@@ -47,13 +47,16 @@ def test_spare_clamps_take_any_part():
         ("fixtures/clamp1", "part1/h_seat"),
         ("fixtures/clamp2", "part1/h_seat"),
     ]
-    assert build_scene.fixtures_srdf(2).count("<gripper name=\"clamp") == 2
+    assert build_scene.fixtures_srdf(2).count('<gripper name="clamp') == 2
     facts = screw_domain.static_facts(1, pairs)
     assert "clamp_takes(fixtures/clamp2, part1/h_seat)" in facts
 
 
 def _planner():
-    from long_tamp.tasks.task_planning.skeleton import FastDownwardPlanner, default_planner
+    from long_tamp.tasks.task_planning.skeleton import (
+        FastDownwardPlanner,
+        default_planner,
+    )
 
     if FastDownwardPlanner.find() is None:
         pytest.importorskip("unified_planning")
@@ -64,8 +67,12 @@ SPARE = [("fixtures/clamp1", "part1/h_seat"), ("fixtures/clamp2", "part1/h_seat"
 
 
 def test_a_blocked_clamp_is_swapped_for_a_spare_one():
-    blocked = [("clamp_and_screw", {"clamp": "fixtures/clamp1", "seat": "part1/h_seat"})]
-    steps = _planner().solve(screw_domain.pddl_problem(1, blocked=blocked, clamps=SPARE))
+    blocked = [
+        ("clamp_and_screw", {"clamp": "fixtures/clamp1", "seat": "part1/h_seat"})
+    ]
+    steps = _planner().solve(
+        screw_domain.pddl_problem(1, blocked=blocked, clamps=SPARE)
+    )
     clamps = [p["clamp"] for c, p in steps if c == "clamp_and_screw"]
     assert clamps == ["fixtures/clamp2"]
 
@@ -134,9 +141,10 @@ def test_the_m3_exit_test_runs_logically():
     planner = _planner()
     first = planner.solve(screw_domain.pddl_problem(1, clamps=SPARE))
     first_clamp = next(p["clamp"] for c, p in first if c == "clamp_and_screw")
-    other = {"fixtures/clamp1": "fixtures/clamp2", "fixtures/clamp2": "fixtures/clamp1"}[
-        first_clamp
-    ]
+    other = {
+        "fixtures/clamp1": "fixtures/clamp2",
+        "fixtures/clamp2": "fixtures/clamp1",
+    }[first_clamp]
     cell = _Cell(1, {"capability": "clamp_and_screw", "match": {"clamp": first_clamp}})
 
     def plan(blocked):
@@ -151,7 +159,10 @@ def test_the_m3_exit_test_runs_logically():
         ("clamp_and_screw", {"clamp": first_clamp, "seat": "part1/h_seat"})
     ]
     assert cell.grasps == {other: "part1/h_seat", "fixtures/rack_hold": "driver/h_rack"}
-    assert cell.screwed == {"screwed(part1, part1/h_hole1)", "screwed(part1, part1/h_hole2)"}
+    assert cell.screwed == {
+        "screwed(part1, part1/h_hole1)",
+        "screwed(part1, part1/h_hole2)",
+    }
     # Nothing done before the failure was planned again.
     assert cell.ran.count("bootstrap: pick driver") == 1
     assert cell.ran.count("part1 A0: grasp") == 1

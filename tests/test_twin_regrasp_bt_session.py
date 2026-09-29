@@ -104,9 +104,10 @@ class TestTwinRegraspBtSession:
         assert grasp2["status"] == "success", grasp2.get("message")
 
         after = json.loads(session.evaluate_condition("gripper-empty"))
-        assert after == {"status": "success", "value": False}, (
-            "regrasping must have actually re-acquired ball/handle"
-        )
+        assert after == {
+            "status": "success",
+            "value": False,
+        }, "regrasping must have actually re-acquired ball/handle"
 
         finalize = json.loads(session.finalize())
         assert finalize["status"] == "success"

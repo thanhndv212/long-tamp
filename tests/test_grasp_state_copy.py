@@ -30,7 +30,11 @@ def test_mutating_the_copy_does_not_affect_the_original():
     original = GraspStateTracker(
         grippers=GRIPPERS,
         handles=HANDLES,
-        initial_grasps={"g_arm1_tool": "h_tool", "g_arm2_wb": None, "g_arm3_part": None},
+        initial_grasps={
+            "g_arm1_tool": "h_tool",
+            "g_arm2_wb": None,
+            "g_arm3_part": None,
+        },
     )
     original_snapshot = dict(original.current_grasps)
 
@@ -66,9 +70,7 @@ def test_copy_does_not_carry_over_phase_indices():
     original = GraspStateTracker(
         grippers=GRIPPERS, handles=HANDLES, initial_grasps=None
     )
-    original.set_phase_indices(
-        phase_grippers=["g_arm1_tool"], phase_handles=["h_tool"]
-    )
+    original.set_phase_indices(phase_grippers=["g_arm1_tool"], phase_handles=["h_tool"])
 
     probe = original.copy()
 

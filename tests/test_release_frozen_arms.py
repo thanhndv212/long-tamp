@@ -75,8 +75,11 @@ class TestHolderIsNeverFrozen:
         released object. arm3 must be dropped; arm2 must survive."""
         p = _planner(PART3_B_STATE)
         frozen = p._release_frozen_arms(
-            "tool_holder/g_holder_part", "part3/h_fg",
-            "manual", {0: ["arm2", "arm3"]}, 0,
+            "tool_holder/g_holder_part",
+            "part3/h_fg",
+            "manual",
+            {0: ["arm2", "arm3"]},
+            0,
         )
         assert "arm3" not in frozen
         assert frozen == ["arm2"]
@@ -86,7 +89,11 @@ class TestHolderIsNeverFrozen:
         excludes the holder -- the path that was always correct."""
         p = _planner(PART3_B_STATE)
         frozen = p._release_frozen_arms(
-            "tool_holder/g_holder_part", "part3/h_fg", "auto", None, 0,
+            "tool_holder/g_holder_part",
+            "part3/h_fg",
+            "auto",
+            None,
+            0,
         )
         assert "arm3" not in frozen
         assert "ur10" not in frozen  # the releasing gripper's own arm
@@ -101,8 +108,11 @@ class TestHolderIsNeverFrozen:
         logger.addHandler(handler)
         try:
             p._release_frozen_arms(
-                "tool_holder/g_holder_part", "part3/h_fg",
-                "manual", {0: ["arm2", "arm3"]}, 0,
+                "tool_holder/g_holder_part",
+                "part3/h_fg",
+                "manual",
+                {0: ["arm2", "arm3"]},
+                0,
             )
         finally:
             logger.removeHandler(handler)
@@ -115,14 +125,19 @@ class TestHolderIsNeverFrozen:
         """part1 sits inside tool_holder, which the UR10 holds. Releasing the
         WB grasp must leave the UR10 free even though no UR10 gripper touches
         part1 directly -- two hops up the chain."""
-        p = _planner({
-            "arm1/g_tool": "tool_holder/h_holder_tool",
-            "tool_holder/g_holder_part": "part1/h_fg",
-            "arm3/g_wb1": "part1/h_wb",
-        })
+        p = _planner(
+            {
+                "arm1/g_tool": "tool_holder/h_holder_tool",
+                "tool_holder/g_holder_part": "part1/h_fg",
+                "arm3/g_wb1": "part1/h_wb",
+            }
+        )
         frozen = p._release_frozen_arms(
-            "arm3/g_wb1", "part1/h_wb",
-            "manual", {0: ["ur10", "arm2"]}, 0,
+            "arm3/g_wb1",
+            "part1/h_wb",
+            "manual",
+            {0: ["ur10", "arm2"]},
+            0,
         )
         assert "ur10" not in frozen
         assert frozen == ["arm2"]
@@ -134,14 +149,19 @@ class TestOverrideIsHonoured:
     def test_override_survives_when_no_arm_holds_the_object(self):
         """The screwdriver releases a CON handle on part4; arm3 holds part4, so
         it goes -- but a caller freezing only the UR10 keeps it."""
-        p = _planner({
-            "arm1/g_tool": "tool_holder/h_holder_tool",
-            "arm3/g_wb4": "part4/h_wb",
-            "driver/g_driver": "part4/h_con2",
-        })
+        p = _planner(
+            {
+                "arm1/g_tool": "tool_holder/h_holder_tool",
+                "arm3/g_wb4": "part4/h_wb",
+                "driver/g_driver": "part4/h_con2",
+            }
+        )
         frozen = p._release_frozen_arms(
-            "driver/g_driver", "part4/h_con2",
-            "manual", {2: ["ur10"]}, 2,
+            "driver/g_driver",
+            "part4/h_con2",
+            "manual",
+            {2: ["ur10"]},
+            2,
         )
         assert frozen == ["ur10"]
 
@@ -151,24 +171,34 @@ class TestOverrideIsHonoured:
         assert p._release_frozen_arms(
             "tool_holder/g_holder_part", "part3/h_fg", "manual", spec, 0
         ) == ["arm2"]
-        assert p._release_frozen_arms(
-            "tool_holder/g_holder_part", "part3/h_fg", "manual", spec, 1
-        ) == []
+        assert (
+            p._release_frozen_arms(
+                "tool_holder/g_holder_part", "part3/h_fg", "manual", spec, 1
+            )
+            == []
+        )
 
     def test_missing_phase_entry_freezes_nothing(self):
         """An override dict without this phase means the caller asked for no
         freezing here -- not a silent fallback to the computed set."""
         p = _planner(PART3_B_STATE)
-        assert p._release_frozen_arms(
-            "tool_holder/g_holder_part", "part3/h_fg", "manual", {7: ["ur10"]}, 0
-        ) == []
+        assert (
+            p._release_frozen_arms(
+                "tool_holder/g_holder_part", "part3/h_fg", "manual", {7: ["ur10"]}, 0
+            )
+            == []
+        )
 
     def test_manual_mode_without_a_dict_falls_back_to_the_walk(self):
         """frozen_arms_mode='manual' with per_phase_frozen_arms=None is the
         resume path's shape; it must still exclude the holder."""
         p = _planner(PART3_B_STATE)
         frozen = p._release_frozen_arms(
-            "tool_holder/g_holder_part", "part3/h_fg", "manual", None, 0,
+            "tool_holder/g_holder_part",
+            "part3/h_fg",
+            "manual",
+            None,
+            0,
         )
         assert "arm3" not in frozen
 
@@ -179,21 +209,29 @@ class TestNoHolder:
     def test_tool_return_freezes_everything_requested(self):
         """The UR10 returns the frame gripper to the dispenser. No other arm
         holds the frame gripper, so both other arms stay frozen."""
-        p = _planner({
-            "arm1/g_tool": "tool_holder/h_holder_tool",
-            "arm2/g_tool": "driver/h_driver_tool",
-        })
+        p = _planner(
+            {
+                "arm1/g_tool": "tool_holder/h_holder_tool",
+                "arm2/g_tool": "driver/h_driver_tool",
+            }
+        )
         frozen = p._release_frozen_arms(
-            "arm1/g_tool", "tool_holder/h_holder_tool",
-            "manual", {0: ["arm2", "arm3"]}, 0,
+            "arm1/g_tool",
+            "tool_holder/h_holder_tool",
+            "manual",
+            {0: ["arm2", "arm3"]},
+            0,
         )
         assert frozen == ["arm2", "arm3"]
 
     def test_order_of_the_requested_list_is_preserved(self):
         p = _planner({"arm1/g_tool": "tool_holder/h_holder_tool"})
         frozen = p._release_frozen_arms(
-            "arm1/g_tool", "tool_holder/h_holder_tool",
-            "manual", {0: ["arm3", "arm2"]}, 0,
+            "arm1/g_tool",
+            "tool_holder/h_holder_tool",
+            "manual",
+            {0: ["arm3", "arm2"]},
+            0,
         )
         assert frozen == ["arm3", "arm2"]
 

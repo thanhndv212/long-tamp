@@ -41,7 +41,12 @@ def test_compiler_stamps_every_plan_element_with_its_ir_id_and_role():
         assert key not in stamped, f"{key} stamped twice"
         stamped[key] = element.get("name")
     roles = {role for _, role in stamped}
-    assert roles == set(TRANSACTION_ROLES) | {"sequence", "fallback", "retry", "condition"}
+    assert roles == set(TRANSACTION_ROLES) | {
+        "sequence",
+        "fallback",
+        "retry",
+        "condition",
+    }
     assert stamped[("move-a", "attempts")] == "Move a retry"
     assert stamped[("retry-flaky", "retry")] == "retry-flaky"
 
@@ -73,7 +78,9 @@ def test_python_events_name_the_compiled_elements(options):
 
 def test_composites_run_then_finish_and_leaves_just_finish():
     events = []
-    run = run_plan(create_fake_session('{"shape": "composite"}'), on_event=events.append)
+    run = run_plan(
+        create_fake_session('{"shape": "composite"}'), on_event=events.append
+    )
     assert run.success
     seen = [(e["ir_id"], e["role"], e["status"], e["previous"]) for e in events]
     assert seen[:3] == [
@@ -82,7 +89,9 @@ def test_composites_run_then_finish_and_leaves_just_finish():
         ("at-a", "condition", "FAILURE", "IDLE"),
     ]
     assert seen[-1] == ("mission", "sequence", "SUCCESS", "RUNNING")
-    executes = [e for e in events if e["ir_id"] == "move-flaky" and e["role"] == "execute"]
+    executes = [
+        e for e in events if e["ir_id"] == "move-flaky" and e["role"] == "execute"
+    ]
     assert [e["status"] for e in executes] == ["FAILURE", "SUCCESS"]
     assert executes[0]["message"] == "synthetic first-attempt failure"
     assert [e["metrics"]["attempt"] for e in executes] == [1, 2]

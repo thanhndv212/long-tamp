@@ -23,7 +23,9 @@ Motion is passed out of band (``submit``) rather than through the session's
 JSON responses, which exist for the C++ host and can't carry path objects.
 Execution happens after planning, so the world state (e.g. the grasp tracker)
 already reflects a step when its motion runs; a failed execution stops the
-mission rather than rolling that back.
+mission rather than rolling that back. Recorded facts are the exception: with
+a backend, a step's recorded effects (a screw driven) are written only once
+its motion has executed.
 """
 
 from __future__ import annotations
@@ -99,6 +101,10 @@ class PlanExecutor:
 
     def run(self) -> PlanRun:
         self._executions = []
+        # Recorded facts (a screw driven) hold once the motion has executed,
+        # not when it was planned.
+        if self.backend is not None and hasattr(self.session, "commit_effects"):
+            self.session.defer_recording = True
         run = run_plan(
             _AttemptSession(self.session, self._pending.clear),
             on_skip=self.on_skip,
@@ -130,6 +136,8 @@ class PlanExecutor:
                 self._emit(node, command, outcome.status.name, "RUNNING", outcome)
                 if outcome.status is not ExecutionStatus.SUCCESS:
                     return f"execution failed ({outcome.reason}): {outcome.message}"
+            if getattr(self.session, "defer_recording", False):
+                self.session.commit_effects(node["id"])
         self.control.checkpoint(node["id"], "after")
         return None
 

@@ -660,24 +660,28 @@ class TestResumedPhases:
 
         # plan_sequence: _01 lands, _12 fails -> partial entry
         partial = {
-            "phase": 1, "gripper": "g_fg", "handle": "part2/h_fg",
-            "edges": ["e_01", "e_12"], "complete": False,
+            "phase": 1,
+            "gripper": "g_fg",
+            "handle": "part2/h_fg",
+            "edges": ["e_01", "e_12"],
+            "complete": False,
             "paths": [FakePath(home, pre_a)],
         }
         r.record_phase_results([partial], block_label="part2 A0")
 
         # resume_sequence drops the partial and replans from pre_a
         complete = {
-            "phase": 1, "gripper": "g_fg", "handle": "part2/h_fg",
-            "edges": ["e_01", "e_12"], "complete": True,
+            "phase": 1,
+            "gripper": "g_fg",
+            "handle": "part2/h_fg",
+            "edges": ["e_01", "e_12"],
+            "complete": True,
             "paths": [FakePath(pre_a, pre_b), FakePath(pre_b, grasp)],
         }
         r.record_phase_results([complete], block_label="part2 A0")
         return r
 
-    def test_the_abandoned_leg_is_kept_and_the_manifest_is_continuous(
-        self, tmp_path
-    ):
+    def test_the_abandoned_leg_is_kept_and_the_manifest_is_continuous(self, tmp_path):
         r = self._rs2(tmp_path)
         segs = _manifest(r)["segments"]
         assert len(segs) == 3, "the failed attempt's _01 must survive"
@@ -690,11 +694,18 @@ class TestResumedPhases:
         r = _rec(tmp_path)
         r.begin_step(0, "part2 A0")
         r.record_path(FakePath([0.0], [0.0]), kind="transit")  # arrives home
-        r.record_phase_results([
-            {"phase": 1, "gripper": "g", "handle": "h",
-             "edges": ["e_01", "e_12"], "complete": True,
-             "paths": [FakePath([1.0], [1.4]), FakePath([1.4], [2.0])]},
-        ])
+        r.record_phase_results(
+            [
+                {
+                    "phase": 1,
+                    "gripper": "g",
+                    "handle": "h",
+                    "edges": ["e_01", "e_12"],
+                    "complete": True,
+                    "paths": [FakePath([1.0], [1.4]), FakePath([1.4], [2.0])],
+                },
+            ]
+        )
         assert r.seam_violations == 1
         assert _manifest(r)["segments"][1]["seam_error"] == pytest.approx(1.0)
 
@@ -707,8 +718,12 @@ class TestResumedPhases:
         r = _rec(tmp_path)
         r.begin_step(0, "s")
         phase = {
-            "phase": 1, "gripper": "g", "handle": "h", "complete": True,
-            "edges": ["e_01"], "paths": [FakePath([0.0], [1.0])],
+            "phase": 1,
+            "gripper": "g",
+            "handle": "h",
+            "complete": True,
+            "edges": ["e_01"],
+            "paths": [FakePath([0.0], [1.0])],
         }
         for _ in range(4):
             r.record_phase_results([phase])
@@ -720,8 +735,12 @@ class TestResumedPhases:
         r = _rec(tmp_path)
         r.begin_step(0, "s")
         phase = {
-            "phase": 1, "gripper": "g", "handle": "h", "complete": False,
-            "edges": ["e_01", "e_12"], "paths": [FakePath([0.0], [1.0])],
+            "phase": 1,
+            "gripper": "g",
+            "handle": "h",
+            "complete": False,
+            "edges": ["e_01", "e_12"],
+            "paths": [FakePath([0.0], [1.0])],
         }
         assert len(r.record_phase_results([phase])) == 1
         phase["paths"].append(FakePath([1.0], [2.0]))
