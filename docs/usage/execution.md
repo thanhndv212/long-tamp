@@ -103,3 +103,63 @@ run = executor.run()                 # PlanRun: success, skipped, failed_step, e
 `eval(t)`, like an HPP path, or an id resolved by `get_path`) in scaled real time, sending
 each configuration to `display` (a viewer) or playing headless. The screw-assembly example
 takes `--backend none|mock|playback`.
+
+## Drift: replanning from the observed state
+
+A plan is computed before its motion runs, from where the previous step's plan ended. If the
+robot isn't there when the motion starts (a tracking error, a bump, a step planned ahead from
+an expected state), the cached plan is stale. Before running a step's motion, `PlanExecutor`
+asks the backend how far the robot is from where the plan starts:
+
+```python
+executor = PlanExecutor(
+    session,
+    backend=backend,                                  # with start_error / observed_config
+    policy=ExecutionPolicy(max_start_drift=0.05),     # rad; None: no check
+    on_drift=replan,                                  # (node, observe) -> new commands
+)
+```
+
+- `backend.start_error(command)`: the largest joint error [rad] between the robot and the
+  command's start, or `None` if unknown. The MuJoCo backend implements it.
+- Beyond `max_start_drift`, the executor emits a `drift` event (`FAILURE`, with
+  `start_drift`) and calls `on_drift(node, observe)`. `observe(like)` returns the robot's
+  observed configuration (`backend.observed_config`). The hook plans the step again from
+  there and returns its commands, which run instead.
+- Without `on_drift`, the step fails with reason `drift`.
+
+The screw assembly replans the block from the grasps it started with and the observed joint
+positions, clipped to the planner's joint bounds, keeping the objects where the planner put
+them. This assumes the grasps still hold. A 0.2 rad bump of an arm whose gripper holds a
+clamped part would break the grasp in the real world, so the planner can't start from that
+configuration either. `--inject-drift
+"LABEL:JOINT:RAD"` bumps a joint just before step LABEL's motion, to exercise this.
+
+## Planning ahead
+
+With `plan_ahead=True`, the executor plans step k+1 while step k's motion executes in a
+worker thread:
+
+1. Step k is planned, and its motion starts in the worker.
+2. Step k+1 is planned against the *expected* world. Its preconditions see step k's recorded
+   effects, which are pending until k's motion has executed.
+3. At the handoff, the executor waits for step k's motion. It commits step k's recorded
+   effects, checks drift for step k+1 (and replans if needed), then starts step k+1's motion.
+
+HPP paths may re-project onto their constraints through state they share with the planner,
+so the worker never evaluates them. Paths are sampled into arrays (`SampledPath`) in the
+planning thread first. A motion that fails stops the plan at the next step boundary.
+
+`PlanRun.timing` reports:
+
+| Key | Meaning |
+|---|---|
+| `wall` | seconds from start to end |
+| `execution` | seconds of motion |
+| `idle_between_motions` | seconds the robot waited between two motions, which is what planning ahead removes |
+| `waited_for_motion` | seconds planning waited for motion (plan-ahead only) |
+| `drift_replans` | steps replanned because of drift |
+
+The screw assembly takes `--plan-ahead`, `--max-drift RAD` and, with `--backend mujoco`,
+`--sim-speed 1` (real time: without it motion takes no wall time, so there is nothing to
+overlap).

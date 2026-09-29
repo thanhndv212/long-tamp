@@ -38,6 +38,7 @@ Roles:
 | `attempts` | its retry budget | `RetryUntilSuccessful` |
 | `execute` | one attempt at the step | `ExecuteTaskStep` |
 | `motion` | a command executed on a backend (Python executor only) | none |
+| `drift` | before a step's motion, the robot was further than `max_start_drift` from where the plan starts: `FAILURE`, with `start_drift`; the step is replanned (Python executor only) | none |
 
 Transitions follow BehaviorTree.CPP: composites go `RUNNING`, then `SUCCESS` or `FAILURE`;
 leaves go straight to their result; resets to `IDLE` are not events. Motion comes before

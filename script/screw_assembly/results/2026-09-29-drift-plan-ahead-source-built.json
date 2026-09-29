@@ -1,0 +1,78 @@
+{
+  "date": "2026-09-29",
+  "validation": "#20: drift replan and planning ahead, MuJoCo backend in its own process",
+  "environment": "hpp-agimus-arm64 (source-built HPP), MuJoCo 3.11, two-part scene",
+  "runs": [
+    {
+      "command": "--backend mujoco --sim-speed 1",
+      "note": "sequential; ran concurrently with the plan-ahead run (and a third mission)",
+      "success": true,
+      "seconds": 773.1,
+      "timing": {
+        "execution": 127.717,
+        "idle_between_motions": 631.133,
+        "waited_for_motion": 0.0,
+        "drift_replans": 0,
+        "wall": 773.097
+      },
+      "execution": {
+        "commands": 37,
+        "failed": 0,
+        "sim_seconds": 125.14,
+        "max_tracking_error": 0.01525,
+        "max_drift": 6e-05,
+        "max_object_drift": 3e-05,
+        "max_start_drift": 0.00059,
+        "screws_driven": 4,
+        "max_screw_lateral_error": 5e-05
+      }
+    },
+    {
+      "command": "--backend mujoco --sim-speed 1 --plan-ahead",
+      "note": "ran concurrently with the sequential run",
+      "success": true,
+      "seconds": 580.82,
+      "timing": {
+        "execution": 190.261,
+        "idle_between_motions": 376.086,
+        "waited_for_motion": 83.249,
+        "drift_replans": 0,
+        "wall": 580.822
+      },
+      "execution": {
+        "commands": 37,
+        "failed": 0,
+        "sim_seconds": 117.78,
+        "max_tracking_error": 0.01525,
+        "max_drift": 1e-05,
+        "max_object_drift": 3e-05,
+        "max_start_drift": 0.00062,
+        "screws_driven": 4,
+        "max_screw_lateral_error": 5e-05
+      }
+    },
+    {
+      "command": "--backend mujoco --inject-drift 'part2 A0: grasp:ur10_left/elbow_joint:0.2'",
+      "success": true,
+      "seconds": 569.08,
+      "timing": {
+        "execution": 21.239,
+        "idle_between_motions": 533.952,
+        "waited_for_motion": 0.0,
+        "drift_replans": 1,
+        "wall": 569.083
+      },
+      "execution": {
+        "commands": 37,
+        "failed": 0,
+        "sim_seconds": 140.01,
+        "max_tracking_error": 0.01525,
+        "max_drift": 1e-05,
+        "max_object_drift": 5e-05,
+        "max_start_drift": 0.00058,
+        "screws_driven": 4,
+        "max_screw_lateral_error": 5e-05
+      }
+    }
+  ]
+}

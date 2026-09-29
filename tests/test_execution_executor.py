@@ -244,3 +244,172 @@ def test_a_failed_execution_records_nothing():
     run = executor.run()
     assert not run.success
     assert recorded() == frozenset()  # planned, but the screw was never driven
+
+
+# ------------------------------------------------------- drift, plan-ahead
+
+
+class _DriftingBackend(MockBackend):
+    """A mock whose robot is ``drift`` rad from every command's start, until
+    a replanned command (payload "replanned") arrives."""
+
+    def __init__(self, drift, **kw):
+        super().__init__(**kw)
+        self.drift = drift
+
+    def start_error(self, command):
+        return 0.0 if command.payload == "replanned" else self.drift
+
+    def observed_config(self, like=None):
+        return "observed-q"
+
+
+def _drift_plan(backend, on_drift=None, plan_ahead=False):
+    executor, planned = _executor(set(), backend=backend)
+    executor.policy.max_start_drift = 0.05
+    executor.on_drift = on_drift
+    executor.plan_ahead = plan_ahead
+    return executor, planned
+
+
+def test_a_drifted_robot_replans_the_step_from_where_it_is():
+    replans = []
+
+    def on_drift(node, observe):
+        replans.append((node["id"], observe()))
+        return [ExecutionCommand(node["id"], duration=1.0, payload="replanned")]
+
+    executor, _ = _drift_plan(_DriftingBackend(0.2, rtf=1000.0), on_drift)
+    run = executor.run()
+    assert run.success
+    assert replans == [("grasp-1", "observed-q"), ("release-1", "observed-q")]
+    assert [e.command.payload for e in run.executions] == ["replanned", "replanned"]
+    assert run.timing["drift_replans"] == 2
+
+
+def test_drift_without_a_replanner_fails_the_step():
+    executor, _ = _drift_plan(_DriftingBackend(0.2, rtf=1000.0))
+    run = executor.run()
+    assert not run.success
+    assert run.failed_step == "grasp-1"
+    assert "drift" in run.message
+
+
+def test_small_drift_runs_the_cached_plan():
+    executor, _ = _drift_plan(_DriftingBackend(0.01, rtf=1000.0))
+    run = executor.run()
+    assert run.success
+    assert run.timing["drift_replans"] == 0
+
+
+def test_plan_ahead_plans_the_next_step_while_the_motion_runs():
+    events = []
+
+    class Backend(MockBackend):
+        def start(self, command):
+            events.append(("start", command.step_id))
+            return super().start(command)
+
+    backend = Backend(rtf=20.0)  # 1 s of motion takes 50 ms
+    executor, planned = _executor(set(), backend=backend)
+    executor.plan_ahead = True
+    run = executor.run()
+    assert run.success
+    assert [e.step_id for e in run.executions] == ["grasp-1", "release-1"]
+    assert planned == [("grasp", "ball"), ("release", "left")]
+    # release was planned while grasp's 50 ms motion ran; the executor then
+    # waited for that motion before starting release's.
+    assert run.timing["waited_for_motion"] > 0.0
+    assert set(run.timing) >= {"wall", "execution", "idle_between_motions"}
+
+
+def test_plan_ahead_stops_on_a_failed_motion():
+    backend = MockBackend(rtf=1.0, fail_at=0.0, message="stalled")
+    executor, planned = _executor(set(), backend=backend)
+    executor.plan_ahead = True
+    run = executor.run()
+    assert not run.success
+    assert run.failed_step == "grasp-1"
+    assert "stalled" in run.message
+
+
+def test_a_step_planned_ahead_sees_its_predecessors_pending_effects():
+    from long_tamp.tasks.task_planning import RecordedFacts
+
+    holder, order = {}, []
+
+    def screw(p):
+        order.append(("screw", p["part"]))
+        holder["executor"].submit(ExecutionCommand("screw", duration=1.0))
+        return {}
+
+    def release(p):
+        order.append(("release", p["part"]))
+        holder["executor"].submit(ExecutionCommand("release", duration=1.0))
+        return {}
+
+    registry = CapabilityRegistry()
+    registry.register(
+        CapabilityDescriptor(
+            "screw", "1.0", {"part": str}, effects=("screwed(?part)",), restartable=True
+        ),
+        screw,
+    )
+    registry.register(
+        CapabilityDescriptor(
+            "release",
+            "1.0",
+            {"part": str},
+            preconditions=("screwed(?part)",),
+            effects=("released(?part)",),
+            restartable=True,
+        ),
+        release,
+    )
+    document = {
+        "schema_version": "1.0",
+        "mission_id": "ahead",
+        "scene": {"id": "fake"},
+        "provenance": {"kind": "human", "generator": "test"},
+        "root": {
+            "type": "sequence",
+            "id": "root",
+            "children": [
+                _transaction("screw-1", "screw", part="p1"),
+                _transaction("release-1", "release", part="p1"),
+            ],
+        },
+    }
+    recorded = RecordedFacts(None, predicates={"screwed", "released"})
+    session = TaskPlanningSession(
+        TaskPlan.from_dict(document, registry),
+        registry,
+        world_state=recorded,
+        recorded=recorded,
+    )
+    executor = PlanExecutor(
+        session,
+        backend=MockBackend(rtf=20.0),
+        policy=ExecutionPolicy(poll_interval=0.001),
+        plan_ahead=True,
+    )
+    holder["executor"] = executor
+    run = executor.run()
+    assert run.success, run.message
+    assert order == [("screw", "p1"), ("release", "p1")]
+    assert {str(a) for a in recorded()} == {"screwed(p1)", "released(p1)"}
+
+
+def test_a_backend_can_run_in_its_own_process():
+    from long_tamp.execution import ProcessBackend
+
+    backend = ProcessBackend(MockBackend, rtf=1000.0)
+    try:
+        executor, _ = _executor(set(), backend=backend, motions=2)
+        executor.plan_ahead = True
+        run = executor.run()
+        assert run.success
+        assert len(run.executions) == 3
+        assert not hasattr(backend, "start_error")  # MockBackend has none
+    finally:
+        backend.close()

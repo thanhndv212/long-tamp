@@ -10,6 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Drift check and planning ahead (#20), `long_tamp.execution`.
+  - **Drift check.** Before a step's motion runs, `PlanExecutor` asks the backend how far
+    the robot is from where the plan starts (`start_error`). Beyond
+    `ExecutionPolicy.max_start_drift`, it emits a `drift` event and calls
+    `on_drift(node, observe)` to replan the step from the observed configuration.
+  - **Planning ahead.** With `plan_ahead=True`, step k+1 is planned while step k's motion
+    runs in a worker thread. Paths are sampled to arrays first (`SampledPath`), and
+    preconditions see pending effects.
+  - **`ProcessBackend`.** It runs a backend in its own process, so a simulator doesn't
+    share the planner's interpreter lock (in a thread, the MuJoCo motion ran 3.6 times
+    slower). `PlanRun.timing` reports wall, execution, idle and drift-replan figures.
+  - **MuJoCo backend.** It gains `start_error`, `observed_config` (`QposMap.inverse`) and
+    `disturb`.
+  - **Screw assembly.** New flags `--plan-ahead`, `--max-drift`, `--sim-speed` and
+    `--inject-drift LABEL:JOINT:RAD`. The simulation runs in a `ProcessBackend`.
+  - **Results.** A 0.2 rad drift before a grasp is replanned and the mission completes.
+    At real-time speed, planning ahead cut a 2-part mission from 773 s to 581 s.
 - Skills (#19), `long_tamp.tasks.task_planning.skills`. A `SkillSpec` declares a step that
   ends in controller-level behaviour: pre- and postconditions, failure facts, start and end
   poses. `descriptor()` turns it into a capability.
