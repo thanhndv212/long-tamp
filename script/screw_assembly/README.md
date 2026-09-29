@@ -155,7 +155,7 @@ can't serve the viewer.
 constraint, so HPP never moves them. How far they close is the grasp planner's job
 (`long_tamp.grasping`, see `../grasp_planning/`): `finger_closures()` computes, for
 every arm grasp, the finger joint values that close the pads on that handle -- 36 mm
-(`finger_joint` 0.496) on the drill's 38 mm handle, 28 mm (0.567) on a part's 30 mm
+(`robotiq_85_left_knuckle_joint` 0.484) on the drill's 38 mm handle, 28 mm (0.555) on a part's 30 mm
 tab, each 2 mm past contact for grip force. Both viewers apply them: the fingers close
 at the end of each grasp, stay closed while the object is carried and open at its
 release. The task prints these closures at start-up.

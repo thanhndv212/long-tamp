@@ -407,13 +407,16 @@ def _joint_group(arm, home):
         f"    - {{joint: {arm}/{j}, initial: {q}, bounds: [-{pi}, {pi}]}}"
         for j, q in zip(names, home)
     ]
+    # The Robotiq 2F-85 from PickNik's ros2_robotiq_gripper: the left knuckle
+    # drives, the others mimic it (their URDF limits, which agree with the
+    # mimic multipliers).
     fingers = [
-        ("finger_joint", "0.0, 0.8"),
-        ("left_inner_knuckle_joint", "0.0, 0.8757"),
-        ("left_inner_finger_joint", "-0.8757, 0.0"),
-        ("right_outer_knuckle_joint", "0.0, 0.81"),
-        ("right_inner_knuckle_joint", "0.0, 0.8757"),
-        ("right_inner_finger_joint", "-0.8757, 0.0"),
+        ("robotiq_85_left_knuckle_joint", "0.0, 0.8"),
+        ("robotiq_85_right_knuckle_joint", "-0.8, 0.0"),
+        ("robotiq_85_left_inner_knuckle_joint", "0.0, 0.8"),
+        ("robotiq_85_right_inner_knuckle_joint", "-0.8, 0.0"),
+        ("robotiq_85_left_finger_tip_joint", "-0.8, 0.0"),
+        ("robotiq_85_right_finger_tip_joint", "0.0, 0.8"),
     ]
     lines += [
         f"    - {{joint: {arm}/{j}, initial: 0.0, bounds: [{b}]}}" for j, b in fingers

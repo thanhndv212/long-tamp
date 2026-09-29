@@ -74,13 +74,15 @@ class _ScrewRun:
         self.p, self.backend, self.command = params, backend, command
         self.saved_omega = backend._omega
         self.depth = self.torque = self.lateral = self.force = self.short = 0.0
-        carried = backend.carried_by_robot()
-        self.tool = next(iter(carried.values()), None)
+        carried = list(backend.carried_by_robot().values())
+        self.tool = None
         self.failure = ""
-        if self.tool is None:
+        if not carried:
             self.failure = "screw: no tool is carried along the approach"
             return
-        # The planned tool positions along the approach, and its arc length.
+        # The planned positions of what the robots carry along the approach;
+        # the tool is the one the approach moves (the other hand may hold
+        # the part still).
         length = backend._length
         n = int(min(400, max(20, length / 0.005)))
         self.grid = np.linspace(0.0, length, n + 1)
@@ -90,8 +92,12 @@ class _ScrewRun:
             if qpos is None:
                 self.failure = "screw: approach path evaluation failed"
                 return
-            points.append(backend.body_position(qpos, self.tool))
-        self.points = np.array(points)
+            points.append([backend.body_position(qpos, body) for body in carried])
+        points = np.array(points)  # (samples, carried, 3)
+        moved = np.linalg.norm(points[-1] - points[0], axis=1)
+        k = int(np.argmax(moved))
+        self.tool = carried[k]
+        self.points = points[:, k]
         steps = np.linalg.norm(np.diff(self.points, axis=0), axis=1)
         self.arc = np.concatenate([[0.0], np.cumsum(steps)])
         total = float(self.arc[-1])
@@ -101,7 +107,9 @@ class _ScrewRun:
         self.axis = (self.points[-1] - self.points[0]) / np.linalg.norm(
             self.points[-1] - self.points[0]
         )
-        self.hole = self.points[-1] + np.asarray(params.hole_error, dtype=float)
+        self.hole = self._actual_hole(self.points[-1]) + np.asarray(
+            params.hole_error, dtype=float
+        )
         self.touch_arc = max(0.0, total - params.thread_length)
         self.total = total
         self.done_at: float | None = None
@@ -109,6 +117,26 @@ class _ScrewRun:
         backend._omega = 2.0 * math.pi * params.bandwidth
 
     # -- helpers ---------------------------------------------------------
+
+    def _actual_hole(self, planned: np.ndarray) -> np.ndarray:
+        """The planned hole where its part actually is: a part held by
+        friction (contact grasps) sits a few mm from where the planner put
+        it, and its hole with it."""
+        backend = self.backend
+        params = self.command.parameters
+        part = params.get("part") or params.get("hole", "").split("/")[0]
+        body = next(
+            (b for n, b in backend._objects.items() if n.split("/")[0] == part), None
+        )
+        if body is None or body == self.tool:
+            return planned
+        qpos = backend.planned_qpos(backend._length)
+        if qpos is None:
+            return planned
+        pos, rot = backend.body_pose(qpos, body)
+        local = rot.T @ (planned - pos)
+        actual = backend.data
+        return actual.xpos[body] + actual.xmat[body].reshape(3, 3) @ local
 
     def _s_at(self, arc: float) -> float:
         return float(np.interp(min(arc, self.total), self.arc, self.grid))

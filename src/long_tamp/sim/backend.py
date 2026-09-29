@@ -11,14 +11,26 @@
   the damping runs through MuJoCo's implicit integrator. The Robotiq fingers are joints like
   the others, so the grippers open and close to the widths the planner chose,
   and the mimic joints follow through their equality constraints.
-- **Grasps are welds.** Contact-rich grasping isn't simulated. At the start of
-  each command, every object is welded to what carries it in the plan: a robot
-  link it moves rigidly with, or the world when it doesn't move. A new grasp
-  snaps the object into the planner's grasp, as closing fingers would, when it
-  is within ``grasp_tolerance`` (else the command fails: the grasp missed,
+- **Grasps are welds** by default. At the start of each command, every object
+  is welded to what carries it in the plan: a robot link it moves rigidly
+  with, or the world when it doesn't move. A new grasp snaps the object into
+  the planner's grasp, as closing fingers would, when it is within
+  ``grasp_tolerance`` (else the command fails: the grasp missed,
   ``grasp_error`` says by how much); a release leaves it where the simulation
-  put it, so placement error shows as ``object_drift``. An object that moves with nothing is driven along
-  its planned pose (reported as ``kinematic_objects``).
+  put it, so placement error shows as ``object_drift``. An object that moves
+  with nothing is driven along its planned pose (reported as
+  ``kinematic_objects``).
+- **Contact grasps** (``grasp="contact"``): the fingers hold the object by
+  friction instead. The planner keeps the fingers open (it plans grasps as
+  constraints), so ``grip(object, carrier)`` says what to close them to. A new
+  grasp snaps the object into place as above, then the fingers close for
+  ``grip_time`` while the object still rests where it was, then the object is
+  let go and the path runs with the fingers squeezing: their motors track the
+  closure plus ``grip_torque`` towards it. A release welds the object where it
+  is and opens the fingers for ``grip_time`` before the path runs. ``slip``
+  reports how far a gripped object moved in its carrier's frame. Unless
+  ``contacts`` is on, only fingers and objects touch, with friction and an
+  elliptic cone (after MuJoCo Menagerie's ``robotiq_2f85``).
 - **Retiming.** Planned paths keep their geometry, which the planner checked
   for collisions, but not always a timing a robot can follow: they may start
   at full speed or turn corners instantly. Each path is retimed along its own
@@ -63,6 +75,23 @@ from .mjcf import MjcfExport
 CARRIER_SAMPLES = 7
 #: Position [m] / orientation [rad] change below which a pose is "constant".
 RIGID_TOLERANCE = 1e-3
+#: Armature [kg m^2] of finger joints under contact grasps (Menagerie's 2F-85).
+FINGER_ARMATURE = 0.005
+#: No-slip solver iterations under contact grasps.
+NOSLIP_ITERATIONS = 5
+
+
+class GripTable:
+    """``grip`` for contact grasps from a table: (object body, robot) ->
+    finger joint values, the robot being the carrier's scene prefix
+    (``"ur10_left"`` for ``"ur10_left/wrist_3_link"``). Picklable, for a
+    backend in its own process."""
+
+    def __init__(self, closures: dict[tuple[str, str], dict[str, float]]) -> None:
+        self.closures = dict(closures)
+
+    def __call__(self, obj: str, carrier: str) -> dict[str, float] | None:
+        return self.closures.get((obj, carrier.split("/", 1)[0]))
 
 
 def _quat_distance(q1: np.ndarray, q2: np.ndarray) -> float:
@@ -96,7 +125,15 @@ class MuJoCoBackend:
         torque_margin: float = 0.8,
         skills: dict[str, Callable[[MuJoCoBackend, SkillCommand], Any]] | None = None,
         from_qpos: Callable[[np.ndarray, Any], np.ndarray] | None = None,
+        grasp: str = "weld",
+        fingers: tuple[str, ...] = (),
+        grip: Callable[[str, str], dict[str, float] | None] | None = None,
+        grip_torque: float = 15.0,
+        pads: dict[str, tuple[Any, Any]] | None = None,
+        grip_time: float = 0.6,
         clock: Callable[[], float] = time.monotonic,
+        record: str | Path | None = None,
+        record_fps: float = 30.0,
     ) -> None:
         import mujoco
 
@@ -118,8 +155,27 @@ class MuJoCoBackend:
         self.from_qpos = from_qpos
         self._skill = None
         self.clock = clock
+        #: Folder the simulation is recorded to (``qpos`` at ``record_fps``
+        #: frames per simulated second, one ``.npz`` chunk per command), for
+        #: replay in MuJoCo's viewer; ``None``: not recorded.
+        self.record = Path(record) if record is not None else None
+        self._frame_dt = 1.0 / record_fps
+        self._clock_sim = 0.0  # simulated seconds since the first command
+        self._next_frame = 0.0
+        self._recorded: list[tuple[float, np.ndarray]] = []
+        self._chunks = 0
+        if grasp not in ("weld", "contact"):
+            raise ValueError(f"grasp must be 'weld' or 'contact', not {grasp!r}")
+        if grasp == "contact" and (grip is None or not fingers):
+            raise ValueError("contact grasps need fingers and grip")
+        #: "weld" or "contact" (see the module docstring).
+        self.grasp = grasp
+        self.grip = grip
+        self.grip_torque = grip_torque
+        self.grip_time = grip_time
+        self._pads = dict(pads or {}) if grasp == "contact" else {}
         self.model, self._objects, self._actuated = self._build(
-            path, timestep, contacts
+            path, timestep, contacts, fingers if grasp == "contact" else ()
         )
         self._omega = 2.0 * math.pi * bandwidth
         self._qadr = self.model.jnt_qposadr[self._actuated]
@@ -157,15 +213,48 @@ class MuJoCoBackend:
         self._initialized = False
         self._path: Any = None
         self.cancelled = False
+        index = {self.model.joint(j).name: i for i, j in enumerate(self._actuated)}
+        missing = [f for f in fingers if f not in index]
+        if missing:
+            raise KeyError(f"finger joints not driven: {missing}")
+        self._finger_index = index
+        #: Gripped objects: name -> (carrier body, {driven index: (closure,
+        #: closing direction)}, object position in the hand's frame when
+        #: gripped).
+        self._gripped: dict[
+            str, tuple[int, dict[int, tuple[float, float]], np.ndarray]
+        ] = {}
+        self._slip = 0.0
 
     # -- model -----------------------------------------------------------
 
-    def _build(self, path: Path, timestep: float, contacts: bool):
+    def _build(self, path: Path, timestep: float, contacts: bool, fingers):
         mujoco = self.mujoco
         spec = mujoco.MjSpec.from_file(str(path))
         spec.option.timestep = timestep
         spec.option.integrator = mujoco.mjtIntegrator.mjINT_IMPLICITFAST
-        if not contacts:
+        if fingers:
+            # Friction grasps, as in Menagerie's robotiq_2f85.
+            spec.option.cone = mujoco.mjtCone.mjCONE_ELLIPTIC
+            spec.option.impratio = 10.0
+            # MuJoCo's friction is soft: a steady load (a long part's weight
+            # twisting it in the pads) creeps through it. The no-slip pass
+            # removes that.
+            spec.option.noslip_iterations = NOSLIP_ITERATIONS
+            # Box pads: a mesh fingertip touches a flat face at a point or
+            # two, which lets a long part pivot; a box face holds it flat.
+            for body, (pos, half) in self._pads.items():
+                pad = spec.body(body)
+                if pad is None:
+                    raise KeyError(f"pad body not in the scene: {body}")
+                geom = pad.add_geom()
+                geom.name = f"{body}/pad"
+                geom.type = mujoco.mjtGeom.mjGEOM_BOX
+                geom.pos = list(pos)
+                geom.size = list(half)
+                geom.mass = 0.0
+                geom.group = 3
+        elif not contacts:
             spec.option.disableflags |= mujoco.mjtDisableBit.mjDSBL_CONTACT
         model = spec.compile()
 
@@ -218,7 +307,68 @@ class MuJoCoBackend:
             name: mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, name)
             for name in objects
         }
+        if fingers:
+            self._grip_contacts(model, fingers, contacts)
         return model, objects, actuated_ids
+
+    def _grip_contacts(self, model: Any, fingers, contacts: bool) -> None:
+        """Finger geoms get friction; without ``contacts``, only they and the
+        objects collide (finger contype 2 against object conaffinity 2)."""
+        mujoco = self.mujoco
+        joints = {
+            mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f) for f in fingers
+        }
+        for e in range(model.neq):  # the fingers' mimic followers
+            if (
+                model.eq_type[e] == int(mujoco.mjtEq.mjEQ_JOINT)
+                and int(model.eq_obj2id[e]) in joints
+            ):
+                joints.add(int(model.eq_obj1id[e]))
+                # The linkage carries the squeeze: as stiff as the step allows.
+                model.eq_solref[e] = [2.0 * model.opt.timestep, 1.0]
+                model.eq_solimp[e] = [0.95, 0.99, 0.001, 0.5, 2.0]
+        # The finger links weigh grams: without armature (Menagerie gives its
+        # 2F-85 joints 0.005), a squeeze drives them through their limits and
+        # the object, which constrain them in proportion to their inertia.
+        for j in joints:
+            model.dof_armature[model.jnt_dofadr[j]] = max(
+                float(model.dof_armature[model.jnt_dofadr[j]]), FINGER_ARMATURE
+            )
+        finger_bodies = self._subtrees(
+            model, {int(model.jnt_bodyid[j]) for j in joints}
+        )
+        objects = {
+            int(model.jnt_bodyid[j])
+            for j in range(model.njnt)
+            if model.jnt_type[j] == int(mujoco.mjtJoint.mjJNT_FREE)
+        }
+        object_bodies = self._subtrees(model, objects)
+        pads = {
+            mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, f"{b}/pad")
+            for b in self._pads
+        }
+        for g in range(model.ngeom):
+            if model.geom_contype[g] == 0 and model.geom_conaffinity[g] == 0:
+                continue  # visual
+            body = int(model.geom_bodyid[g])
+            if body in finger_bodies:
+                model.geom_friction[g] = [1.0, 0.005, 0.0001]
+                model.geom_condim[g] = 4
+                model.geom_priority[g] = 1
+                model.geom_solref[g] = [2.0 * model.opt.timestep, 1.0]
+                model.geom_solimp[g] = [0.95, 0.99, 0.001, 0.5, 2.0]
+            if contacts:
+                continue
+            if body in finger_bodies and pads and g not in pads:
+                # With pads, they alone grip (the mesh's point contacts would
+                # take most of the squeeze).
+                model.geom_contype[g], model.geom_conaffinity[g] = 0, 0
+            elif body in finger_bodies:
+                model.geom_contype[g], model.geom_conaffinity[g] = 2, 0
+            elif body in object_bodies:
+                model.geom_contype[g], model.geom_conaffinity[g] = 0, 2
+            else:
+                model.geom_contype[g], model.geom_conaffinity[g] = 0, 0
 
     @staticmethod
     def _subtrees(model: Any, roots) -> set[int]:
@@ -253,6 +403,7 @@ class MuJoCoBackend:
         """Put the simulation at a planner configuration, at rest."""
         mujoco = self.mujoco
         mujoco.mj_resetData(self.model, self.data)
+        self._gripped.clear()
         self.data.qpos[:] = self.to_qpos(planner_q)
         mujoco.mj_forward(self.model, self.data)
         self._set_ctrl(self.data.qpos, np.zeros(self.model.nv))
@@ -282,6 +433,7 @@ class MuJoCoBackend:
             frames.append(
                 (scratch.xpos.copy(), scratch.xquat.copy(), scratch.xmat.copy())
             )
+        self._frames = frames
         carriers: dict[str, int | None] = {}
         for name, obj in self._objects.items():
             x0, q0 = frames[0][0][obj], frames[0][1][obj]
@@ -297,17 +449,7 @@ class MuJoCoBackend:
             # finger, which hangs on a weakly driven mimic joint.
             best, best_key = None, None
             for body in self._robot_bodies:
-                rel = []
-                for xpos, xquat, xmat in frames:
-                    rot = xmat[body].reshape(3, 3)
-                    inv, quat = np.zeros(4), np.zeros(4)
-                    mujoco.mju_negQuat(inv, xquat[body])
-                    mujoco.mju_mulQuat(quat, inv, xquat[obj])
-                    rel.append((rot.T @ (xpos[obj] - xpos[body]), quat))
-                dev = max(
-                    max(np.linalg.norm(p - rel[0][0]), _quat_distance(q, rel[0][1]))
-                    for p, q in rel
-                )
+                dev = self._deviation(body, obj)
                 if dev >= RIGID_TOLERANCE:
                     continue
                 key = (len(self._ancestors(body)), dev)
@@ -315,6 +457,21 @@ class MuJoCoBackend:
                     best, best_key = body, key
             carriers[name] = best
         return carriers
+
+    def _deviation(self, body: int, obj: int) -> float:
+        """How much ``obj`` moves in ``body``'s frame over the sampled path."""
+        mujoco = self.mujoco
+        rel = []
+        for xpos, xquat, xmat in self._frames:
+            rot = xmat[body].reshape(3, 3)
+            inv, quat = np.zeros(4), np.zeros(4)
+            mujoco.mju_negQuat(inv, xquat[body])
+            mujoco.mju_mulQuat(quat, inv, xquat[obj])
+            rel.append((rot.T @ (xpos[obj] - xpos[body]), quat))
+        return max(
+            max(np.linalg.norm(p - rel[0][0]), _quat_distance(q, rel[0][1]))
+            for p, q in rel
+        )
 
     def _attach(self, carriers: dict[str, int | None], planned: np.ndarray) -> str:
         """Weld each object to its carrier; returns a failure message, or "".
@@ -329,9 +486,26 @@ class MuJoCoBackend:
         mujoco, scratch = self.mujoco, self._scratch
         scratch.qpos[:] = planned
         mujoco.mj_kinematics(self.model, scratch)
+        self._closing: list[str] = []
+        self._opening = False
         for name, carrier in carriers.items():
             eq = self._weld(name)
             obj = self._objects[name]
+            held = self._gripped.get(name)
+            if held is not None:
+                # Still in the fingers while the plan keeps it rigid with the
+                # hand: the carrier (the highest such link) varies from path
+                # to path, and a static arm leaves it rigid with the world too.
+                if self._deviation(self._hand(held[1]), obj) < RIGID_TOLERANCE:
+                    if carrier in (0, None):
+                        self._carried[name] = held[0]
+                    else:
+                        self._gripped[name] = (carrier, *held[1:])
+                    continue
+                del self._gripped[name]  # a release: weld it where it is
+                self._opening = True
+                if carrier is None:
+                    carrier = 0
             if carrier is None:
                 self.data.eq_active[eq] = 0
                 continue
@@ -349,12 +523,80 @@ class MuJoCoBackend:
                         f"{self.grasp_tolerance * 1000:.0f} mm)"
                     )
                 pos, quat = pos_plan, quat_plan
+                closure = self._closure(name, carrier)
+                if closure:
+                    # Snap it into the planned grasp, resting (welded to the
+                    # world) while the fingers close on it.
+                    self._place(obj, carrier, pos, quat)
+                    self._gripped[name] = (carrier, closure, np.zeros(3))
+                    self._closing.append(name)
+                    pos, quat = self._relative(self.data, 0, obj)
+                    carrier = 0
             self.model.eq_obj1id[eq] = carrier
             self.model.eq_data[eq][:] = 0.0
             self.model.eq_data[eq][3:6] = pos
             self.model.eq_data[eq][6:10] = quat
             self.model.eq_data[eq][10] = 1.0  # torquescale
             self.data.eq_active[eq] = 1
+        return ""
+
+    def _closure(self, name: str, carrier: int) -> dict[int, tuple[float, float]]:
+        """Driven-joint index -> (closure, closing direction) for gripping
+        ``name`` from ``carrier`` (contact grasps), or {} to weld it."""
+        if self.grasp != "contact":
+            return {}
+        values = self.grip(name, self.model.body(carrier).name) or {}
+        closure = {}
+        for joint, value in values.items():
+            i = self._finger_index.get(joint)
+            if i is not None:
+                now = float(self.data.qpos[self._qadr[i]])
+                closure[i] = (float(value), 1.0 if value >= now else -1.0)
+        return closure
+
+    def _hand(self, closure: dict[int, tuple[float, float]]) -> int:
+        """The body the fingers hang from (slip is measured in its frame: the
+        carrier may be further up the arm, past joints that track loosely)."""
+        joint = self._actuated[next(iter(closure))]
+        return int(self.model.body_parentid[self.model.jnt_bodyid[joint]])
+
+    def _place(self, obj: int, carrier: int, pos: np.ndarray, quat: np.ndarray) -> None:
+        """Put free body ``obj`` at pose (``pos``, ``quat``) in ``carrier``'s frame."""
+        mujoco, model, data = self.mujoco, self.model, self.data
+        j = model.body_jntadr[obj]
+        adr, dof = model.jnt_qposadr[j], model.jnt_dofadr[j]
+        world = np.zeros(4)
+        mujoco.mju_mulQuat(world, data.xquat[carrier], quat)
+        data.qpos[adr : adr + 3] = data.xpos[carrier] + data.xmat[carrier].reshape(
+            3, 3
+        ) @ np.asarray(pos)
+        data.qpos[adr + 3 : adr + 7] = world
+        data.qvel[dof : dof + 6] = 0.0
+        mujoco.mj_forward(model, data)
+
+    def _grip_phase(self, start: np.ndarray) -> str:
+        """Close the fingers on new grasps, or open them after a release,
+        holding the arm at the path's start; then let new grasps go of their
+        world welds. "" or a failure message."""
+        if not self._closing and not self._opening:
+            return ""
+        qvel = np.zeros(self.model.nv)
+        steps = int(round(self.grip_time / self.model.opt.timestep))
+        for _ in range(steps):
+            error = self.control_step(start, qvel, start)
+            if error:
+                return error
+        for name in self._closing:
+            carrier, closure, _ = self._gripped[name]
+            obj = self._objects[name]
+            self.data.eq_active[self._weld(name)] = 0
+            hand = self._hand(closure)
+            self._gripped[name] = (
+                carrier,
+                closure,
+                self._relative(self.data, hand, obj)[0],
+            )
+        self._closing = []
         return ""
 
     def _retime(self) -> tuple[np.ndarray, np.ndarray]:
@@ -411,7 +653,7 @@ class MuJoCoBackend:
         dependent torques (inertia, Coriolis, centrifugal) by ``k**2``;
         gravity stays.
         """
-        mujoco, model, scratch = self.mujoco, self.model, self._scratch
+        mujoco, model = self.mujoco, self.model
         duration = float(times[-1])
         if duration <= 0 or not np.isfinite(self._effort).any():
             return 1.0
@@ -426,7 +668,20 @@ class MuJoCoBackend:
         qacc = np.diff(qvel, axis=0) / h
         effort = self._effort * self.torque_margin
         scale = 1.0
-        for k in range(n + 1):
+        # The motion's own torques: contacts (grasping fingers) aren't part of
+        # it, and a planned configuration's open fingers may graze the object.
+        flags = model.opt.disableflags
+        model.opt.disableflags = flags | int(mujoco.mjtDisableBit.mjDSBL_CONTACT)
+        try:
+            scale = self._inverse_scale(qpos, qvel, qacc, effort)
+        finally:
+            model.opt.disableflags = flags
+        return scale
+
+    def _inverse_scale(self, qpos, qvel, qacc, effort) -> float:
+        mujoco, model, scratch = self.mujoco, self.model, self._scratch
+        scale = 1.0
+        for k in range(len(qpos)):
             scratch.qpos[:] = qpos[k]
             scratch.qvel[:] = 0.0
             scratch.qacc[:] = 0.0
@@ -509,7 +764,10 @@ class MuJoCoBackend:
         for name, obj in self._objects.items():
             eq = self._weld(name)
             carrier = int(model.eq_obj1id[eq])
-            if not data.eq_active[eq] or carrier == 0:
+            if name in self._gripped and not data.eq_active[eq]:
+                # held by friction: the hand bears it, not the carrier above
+                carrier = self._hand(self._gripped[name][1])
+            elif not data.eq_active[eq] or carrier == 0:
                 continue
             ancestors = self._ancestors(carrier)
             mass = float(model.body_subtreemass[obj])
@@ -552,15 +810,25 @@ class MuJoCoBackend:
         damping = 2.0 * inertia * omega
         model.dof_damping[self._vadr] = damping
         error = qpos_ref[self._qadr] - data.qpos[self._qadr]
+        qvel_ref = qvel_ref[self._vadr].copy()
+        grip = np.zeros(len(self._actuated))
+        for _, closure, _ in self._gripped.values():
+            # Track the closure and squeeze towards it (the object stops the
+            # fingers short of it).
+            for i, (value, direction) in closure.items():
+                error[i] = value - data.qpos[self._qadr[i]]
+                qvel_ref[i] = 0.0
+                grip[i] = direction * self.grip_torque
         bias = data.qfrc_bias[self._vadr] - load_torque  # hold the payload up too
         for i, group in enumerate(self._followers):
             for dof, multiplier in group:  # followers' loads, seen by the leader
                 bias[i] += multiplier * data.qfrc_bias[dof]
         command = (
             inertia * omega**2 * error
-            + damping * qvel_ref[self._vadr]
+            + damping * qvel_ref
             + bias
             + self.feedforward
+            + grip
         )
         passive = damping * data.qvel[self._vadr]  # what the damping takes away
         data.ctrl[:] = np.clip(command, passive - self._effort, passive + self._effort)
@@ -589,6 +857,12 @@ class MuJoCoBackend:
             return ExecutionStatus.FAILURE
         self._grasp_error = 0.0
         self._carried = self._carriers(samples)
+        self._skill = None
+        self.feedforward[:] = 0.0
+        self._t = 0.0
+        self._slip = 0.0
+        self._tracking = 0.0
+        self._failure = self._attach(self._carried, start) or self._grip_phase(start)
         #: What carries each object in the current command (body names).
         self.carriers = {
             name: (
@@ -596,9 +870,6 @@ class MuJoCoBackend:
             )
             for name, c in self._carried.items()
         }
-        self._failure = self._attach(self._carried, start)
-        self._skill = None
-        self.feedforward[:] = 0.0
         if isinstance(payload, SkillCommand):
             factory = self.skills.get(payload.name)
             if factory is not None:
@@ -631,10 +902,34 @@ class MuJoCoBackend:
         return self.to_qpos(q)
 
     def _joint_error(self, qpos_ref: np.ndarray) -> float:
-        adr = self._qadr
-        return float(np.max(np.abs(self.data.qpos[adr] - qpos_ref[adr]), initial=0.0))
+        """The largest driven-joint error, gripping fingers aside (they hold
+        the closure, not the plan's open fingers)."""
+        error = np.abs(self.data.qpos[self._qadr] - qpos_ref[self._qadr])
+        for _, closure, _ in self._gripped.values():
+            error[list(closure)] = 0.0
+        return float(np.max(error, initial=0.0))
 
     def poll(self) -> tuple[ExecutionStatus, Feedback | None]:
+        status, feedback = self._poll()
+        if status is not ExecutionStatus.RUNNING:
+            self._flush_frames()
+        return status, feedback
+
+    def _flush_frames(self) -> None:
+        """Write the frames recorded since the last chunk."""
+        if self.record is None or not self._recorded:
+            return
+        self.record.mkdir(parents=True, exist_ok=True)
+        self._chunks += 1
+        times, qpos = zip(*self._recorded)
+        np.savez_compressed(
+            self.record / f"chunk_{self._chunks:05d}.npz",
+            time=np.array(times),
+            qpos=np.array(qpos),
+        )
+        self._recorded = []
+
+    def _poll(self) -> tuple[ExecutionStatus, Feedback | None]:
         if self._path is None:
             return ExecutionStatus.FAILURE, Feedback(message="nothing started")
         if self.cancelled:
@@ -709,8 +1004,17 @@ class MuJoCoBackend:
                 self._drive(name, ahead, qvel_ref)
         self.mujoco.mj_step(self.model, data)
         self._t += self.model.opt.timestep
+        self._clock_sim += self.model.opt.timestep
+        if self.record is not None and self._clock_sim >= self._next_frame:
+            self._recorded.append((self._clock_sim, data.qpos.copy()))
+            self._next_frame += self._frame_dt
         if not np.isfinite(data.qpos).all():
             return f"simulation diverged at t={self._t:.3f}"
+        for name, (_, closure, grip_pos) in self._gripped.items():
+            if name not in self._closing:
+                hand = self._hand(closure)
+                pos = self._relative(data, hand, self._objects[name])[0]
+                self._slip = max(self._slip, float(np.linalg.norm(pos - grip_pos)))
         self._tracking = max(self._tracking, self._joint_error(qpos_ref))
         if (
             self.max_tracking_error is not None
@@ -732,6 +1036,16 @@ class MuJoCoBackend:
         self.mujoco.mj_kinematics(self.model, self._scratch)
         return self._scratch.xpos[body].copy()
 
+    def body_pose(self, qpos: np.ndarray, body: int) -> tuple[np.ndarray, np.ndarray]:
+        """Where ``body`` is at configuration ``qpos``: position and rotation
+        matrix (kinematics only)."""
+        self._scratch.qpos[:] = qpos
+        self.mujoco.mj_kinematics(self.model, self._scratch)
+        return (
+            self._scratch.xpos[body].copy(),
+            self._scratch.xmat[body].reshape(3, 3).copy(),
+        )
+
     def wrench_torques(self, body: int, wrench: np.ndarray) -> np.ndarray:
         """Driven-joint torques that exert ``wrench`` (force, torque; world
         frame) at ``body``'s centre of mass, through what carries it:
@@ -742,6 +1056,8 @@ class MuJoCoBackend:
             eq = self._weld(name)
             if obj == body and data.eq_active[eq]:
                 link = int(model.eq_obj1id[eq])  # a welded object: its carrier
+            elif obj == body and name in self._gripped:
+                link = self._hand(self._gripped[name][1])  # held by the fingers
         jacp = np.zeros((3, model.nv))
         jacr = np.zeros((3, model.nv))
         # At the centre of mass: where MuJoCo applies xfrc_applied.
@@ -809,6 +1125,8 @@ class MuJoCoBackend:
         }
         if self._grasp_error:
             metrics["grasp_error"] = round(self._grasp_error, 5)
+        if self._gripped:
+            metrics["slip"] = round(self._slip, 5)
         kinematic = sum(1 for c in self._carried.values() if c is None)
         if kinematic:
             metrics["kinematic_objects"] = kinematic

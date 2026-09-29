@@ -255,12 +255,12 @@ def _plan_random_arm_config(
 # equivalent, which correctly flips a mimic="-1" joint's own <limit> sign
 # too). finger_joint itself is the master, multiplier 1 by definition.
 GRIPPER_MIMIC_JOINTS = [
-    ("finger_joint", 1),
-    ("left_inner_knuckle_joint", 1),
-    ("left_inner_finger_joint", -1),
-    ("right_outer_knuckle_joint", 1),
-    ("right_inner_knuckle_joint", 1),
-    ("right_inner_finger_joint", -1),
+    ("robotiq_85_left_knuckle_joint", 1),
+    ("robotiq_85_right_knuckle_joint", -1),
+    ("robotiq_85_left_inner_knuckle_joint", 1),
+    ("robotiq_85_right_inner_knuckle_joint", -1),
+    ("robotiq_85_left_finger_tip_joint", -1),
+    ("robotiq_85_right_finger_tip_joint", 1),
 ]
 
 

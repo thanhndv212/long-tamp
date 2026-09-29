@@ -26,6 +26,7 @@ from .gripper import (
     PANDA_HAND,
     PRESETS,
     ROBOTIQ_2F85,
+    ROBOTIQ_2F85_ROS_INDUSTRIAL,
     ParallelGripperModel,
     calibrate_from_urdf,
 )
@@ -41,6 +42,7 @@ __all__ = [
     "PANDA_HAND",
     "PRESETS",
     "ROBOTIQ_2F85",
+    "ROBOTIQ_2F85_ROS_INDUSTRIAL",
     "Box",
     "Cylinder",
     "FingerClosureTable",

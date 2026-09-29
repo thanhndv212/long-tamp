@@ -30,23 +30,25 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 ARM_URDF = ROOT / "script/ikea_table_prototype/generated/ur10_robotiq.urdf"
 TASK_YAML = ROOT / "script/screw_assembly/config/screw_assembly_config.yaml"
+# The Robotiq 2F-85 from PickNik's ros2_robotiq_gripper (#71).
 GRIPPER_LINKS = (
-    "robotiq_arg2f_base_link",
-    "left_outer_knuckle",
-    "left_outer_finger",
-    "left_inner_finger",
-    "left_inner_knuckle",
-    "right_outer_knuckle",
-    "right_outer_finger",
-    "right_inner_finger",
-    "right_inner_knuckle",
+    "robotiq_85_base_link",
+    "robotiq_85_left_knuckle_link",
+    "robotiq_85_left_finger_link",
+    "robotiq_85_left_inner_knuckle_link",
+    "robotiq_85_left_finger_tip_link",
+    "robotiq_85_right_knuckle_link",
+    "robotiq_85_right_finger_link",
+    "robotiq_85_right_inner_knuckle_link",
+    "robotiq_85_right_finger_tip_link",
 )
-PADS = ("left_inner_finger_pad", "right_inner_finger_pad")
-PAD_BOX = (
-    0.022,
-    0.00635,
-    0.0375,
-)  # the pads' visual box (their collision mesh is not a pad)
+# Pad frames on the fingertips' inner faces (build_assets.py robotiq-picknik),
+# and which way is into the finger from each (the fingertip frame's X).
+PADS = {"robotiq_85_left_finger_pad": 1.0, "robotiq_85_right_finger_pad": -1.0}
+PAD_THICKNESS = 0.00635
+# The pad as a box in its frame: thickness along X (the face normal), 22 mm
+# wide (Y), 38 mm long (Z); the fingertip mesh itself is not a pad.
+PAD_BOX = (PAD_THICKNESS, 0.022, 0.038)
 
 
 def coal_shape(prim):
@@ -129,8 +131,12 @@ class HandChecker:
             return best
 
         pads = {}
-        for pad in PADS:
-            pl = self.data.oMf[self.model.getFrameId(pad)]
+        for pad, into_finger in PADS.items():
+            face = self.data.oMf[self.model.getFrameId(pad)]
+            # the box behind the face, inside the finger
+            pl = face * pin.SE3(
+                np.eye(3), np.array([into_finger * PAD_THICKNESS / 2, 0.0, 0.0])
+            )
             pads[pad] = distance(coal.Box(*PAD_BOX), pl)
         q = self._configure(contact)
         gdata = self.geom.createData()

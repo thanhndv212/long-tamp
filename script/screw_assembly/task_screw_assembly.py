@@ -87,7 +87,7 @@ from screw_domain import (  # noqa: E402
 # Planning keeps the fingers frozen open (a grasp is a rigid TCP constraint);
 # how far they close on each handle comes from the grasp planner, see
 # finger_closures().
-FREEZE_JOINT_SUBSTRINGS = ["finger_joint", "knuckle_joint"]
+FREEZE_JOINT_SUBSTRINGS = ["knuckle_joint", "finger_tip_joint"]
 
 ARM_JOINTS = (
     "shoulder_pan_joint",
@@ -748,6 +748,8 @@ def make_backend(
     hole_error: tuple[float, float, float] = (0.0, 0.0, 0.0),
     speed: float = math.inf,
     drift: list[tuple[str, str, float]] | None = None,
+    grasp: str = "weld",
+    record: bool = False,
 ):
     """The execution backend for ``--backend``."""
     if name == "mock":
@@ -763,6 +765,7 @@ def make_backend(
         # The simulation runs in its own process, like a robot controller:
         # stepping it from a thread would share the planner's interpreter
         # lock (see long_tamp.execution.process).
+        contact = contact_grasps(export) if grasp == "contact" else {}
         backend = ProcessBackend(  # closed at exit (see main)
             MuJoCoBackend,
             export,
@@ -770,9 +773,47 @@ def make_backend(
             speed=speed,
             skills={"screw": ScrewDriving(hole_error=hole_error)},
             from_qpos=to_qpos.inverse,
+            grasp=grasp,
+            record=(run_dir or HERE / "runs") / "sim" if record else None,
+            **contact,
         )
         return DriftInjector(backend, drift) if drift else backend
     return None
+
+
+def robotiq_pads(arm: str) -> dict[str, tuple[tuple, tuple]]:
+    """Box pads for the MuJoCo backend on an arm's 2F-85: on the pad frames
+    (the fingertips' inner faces), 1 mm thick behind the face, the size of
+    ROBOTIQ_2F85's pad."""
+    from long_tamp.grasping import ROBOTIQ_2F85
+
+    half = (0.001, ROBOTIQ_2F85.pad_width / 2, ROBOTIQ_2F85.pad_length / 2)
+    return {
+        f"{arm}/robotiq_85_{side}_finger_pad": ((sign * 0.001, 0.0, 0.0), half)
+        for side, sign in (("left", 1.0), ("right", -1.0))
+    }
+
+
+def contact_grasps(export) -> dict[str, Any]:
+    """``--grasp contact``: the MuJoCo backend's fingers, grip table and pads.
+    Each arm has one handle per object, so (object, arm) picks the closure."""
+    from long_tamp.sim import GripTable
+
+    model = export.load()
+    closures = finger_closures()
+    table = {}
+    for gripper, handle in closures.pairs():
+        arm, obj = gripper.split("/")[0], handle.split("/")[0]
+        if obj not in export.free_joints:
+            continue  # a part this scene doesn't have
+        joint = model.joint(export.free_joints[obj]).id
+        root = model.body(int(model.jnt_bodyid[joint])).name
+        table[(root, arm)] = closures.closed_values(gripper, handle)
+    return {
+        "fingers": tuple(f"{arm}/robotiq_85_left_knuckle_joint" for arm in (LEFT, RIGHT)),
+        "grip": GripTable(table),
+        "pads": {**robotiq_pads(LEFT), **robotiq_pads(RIGHT)},
+    }
 
 
 class DriftInjector:
@@ -861,6 +902,20 @@ def main() -> int:
         "(planning only, the default), mock (instant, for testing the pipeline), "
         "playback (plays the paths in real time, in the viewer if it is on) or "
         "mujoco (simulates them under tracking control; needs the sim extra)",
+    )
+    ap.add_argument(
+        "--grasp",
+        choices=("weld", "contact"),
+        default="weld",
+        help="with --backend mujoco: how grasps hold objects: weld (the "
+        "default) or contact (the Robotiq fingers close and hold them by "
+        "friction)",
+    )
+    ap.add_argument(
+        "--sim-record",
+        action="store_true",
+        help="with --backend mujoco: record the simulation to <run folder>/sim, "
+        "for view_mujoco.py",
     )
     ap.add_argument(
         "--plan-ahead",
@@ -1000,7 +1055,7 @@ def main() -> int:
         if row["handle"].startswith(("driver", "part1")):
             print(
                 f"grasp {row['gripper']} > {row['handle']}: close to "
-                f"{row['width'] * 1000:.1f} mm (finger_joint {row['q']:.3f})"
+                f"{row['width'] * 1000:.1f} mm (robotiq_85_left_knuckle_joint {row['q']:.3f})"
                 + ("" if row["feasible"] else f"  WARNING: {'; '.join(row['reasons'])}")
             )
     live_viewer = None
@@ -1028,6 +1083,8 @@ def main() -> int:
                 run_dir,
                 hole_error=tuple(v / 1000.0 for v in args.hole_error),
                 speed=args.sim_speed,
+                grasp=args.grasp,
+                record=args.sim_record,
                 drift=[parse_drift(spec) for spec in args.inject_drift],
             ),
             plan_ahead=args.plan_ahead,
