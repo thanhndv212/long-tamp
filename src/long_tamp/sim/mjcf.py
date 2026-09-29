@@ -278,7 +278,7 @@ class QposMap:
                 continue
             joint = pin_model.joints[jid]
             adr = int(model.jnt_qposadr[mj])
-            if model.jnt_type[mj] == mujoco.mjtJoint.mjJNT_FREE:
+            if model.jnt_type[mj] == int(mujoco.mjtJoint.mjJNT_FREE):
                 free_src.append(joint.idx_q)
                 free_dst.append(adr)
             elif joint.nq == 1:

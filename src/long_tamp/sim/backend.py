@@ -158,11 +158,11 @@ class MuJoCoBackend:
         followers = {
             model.joint(model.eq_obj1id[i]).name
             for i in range(model.neq)
-            if model.eq_type[i] == mujoco.mjtEq.mjEQ_JOINT
+            if model.eq_type[i] == int(mujoco.mjtEq.mjEQ_JOINT)
         }
         objects: dict[str, int] = {}  # object root body name -> body id
         for j in range(model.njnt):
-            if model.jnt_type[j] == mujoco.mjtJoint.mjJNT_FREE:
+            if model.jnt_type[j] == int(mujoco.mjtJoint.mjJNT_FREE):
                 body = model.jnt_bodyid[j]
                 objects[model.body(body).name] = int(body)
         object_bodies = self._subtrees(model, objects.values())
@@ -170,7 +170,8 @@ class MuJoCoBackend:
             j
             for j in range(model.njnt)
             if model.jnt_type[j]
-            in (mujoco.mjtJoint.mjJNT_HINGE, mujoco.mjtJoint.mjJNT_SLIDE)
+            # Compare ints: in MuJoCo 3.14 `x in (enum, ...)` is always False.
+            in (int(mujoco.mjtJoint.mjJNT_HINGE), int(mujoco.mjtJoint.mjJNT_SLIDE))
             and model.jnt_bodyid[j] not in object_bodies
             and model.joint(j).name not in followers
         ]
@@ -451,7 +452,7 @@ class MuJoCoBackend:
         followers: list[list[tuple[int, float]]] = [[] for _ in self._actuated]
         index = {j: i for i, j in enumerate(self._actuated)}
         for e in range(model.neq):
-            if model.eq_type[e] != mujoco.mjtEq.mjEQ_JOINT:
+            if model.eq_type[e] != int(mujoco.mjtEq.mjEQ_JOINT):
                 continue
             leader = int(model.eq_obj2id[e])
             if leader in index:
