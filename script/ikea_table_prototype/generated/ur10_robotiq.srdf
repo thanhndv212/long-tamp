@@ -41,11 +41,13 @@
   false positive, same as any other adjacent pair — confirming this file's
   own prior warning that the arm chain itself was never covered (only the
   newly-merged gripper linkage was). See
-  assets/ur10/ur10_robot_generated.urdf's own <joint> parent/child tags
+  assets/ur10/official/ur10.urdf's <joint> parent/child tags
   for the chain this list follows.
 -->
 <robot name="ur10_robotiq">
-  <disable_collisions link1="base_link" link2="shoulder_link" reason="Adjacent"/>
+  <!-- The UR10 from Universal Robots' description (build_assets.py
+       ur10-official) carries its base geometry on base_link_inertia. -->
+  <disable_collisions link1="base_link_inertia" link2="shoulder_link" reason="Adjacent"/>
   <disable_collisions link1="shoulder_link" link2="upper_arm_link" reason="Adjacent"/>
   <disable_collisions link1="upper_arm_link" link2="forearm_link" reason="Adjacent"/>
   <disable_collisions link1="forearm_link" link2="wrist_1_link" reason="Adjacent"/>

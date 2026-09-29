@@ -113,7 +113,7 @@ environments:
 # Arm initial values (LEFT/RIGHT_ARM_Q) copied from
 # debug_view_frames.py's layout.
 # Bounds were originally the raw +/-2*pi from
-# assets/ur10/ur10_robot_generated.urdf's own <limit> tags (elbow_joint is
+# the UR10 URDF's own <limit> tags (then example-robot-data's; elbow_joint is
 # +/-pi already) — tightened to +/-pi across the board after the first
 # real planning run: a standalone pinocchio DLS-IK check confirmed
 # leg1's top-down pregrasp pose for ur10_left converges reliably (300/300
