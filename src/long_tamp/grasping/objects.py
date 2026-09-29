@@ -127,6 +127,11 @@ class FingerClosureTable:
     def has(self, gripper: str | None) -> bool:
         return gripper in self.bindings
 
+    def pairs(self) -> list[tuple[str, str]]:
+        """The (gripper, handle) pairs evaluated so far (the task's valid
+        pairs with a hand, once built from a task YAML)."""
+        return sorted(self._cache)
+
     def evaluation(self, gripper: str, handle: str) -> GraspEvaluation:
         """Close ``gripper`` on ``handle`` (``"object/handle"``), cached."""
         key = (gripper, handle)

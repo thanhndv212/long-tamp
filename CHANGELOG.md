@@ -18,9 +18,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Kinematics: `tool0` relative to `base_link` is identical (6e-10 m), and every collision
     mesh's world bounding box matches within 1 mm, so grasps and scenes are unchanged.
   - The base geometry is now on `base_link_inertia`, and the SRDF's adjacent pair follows.
+- The example cells' Robotiq 2F-85 now comes from PickNik's `ros2_robotiq_gripper` (#71).
+  - Source: `PickNikRobotics/ros2_robotiq_gripper` at a pinned commit, vendored by
+    `build_assets.py --only robotiq-picknik` (the world link and ros2_control tags dropped;
+    pad frames `robotiq_85_{left,right}_finger_pad` added on the fingertips' flat inner
+    faces).
+  - Joint and link names change to PickNik's: the driver is
+    `robotiq_85_left_knuckle_joint` (0 open .. 0.8 closed), with five mimic joints. Configs,
+    SRDF collision pairs and the example scripts follow.
+  - `long_tamp.grasping.ROBOTIQ_2F85` is now this gripper, recalibrated from the merged
+    URDF (84.9 mm stroke). The ros-industrial model stays available as
+    `ROBOTIQ_2F85_ROS_INDUSTRIAL`.
+  - `gripper_tcp` and the HPP gripper frame are unchanged. The screw assembly now closes to
+    0.484 on the driver and 0.555 on a part, and `validate_closure.py` shows both pads
+    touching and no other link in collision.
 
 ### Added
 
+- Contact grasps in the MuJoCo backend (#71): `MuJoCoBackend(grasp="contact", fingers=...,
+  grip=..., pads=...)`, and `task_screw_assembly.py --backend mujoco --grasp contact`.
+  Welds remain the default.
+  - The planner keeps the fingers open, so `grip(object, carrier)` gives the closure
+    (`GripTable` builds it from a table; the mission uses the grasp planner's closures).
+  - A new grasp snaps the object into place, closes the fingers for `grip_time` while the
+    object still rests, then lets it go. The path runs with the fingers squeezing: they
+    track the closure plus `grip_torque` towards it. A release welds the object where it is
+    and opens the fingers before the path runs.
+  - Physics after MuJoCo Menagerie's `robotiq_2f85`: elliptic cone, `impratio` 10,
+    armature on the finger joints, stiff mimic equalities, and box pads on the fingertips
+    that alone grip (a mesh fingertip touches a flat face at a point or two, and a long
+    part pivots). The no-slip solver stops the creep MuJoCo's soft friction allows under a
+    steady load. Unless `contacts` is on, only fingers and objects collide. The default
+    `grip_torque` (15 N m) squeezes with about 95 N per pad (the 2F-85 is rated 20-235 N).
+  - `slip` reports how far a gripped object moved in the hand, and gripping fingers are
+    left out of `tracking_error` and `drift`. A 0.27 kg part carried through a 2 s arm
+    move slips 0.4 mm (`tests/test_sim_contact_grasp.py`).
+  - The screwing skill aims at the hole where its part actually is, and takes as its tool
+    the carried object the approach moves (the other arm may hold the part still).
+  - Known limit: execution is open loop. On the two-part mission, objects sit up to 3 mm
+    from the plan in the fingers; part 1's screws go in, part 2's first misses the 2 mm
+    alignment tolerance by 0.5 mm. Welds stay the default for missions.
 - Drift check and planning ahead (#20), `long_tamp.execution`.
   - **Drift check.** Before a step's motion runs, `PlanExecutor` asks the backend how far
     the robot is from where the plan starts (`start_error`). Beyond
