@@ -14,7 +14,7 @@ action client, a MuJoCo loop or a stub, and needs no threads of its own:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Protocol
 
@@ -43,10 +43,16 @@ class ExecutionCommand:
 
 @dataclass(frozen=True)
 class Feedback:
-    """A heartbeat: proof of progress, optionally with how much."""
+    """A heartbeat: proof of progress, optionally with how much.
+
+    ``metrics`` are numbers the backend measures (a simulator's tracking error,
+    for example); the last ones reported end up in the command's result and
+    its ``motion`` event.
+    """
 
     progress: float | None = None
     message: str = ""
+    metrics: dict[str, float] | None = None
 
 
 class ExecutionBackend(Protocol):
@@ -102,3 +108,5 @@ class ExecutionResult:
     elapsed: float = 0.0
     feedback_count: int = 0
     busy_retries: int = 0
+    #: The last metrics the backend reported (``Feedback.metrics``).
+    metrics: dict[str, float] = field(default_factory=dict)

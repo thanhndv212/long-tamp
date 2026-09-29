@@ -45,7 +45,9 @@ the `execute` result it belongs to.
 
 Metrics, when present: `execute` has `attempt` and `seconds`; `motion` has `seconds`,
 `duration` (the command's), `feedback_count`, `busy_retries` and, on failure, `reason`
-(see [Execution backends](execution.md)).
+(see [Execution backends](execution.md)), plus whatever the backend measured
+(`Feedback.metrics`; the MuJoCo backend reports tracking error and drift, see
+[Simulation](simulation-mujoco.md)).
 
 ## Example
 
