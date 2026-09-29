@@ -133,7 +133,8 @@ def _run_factory(factory_cls, n, grasp_filter=None):
 # ---------------------------------------------------------------------------
 
 _FILTER_PATH = (
-    Path(__file__).parent.parent / "src/long_tamp/planning/sequential_grasp_filter.py"
+    Path(__file__).parent.parent
+    / "src/long_tamp/planning/sequential_grasp_filter.py"
 )
 
 

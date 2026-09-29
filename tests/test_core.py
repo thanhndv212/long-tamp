@@ -33,80 +33,79 @@ def test_invalid_backend_raises():
 
 class TestConfigBuilder:
     """Tests for ConfigBuilder utility."""
-
+    
     def test_import(self):
         """Test importing ConfigBuilder."""
         from long_tamp.utils import ConfigBuilder
-
         builder = ConfigBuilder()
         assert builder is not None
-
+    
     def test_add_joint_config(self):
         """Test adding joint configurations."""
         from long_tamp.utils import ConfigBuilder
-
+        
         builder = ConfigBuilder()
         builder.add_joint_config([1.0, 2.0, 3.0])
         q = builder.build()
-
+        
         assert len(q) == 3
         np.testing.assert_array_equal(q, [1.0, 2.0, 3.0])
-
+    
     def test_add_multiple_configs(self):
         """Test adding multiple configurations."""
         from long_tamp.utils import ConfigBuilder
-
+        
         builder = ConfigBuilder()
         builder.add_joint_config([1.0, 2.0])
         builder.add_joint_config([3.0, 4.0])
         q = builder.build()
-
+        
         assert len(q) == 4
         np.testing.assert_array_equal(q, [1.0, 2.0, 3.0, 4.0])
 
 
 class TestBoundsManager:
     """Tests for BoundsManager utility."""
-
+    
     def test_freeflyer_bounds(self):
         """Test creating freeflyer bounds."""
         from long_tamp.utils import BoundsManager
-
+        
         bounds = BoundsManager.freeflyer_bounds()
-
+        
         # Should have 14 values (3*2 for translation + 4*2 for quaternion)
         assert len(bounds) == 14
-
+    
     def test_revolute_bounds(self):
         """Test creating revolute joint bounds."""
         from long_tamp.utils import BoundsManager
-
+        
         bounds = BoundsManager.revolute_bounds(-1.0, 1.0)
-
+        
         assert bounds == [-1.0, 1.0]
 
 
 class TestTransformUtils:
     """Tests for transformation utilities."""
-
+    
     def test_xyzrpy_to_xyzquat(self):
         """Test RPY to quaternion conversion."""
         from long_tamp.utils import xyzrpy_to_xyzquat
-
+        
         xyzrpy = [1.0, 2.0, 3.0, 0.0, 0.0, 0.0]
         xyzquat = xyzrpy_to_xyzquat(xyzrpy)
-
+        
         assert len(xyzquat) == 7
         # Position should be preserved
         np.testing.assert_array_almost_equal(xyzquat[:3], [1.0, 2.0, 3.0])
-
+    
     def test_normalize_quaternion(self):
         """Test quaternion normalization."""
         from long_tamp.utils import normalize_quaternion
-
+        
         q = [0.5, 0.5, 0.5, 0.5]
         q_norm = normalize_quaternion(q)
-
+        
         # Should be unit quaternion
         assert abs(np.linalg.norm(q_norm) - 1.0) < 1e-10
 

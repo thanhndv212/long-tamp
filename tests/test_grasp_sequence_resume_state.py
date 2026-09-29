@@ -66,7 +66,9 @@ def _make_planner(initial_grasps, phase_results):
 
 def _held(planner):
     return {
-        g: h for g, h in planner.grasp_tracker.current_grasps.items() if h is not None
+        g: h
+        for g, h in planner.grasp_tracker.current_grasps.items()
+        if h is not None
     }
 
 

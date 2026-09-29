@@ -21,10 +21,7 @@ SRC = Path(__file__).resolve().parents[1] / "src"
 
 
 def _run(run_dir, *args):
-    env = {
-        **os.environ,
-        "PYTHONPATH": f"{SRC}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
-    }
+    env = {**os.environ, "PYTHONPATH": f"{SRC}{os.pathsep}{os.environ.get('PYTHONPATH', '')}"}
     return subprocess.run(
         [sys.executable, str(MISSION), str(run_dir), *args],
         env=env,
@@ -113,10 +110,7 @@ def test_screw_check_fails_when_a_completed_step_is_planned_again():
 
 def test_screw_check_fails_when_the_resumed_run_does_not_finish():
     check = _load_kill_resume().check_resume
-    after = [
-        _ev("b02-grasp", "execute", "FAILURE"),
-        _ev("mission", "sequence", "FAILURE"),
-    ]
+    after = [_ev("b02-grasp", "execute", "FAILURE"), _ev("mission", "sequence", "FAILURE")]
     assert not check([], after)["pass"]
 
 

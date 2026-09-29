@@ -38,9 +38,7 @@ class TestConfigureLoggingConsoleFileSplit:
         with tempfile.TemporaryDirectory() as tmp:
             logger = configure_logging(level=logging.INFO, log_dir=tmp, run_id="r")
             console_handlers = [
-                h
-                for h in logger.handlers
-                if isinstance(h, logging.StreamHandler)
+                h for h in logger.handlers if isinstance(h, logging.StreamHandler)
                 and not isinstance(h, logging.FileHandler)
             ]
             file_handlers = [
@@ -60,14 +58,10 @@ class TestConfigureLoggingConsoleFileSplit:
     def test_console_level_overrides_default_without_touching_file_level(self):
         with tempfile.TemporaryDirectory() as tmp:
             logger = configure_logging(
-                log_dir=tmp,
-                run_id="r",
-                console_level=logging.WARNING,
+                log_dir=tmp, run_id="r", console_level=logging.WARNING,
             )
             console_handler = next(
-                h
-                for h in logger.handlers
-                if isinstance(h, logging.StreamHandler)
+                h for h in logger.handlers if isinstance(h, logging.StreamHandler)
                 and not isinstance(h, logging.FileHandler)
             )
             file_handler = next(
@@ -82,9 +76,7 @@ class TestConfigureLoggingConsoleFileSplit:
     def test_quiet_console_still_writes_full_detail_to_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             logger = configure_logging(
-                log_dir=tmp,
-                run_id="r",
-                console_level=logging.WARNING,
+                log_dir=tmp, run_id="r", console_level=logging.WARNING,
             )
             probe = logging.getLogger("long_tamp.some.module")
             probe.info("this should reach the file but not raise console level")
@@ -99,9 +91,7 @@ class TestConfigureLoggingConsoleFileSplit:
     def test_explicit_file_level_is_respected(self):
         with tempfile.TemporaryDirectory() as tmp:
             logger = configure_logging(
-                log_dir=tmp,
-                run_id="r",
-                file_level=logging.ERROR,
+                log_dir=tmp, run_id="r", file_level=logging.ERROR,
             )
             file_handler = next(
                 h for h in logger.handlers if isinstance(h, logging.FileHandler)

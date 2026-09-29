@@ -144,16 +144,17 @@ class TestGrasp:
         planner.planner = type(
             "P",
             (),
-            {"configure_transition_planner": lambda self, **kw: configured.append(kw)},
+            {
+                "configure_transition_planner": lambda self, **kw: configured.append(
+                    kw
+                )
+            },
         )()
         planner._build_phase_graph_and_constraints = lambda **kw: (_ for _ in ()).throw(
             RuntimeError("stop here")
         )
         planner.grasp(
-            "g1",
-            "h1",
-            q_current=[0.0],
-            timeout_per_edge=12.0,
+            "g1", "h1", q_current=[0.0], timeout_per_edge=12.0,
             max_iterations_per_edge=99,
         )
         assert configured == [{"time_out": 12.0, "max_iterations": 99}]

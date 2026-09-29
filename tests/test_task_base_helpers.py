@@ -389,9 +389,8 @@ class _RecordingPlanner:
         self.configure_time_parameterization_method_calls.append(kwargs)
 
 
-def _make_setup_task(
-    task_config=None, planner=None, run_logger=None, use_factory=False, q_init=None
-):
+def _make_setup_task(task_config=None, planner=None, run_logger=None,
+                     use_factory=False, q_init=None):
     """Bare ManipulationTask for setup-helper tests.
 
     The setup helpers read self.task_config / self.planner / self.run_logger /
@@ -533,7 +532,8 @@ class TestSetupLockedJointConstraints:
             return (["locked::j1", "locked::j2"], ["j1", "j2"])
 
         monkeypatch.setattr(
-            "long_tamp.tasks.base.ConstraintBuilder" ".create_locked_joint_constraints",
+            "long_tamp.tasks.base.ConstraintBuilder"
+            ".create_locked_joint_constraints",
             staticmethod(fake_create),
         )
         task = _make_setup_task(q_init=[0.0, 0.0])
@@ -547,7 +547,8 @@ class TestSetupLockedJointConstraints:
 
     def test_empty_frozen_names_returns_none(self, monkeypatch):
         monkeypatch.setattr(
-            "long_tamp.tasks.base.ConstraintBuilder" ".create_locked_joint_constraints",
+            "long_tamp.tasks.base.ConstraintBuilder"
+            ".create_locked_joint_constraints",
             staticmethod(lambda *a, **k: (["c"], [])),  # frozen_names empty
         )
         task = _make_setup_task(q_init=[0.0])
@@ -560,7 +561,9 @@ class TestSetupLockedJointConstraints:
         # patterns=None, use_factory False -> no task_config fallback, no call
         assert task._setup_locked_joint_constraints(None) is None
 
-    def test_patterns_from_task_config_when_factory_and_none_arg(self, monkeypatch):
+    def test_patterns_from_task_config_when_factory_and_none_arg(
+        self, monkeypatch
+    ):
         captured = {}
 
         def fake_create(ps, robot, q_ref, patterns, backend):
@@ -568,7 +571,8 @@ class TestSetupLockedJointConstraints:
             return (["c::x"], ["x"])
 
         monkeypatch.setattr(
-            "long_tamp.tasks.base.ConstraintBuilder" ".create_locked_joint_constraints",
+            "long_tamp.tasks.base.ConstraintBuilder"
+            ".create_locked_joint_constraints",
             staticmethod(fake_create),
         )
         cfg = _FakeTaskConfig(FREEZE_JOINT_SUBSTRINGS=["x"])

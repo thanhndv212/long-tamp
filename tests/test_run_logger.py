@@ -23,6 +23,7 @@ from long_tamp.logging.run_logger import (
     _serialize_task_config,
 )
 
+
 # ---------------------------------------------------------------------------
 # _make_serializable helpers
 # ---------------------------------------------------------------------------
@@ -62,7 +63,9 @@ class TestMakeSerializable:
         import numpy as np
 
         assert _make_serializable(np.int64(7)) == 7
-        assert _make_serializable(np.float32(1.5)) == pytest.approx(1.5, abs=1e-5)
+        assert _make_serializable(np.float32(1.5)) == pytest.approx(
+            1.5, abs=1e-5
+        )
 
     def test_numpy_array(self):
         pytest.importorskip("numpy")

@@ -52,9 +52,7 @@ def test_actions_translate_literals_and_wildcards():
     assert x.parameters["grasp"] == ["gripper", "handle"]
     assert "(not (exists (?w0) (holds ?gripper ?w0)))" in x.domain
     assert "(forall (?w0) (not (holds ?gripper ?w0)))" in x.domain
-    assert (
-        ":conditional-effects" in x.domain and ":existential-preconditions" in x.domain
-    )
+    assert ":conditional-effects" in x.domain and ":existential-preconditions" in x.domain
     assert "(holds left__g ball__h)" in x.problem
 
 

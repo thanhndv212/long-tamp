@@ -135,9 +135,7 @@ def test_the_loop_is_bounded():
     def execute(document):
         return {**failing, "parameters": {"slot": f"s{next(n)}"}}
 
-    outcome = plan_execute_repair(
-        lambda b: {}, execute, block_failed_step, max_rounds=3
-    )
+    outcome = plan_execute_repair(lambda b: {}, execute, block_failed_step, max_rounds=3)
     assert not outcome.success and len(outcome.rounds) == 3
     assert "after 3 plans" in outcome.message
 
@@ -186,10 +184,7 @@ def test_screw_policy_blocks_a_clamp_that_cannot_reach_a_seat():
         "step": "part1 A: clamp + screw",
         "capability": "clamp_and_screw",
         "parameters": CLAMP_STEP,
-        "facts": [
-            "refinement_failed(x)",
-            "cannot_reach(fixtures/clamp1, part1/h_seat)",
-        ],
+        "facts": ["refinement_failed(x)", "cannot_reach(fixtures/clamp1, part1/h_seat)"],
     }
     assert screw_domain.repair_policy(failure) == [
         ("clamp_and_screw", {"clamp": "fixtures/clamp1", "seat": "part1/h_seat"})
@@ -201,10 +196,7 @@ def test_screw_policy_otherwise_blocks_the_failed_binding():
         "step": "part1 A0: grasp",
         "capability": "grasp",
         "parameters": {"gripper": "ur10_left/gripper", "handle": "part1/h_grasp"},
-        "facts": [
-            "refinement_failed(x)",
-            "cannot_reach(ur10_left/gripper, part1/h_grasp)",
-        ],
+        "facts": ["refinement_failed(x)", "cannot_reach(ur10_left/gripper, part1/h_grasp)"],
     }
     assert screw_domain.repair_policy(failure) == [
         ("grasp", {"gripper": "ur10_left/gripper", "handle": "part1/h_grasp"})
@@ -215,13 +207,8 @@ def test_a_blocked_clamp_with_no_alternative_leaves_no_plan():
     """One part, one clamp: blocking it makes the goal unreachable, which the
     repair loop reports instead of replanning forever."""
     pytest.importorskip("unified_planning")
-    from long_tamp.tasks.task_planning.skeleton import (
-        NoPlanFound,
-        UnifiedPlanningPlanner,
-    )
+    from long_tamp.tasks.task_planning.skeleton import NoPlanFound, UnifiedPlanningPlanner
 
-    blocked = [
-        ("clamp_and_screw", {"clamp": "fixtures/clamp1", "seat": "part1/h_seat"})
-    ]
+    blocked = [("clamp_and_screw", {"clamp": "fixtures/clamp1", "seat": "part1/h_seat"})]
     with pytest.raises(NoPlanFound):
         UnifiedPlanningPlanner().solve(screw_domain.pddl_problem(1, blocked=blocked))
