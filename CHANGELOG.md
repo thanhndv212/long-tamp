@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- MuJoCo export (#17), `long_tamp.sim.mjcf`: `export_mjcf(config, out_dir)` writes a
+  task's scene as one self-contained MJCF (HPP's body and joint names, objects free at
+  their initial pose, Robotiq mimic joints as equalities, COLLADA meshes converted);
+  `qpos_from_pinocchio` maps an HPP configuration to MuJoCo `qpos` and `fk_mismatch`
+  compares the two models' kinematics (screw-assembly cell: < 1e-7 on 60 bodies). CLI:
+  `python -m long_tamp.sim.mjcf CONFIG -o OUT`. New `sim` extra (mujoco, trimesh,
+  pycollada).
+
 ## [0.4.0] - 2026-09-29
 
 Milestone M3: automatic task planning. Capabilities, a world state and a goal

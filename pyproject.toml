@@ -81,6 +81,14 @@ planning = [
     "up-pyperplan>=1.1",
 ]
 
+# MuJoCo export of a task's scene (long_tamp.sim). trimesh + pycollada convert
+# the COLLADA meshes MuJoCo can't read. Tested with MuJoCo 3.11 and 3.14.
+sim = [
+    "mujoco>=3.11",
+    "trimesh>=4",
+    "pycollada>=0.8",
+]
+
 dev = [
     "pytest>=6.0",
     "pytest-cov",

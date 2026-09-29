@@ -47,7 +47,7 @@ jobs:
         with:
           python-version: "3.12"
       # Verify the base install independently of the native HPP extra.
-      - run: pip install --upgrade pip && pip install -e ".[dev,planning]" pytest-timeout
+      - run: pip install --upgrade pip && pip install -e ".[dev,planning,sim]" pytest-timeout
       - run: python -c "import long_tamp; print(long_tamp.get_available_backends())"
       - run: python -m pytest tests/ -q --timeout=300 --timeout-method=thread
       - run: python script/validate_standalone_install.py
