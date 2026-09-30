@@ -51,6 +51,7 @@ from .contract import (
     ExecutionResult,
     ExecutionStatus,
 )
+from .concurrent import merge_lanes
 from .control import ExecutionControl
 from .sampled import sampled
 from .supervisor import run_command
@@ -94,6 +95,11 @@ class PlanExecutor:
       its recorded effects, checks drift, and only then starts step k+1's
       motion. Paths are sampled (``SampledPath``) in the planning thread, so
       the worker never evaluates a planner path while the planner plans.
+    - ``concurrent``: a ``parallel`` group's steps are planned first, then
+      their lanes' motions run together, merged (``concurrent.merge_lanes``;
+      ``validate_config`` checks the merged motion for collisions). If they
+      can't be merged, the steps' motions run one after another, in planning
+      order. Either way the group's steps commit once all of it has run.
     """
 
     def __init__(
@@ -108,6 +114,8 @@ class PlanExecutor:
         sleep: Callable[[float], None] = time.sleep,
         on_drift: Callable[[dict[str, Any], Any], list[ExecutionCommand]] | None = None,
         plan_ahead: bool = False,
+        concurrent: bool = False,
+        validate_config: Callable[[Any], bool] | None = None,
     ) -> None:
         self.session = session
         self.backend = backend
@@ -119,10 +127,18 @@ class PlanExecutor:
         self.clock, self.sleep = clock, sleep
         self.on_drift = on_drift
         self.plan_ahead = plan_ahead
+        self.concurrent = concurrent
+        self.validate_config = validate_config
         self._pending: list[ExecutionCommand] = []
         self._executions: list[StepExecution] = []
         self._worker: threading.Thread | None = None
-        self._in_flight: tuple[dict[str, Any], str | None] | None = None
+        #: The motion in flight: (the steps it commits, the node its events
+        #: go to, its error once done).
+        self._in_flight: tuple[list[dict[str, Any]], dict[str, Any], str | None] | None
+        self._in_flight = None
+        #: The parallel group being planned: its node, each step's lane, and
+        #: the planned steps' commands.
+        self._group: dict[str, Any] | None = None
         self._timing: dict[str, float] = {}
 
     def _locked(self, sink: EventSink) -> EventSink:
@@ -143,6 +159,8 @@ class PlanExecutor:
             "idle_between_motions": 0.0,
             "waited_for_motion": 0.0,
             "drift_replans": 0,
+            "merged_groups": 0,
+            "sequential_groups": 0,
         }
         self._last_motion_end: float | None = None
         # Recorded facts (a screw driven) hold once the motion has executed,
@@ -156,6 +174,7 @@ class PlanExecutor:
             before_step=self._before,
             after_step=self._after,
             on_event=self.on_event,
+            on_group=self._on_group if self.concurrent else None,
         )
         # The last step's motion may still be running.
         failed = self._join()
@@ -173,7 +192,7 @@ class PlanExecutor:
         self._pending.clear()
         # A failed motion in flight stops the plan at the next boundary.
         if self._worker is not None and not self._worker.is_alive():
-            if self._in_flight is not None and self._in_flight[1] is not None:
+            if self._in_flight is not None and self._in_flight[2] is not None:
                 return False
         return self.control.checkpoint(node["id"], "before")
 
@@ -182,6 +201,21 @@ class PlanExecutor:
         if self.backend is None:
             self.control.checkpoint(node["id"], "after")
             return None
+        if self._group is not None and node["id"] in self._group["lane_of"]:
+            # Runs with the rest of the group, when it is planned.
+            self._group["planned"].append((node, list(commands)))
+            return None
+        return self._run_motion([node], node, commands)
+
+    def _run_motion(
+        self,
+        nodes: list[dict[str, Any]],
+        report: dict[str, Any],
+        commands: list[ExecutionCommand],
+    ) -> str | None:
+        """Execute ``commands`` (events under ``report``), then commit
+        ``nodes``: now, or in the worker thread with plan-ahead."""
+        node = report
         if self.plan_ahead:
             commands = [
                 ExecutionCommand(c.step_id, c.duration, sampled(c.payload))
@@ -194,18 +228,58 @@ class PlanExecutor:
         if error:
             return error
         if self.plan_ahead:
-            self._in_flight = (node, None)
+            self._in_flight = (nodes, node, None)
             self._worker = threading.Thread(
-                target=self._execute_async, args=(node, commands), daemon=True
+                target=self._execute_async, args=(nodes, node, commands), daemon=True
             )
             self._worker.start()
             return None
         error = self._execute(node, commands)
         if error:
             return error
-        self._commit(node)
-        self.control.checkpoint(node["id"], "after")
+        for done in nodes:
+            self._commit(done)
+            self.control.checkpoint(done["id"], "after")
         return None
+
+    # -- parallel groups ---------------------------------------------------
+
+    def _on_group(self, node: dict[str, Any], ok: bool | None) -> str | None:
+        from long_tamp.tasks.task_planning.partial_order import lane_steps
+
+        if self.backend is None:
+            return None
+        if ok is None:
+            lane_of = {
+                step["id"]: k
+                for k, lane in enumerate(node["children"])
+                for step in lane_steps(lane)
+            }
+            self._group = {"node": node, "lane_of": lane_of, "planned": []}
+            return None
+        group, self._group = self._group, None
+        if group is None or not group["planned"]:
+            return None
+        planned = group["planned"]
+        nodes = [step for step, _ in planned]
+        merged = None
+        if ok:
+            lanes: dict[int, list[ExecutionCommand]] = {}
+            for step, commands in planned:
+                lanes.setdefault(group["lane_of"][step["id"]], []).extend(commands)
+            merged = merge_lanes(
+                [lanes[k] for k in sorted(lanes)],
+                self.validate_config,
+                step_id=node.get("label", node["id"]),
+            )
+        if merged is not None:
+            self._timing["merged_groups"] += 1
+            return self._run_motion(nodes, node, merged)
+        # One after another, in planning order (also what a failed group
+        # planned before it failed: the world state already has it).
+        self._timing["sequential_groups"] += ok is not False
+        commands = [c for _, step_commands in planned for c in step_commands]
+        return self._run_motion(nodes, node, commands)
 
     # -- drift -------------------------------------------------------------
 
@@ -220,7 +294,8 @@ class PlanExecutor:
         if drift is None or drift <= tolerance:
             return "", commands
         self._emit_drift(node, drift, tolerance)
-        if self.on_drift is None:
+        # Replanning is per step; a parallel group's merged motion can't be.
+        if self.on_drift is None or node.get("type") == "parallel":
             return (
                 f"execution failed (drift): the robot is {drift:.3f} rad from "
                 f"where the plan starts (tolerance {tolerance:g})"
@@ -277,9 +352,12 @@ class PlanExecutor:
         return ""
 
     def _execute_async(
-        self, node: dict[str, Any], commands: list[ExecutionCommand]
+        self,
+        nodes: list[dict[str, Any]],
+        node: dict[str, Any],
+        commands: list[ExecutionCommand],
     ) -> None:
-        self._in_flight = (node, self._execute(node, commands) or None)
+        self._in_flight = (nodes, node, self._execute(node, commands) or None)
 
     def _join(self) -> tuple[str, str] | None:
         """Wait for the motion in flight; commit its step, or return
@@ -290,12 +368,13 @@ class PlanExecutor:
         self._worker.join()
         self._timing["waited_for_motion"] += self.clock() - waited
         self._worker = None
-        node, error = self._in_flight
+        nodes, node, error = self._in_flight
         self._in_flight = None
         if error:
             return node["id"], error
-        self._commit(node)
-        self.control.checkpoint(node["id"], "after")
+        for done in nodes:
+            self._commit(done)
+            self.control.checkpoint(done["id"], "after")
         return None
 
     def _commit(self, node: dict[str, Any]) -> None:

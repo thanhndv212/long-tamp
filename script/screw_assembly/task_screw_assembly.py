@@ -56,6 +56,7 @@ from long_tamp.tasks.task_planning import (  # noqa: E402
     RecordedFacts,
     TaskPlan,
     TaskPlanningSession,
+    parallelize,
 )
 from long_tamp.tasks.task_planning.events import JsonlEventWriter  # noqa: E402
 from long_tamp.tasks.task_planning.skills import SkillCommand  # noqa: E402
@@ -548,7 +549,11 @@ def mission_session(
     for name, descriptor in descriptors(n_parts).items():
         is_guard = name in ("part_done", "all_parts_done")
         registry.register(descriptor, check(descriptor) if is_guard else runner(name))
-    plan = TaskPlan.from_dict(document or build_plan_document(n_parts), registry)
+    document = document or build_plan_document(n_parts)
+    if ctx.get("concurrent"):
+        # Independent steps (the other arm's) in parallel lanes (#21).
+        document = parallelize(document, registry)
+    plan = TaskPlan.from_dict(document, registry)
     return TaskPlanningSession(plan, registry, world_state=world, recorded=recorded)
 
 
@@ -677,6 +682,7 @@ def run_mission(
     inject: list[dict[str, Any]] | None = None,
     plan_ahead: bool = False,
     max_drift: float | None = None,
+    concurrent: bool = False,
 ) -> dict[str, Any]:
     """Run the mission's TaskPlan from ``q_start`` (default: the scene start).
 
@@ -703,6 +709,7 @@ def run_mission(
         "n_parts": n_parts,
         "backend_displays": getattr(backend, "display", None) is not None,
         "inject": inject if inject is not None else [],
+        "concurrent": concurrent,
     }
     session = mission_session(
         task, planner, ctx, recorded, max_replans, verbose, document=document
@@ -715,6 +722,9 @@ def run_mission(
         on_event=on_event,
         on_drift=ctx.get("on_drift"),
         plan_ahead=plan_ahead,
+        concurrent=concurrent,
+        # merged motion of two lanes: checked for collisions as a whole
+        validate_config=lambda q: planner.config_gen.is_config_valid(list(q))[0],
     )
     ctx["executor"] = executor
     t_mission = time.time()
@@ -918,6 +928,12 @@ def main() -> int:
         "for view_mujoco.py",
     )
     ap.add_argument(
+        "--concurrent",
+        action="store_true",
+        help="run independent steps (the other arm's) at the same time: their "
+        "motions are merged and checked for collisions (#21)",
+    )
+    ap.add_argument(
         "--plan-ahead",
         action="store_true",
         help="plan each step while the previous step's motion executes",
@@ -1088,6 +1104,7 @@ def main() -> int:
                 drift=[parse_drift(spec) for spec in args.inject_drift],
             ),
             plan_ahead=args.plan_ahead,
+            concurrent=args.concurrent,
             max_drift=args.max_drift,
             on_event=events,
             inject=inject,
