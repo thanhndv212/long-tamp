@@ -1,0 +1,104 @@
+{
+  "date": "2026-09-30",
+  "validation": "V3 planning batch on dev before 0.5.0 (UR10 from Universal Robots, Robotiq 2F-85 from PickNik; #67, #71)",
+  "environment": "hpp-agimus-arm64 (source-built HPP)",
+  "command": "bash run_batch.sh 10 1 batch_v3; summarize.py batch_v3 --gate --baseline results/2026-09-28-taskplan-source-built.json",
+  "scene": "four-part screw assembly",
+  "planner": "hand-written TaskPlan",
+  "gate": "PASS",
+  "notes": "the host slept during seeds 1-3 (clamshell, on battery); mission times are the planner's own and exclude it",
+  "parts": [
+    4
+  ],
+  "completed": 10,
+  "attempted": 10,
+  "replanning_blocks": 0,
+  "planning_blocks": 140,
+  "recovered_failures": 12,
+  "failure_episodes": 12,
+  "seconds_median": 913.48,
+  "seconds_min": 616.39,
+  "seconds_max": 1229.05,
+  "seeds": [
+    {
+      "seed": 1,
+      "success": true,
+      "seconds": 857.98,
+      "blocks": 19,
+      "resumes": 3,
+      "replans": 0
+    },
+    {
+      "seed": 2,
+      "success": true,
+      "seconds": 679.82,
+      "blocks": 19,
+      "resumes": 3,
+      "replans": 0
+    },
+    {
+      "seed": 3,
+      "success": true,
+      "seconds": 888.8,
+      "blocks": 19,
+      "resumes": 0,
+      "replans": 0
+    },
+    {
+      "seed": 4,
+      "success": true,
+      "seconds": 938.16,
+      "blocks": 19,
+      "resumes": 1,
+      "replans": 0
+    },
+    {
+      "seed": 5,
+      "success": true,
+      "seconds": 953.16,
+      "blocks": 19,
+      "resumes": 2,
+      "replans": 0
+    },
+    {
+      "seed": 6,
+      "success": true,
+      "seconds": 813.45,
+      "blocks": 19,
+      "resumes": 3,
+      "replans": 0
+    },
+    {
+      "seed": 7,
+      "success": true,
+      "seconds": 616.39,
+      "blocks": 19,
+      "resumes": 0,
+      "replans": 0
+    },
+    {
+      "seed": 8,
+      "success": true,
+      "seconds": 953.41,
+      "blocks": 19,
+      "resumes": 2,
+      "replans": 0
+    },
+    {
+      "seed": 9,
+      "success": true,
+      "seconds": 992.43,
+      "blocks": 19,
+      "resumes": 3,
+      "replans": 0
+    },
+    {
+      "seed": 10,
+      "success": true,
+      "seconds": 1229.05,
+      "blocks": 19,
+      "resumes": 1,
+      "replans": 0
+    }
+  ]
+}

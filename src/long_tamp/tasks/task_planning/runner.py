@@ -41,6 +41,9 @@ class PlanRun:
     #: Commands executed for the steps (filled by executors; see
     #: ``long_tamp.execution.executor``).
     executions: list[Any] = field(default_factory=list)
+    #: Where the time went (filled by executors): wall, planning and
+    #: execution seconds, idle time between motions, drift replans.
+    timing: dict[str, float] = field(default_factory=dict)
 
 
 def run_plan(

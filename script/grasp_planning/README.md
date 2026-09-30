@@ -40,12 +40,12 @@ planner = GraspPlanner(ROBOTIQ_2F85)
 best = planner.plan(drill.primitives)[0]          # ranked GraspCandidate
 print(best.srdf_handle("h_new"))                  # paste into the SRDF
 ev = planner.evaluate_handle(drill.handle_pose("h_grip"), drill.primitives)
-ev.width, ev.q, ev.feasible                       # 0.036, 0.496, True
+ev.width, ev.q, ev.feasible                       # 0.036, 0.484, True
 
 # every (gripper, handle) pair of a task, for playback or a controller
 closures = FingerClosureTable.from_task_yaml(
     "config.yaml", {"ur10_left/gripper": ROBOTIQ_2F85, "ur10_right/gripper": ROBOTIQ_2F85})
-closures.closed_values("ur10_right/gripper", "driver/h_grip")  # {"ur10_right/finger_joint": 0.496, ...}
+closures.closed_values("ur10_right/gripper", "driver/h_grip")  # {"ur10_right/robotiq_85_left_knuckle_joint": 0.484, ...}
 ```
 
 ## How it works, and how far to trust it

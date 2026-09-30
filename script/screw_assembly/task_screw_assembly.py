@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import ctypes
 import json
+import math
 import random
 import sys
 import time
@@ -57,12 +58,16 @@ from long_tamp.tasks.task_planning import (  # noqa: E402
     TaskPlanningSession,
 )
 from long_tamp.tasks.task_planning.events import JsonlEventWriter  # noqa: E402
+from long_tamp.tasks.task_planning.skills import SkillCommand  # noqa: E402
+from long_tamp.sim.skills import SCREW  # noqa: E402
 from long_tamp.tasks.task_planning.predicates import holds  # noqa: E402
 from long_tamp.execution import (  # noqa: E402
     ExecutionCommand,
+    ExecutionPolicy,
     MockBackend,
     PathPlaybackBackend,
     PlanExecutor,
+    ProcessBackend,
 )
 from screw_domain import (  # noqa: E402
     LEFT,
@@ -82,7 +87,7 @@ from screw_domain import (  # noqa: E402
 # Planning keeps the fingers frozen open (a grasp is a rigid TCP constraint);
 # how far they close on each handle comes from the grasp planner, see
 # finger_closures().
-FREEZE_JOINT_SUBSTRINGS = ["finger_joint", "knuckle_joint"]
+FREEZE_JOINT_SUBSTRINGS = ["knuckle_joint", "finger_tip_joint"]
 
 ARM_JOINTS = (
     "shoulder_pan_joint",
@@ -376,18 +381,40 @@ def run_block(
 def block_commands(
     task: ScrewAssemblyTask, label: str, phases: list[dict[str, Any]]
 ) -> list[ExecutionCommand]:
-    """The motion a block produced, one command per completed path."""
+    """The motion a block produced, one command per completed path.
+
+    Driving a screw is a skill: the planned insertion of the driver's tip into
+    a hole (the grasp edge ``_12``, from pregrasp to grasp) is sent as a
+    ``SkillCommand`` for the screw skill. A backend that runs skills (MuJoCo)
+    drives the screw; any other plays the path.
+    """
     commands = []
     for phase in phases:
         if not phase.get("complete", True) or phase.get("skipped"):
             continue
-        for path in phase.get("paths", []):
-            if path is None:
-                continue
+        paths = [p for p in phase.get("paths", []) if p is not None]
+        edges = list(phase.get("edges", []))
+        # A resumed phase planned only its last edges: align from the end.
+        edges = (
+            [None] * (len(paths) - len(edges)) + edges[-len(paths) :] if paths else []
+        )
+        for path, edge in zip(paths, edges):
             if isinstance(path, int):
                 path = task.planner.get_path(path)
+            payload = path
+            hole = phase.get("handle") or ""
+            if (
+                phase.get("gripper") == "driver/tip"
+                and edge is not None
+                and str(edge).endswith("_12")
+            ):
+                payload = SkillCommand(
+                    SCREW,
+                    {"tool": "driver", "part": hole.split("/")[0], "hole": hole},
+                    approach=path,
+                )
             commands.append(
-                ExecutionCommand(step_id=label, duration=path.length(), payload=path)
+                ExecutionCommand(step_id=label, duration=path.length(), payload=payload)
             )
     return commands
 
@@ -410,6 +437,7 @@ def mission_session(
     skipped.
     """
     n_parts = ctx["n_parts"]
+
     def runner(capability: str):
         def run(parameters: dict[str, Any]) -> dict[str, Any]:
             return run_step(capability, parameters)
@@ -421,6 +449,11 @@ def mission_session(
         # part 1 in clamp 2) runs the same way as the hand-written one.
         block = block_for(capability, parameters)
         label = block["label"]
+        # Where the step starts (grasps held), to replan it from if the robot
+        # has drifted by the time its motion runs.
+        ctx.setdefault("step_start", {})[label] = {
+            g: h for g, h in planner.grasp_tracker.current_grasps.items() if h
+        }
         index = ctx.setdefault("block_index", 0)
         ctx["block_index"] = index + 1
         binding = {k: v for k, v in parameters.items() if k != "block"}
@@ -437,7 +470,9 @@ def mission_session(
                     f"cannot_reach({gripper}, {handle})",
                 ],
             }
-            print(f"\n=== {label} === INJECTED FAILURE: cannot_reach({gripper}, {handle})")
+            print(
+                f"\n=== {label} === INJECTED FAILURE: cannot_reach({gripper}, {handle})"
+            )
             raise RuntimeError(f"{label}: injected failure")
         r = run_block(
             task,
@@ -466,6 +501,34 @@ def mission_session(
             for command in block_commands(task, label, ctx.get("last_phases", [])):
                 executor.submit(command)
         return {"replans": r["replans"], "resumes": r["resumes"]}
+
+    def on_drift(node: dict[str, Any], observe) -> list[ExecutionCommand]:
+        """The robot drifted before this step's motion: plan the step again
+        from where it is (the grasps it started with, the observed config)."""
+        operation = node["children"][0] if node["type"] == "transaction" else node
+        capability = operation["capability"]
+        parameters = dict(operation.get("parameters", {}))
+        label = block_for(capability, parameters)["label"]
+        MissionCheckpoint.restore_grasps(
+            planner.grasp_tracker, ctx["step_start"][label]
+        )
+        observed = observe(ctx["q"]) if observe is not None else None
+        if observed is None:
+            raise RuntimeError("the backend can't report the observed configuration")
+        # Within the planner's bounds: a simulated finger at -1e-9 rad is
+        # "out of range" to HPP, which then rejects the start configuration.
+        model = task.robot.model()
+        observed = np.clip(observed, model.lowerPositionLimit, model.upperPositionLimit)
+        ctx["q"] = [float(v) for v in observed]
+        print(f"\n=== {label} === the robot drifted: replanning from where it is")
+        executor = ctx["executor"]
+        submitted = len(executor._pending)
+        run_step(capability, parameters)
+        commands = executor._pending[submitted:]
+        del executor._pending[submitted:]
+        return commands
+
+    ctx["on_drift"] = on_drift
 
     world = CompositeWorldState(GraspTrackerState(planner), recorded)
 
@@ -612,6 +675,8 @@ def run_mission(
     on_event=None,
     document: dict[str, Any] | None = None,
     inject: list[dict[str, Any]] | None = None,
+    plan_ahead: bool = False,
+    max_drift: float | None = None,
 ) -> dict[str, Any]:
     """Run the mission's TaskPlan from ``q_start`` (default: the scene start).
 
@@ -645,8 +710,11 @@ def run_mission(
     executor = PlanExecutor(
         session,
         backend=backend,
+        policy=ExecutionPolicy(max_start_drift=max_drift),
         on_skip=lambda label, why: print(f"\n=== {label} === skipped ({why})"),
         on_event=on_event,
+        on_drift=ctx.get("on_drift"),
+        plan_ahead=plan_ahead,
     )
     ctx["executor"] = executor
     t_mission = time.time()
@@ -660,22 +728,160 @@ def run_mission(
         "blocks": ctx["records"],
         "skipped": skipped,
         "executed": len(run.executions),
+        "execution": execution_summary(run.executions),
+        "timing": run.timing or None,
         "final_config": ctx["q"],
-        "failure": None if run.success else ctx.get("failure"),
+        "failure": (
+            None if run.success else ctx.get("failure") or execution_failure(run)
+        ),
     }
 
 
 from long_tamp.visualization.mission_viewer import MissionViewer
 
 
-def make_backend(name: str, task: ScrewAssemblyTask, live_viewer=None):
+def make_backend(
+    name: str,
+    task: ScrewAssemblyTask,
+    live_viewer=None,
+    run_dir: Path | None = None,
+    hole_error: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    speed: float = math.inf,
+    drift: list[tuple[str, str, float]] | None = None,
+    grasp: str = "weld",
+    record: bool = False,
+):
     """The execution backend for ``--backend``."""
     if name == "mock":
         return MockBackend(rtf=1000.0)
     if name == "playback":
         display = (lambda q: task.planner.viewer(q)) if live_viewer else None
         return PathPlaybackBackend(display=display)
+    if name == "mujoco":
+        from long_tamp.sim import MuJoCoBackend, QposMap, ScrewDriving, export_mjcf
+
+        export = export_mjcf(CONFIG, (run_dir or HERE / "runs") / "mjcf")
+        to_qpos = QposMap(export.load(), task.robot.model())
+        # The simulation runs in its own process, like a robot controller:
+        # stepping it from a thread would share the planner's interpreter
+        # lock (see long_tamp.execution.process).
+        contact = contact_grasps(export) if grasp == "contact" else {}
+        backend = ProcessBackend(  # closed at exit (see main)
+            MuJoCoBackend,
+            export,
+            to_qpos,
+            speed=speed,
+            skills={"screw": ScrewDriving(hole_error=hole_error)},
+            from_qpos=to_qpos.inverse,
+            grasp=grasp,
+            record=(run_dir or HERE / "runs") / "sim" if record else None,
+            **contact,
+        )
+        return DriftInjector(backend, drift) if drift else backend
     return None
+
+
+def robotiq_pads(arm: str) -> dict[str, tuple[tuple, tuple]]:
+    """Box pads for the MuJoCo backend on an arm's 2F-85: on the pad frames
+    (the fingertips' inner faces), 1 mm thick behind the face, the size of
+    ROBOTIQ_2F85's pad."""
+    from long_tamp.grasping import ROBOTIQ_2F85
+
+    half = (0.001, ROBOTIQ_2F85.pad_width / 2, ROBOTIQ_2F85.pad_length / 2)
+    return {
+        f"{arm}/robotiq_85_{side}_finger_pad": ((sign * 0.001, 0.0, 0.0), half)
+        for side, sign in (("left", 1.0), ("right", -1.0))
+    }
+
+
+def contact_grasps(export) -> dict[str, Any]:
+    """``--grasp contact``: the MuJoCo backend's fingers, grip table and pads.
+    Each arm has one handle per object, so (object, arm) picks the closure."""
+    from long_tamp.sim import GripTable
+
+    model = export.load()
+    closures = finger_closures()
+    table = {}
+    for gripper, handle in closures.pairs():
+        arm, obj = gripper.split("/")[0], handle.split("/")[0]
+        if obj not in export.free_joints:
+            continue  # a part this scene doesn't have
+        joint = model.joint(export.free_joints[obj]).id
+        root = model.body(int(model.jnt_bodyid[joint])).name
+        table[(root, arm)] = closures.closed_values(gripper, handle)
+    return {
+        "fingers": tuple(f"{arm}/robotiq_85_left_knuckle_joint" for arm in (LEFT, RIGHT)),
+        "grip": GripTable(table),
+        "pads": {**robotiq_pads(LEFT), **robotiq_pads(RIGHT)},
+    }
+
+
+class DriftInjector:
+    """``--inject-drift``: bump a joint just before a step's motion runs, as
+    if someone knocked the robot while the next step was being planned. The
+    executor's drift check (``start_error``) then sees it."""
+
+    def __init__(self, backend, drift: list[tuple[str, str, float]]):
+        self._backend = backend
+        self._pending = list(drift)
+
+    def start_error(self, command):
+        for item in list(self._pending):
+            label, joint, delta = item
+            if command.step_id == label:
+                self._backend.disturb(joint, delta)
+                self._pending.remove(item)
+                print(f"\n=== {label} === INJECTED DRIFT: {joint} {delta:+.3f} rad")
+        return self._backend.start_error(command)
+
+    def __getattr__(self, name):
+        return getattr(self._backend, name)
+
+
+def parse_drift(spec: str) -> tuple[str, str, float]:
+    """``--inject-drift "LABEL:JOINT:RAD"``."""
+    label, joint, delta = spec.rsplit(":", 2)
+    return label, joint, float(delta)
+
+
+def execution_failure(run) -> dict[str, Any] | None:
+    """The failure facts of a step whose execution failed (a skill reporting
+    ``screw_misaligned``, say), in the shape planning failures have."""
+    failed = [e for e in run.executions if e.result.status.value != "success"]
+    if not failed:
+        return None
+    last = failed[-1]
+    return {
+        "step": last.command.step_id,
+        "facts": list(last.result.facts),
+        "message": last.result.message,
+    }
+
+
+def execution_summary(executions) -> dict[str, Any] | None:
+    """What the backend measured over the mission (the MuJoCo backend's
+    tracking error and drift), from ``PlanRun.executions``."""
+    if not executions:
+        return None
+    metrics = [e.result.metrics for e in executions]
+
+    def worst(key):
+        values = [m[key] for m in metrics if key in m]
+        return max(values) if values else None
+
+    return {
+        "commands": len(executions),
+        "failed": sum(1 for e in executions if e.result.status.value != "success"),
+        "sim_seconds": round(sum(m.get("sim_seconds", 0.0) for m in metrics), 2),
+        "max_tracking_error": worst("tracking_error"),
+        "max_drift": worst("drift"),
+        "max_object_drift": worst("object_drift"),
+        "max_start_drift": worst("start_drift"),
+        "screws_driven": sum(
+            1 for e in executions for f in e.result.facts if f.startswith("screwed(")
+        ),
+        "max_screw_lateral_error": worst("lateral_error"),
+    }
 
 
 def main() -> int:
@@ -690,11 +896,62 @@ def main() -> int:
     )
     ap.add_argument(
         "--backend",
-        choices=("none", "mock", "playback"),
+        choices=("none", "mock", "playback", "mujoco"),
         default="none",
         help="what executes each block's motion after it is planned: none "
-        "(planning only, the default), mock (instant, for testing the pipeline) "
-        "or playback (plays the paths in real time, in the viewer if it is on)",
+        "(planning only, the default), mock (instant, for testing the pipeline), "
+        "playback (plays the paths in real time, in the viewer if it is on) or "
+        "mujoco (simulates them under tracking control; needs the sim extra)",
+    )
+    ap.add_argument(
+        "--grasp",
+        choices=("weld", "contact"),
+        default="weld",
+        help="with --backend mujoco: how grasps hold objects: weld (the "
+        "default) or contact (the Robotiq fingers close and hold them by "
+        "friction)",
+    )
+    ap.add_argument(
+        "--sim-record",
+        action="store_true",
+        help="with --backend mujoco: record the simulation to <run folder>/sim, "
+        "for view_mujoco.py",
+    )
+    ap.add_argument(
+        "--plan-ahead",
+        action="store_true",
+        help="plan each step while the previous step's motion executes",
+    )
+    ap.add_argument(
+        "--max-drift",
+        type=float,
+        default=0.05,
+        help="with a backend that reports it: replan a step whose robot is "
+        "further than this (rad) from where its plan starts (default 0.05)",
+    )
+    ap.add_argument(
+        "--sim-speed",
+        type=float,
+        default=math.inf,
+        help="with --backend mujoco: simulated seconds per wall-clock second "
+        "(default: as fast as possible; 1 = real time)",
+    )
+    ap.add_argument(
+        "--inject-drift",
+        action="append",
+        default=[],
+        metavar="LABEL:JOINT:RAD",
+        help="with --backend mujoco: bump JOINT by RAD just before step LABEL's "
+        "motion (repeatable), e.g. 'part1 B: release:ur10_left/elbow_joint:0.2'",
+    )
+    ap.add_argument(
+        "--hole-error",
+        type=float,
+        nargs=3,
+        default=(0.0, 0.0, 0.0),
+        metavar=("X", "Y", "Z"),
+        help="with --backend mujoco: where the real holes are relative to the "
+        "planned ones, in mm (a perception error for the screw skill)",
     )
     ap.add_argument(
         "--planner",
@@ -798,7 +1055,7 @@ def main() -> int:
         if row["handle"].startswith(("driver", "part1")):
             print(
                 f"grasp {row['gripper']} > {row['handle']}: close to "
-                f"{row['width'] * 1000:.1f} mm (finger_joint {row['q']:.3f})"
+                f"{row['width'] * 1000:.1f} mm (robotiq_85_left_knuckle_joint {row['q']:.3f})"
                 + ("" if row["feasible"] else f"  WARNING: {'; '.join(row['reasons'])}")
             )
     live_viewer = None
@@ -819,7 +1076,19 @@ def main() -> int:
             checkpoint=checkpoint,
             live_viewer=live_viewer,
             recorded=recorded,
-            backend=make_backend(args.backend, task, live_viewer),
+            backend=make_backend(
+                args.backend,
+                task,
+                live_viewer,
+                run_dir,
+                hole_error=tuple(v / 1000.0 for v in args.hole_error),
+                speed=args.sim_speed,
+                grasp=args.grasp,
+                record=args.sim_record,
+                drift=[parse_drift(spec) for spec in args.inject_drift],
+            ),
+            plan_ahead=args.plan_ahead,
+            max_drift=args.max_drift,
             on_event=events,
             inject=inject,
         )
@@ -848,6 +1117,9 @@ def main() -> int:
         if live_viewer is not None:
             live_viewer.close()
         raise
+    backend = mission.get("backend")
+    if hasattr(backend, "close"):
+        backend.close()  # a simulation process: stop and reap it
     checkpoint.finish(result["success"], result["seconds"])
     write_trajectory(traj_path, trajectory, n_parts)
     result["seed"] = args.seed

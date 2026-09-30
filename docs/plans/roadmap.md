@@ -87,13 +87,17 @@ resumes from world state, not from a block index.
 
 ## M4 — Execution in simulation and controllers (0.5.0)
 
+**Released as 0.5.0 on 2026-09-30.**
+
 [Milestone 4](https://github.com/thanhndv212/long-tamp/milestone/4)
 
-- [ ] [#17](https://github.com/thanhndv212/long-tamp/issues/17) MuJoCo scene export (MJCF from the example's URDFs)
-- [ ] [#18](https://github.com/thanhndv212/long-tamp/issues/18) MuJoCo execution backend: trajectory tracking controller, gripper actuation
-- [ ] [#19](https://github.com/thanhndv212/long-tamp/issues/19) Skill capabilities (pre/post conditions, start/end poses) and a screwing skill stub
-- [ ] [#20](https://github.com/thanhndv212/long-tamp/issues/20) Drift check before executing a cached plan; replan from observed state;
+- [x] [#17](https://github.com/thanhndv212/long-tamp/issues/17) MuJoCo scene export (MJCF from the example's URDFs)
+- [x] [#18](https://github.com/thanhndv212/long-tamp/issues/18) MuJoCo execution backend: trajectory tracking controller, gripper actuation
+- [x] [#19](https://github.com/thanhndv212/long-tamp/issues/19) Skill capabilities (pre/post conditions, start/end poses) and a screwing skill stub
+- [x] [#20](https://github.com/thanhndv212/long-tamp/issues/20) Drift check before executing a cached plan; replan from observed state;
       plan-ahead in a planner process
+- [x] [#67](https://github.com/thanhndv212/long-tamp/issues/67) The UR10 from Universal Robots' own description package
+- [x] [#71](https://github.com/thanhndv212/long-tamp/issues/71) The Robotiq 2F-85 from PickNik's ros2_robotiq_gripper, with contact grasps in MuJoCo
 
 **Exit test:** a full two-part mission executes in simulation with tracking control;
 injected drift triggers a replan and the mission completes.

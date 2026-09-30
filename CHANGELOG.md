@@ -8,6 +8,130 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-30
+
+Milestone M4: execution in simulation. The planning scene exports to MuJoCo, and a
+MuJoCo execution backend runs the planned paths under tracking control (retimed within the
+joints' limits), with grasps as welds or, optionally, held by the fingers' friction. Skills
+carry their own controllers (a screwing skill with a virtual screw); the executor checks
+drift before each step and replans from the observed state, and can plan the next step
+while the current one runs, with the simulation in its own process. The example cells now
+use the vendors' own robot models (the UR10 from Universal Robots, the Robotiq 2F-85 from
+PickNik), and missions can be recorded and replayed in MuJoCo's viewer. Validated with the
+screw-assembly batch gate on the new models (10/10, median 913 s, source-built HPP).
+
+### Changed
+
+- The example cells' UR10 now comes from Universal Robots' own description package (#67).
+  - Source: `UniversalRobots/Universal_Robots_ROS2_Description` at a pinned commit, vendored
+    by `build_assets.py --only ur10-official` (URDF with relative mesh paths, meshes, BSD-3
+    LICENSE, SOURCE.md). It replaces the Gepetto/example-robot-data export, and so brings
+    UR's masses, inertias and joint limits.
+  - Kinematics: `tool0` relative to `base_link` is identical (6e-10 m), and every collision
+    mesh's world bounding box matches within 1 mm, so grasps and scenes are unchanged.
+  - The base geometry is now on `base_link_inertia`, and the SRDF's adjacent pair follows.
+- The example cells' Robotiq 2F-85 now comes from PickNik's `ros2_robotiq_gripper` (#71).
+  - Source: `PickNikRobotics/ros2_robotiq_gripper` at a pinned commit, vendored by
+    `build_assets.py --only robotiq-picknik` (the world link and ros2_control tags dropped;
+    pad frames `robotiq_85_{left,right}_finger_pad` added on the fingertips' flat inner
+    faces).
+  - Joint and link names change to PickNik's: the driver is
+    `robotiq_85_left_knuckle_joint` (0 open .. 0.8 closed), with five mimic joints. Configs,
+    SRDF collision pairs and the example scripts follow.
+  - `long_tamp.grasping.ROBOTIQ_2F85` is now this gripper, recalibrated from the merged
+    URDF (84.9 mm stroke). The ros-industrial model stays available as
+    `ROBOTIQ_2F85_ROS_INDUSTRIAL`.
+  - `gripper_tcp` and the HPP gripper frame are unchanged. The screw assembly now closes to
+    0.484 on the driver and 0.555 on a part, and `validate_closure.py` shows both pads
+    touching and no other link in collision.
+
+### Added
+
+- Contact grasps in the MuJoCo backend (#71): `MuJoCoBackend(grasp="contact", fingers=...,
+  grip=..., pads=...)`, and `task_screw_assembly.py --backend mujoco --grasp contact`.
+  Welds remain the default.
+  - The planner keeps the fingers open, so `grip(object, carrier)` gives the closure
+    (`GripTable` builds it from a table; the mission uses the grasp planner's closures).
+  - A new grasp snaps the object into place, closes the fingers for `grip_time` while the
+    object still rests, then lets it go. The path runs with the fingers squeezing: they
+    track the closure plus `grip_torque` towards it. A release welds the object where it is
+    and opens the fingers before the path runs.
+  - Physics after MuJoCo Menagerie's `robotiq_2f85`: elliptic cone, `impratio` 10,
+    armature on the finger joints, stiff mimic equalities, and box pads on the fingertips
+    that alone grip (a mesh fingertip touches a flat face at a point or two, and a long
+    part pivots). The no-slip solver stops the creep MuJoCo's soft friction allows under a
+    steady load. Unless `contacts` is on, only fingers and objects collide. The default
+    `grip_torque` (15 N m) squeezes with about 95 N per pad (the 2F-85 is rated 20-235 N).
+  - `slip` reports how far a gripped object moved in the hand, and gripping fingers are
+    left out of `tracking_error` and `drift`. A 0.27 kg part carried through a 2 s arm
+    move slips 0.4 mm (`tests/test_sim_contact_grasp.py`).
+  - The screwing skill aims at the hole where its part actually is, and takes as its tool
+    the carried object the approach moves (the other arm may hold the part still).
+  - Known limit: execution is open loop. On the two-part mission, objects sit up to 3 mm
+    from the plan in the fingers; part 1's screws go in, part 2's first misses the 2 mm
+    alignment tolerance by 0.5 mm. Welds stay the default for missions.
+- Replay a MuJoCo mission in MuJoCo's viewer: `MuJoCoBackend(record=folder)` saves `qpos` at
+  30 frames per simulated second (one chunk per command), `task_screw_assembly.py
+  --sim-record` records into the run folder, and `script/screw_assembly/view_mujoco.py` replays
+  it (`mjpython` on macOS). The planning container has no display; the replay needs only
+  `mujoco`.
+- Drift check and planning ahead (#20), `long_tamp.execution`.
+  - **Drift check.** Before a step's motion runs, `PlanExecutor` asks the backend how far
+    the robot is from where the plan starts (`start_error`). Beyond
+    `ExecutionPolicy.max_start_drift`, it emits a `drift` event and calls
+    `on_drift(node, observe)` to replan the step from the observed configuration.
+  - **Planning ahead.** With `plan_ahead=True`, step k+1 is planned while step k's motion
+    runs in a worker thread. Paths are sampled to arrays first (`SampledPath`), and
+    preconditions see pending effects.
+  - **`ProcessBackend`.** It runs a backend in its own process, so a simulator doesn't
+    share the planner's interpreter lock (in a thread, the MuJoCo motion ran 3.6 times
+    slower). `PlanRun.timing` reports wall, execution, idle and drift-replan figures.
+  - **MuJoCo backend.** It gains `start_error`, `observed_config` (`QposMap.inverse`) and
+    `disturb`.
+  - **Screw assembly.** New flags `--plan-ahead`, `--max-drift`, `--sim-speed` and
+    `--inject-drift LABEL:JOINT:RAD`. The simulation runs in a `ProcessBackend`.
+  - **Results.** A 0.2 rad drift before a grasp is replanned and the mission completes.
+    At real-time speed, planning ahead cut a 2-part mission from 773 s to 581 s.
+- Skills (#19), `long_tamp.tasks.task_planning.skills`. A `SkillSpec` declares a step that
+  ends in controller-level behaviour: pre- and postconditions, failure facts, start and end
+  poses. `descriptor()` turns it into a capability.
+  - A `SkillCommand` is the payload a backend runs, and it is also its approach path, so
+    backends without the skill play it.
+  - `long_tamp.sim.ScrewDriving` is a screwing stub for the MuJoCo backend: a compliant
+    approach, an alignment check, a virtual screw with force feed-forward, and a torque
+    threshold. It reports `screwed(part, hole)`, `screw_misaligned` or `screw_no_contact`.
+  - The screw assembly sends each screw insertion as a skill; `--hole-error` models a
+    perception error.
+  - `Feedback` and `ExecutionResult` carry `facts`.
+  - With a backend, a step's recorded effects are written only after its motion executed
+    (they used to be written when it was planned).
+  - Docs: `docs/usage/skills.md`.
+- MuJoCo export (#17), `long_tamp.sim.mjcf`: `export_mjcf(config, out_dir)` writes a
+  task's scene as one self-contained MJCF (HPP's body and joint names, objects free at
+  their initial pose, Robotiq mimic joints as equalities, COLLADA meshes converted);
+  `qpos_from_pinocchio` maps an HPP configuration to MuJoCo `qpos` and `fk_mismatch`
+  compares the two models' kinematics (screw-assembly cell: < 1e-7 on 60 bodies). CLI:
+  `python -m long_tamp.sim.mjcf CONFIG -o OUT`. New `sim` extra (mujoco, trimesh,
+  pycollada).
+- MuJoCo execution backend (#18), `long_tamp.sim.MuJoCoBackend`: runs planned paths in
+  the exported scene under tracking control, with the following behaviour.
+  - Torque motors with PD, gains scheduled on each joint's apparent inertia plus any
+    carried payload, gravity and Coriolis compensation, and net torque limited to the
+    URDF effort.
+  - Grasps are welds to the carrying link: a grasp snaps within 2 cm, or fails as
+    "grasp missed".
+  - Every path is retimed rest to rest within velocity and acceleration limits, and
+    stretched until inverse dynamics fits within 80 % of effort.
+  - Motion events report `tracking_error`, `drift`, `start_drift`, `object_drift`,
+    `grasp_error` and `time_scale`.
+  - The screw assembly runs on it with `--backend mujoco`; `--summary` adds an
+    `execution` block.
+  - A 2-part mission completes in simulation: 37 commands, worst tracking error
+    0.015 rad, object drift 0.05 mm.
+  - The export keeps the URDF velocity limits and frees mimic followers' own limits.
+  - `Feedback` and `ExecutionResult` carry `metrics`, which the executor adds to
+    `motion` events.
+
 ## [0.4.0] - 2026-09-29
 
 Milestone M3: automatic task planning. Capabilities, a world state and a goal
@@ -442,7 +566,8 @@ First public release, on PyPI as `long-tamp`.
   in ~18s as the *second* phase of a multi-grasp sequence but failed 6/6 draws when built as
   the *only* phase of a single-gripper session. Not root-caused.
 
-[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/thanhndv212/long-tamp/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/thanhndv212/long-tamp/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/thanhndv212/long-tamp/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/thanhndv212/long-tamp/compare/v0.1.0...v0.2.0

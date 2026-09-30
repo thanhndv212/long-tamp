@@ -77,3 +77,7 @@ COLCON_IGNORE
 
 # Run artifacts: step/phase checkpoints and captured paths
 checkpoints/
+
+# build_assets.py --only ur10-official: the upstream clone
+script/ikea_table_prototype/assets/ur10/_upstream/
+script/ikea_table_prototype/assets/robotiq_2f85/_upstream/

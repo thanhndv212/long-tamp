@@ -149,28 +149,27 @@ _YAML_PATH = Path(__file__).parent / "config" / "ikea_table_config.yaml"
 # itself is a rigid gripper_tcp<->handle constraint, not simulated finger
 # closing. Frozen the same way twin/task_lift_ball.py freezes Panda's
 # finger joints, via substring match on the joint name.
-FREEZE_JOINT_SUBSTRINGS: List[str] = ["finger_joint", "knuckle_joint"]
+FREEZE_JOINT_SUBSTRINGS: List[str] = ["knuckle_joint", "finger_tip_joint"]
 
 # Cosmetic replay-only overlay (_replay_sequence_with_grasp_visuals):
 # these joints stay frozen open per FREEZE_JOINT_SUBSTRINGS during actual
 # planning, so nothing closes them for real. Mimic multipliers from
-# robotiq_arg2f_85_model_macro.xacro's <mimic> tags, duplicated from
+# the PickNik 2F-85's <mimic> tags (assets/robotiq_2f85/picknik), duplicated from
 # debug_view_frames.py's GRIPPER_MIMIC_JOINTS since this pairing is
 # specific to this demo's gripper + leg geometry.
 GRIPPER_MIMIC_JOINTS: List[Tuple[str, int]] = [
-    ("finger_joint", 1),
-    ("left_inner_knuckle_joint", 1),
-    ("left_inner_finger_joint", -1),
-    ("right_outer_knuckle_joint", 1),
-    ("right_inner_knuckle_joint", 1),
-    ("right_inner_finger_joint", -1),
+    ("robotiq_85_left_knuckle_joint", 1),
+    ("robotiq_85_right_knuckle_joint", -1),
+    ("robotiq_85_left_inner_knuckle_joint", 1),
+    ("robotiq_85_right_inner_knuckle_joint", -1),
+    ("robotiq_85_left_finger_tip_joint", -1),
+    ("robotiq_85_right_finger_tip_joint", 1),
 ]
 
-# finger_joint value that closes the inner-finger pads to ~30mm apart,
-# matching the leg's 0.03x0.03 cross-section (LEG_HALF_EXTENT in
-# build_assets.py). Found via an FK sweep: 0 rad -> 0.0924m open, 0.8 rad
-# -> 0.0079m (pads touching), 0.6 rad -> 0.0307m (closest to 0.03m).
-GRIPPER_CLOSED_VALUE: float = 0.60
+# Driving-joint value that closes the pads to ~30mm apart, matching the
+# leg's 0.03x0.03 cross-section (LEG_HALF_EXTENT in build_assets.py): from
+# ROBOTIQ_2F85's stroke table (0.55 rad -> 29.0 mm, 0.50 -> 34.6 mm).
+GRIPPER_CLOSED_VALUE: float = 0.54
 
 # Pairs never collision-checked. Empty: the pedestal-vs-arm entries that
 # used to live here hid real collisions (an arm folding down into its own

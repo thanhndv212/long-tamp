@@ -38,6 +38,9 @@ TRANSACTION_ROLES = {
 }
 #: Python executor only: one command executed on an execution backend.
 MOTION_ROLE = "motion"
+#: Python executor only: before a step's motion, the robot was too far from
+#: where the plan starts (``FAILURE``, with ``start_drift``); it is replanned.
+DRIFT_ROLE = "drift"
 
 STATUSES = ("RUNNING", "SUCCESS", "FAILURE", "SKIPPED")
 

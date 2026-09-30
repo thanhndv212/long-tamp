@@ -70,6 +70,8 @@ nav:
       - Refiner: usage/refiner.md
       - Automatic task planning: usage/task-planning-pddl.md
       - Execution backends: usage/execution.md
+      - Simulation (MuJoCo): usage/simulation-mujoco.md
+      - Skills: usage/skills.md
       - Mission events: usage/events.md
   - Features:
       - Overview: features/README.md

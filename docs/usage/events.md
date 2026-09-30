@@ -38,6 +38,7 @@ Roles:
 | `attempts` | its retry budget | `RetryUntilSuccessful` |
 | `execute` | one attempt at the step | `ExecuteTaskStep` |
 | `motion` | a command executed on a backend (Python executor only) | none |
+| `drift` | before a step's motion, the robot was further than `max_start_drift` from where the plan starts: `FAILURE`, with `start_drift`; the step is replanned (Python executor only) | none |
 
 Transitions follow BehaviorTree.CPP: composites go `RUNNING`, then `SUCCESS` or `FAILURE`;
 leaves go straight to their result; resets to `IDLE` are not events. Motion comes before
@@ -45,7 +46,9 @@ the `execute` result it belongs to.
 
 Metrics, when present: `execute` has `attempt` and `seconds`; `motion` has `seconds`,
 `duration` (the command's), `feedback_count`, `busy_retries` and, on failure, `reason`
-(see [Execution backends](execution.md)).
+(see [Execution backends](execution.md)), plus whatever the backend measured
+(`Feedback.metrics`; the MuJoCo backend reports tracking error and drift, see
+[Simulation](simulation-mujoco.md)).
 
 ## Example
 
