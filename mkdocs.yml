@@ -87,6 +87,7 @@ nav:
           - "0002 Effects as runtime guards": adr/0002-effects-as-runtime-guards.md
           - "0003 Screw assembly reference track": adr/0003-screw-assembly-reference-track.md
           - "0004 Execution contract": adr/0004-execution-contract.md
+          - "0005 Partial-order plans": adr/0005-partial-order-plans.md
   - Plans:
       - Roadmap: plans/roadmap.md
       - "Roadmap: PyPI as the default install": plans/pypi-install-roadmap.md
