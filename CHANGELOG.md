@@ -37,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `task_screw_assembly.py --concurrent`: independent steps run in parallel lanes. On the
     planner-ordered two-part mission, the right arm goes home while the left arm releases
     the part and grasps the next one. Motion time drops from 132 s to 115 s (seed 1).
+- `script/screw_assembly/concurrency_ab.py`: the #21 exit test on identical plans. It plans a
+  mission once, then runs the same motions sequentially and merged on fresh MuJoCo backends.
+  On the two-part mission, seeds 1-5, concurrent execution saves 6.5-10 s of motion on
+  every seed (5.8% on average), so it wins on wall-clock with planning shared.
 
 ## [0.5.0] - 2026-09-30
 
