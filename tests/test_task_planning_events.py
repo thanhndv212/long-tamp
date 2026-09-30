@@ -30,7 +30,7 @@ def _elements(session):
 
 def test_compiler_stamps_every_plan_element_with_its_ir_id_and_role():
     session = create_fake_session('{"shape": "composite"}')
-    assert COMPILER_VERSION == "1.1"
+    assert COMPILER_VERSION == "1.2"
     stamped = {}
     for element in _elements(session):
         if element.tag in UNSTAMPED or element.get("name") == "task-plan-root":

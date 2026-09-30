@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Partial-order plans (#21, ADR-0005), `long_tamp.tasks.task_planning.partial_order`.
+  - A `parallel` node in the TaskPlan IR: lanes of steps with no ordering constraint between
+    them. At load time, no step of a lane may depend on another lane's.
+  - `parallelize(document, registry)` rewrites runs of consecutive independent steps into
+    `parallel` nodes. Steps depend on each other when they share a resource (capabilities'
+    `resources` name the parameters a step holds; `ur10_left` and `ur10_left/gripper` are
+    the same arm), when their literals interfere, or when a step declares neither.
+  - The runner plans lanes one after another and reports each group to executors
+    (`on_group`). The BehaviorTree.CPP compiler (1.2) lowers `parallel` to `Parallel`.
+    Mermaid and DOT diagrams show it.
+  - The screw assembly's capabilities declare their resources: each part's "right arm home"
+    runs alongside the left arm's release.
+
 ## [0.5.0] - 2026-09-30
 
 Milestone M4: execution in simulation. The planning scene exports to MuJoCo, and a

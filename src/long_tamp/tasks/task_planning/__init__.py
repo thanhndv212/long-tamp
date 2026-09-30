@@ -3,6 +3,7 @@
 from .capabilities import CapabilityDescriptor, CapabilityRegistry
 from .compiler import CompiledBehaviorTree, compile_behavior_tree
 from .model import PlanValidationError, TaskPlan
+from .partial_order import parallelize
 from .session import TaskPlanningSession
 from .world_state import CompositeWorldState, GraspTrackerState, RecordedFacts
 
@@ -17,4 +18,5 @@ __all__ = [
     "TaskPlan",
     "TaskPlanningSession",
     "compile_behavior_tree",
+    "parallelize",
 ]

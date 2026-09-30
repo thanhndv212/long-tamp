@@ -98,12 +98,16 @@ def build_mission(n_parts: int) -> list[dict[str, Any]]:
 
 _GRASP_PRE = ("not holds(?gripper, _)", "not holds(_, ?handle)")
 
+# ``resources``: what a step holds exclusively (the arm, the objects it
+# moves), which the partial-order pass uses to find steps that can run
+# concurrently (``--concurrent``).
 DESCRIPTORS: dict[str, CapabilityDescriptor] = {
     # Pick the driver off its dock, or a part off the staging row.
     "grasp": CapabilityDescriptor(
         "grasp",
         "1.0",
         {"block": str, "gripper": str, "handle": str},
+        resources=("gripper", "handle"),
         preconditions=_GRASP_PRE,
         effects=("holds(?gripper, ?handle)",),
         writes=("grasp_state",),
@@ -126,6 +130,7 @@ DESCRIPTORS: dict[str, CapabilityDescriptor] = {
             "tool_gripper": str,
             "tool": str,
         },
+        resources=("holder", "tool_gripper", "clamp", "part", "tool"),
         preconditions=(
             "holds(?holder, ?held)",
             "holds(?tool_gripper, ?tool)",
@@ -143,6 +148,7 @@ DESCRIPTORS: dict[str, CapabilityDescriptor] = {
         "release",
         "1.0",
         {"block": str, "gripper": str},
+        resources=("gripper",),
         preconditions=("holds(?gripper, _)",),
         effects=("not holds(?gripper, _)",),
         writes=("grasp_state",),
@@ -153,6 +159,7 @@ DESCRIPTORS: dict[str, CapabilityDescriptor] = {
         "rack",
         "1.0",
         {"block": str, "dock": str, "dock_handle": str, "gripper": str},
+        resources=("gripper", "dock"),
         preconditions=("holds(?gripper, _)", "not holds(?dock, _)"),
         effects=("holds(?dock, ?dock_handle)", "not holds(?gripper, _)"),
         writes=("grasp_state",),
@@ -162,6 +169,7 @@ DESCRIPTORS: dict[str, CapabilityDescriptor] = {
         "home",
         "1.0",
         {"block": str, "arm": str},
+        resources=("arm",),
         writes=("arm_pose",),
         restartable=True,
     ),
