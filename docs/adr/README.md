@@ -39,3 +39,4 @@ What becomes easier, harder, or required. What we give up.
 | [0002](0002-effects-as-runtime-guards.md) | Capability effects are checked at plan time and at run time | Accepted |
 | [0003](0003-screw-assembly-reference-track.md) | Screw assembly is the reference mission for validation | Accepted |
 | [0004](0004-execution-contract.md) | The execution contract: polled backends, heartbeats, duration-scaled deadlines | Accepted |
+| [0005](0005-partial-order-plans.md) | Partial-order plans and concurrent arms | Accepted |

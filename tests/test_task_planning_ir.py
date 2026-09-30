@@ -73,11 +73,12 @@ def test_duplicate_node_ids_are_rejected():
         TaskPlan.from_dict(document, _registry())
 
 
-def test_parallel_is_reserved_but_not_initially_supported():
+def test_parallel_needs_lanes():
+    # Supported since #21 (see test_task_planning_partial_order.py).
     document = _plan()
     document["root"] = {"type": "parallel", "id": "root", "children": []}
 
-    with pytest.raises(PlanValidationError, match=r"unsupported node type.*parallel"):
+    with pytest.raises(PlanValidationError, match=r"parallel requires at least two"):
         TaskPlan.from_dict(document, _registry())
 
 

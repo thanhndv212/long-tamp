@@ -4,6 +4,10 @@
 semantics as the compiled BT (``compiler.py``):
 
 - ``sequence``: children in order, failing at the first failure;
+- ``parallel``: every lane must succeed. Lanes are independent
+  (``partial_order``), so they are planned one after another, in order; an
+  executor may run their motions concurrently (``on_group`` marks the
+  group's start and end);
 - ``fallback``: children in order, succeeding at the first success;
 - ``retry``: the child up to its effective attempts;
 - ``condition``: the capability's verdict (``evaluate_condition``);
@@ -52,6 +56,7 @@ def run_plan(
     before_step: Callable[[dict[str, Any]], bool] | None = None,
     after_step: Callable[[dict[str, Any], dict[str, Any]], str | None] | None = None,
     on_event: EventSink | None = None,
+    on_group: Callable[[dict[str, Any], bool | None], str | None] | None = None,
 ) -> PlanRun:
     """Run ``session``'s plan from its root; see the module docstring.
 
@@ -63,10 +68,13 @@ def run_plan(
       (``result`` is ``execute_step``'s response); returning an error message
       fails the step with it;
     - ``on_event(event)`` receives one event per status transition, in the
-      schema the BehaviorTree.CPP host writes (``events.py``).
+      schema the BehaviorTree.CPP host writes (``events.py``);
+    - ``on_group(node, None)`` runs when a ``parallel`` node starts, and
+      ``on_group(node, ok)`` when its lanes are done; returning an error
+      message from the second call fails the node with it.
     """
     run = PlanRun()
-    hooks = _Hooks(on_skip, before_step, after_step, on_event)
+    hooks = _Hooks(on_skip, before_step, after_step, on_event, on_group)
     run.success = _run(session, session.plan.document["root"], run, hooks)
     return run
 
@@ -77,6 +85,7 @@ class _Hooks:
     before_step: Callable[[dict[str, Any]], bool] | None = None
     after_step: Callable[[dict[str, Any], dict[str, Any]], str | None] | None = None
     on_event: EventSink | None = None
+    on_group: Callable[[dict[str, Any], bool | None], str | None] | None = None
 
     def emit(
         self,
@@ -122,6 +131,8 @@ def _run(
     hooks: _Hooks,
 ) -> bool:
     kind = node["type"]
+    if kind == "parallel":
+        return _run_parallel(session, node, run, hooks)
     if kind in ("sequence", "fallback", "retry"):
         hooks.emit(node, kind, "RUNNING")
         if kind == "sequence":
@@ -145,9 +156,36 @@ def _run(
         return _run_transaction(session, node, run, hooks)
     # A bare operation: one ExecuteTaskStep in the compiled tree.
     ok = _run_step(
-        session, node, run, _Hooks(hooks.on_skip, hooks.before_step, hooks.after_step)
+        session,
+        node,
+        run,
+        _Hooks(
+            hooks.on_skip, hooks.before_step, hooks.after_step, None, hooks.on_group
+        ),
     )
     hooks.emit(node, "operation", _result(ok), message="" if ok else run.message)
+    return ok
+
+
+def _run_parallel(
+    session: TaskPlanningSession,
+    node: dict[str, Any],
+    run: PlanRun,
+    hooks: _Hooks,
+) -> bool:
+    hooks.emit(node, "parallel", "RUNNING")
+    if hooks.on_group is not None:
+        hooks.on_group(node, None)
+    ok = all(_run(session, child, run, hooks) for child in node["children"])
+    if hooks.on_group is not None:
+        error = hooks.on_group(node, ok)
+        if error and ok:
+            ok = False
+            run.failed_step = node["id"]
+            run.message = error
+    hooks.emit(
+        node, "parallel", _result(ok), "RUNNING", message="" if ok else run.message
+    )
     return ok
 
 
