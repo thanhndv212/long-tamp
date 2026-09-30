@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-30
+
+Milestone M4: execution in simulation. The planning scene exports to MuJoCo, and a
+MuJoCo execution backend runs the planned paths under tracking control (retimed within the
+joints' limits), with grasps as welds or, optionally, held by the fingers' friction. Skills
+carry their own controllers (a screwing skill with a virtual screw); the executor checks
+drift before each step and replans from the observed state, and can plan the next step
+while the current one runs, with the simulation in its own process. The example cells now
+use the vendors' own robot models (the UR10 from Universal Robots, the Robotiq 2F-85 from
+PickNik), and missions can be recorded and replayed in MuJoCo's viewer. Validated with the
+screw-assembly batch gate on the new models (10/10, median 913 s, source-built HPP).
+
 ### Changed
 
 - The example cells' UR10 now comes from Universal Robots' own description package (#67).
@@ -554,7 +566,8 @@ First public release, on PyPI as `long-tamp`.
   in ~18s as the *second* phase of a multi-grasp sequence but failed 6/6 draws when built as
   the *only* phase of a single-gripper session. Not root-caused.
 
-[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/thanhndv212/long-tamp/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/thanhndv212/long-tamp/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/thanhndv212/long-tamp/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/thanhndv212/long-tamp/compare/v0.1.0...v0.2.0
