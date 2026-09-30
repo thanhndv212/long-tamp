@@ -22,6 +22,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     Mermaid and DOT diagrams show it.
   - The screw assembly's capabilities declare their resources: each part's "right arm home"
     runs alongside the left arm's release.
+- Concurrent arms (#21), `long_tamp.execution.concurrent`. With
+  `PlanExecutor(concurrent=True, validate_config=...)`, a `parallel` group's steps are
+  planned first, then their lanes' motions run together.
+  - `merge_lanes` pairs the lanes' k-th commands into one command whose path takes each
+    configuration entry from the lane that moves it. The lanes were planned one after
+    another, each with the other arms still, so each lane moves only its own entries.
+  - The merge is refused, and the group's motions run one after another in planning order,
+    when a lane has a skill command, when two lanes move the same entry, or when
+    `validate_config` (HPP's collision check) rejects a configuration along the merged
+    motion.
+  - The group's steps commit once all of it has run, with or without plan-ahead.
+    `PlanRun.timing` counts `merged_groups` and `sequential_groups`.
+  - `task_screw_assembly.py --concurrent`: independent steps run in parallel lanes. On the
+    planner-ordered two-part mission, the right arm goes home while the left arm releases
+    the part and grasps the next one. Motion time drops from 132 s to 115 s (seed 1).
 
 ## [0.5.0] - 2026-09-30
 
