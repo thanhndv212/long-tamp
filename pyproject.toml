@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "long-tamp"
-version = "0.5.0"
+version = "0.6.0"
 description = "Long-TAMP - Manipulation Planning Framework"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -79,6 +79,20 @@ planning = [
     "unified-planning>=1.3",
     "up-fast-downward>=0.5; (sys_platform == 'linux' and platform_machine == 'x86_64') or sys_platform == 'darwin'",
     "up-pyperplan>=1.1",
+]
+
+# AI models (long_tamp.ai, ADR-0006): any model behind an Anthropic- or
+# OpenAI-compatible API. ai-anthropic for the Anthropic Messages API, ai-openai
+# for OpenAI-compatible endpoints (OpenAI, Azure, vLLM, Ollama, gateways), ai for both.
+ai-anthropic = [
+    "anthropic>=1.0",
+]
+ai-openai = [
+    "openai>=1.0",
+]
+ai = [
+    "anthropic>=1.0",
+    "openai>=1.0",
 ]
 
 # MuJoCo export of a task's scene (long_tamp.sim). trimesh + pycollada convert

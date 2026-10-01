@@ -1,0 +1,20 @@
+{
+  "date": "2026-10-01",
+  "validation": "#22 smoke mission: instruction -> goal (written by a model) -> task plan -> MuJoCo execution",
+  "environment": "hpp-agimus-arm64 (source-built HPP), MuJoCo 3.11, two-part scene",
+  "command": "task_screw_assembly.py --seed 1 --no-viewer --backend mujoco --goal-api openai --goal-model <model> --instruction 'assemble part 2 and put the screwdriver back'",
+  "goal_writer": "OpenAIGoalWriter, a model behind an OpenAI-compatible gateway",
+  "instruction": "assemble part 2 and put the screwdriver back",
+  "goal": [
+    "screwed(part2, part2/h_hole1)",
+    "screwed(part2, part2/h_hole2)",
+    "not holds(ur10_left/gripper, _)",
+    "holds(fixtures/rack_hold, driver/h_rack)"
+  ],
+  "goal_attempts": 1,
+  "goal_seconds": 6.1,
+  "task_plan_steps": 5,
+  "success": true,
+  "mission_seconds": 220.85,
+  "notes": "the goal names part 2 only, as asked; part 1 stays unassembled. ClaudeGoalWriter was not run live (the Anthropic API organization had no credit)."
+}

@@ -69,6 +69,7 @@ nav:
       - BehaviorTree.CPP integration: usage/behaviortree-integration.md
       - Refiner: usage/refiner.md
       - Automatic task planning: usage/task-planning-pddl.md
+      - AI models: usage/ai-models.md
       - Execution backends: usage/execution.md
       - Simulation (MuJoCo): usage/simulation-mujoco.md
       - Skills: usage/skills.md
@@ -88,6 +89,7 @@ nav:
           - "0003 Screw assembly reference track": adr/0003-screw-assembly-reference-track.md
           - "0004 Execution contract": adr/0004-execution-contract.md
           - "0005 Partial-order plans": adr/0005-partial-order-plans.md
+          - "0006 AI model integration": adr/0006-ai-model-integration.md
   - Plans:
       - Roadmap: plans/roadmap.md
       - "Roadmap: PyPI as the default install": plans/pypi-install-roadmap.md

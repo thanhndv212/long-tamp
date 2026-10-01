@@ -20,6 +20,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- One gateway to AI models (#86, ADR-0006), `long_tamp.ai`.
+  - Any model behind an Anthropic- or OpenAI-compatible API, named `<api>:<model>`
+    (`anthropic:claude-opus-5-5`, `openai:<model>`). `make_client(model)` returns a client
+    whose `complete_json(system, user, schema, role)` returns the parsed JSON answer.
+  - Structured output, falling back to plain JSON mode where an endpoint refuses a schema.
+    Claude on Anthropic's endpoint also gets an effort level and the refusal fallback.
+  - Typed errors from either SDK (`AIAuthError`, `AIBillingError`, `AIRateLimitError`,
+    `AIConnectionError`, `AIRefusalError`, `AIOutputError`, `AIRequestError`).
+  - Each call becomes a `CallRecord` (role, model, tokens, seconds, error), which the mission
+    writes to `events.jsonl` as `model` events.
+  - Configuration: `configure()` / `load_env_file()` read env files the way a shell does
+    (`--ai-env` or `LONG_TAMP_AI_ENV`). Inside a container, endpoints on `localhost` map to
+    `host.docker.internal`.
+  - Extras `ai-anthropic`, `ai-openai` and `ai`. Setup guide: `docs/usage/ai-models.md`.
+- Goals from natural language (#22), `long_tamp.tasks.task_planning.language`. A model
+  writes the goal of the planning problem, never the plan.
+  - `goal_from_instruction(instruction, writer, vocabulary, reachable)` checks each written
+    goal (syntax, known predicates and arities, known objects; `check_goal`), then whether
+    the task planner reaches it from the current state. What fails goes back to the model,
+    for up to three attempts.
+  - The initial state stays the observed one; motion failures are still replanned
+    deterministically, never through the model.
+  - `Vocabulary.from_domain` builds what a goal may say from the capabilities' literals,
+    the objects and the state, with free-text notes.
+  - `ModelGoalWriter` writes goals through the gateway; `goal_writer(model)` builds one.
+  - `task_screw_assembly.py --instruction "assemble part 2" --goal-model <api>:<model>
+    [--ai-env FILE]` plans the written goal with the task planner (implies
+    `--planner up`). `screw_domain.goal_vocabulary` describes the domain, and
+    `pddl_problem(goal=...)` takes a goal other than the full mission's.
+
+## [0.6.0] - 2026-10-01
+
+Milestone M5: multi-arm partial-order execution. Plans become partial orders:
+`parallelize` groups steps with no ordering between them (by the resources capabilities
+declare and their literals) into `parallel` lanes, which BehaviorTree.CPP gets as
+`Parallel`. The executor plans a group's lanes, then runs their motions together,
+merged joint by joint and collision-checked in HPP, or one after another when they can't
+be merged. On identical plans, concurrent execution beats the sequential one on
+wall-clock for every seed tested (5/5, 5.8% of motion time saved on the two-part screw
+assembly). The BT session path is also checked on the real screw cell, in Python
+nightly and through the C++ host.
+### Added
 - The BehaviorTree.CPP session path on the screw-assembly cell (#58).
   - `host.create_screw_session` builds a short seeded plan: pick the driver, home it while
     the left arm grasps part 1 (a `parallel` node), rack it
@@ -29,9 +71,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The opt-in `taskplan_bt_screw_cell` CTest runs the compiled tree in
     `agimus_taskplan_bt`. It is the first real-scene run of BT.CPP's `Parallel` lowering,
     and it passes (131 s).
-
-### Added
-
 - Partial-order plans (#21, ADR-0005), `long_tamp.tasks.task_planning.partial_order`.
   - A `parallel` node in the TaskPlan IR: lanes of steps with no ordering constraint between
     them. At load time, no step of a lane may depend on another lane's.
@@ -622,7 +661,8 @@ First public release, on PyPI as `long-tamp`.
   in ~18s as the *second* phase of a multi-grasp sequence but failed 6/6 draws when built as
   the *only* phase of a single-gripper session. Not root-caused.
 
-[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/thanhndv212/long-tamp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/thanhndv212/long-tamp/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/thanhndv212/long-tamp/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/thanhndv212/long-tamp/compare/v0.2.0...v0.3.0

@@ -58,7 +58,10 @@ from long_tamp.tasks.task_planning import (  # noqa: E402
     TaskPlanningSession,
     parallelize,
 )
-from long_tamp.tasks.task_planning.events import JsonlEventWriter  # noqa: E402
+from long_tamp.tasks.task_planning.events import (  # noqa: E402
+    JsonlEventWriter,
+    make_event,
+)
 from long_tamp.tasks.task_planning.skills import SkillCommand  # noqa: E402
 from long_tamp.sim.skills import SCREW  # noqa: E402
 from long_tamp.tasks.task_planning.predicates import holds  # noqa: E402
@@ -79,6 +82,7 @@ from screw_domain import (  # noqa: E402
     block_for,
     clamp_seats,
     descriptors,
+    goal_vocabulary,
     pddl_problem,
     planned_document,
     refinement_step,
@@ -590,6 +594,7 @@ def run_with_repair(
     recorded: RecordedFacts,
     rounds: int,
     mission: dict[str, Any],
+    goal: list[str] | None = None,
 ) -> dict[str, Any]:
     """Plan, run, and replan around failures (``--replan``, issue #15).
 
@@ -604,7 +609,11 @@ def run_with_repair(
 
     def plan(blocked):
         return plan_from_goal(
-            n_parts, world_atoms(planner, recorded), blocked=blocked, clamps=clamps
+            n_parts,
+            world_atoms(planner, recorded),
+            blocked=blocked,
+            clamps=clamps,
+            goal=goal,
         )
 
     def execute(document):
@@ -649,12 +658,58 @@ def world_atoms(planner: GraspSequencePlanner, recorded: RecordedFacts) -> list[
     return sorted(str(atom) for atom in state)
 
 
+def goal_from_text(
+    instruction: str,
+    n_parts: int,
+    state: list[str],
+    clamps: list[tuple[str, str]] | None = None,
+    model: str | None = None,
+    on_call=None,
+) -> list[str]:
+    """The goal for an operator's ``instruction`` (``--instruction``, #22).
+
+    A model writes it from the domain's vocabulary and the current ``state``,
+    through the AI gateway (``model``: ``"<api>:<model>"``, default
+    ``anthropic:claude-opus-5-5``). It is checked (syntax, predicates,
+    objects), then the task planner must reach it from ``state``; what fails
+    goes back to the model, up to three times. The model never writes the
+    plan. ``on_call`` receives each model call's record.
+    """
+    from long_tamp.tasks.task_planning.language import (
+        goal_from_instruction,
+        goal_writer,
+    )
+    from long_tamp.tasks.task_planning.skeleton import default_planner
+
+    task_planner = default_planner("auto")
+
+    def reachable(goal: list[str]) -> str | None:
+        try:
+            task_planner.solve(pddl_problem(n_parts, state, None, clamps, goal))
+        except Exception as error:  # noqa: BLE001 - the planner's verdict
+            return str(error).splitlines()[0][:300] or type(error).__name__
+        return None
+
+    writer = goal_writer(model, on_call=on_call)
+    t0 = time.time()
+    goal = goal_from_instruction(
+        instruction, writer, goal_vocabulary(n_parts, state, clamps), reachable
+    )
+    print(
+        f"goal for {instruction!r} ({writer.model}, {time.time() - t0:.1f}s):\n  "
+        + "\n  ".join(goal),
+        flush=True,
+    )
+    return goal
+
+
 def plan_from_goal(
     n_parts: int,
     state: list[str],
     engine: str = "auto",
     blocked: list[tuple[str, dict[str, str]]] | None = None,
     clamps: list[tuple[str, str]] | None = None,
+    goal: list[str] | None = None,
 ) -> dict[str, Any]:
     """Plan the mission from ``state`` with a task planner (``--planner up``):
     the goal (``screw_domain.mission_goal``) as PDDL, a skeleton from Unified
@@ -664,7 +719,7 @@ def plan_from_goal(
     t0 = time.time()
     task_planner = default_planner(engine)
     name = planner_name(task_planner)
-    steps = task_planner.solve(pddl_problem(n_parts, state, blocked, clamps))
+    steps = task_planner.solve(pddl_problem(n_parts, state, blocked, clamps, goal))
     print(
         f"task planner ({name}): {len(steps)} steps in {time.time() - t0:.2f}s",
         flush=True,
@@ -827,7 +882,9 @@ def contact_grasps(export) -> dict[str, Any]:
         root = model.body(int(model.jnt_bodyid[joint])).name
         table[(root, arm)] = closures.closed_values(gripper, handle)
     return {
-        "fingers": tuple(f"{arm}/robotiq_85_left_knuckle_joint" for arm in (LEFT, RIGHT)),
+        "fingers": tuple(
+            f"{arm}/robotiq_85_left_knuckle_joint" for arm in (LEFT, RIGHT)
+        ),
         "grip": GripTable(table),
         "pads": {**robotiq_pads(LEFT), **robotiq_pads(RIGHT)},
     }
@@ -985,6 +1042,27 @@ def main() -> int:
         "state; needs the 'planning' extra)",
     )
     ap.add_argument(
+        "--instruction",
+        metavar="TEXT",
+        help="what to do, in words (e.g. 'assemble part 2'): Claude writes the "
+        "goal, the task planner plans it (implies --planner up; needs the "
+        "'language' extra and Anthropic API credentials)",
+    )
+    ap.add_argument(
+        "--goal-model",
+        metavar="API:MODEL",
+        help="with --instruction: the model that writes the goal, as <api>:<model> "
+        "with <api> anthropic or openai (any OpenAI-compatible endpoint); "
+        "default anthropic:claude-opus-5-5. See docs/usage/ai-models.md",
+    )
+    ap.add_argument(
+        "--ai-env",
+        metavar="FILE",
+        type=Path,
+        help="env file with the model endpoints and keys (default: "
+        "$LONG_TAMP_AI_ENV); read like a shell reads it",
+    )
+    ap.add_argument(
         "--replan",
         type=int,
         default=0,
@@ -1026,6 +1104,8 @@ def main() -> int:
         help="load the scene, validate the start configuration, then exit",
     )
     args = ap.parse_args()
+    if args.instruction:
+        args.planner = "up"  # the instruction is a goal: a task planner plans it
     if args.resume and args.run_dir is None:
         ap.error("--resume needs --run-dir")
     if args.replan and args.planner != "up":
@@ -1116,9 +1196,35 @@ def main() -> int:
             on_event=events,
             inject=inject,
         )
+        goal = None
+        if args.instruction:
+            from long_tamp.ai import configure
+
+            configure(args.ai_env)  # endpoints, keys; localhost in a container
+
+            def on_call(record):
+                events(
+                    make_event(
+                        "ai",
+                        "model",
+                        record.role,
+                        "FAILURE" if record.error else "SUCCESS",
+                        message=record.error or "",
+                        metrics=record.metrics(),
+                    )
+                )
+
+            goal = goal_from_text(
+                args.instruction,
+                n_parts,
+                world_atoms(planner, recorded),
+                clamps=clamp_seats(task.task_config.VALID_PAIRS),
+                model=args.goal_model,
+                on_call=on_call,
+            )
         if args.replan:
             result = run_with_repair(
-                task, planner, n_parts, q_start, recorded, args.replan, mission
+                task, planner, n_parts, q_start, recorded, args.replan, mission, goal
             )
         else:
             result = run_mission(
@@ -1131,6 +1237,7 @@ def main() -> int:
                         n_parts,
                         world_atoms(planner, recorded),
                         clamps=clamp_seats(task.task_config.VALID_PAIRS),
+                        goal=goal,
                     )
                     if args.planner == "up"
                     else None
