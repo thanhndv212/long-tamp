@@ -490,9 +490,11 @@ def pddl_problem(
     state: list[str] | None = None,
     blocked: list[tuple[str, dict[str, str]]] | None = None,
     clamps: list[tuple[str, str]] | None = None,
+    goal: list[str] | None = None,
 ) -> PddlExport:
     """The mission as PDDL: the capabilities, ``state`` (default: nothing
-    held, nothing screwed) plus the static facts, and ``mission_goal``.
+    held, nothing screwed) plus the static facts, and ``goal`` (default:
+    ``mission_goal``; one written from an instruction, see ``goal_vocabulary``).
 
     Home moves have no effects, so they are not actions: a plan found for
     this problem is the mission's grasp/clamp/release/rack skeleton.
@@ -502,11 +504,48 @@ def pddl_problem(
     return to_pddl(
         descriptors(n_parts),
         init=[*static_facts(n_parts, clamps), *(state or [])],
-        goal=mission_goal(n_parts),
+        goal=goal if goal is not None else mission_goal(n_parts),
         domain_name="screw-assembly",
         problem_name=f"screw-assembly-{n_parts}",
         static_preconditions=STATIC_PRECONDITIONS,
         blocked=blocked or (),
+    )
+
+
+#: What a goal written from an instruction should know about this domain.
+GOAL_NOTES = f"""\
+- holds(holder, handle): a gripper or a fixture holds an object by one of its
+  handles. Grippers: {LEFT}/gripper (left arm: carries the parts) and
+  {RIGHT}/gripper (right arm: carries the screwdriver, "driver").
+  Fixtures: fixtures/clampN (jig clamps; a clamp holds a part by partN/h_seat)
+  and fixtures/rack_hold (the driver's dock, by driver/h_rack).
+- screwed(part, hole): the screw in that hole of the part is driven. Each part
+  has two holes, partN/h_hole1 and partN/h_hole2; a part is assembled when both
+  are screwed (screwing clamps it for good, in whichever clamp).
+- "Assemble" a part means both its holes screwed. Unless the instruction says
+  otherwise, a finished job leaves the left gripper empty
+  (not holds({LEFT}/gripper, _)) and the driver back on its dock
+  (holds(fixtures/rack_hold, driver/h_rack)).
+"""
+
+
+def goal_vocabulary(
+    n_parts: int,
+    state: list[str] | None = None,
+    clamps: list[tuple[str, str]] | None = None,
+):
+    """What a goal for this mission may say (``task_planning.language``):
+    the capabilities' predicates, the scene's objects, and ``state``."""
+    from long_tamp.tasks.task_planning.language import Vocabulary
+    from long_tamp.tasks.task_planning.predicates import parse_atom
+
+    objects = {
+        arg
+        for fact in static_facts(n_parts, clamps)
+        for arg in parse_atom(fact).args
+    }
+    return Vocabulary.from_domain(
+        descriptors(n_parts), state or [], objects=objects, notes=GOAL_NOTES
     )
 
 
