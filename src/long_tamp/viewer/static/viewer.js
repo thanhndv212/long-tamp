@@ -532,6 +532,63 @@
     keep: true, // the iframe is not rebuilt on every update
   };
 
+  // chat (#90): the operator chat of a live server, next to everything else
+  var chat = { entries: [], busy: false, ended: false, log: null, status: null, input: null };
+
+  function chatEntry(e) {
+    var cls = "msg " + e.who + (e.who === "tool" && !e.ok ? " rejected" : "");
+    var text = e.who === "operator" && e.source && e.source !== "web" ? e.text + "  (" + e.source + ")" : e.text;
+    return h("div", { cls: cls, title: new Date(e.t * 1000).toLocaleTimeString() }, text || "\u2026");
+  }
+
+  function chatStatus() {
+    if (!chat.status) return;
+    chat.status.textContent = chat.ended ? "The chat has ended." : chat.busy ? "The model is working\u2026" : "";
+    chat.input.disabled = chat.ended;
+  }
+
+  function chatPoll() {
+    if (chat.polling) return;
+    chat.polling = true;
+    fetch("api/chat?since=" + chat.entries.length).then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.since === chat.entries.length && data.entries.length) {
+          data.entries.forEach(function (e) { chat.entries.push(e); if (chat.log) chat.log.appendChild(chatEntry(e)); });
+          if (chat.log) chat.log.scrollTop = chat.log.scrollHeight;
+        }
+        chat.busy = data.busy; chat.ended = data.ended;
+        chatStatus();
+      })
+      .catch(function () {})
+      .then(function () {
+        chat.polling = false;
+        if (!chat.ended) setTimeout(chatPoll, config.poll_ms || 500);
+      });
+  }
+
+  builtins.chat = {
+    title: "Chat",
+    available: function () { return !!boot.chat; },
+    keep: true,
+    render: function (view, el) {
+      if (chat.log && el.contains(chat.log)) return;
+      chat.log = h("div", { cls: "log", "aria-live": "polite" }, chat.entries.map(chatEntry));
+      chat.status = h("div", { cls: "busy" });
+      chat.input = h("input", { type: "text", placeholder: "Ask the mission model, e.g. \u201cplan part 2 first\u201d", "aria-label": "message to the model" });
+      var form = h("form", { onsubmit: function (e) {
+        e.preventDefault();
+        var text = chat.input.value.trim();
+        if (!text) return;
+        post("api/chat", { message: text }).then(function (r) {
+          if (r.error) { chat.log.appendChild(chatEntry({ who: "error", text: r.error, t: Date.now() / 1000 })); }
+          else { chat.input.value = ""; chat.busy = !r.ended; chat.ended = r.ended; chatStatus(); }
+        });
+      } }, chat.input, h("button", { type: "submit", text: "Send" }));
+      el.appendChild(h("div", { cls: "chat" }, chat.log, chat.status, form));
+      chatStatus();
+    },
+  };
+
   // -- layout and rendering --------------------------------------------------
 
   var sections = {};
@@ -658,6 +715,11 @@
     layout();
     controls();
     seek(LT.events.length);
-    if (LT.live) { poll(); features(); }
+    if (LT.live) {
+      poll();
+      features();
+      if (boot.chat) chatPoll();
+      LT._featureHooks.push(function (f) { if (f.chat) chatPoll(); });
+    }
   };
 })();

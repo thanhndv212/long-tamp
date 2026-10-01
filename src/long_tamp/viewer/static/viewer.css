@@ -176,3 +176,17 @@ dl.kv dd { margin: 0; word-break: break-word; }
 
 /* scene */
 .scene iframe { width: 100%; height: 480px; border: 0; border-radius: 6px; background: #000; }
+
+/* chat */
+.chat .log { max-height: 420px; overflow: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.chat .msg { padding: 6px 9px; border-radius: 8px; max-width: 92%; white-space: pre-wrap; word-break: break-word; }
+.chat .operator { align-self: flex-end; background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.chat .model { align-self: flex-start; background: color-mix(in srgb, var(--fg) 7%, transparent); }
+.chat .tool { align-self: flex-start; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+  border-left: 3px solid var(--st-success); padding: 2px 8px; color: var(--muted); max-height: 7.5em; overflow: auto; }
+.chat .tool.rejected { border-left-color: var(--st-failure); }
+.chat .error { align-self: flex-start; color: var(--st-failure); }
+.chat .system { align-self: center; color: var(--muted); font-size: 12px; }
+.chat form { display: flex; gap: 6px; }
+.chat form input { flex: 1; min-width: 0; }
+.chat .busy { color: var(--muted); font-size: 12px; min-height: 1.4em; }

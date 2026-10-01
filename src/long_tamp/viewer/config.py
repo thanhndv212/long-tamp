@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 #: The built-in panels, in their default order.
-PANELS = ("summary", "timeline", "plan", "details", "events", "scene")
+PANELS = ("summary", "timeline", "plan", "details", "events", "chat", "scene")
 
 
 @dataclass
@@ -19,7 +19,8 @@ class ViewerConfig:
     (``ViewerConfig.load``, ``python -m long_tamp.viewer --config``).
 
     - ``panels``: the panels to show, in order: built-in ones (``PANELS``;
-      ``scene`` shows only with a ``scene_url``) and the ids of panels an
+      ``scene`` shows only with a ``scene_url``, ``chat`` only on a live
+      server with a ``ChatBridge``) and the ids of panels an
       ``extra_js`` file registers. Panels registered but not listed come
       last.
     - ``hidden_roles``: event roles left out of the event list by default
