@@ -189,3 +189,16 @@ def test_the_screw_domain_vocabulary_and_a_written_goal_plan():
     assert check_goal(goal, v) == []
     export = screw_domain.pddl_problem(2, goal=goal)
     assert "part1" not in export.problem.split(":goal")[1]  # only part 2 asked for
+
+
+def test_an_api_error_fails_with_a_clear_message():
+    class APIStatusError(Exception):  # stands in for the SDK's error class
+        __module__ = "anthropic._exceptions"
+        message = "Your credit balance is too low"
+
+    client = FakeClient()
+    client.beta.messages.create = lambda **kwargs: (_ for _ in ()).throw(
+        APIStatusError()
+    )
+    with pytest.raises(GoalError, match="Anthropic API error: Your credit balance"):
+        goal_from_instruction("...", ClaudeGoalWriter(client=client), _vocabulary())

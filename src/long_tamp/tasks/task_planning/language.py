@@ -240,18 +240,27 @@ class ClaudeGoalWriter:
         self, instruction: str, vocabulary: Vocabulary, feedback: Sequence[str]
     ) -> list[str]:
         content = self.prompt(instruction, vocabulary, feedback)
-        response = self._client().beta.messages.create(
-            model=self.model,
-            max_tokens=self.max_tokens,
-            system=_SYSTEM,
-            messages=[{"role": "user", "content": content}],
-            output_config={
-                "effort": self.effort,
-                "format": {"type": "json_schema", "schema": _SCHEMA},
-            },
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-        )
+        client = self._client()
+        try:
+            response = client.beta.messages.create(
+                model=self.model,
+                max_tokens=self.max_tokens,
+                system=_SYSTEM,
+                messages=[{"role": "user", "content": content}],
+                output_config={
+                    "effort": self.effort,
+                    "format": {"type": "json_schema", "schema": _SCHEMA},
+                },
+                betas=["server-side-fallback-2026-07-01"],
+                fallbacks="default",
+            )
+        except Exception as error:
+            # The SDK's API errors (auth, billing, rate limits, outages): no
+            # goal, and no point asking again with feedback.
+            if type(error).__module__.startswith("anthropic"):
+                message = getattr(error, "message", None) or str(error)
+                raise GoalError(f"Anthropic API error: {message}") from error
+            raise
         if response.stop_reason == "refusal":
             details = getattr(response, "stop_details", None)
             raise GoalError(
