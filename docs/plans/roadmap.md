@@ -122,7 +122,7 @@ Revisit against ScheduleStream before starting.
 Any model, through one gateway; models act through typed, checked roles and gated tools;
 interactive and autonomous operation. A model writes the problem, never the plan (ADR-0001).
 
-- [ ] [#22](https://github.com/thanhndv212/long-tamp/issues/22) A model writes a mission's
+- [x] [#22](https://github.com/thanhndv212/long-tamp/issues/22) A model writes a mission's
       goal from an instruction, through the same validation gate (PR #85)
 - [ ] [#86](https://github.com/thanhndv212/long-tamp/issues/86) One model gateway for
       Anthropic- and OpenAI-compatible APIs (`long_tamp.ai`)
