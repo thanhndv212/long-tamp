@@ -780,7 +780,7 @@ def run_chat(
     (#90); after stdin closes, it goes on there until "quit" or Ctrl-C."""
     from chat_tools import INTRO, MissionChat
 
-    from long_tamp.ai.chat import ChatSession
+    from long_tamp.ai.chat import ChatSession, ChatTurn
     from long_tamp.viewer import ChatBridge
 
     work = MissionChat(
@@ -812,6 +812,19 @@ def run_chat(
         client, work.tools(), INTRO + "\n\n" + work.domain(), on_tool=on_tool
     )
     bridge = ChatBridge(session)
+
+    def start():
+        """The page's Start button (#104): run the plan, no model involved;
+        the model sees it in the history, like a run it called."""
+        call = session.call("run", {})
+        session.turns.append(
+            ChatTurn(user="(the operator pressed Start mission)", say="", calls=[call])
+        )
+        return call
+
+    bridge.add_action(
+        "start", "Start mission", start, enabled=lambda: work.document is not None
+    )
     if web is not None:
         bridge.attach(web)
         print(f"chat: also in the web viewer, {web.url}", flush=True)
@@ -1314,7 +1327,8 @@ def main() -> int:
         metavar="API:MODEL",
         help="with --instruction: the model that writes the goal, as <api>:<model> "
         "with <api> anthropic or openai (any OpenAI-compatible endpoint); "
-        "default anthropic:claude-opus-5-5. See docs/usage/ai-models.md",
+        "default $LONG_TAMP_GOAL_MODEL (it may be set in the AI env file), else "
+        "anthropic:claude-opus-5-5. See docs/usage/ai-models.md",
     )
     ap.add_argument(
         "--chat",
@@ -1336,7 +1350,8 @@ def main() -> int:
         metavar="FILE",
         type=Path,
         help="env file with the model endpoints and keys (default: "
-        "$LONG_TAMP_AI_ENV); read like a shell reads it",
+        "$LONG_TAMP_AI_ENV, else ~/.config/long-tamp/ai.env if it exists); read "
+        "like a shell reads it",
     )
     ap.add_argument(
         "--replan",

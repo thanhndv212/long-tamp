@@ -127,6 +127,7 @@ class ChatSession:
         max_steps: int = 4,
         history_turns: int = 6,
         on_tool: Callable[[ToolCall], None] | None = None,
+        on_message: Callable[[str], None] | None = None,
     ) -> None:
         self.client = client
         self.tools = {t.name: t for t in tools}
@@ -134,6 +135,9 @@ class ChatSession:
         self.max_steps = max_steps
         self.history_turns = history_turns
         self.on_tool = on_tool
+        #: Called with each of the model's messages as it comes, before the
+        #: tools it calls in that step (a turn can have several).
+        self.on_message = on_message
         self.turns: list[ChatTurn] = []
         self.system = (
             (intro.strip() + "\n\n" if intro else "")
@@ -192,7 +196,10 @@ class ChatSession:
             if not isinstance(answer, dict):
                 turn.error = "the answer was not a JSON object"
                 continue
-            turn.say = str(answer.get("say", "")) or turn.say
+            say = str(answer.get("say", ""))
+            turn.say = say or turn.say
+            if say and self.on_message is not None:
+                self.on_message(say)
             actions = answer.get("actions") or []
             if isinstance(actions, dict):
                 actions = [actions]

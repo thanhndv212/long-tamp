@@ -26,11 +26,13 @@ from .client import (
     make_client,
 )
 from .config import (
+    DEFAULT_ENV_FILE,
     DEFAULT_MODEL,
     ModelSpec,
     configure,
     host_endpoint,
     load_env_file,
+    default_model,
     parse_model,
 )
 
@@ -45,6 +47,7 @@ __all__ = [
     "AIRequestError",
     "AnthropicClient",
     "CallRecord",
+    "DEFAULT_ENV_FILE",
     "DEFAULT_MODEL",
     "ModelClient",
     "ModelSpec",
@@ -53,5 +56,6 @@ __all__ = [
     "host_endpoint",
     "load_env_file",
     "make_client",
+    "default_model",
     "parse_model",
 ]

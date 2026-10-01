@@ -54,7 +54,12 @@
   LT.onEvent = function (fn) { LT._eventHooks.push(fn); };
   LT.addBadge = function (fn) { LT._badges.push(fn); };
   LT.formatMetric = function (key, fn) { LT._formatters[key] = fn; };
-  LT.select = function (id) { LT.selected = id; render(); };
+  LT.select = function (id) {
+    LT.selected = id;
+    var d = sections.details;
+    if (d && d.group) { LT._tabs[d.group] = "details"; showTab(d.group); }
+    render();
+  };
 
   // -- helpers -------------------------------------------------------------
 
@@ -343,7 +348,7 @@
             onclick: function () { LT.select(id); } },
           caret,
           h("span", { cls: "kind", title: n.type || "", text: KIND_ICONS[n.type] || "·" }),
-          h("span", { text: n.label }),
+          h("span", { text: n.label, title: c || null }),
           c ? h("span", { cls: "call mono", title: c, text: c.length > 60 ? c.slice(0, 59) + "\u2026" : c }) : null,
           h("span", { cls: "pill " + stateClass(state), text: state }),
           badges(n, view)));
@@ -533,9 +538,50 @@
   };
 
   // chat (#90): the operator chat of a live server, next to everything else
-  var chat = { entries: [], busy: false, ended: false, log: null, status: null, input: null };
+  var chat = { entries: [], busy: false, ended: false, log: null, status: null, input: null,
+               actions: [], bar: null, cards: [] };
+
+  function actionButton(a, primary) {
+    return h("button", { cls: primary ? "primary" : null, disabled: !a.enabled || chat.busy || chat.ended,
+      "data-action": a.name, text: a.label, onclick: function () { runAction(a.name); } });
+  }
+
+  function runAction(name) {
+    post("api/action", { name: name }).then(function (r) {
+      if (r.error) { chat.log.appendChild(chatEntry({ who: "error", text: r.error, t: Date.now() / 1000 })); return; }
+      chat.busy = true;
+      chatStatus();
+      if (name === "start") openMonitor();
+    });
+  }
+
+  // Start: follow the run live, with the plan monitor in view.
+  function openMonitor() {
+    LT.follow = true;
+    seek(LT.events.length);
+    var target = document.querySelector('[data-panel="monitor"]') || document.querySelector('[data-panel="plan"]');
+    if (target) {
+      target.classList.add("flash");
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      setTimeout(function () { target.classList.remove("flash"); }, 1600);
+    }
+  }
+  LT.openMonitor = openMonitor;
+
+  function planCard(e) {
+    var start = chat.actions.filter(function (a) { return a.name === "start"; })[0];
+    var card = h("div", { cls: "msg plan-card" },
+      h("b", { text: "Plan: " + e.steps.length + " step" + (e.steps.length === 1 ? "" : "s") }),
+      h("ol", null, e.steps.map(function (s) { return h("li", { text: s }); })));
+    var bar = h("div", { cls: "card-actions" });
+    if (start) bar.appendChild(actionButton(start, true));
+    card.appendChild(bar);
+    chat.cards.push(bar);
+    return card;
+  }
 
   function chatEntry(e) {
+    if (e.who === "plan") return planCard(e);
     var cls = "msg " + e.who + (e.who === "tool" && !e.ok ? " rejected" : "");
     var text = e.who === "operator" && e.source && e.source !== "web" ? e.text + "  (" + e.source + ")" : e.text;
     return h("div", { cls: cls, title: new Date(e.t * 1000).toLocaleTimeString() }, text || "\u2026");
@@ -543,8 +589,20 @@
 
   function chatStatus() {
     if (!chat.status) return;
-    chat.status.textContent = chat.ended ? "The chat has ended." : chat.busy ? "The model is working\u2026" : "";
+    var last = chat.entries.length ? chat.entries[chat.entries.length - 1] : null;
+    var acting = chat.busy && last && last.who === "operator" && last.action;
+    chat.status.textContent = chat.ended ? "The chat has ended." :
+      acting ? last.text + ": running\u2026" : chat.busy ? "The model is working\u2026" : "";
     chat.input.disabled = chat.ended;
+    // action buttons: the bar under the log, and the latest plan card's
+    chat.bar.textContent = "";
+    var onCard = chat.cards.length ? "start" : null; // the latest plan card has it
+    chat.actions.forEach(function (a) { if (a.name !== onCard) chat.bar.appendChild(actionButton(a, false)); });
+    chat.cards.forEach(function (bar, i) {
+      bar.textContent = "";
+      var start = chat.actions.filter(function (a) { return a.name === "start"; })[0];
+      if (start && i === chat.cards.length - 1) bar.appendChild(actionButton(start, true));
+    });
   }
 
   function chatPoll() {
@@ -556,7 +614,7 @@
           data.entries.forEach(function (e) { chat.entries.push(e); if (chat.log) chat.log.appendChild(chatEntry(e)); });
           if (chat.log) chat.log.scrollTop = chat.log.scrollHeight;
         }
-        chat.busy = data.busy; chat.ended = data.ended;
+        chat.busy = data.busy; chat.ended = data.ended; chat.actions = data.actions || [];
         chatStatus();
       })
       .catch(function () {})
@@ -572,8 +630,10 @@
     keep: true,
     render: function (view, el) {
       if (chat.log && el.contains(chat.log)) return;
+      chat.cards = [];
       chat.log = h("div", { cls: "log", "aria-live": "polite" }, chat.entries.map(chatEntry));
       chat.status = h("div", { cls: "busy" });
+      chat.bar = h("div", { cls: "actions" });
       chat.input = h("input", { type: "text", placeholder: "Ask the mission model, e.g. \u201cplan part 2 first\u201d", "aria-label": "message to the model" });
       var form = h("form", { onsubmit: function (e) {
         e.preventDefault();
@@ -584,7 +644,7 @@
           else { chat.input.value = ""; chat.busy = !r.ended; chat.ended = r.ended; chatStatus(); }
         });
       } }, chat.input, h("button", { type: "submit", text: "Send" }));
-      el.appendChild(h("div", { cls: "chat" }, chat.log, chat.status, form));
+      el.appendChild(h("div", { cls: "chat" }, chat.log, chat.status, chat.bar, form));
       chatStatus();
     },
   };
@@ -597,24 +657,127 @@
     return LT._panels[id] || builtins[id] || null;
   }
 
+  // Where each panel goes on one screen (ViewerConfig.layout "screen"): a
+  // list per area; an inner list is a group of tabs.
+  var SCREEN = config.screen || { top: ["summary"], left: ["plan", ["details", "events"]],
+                 center: ["scene", "timeline"], right: ["chat"] };
+  var FIT = ["summary", "timeline"]; // their natural height, the rest share
+  LT._tabs = {};
+
+  function usable(id) {
+    var p = panelFor(id);
+    if (!p && LT._started && (config.panels || []).indexOf(id) >= 0) {
+      p = { title: id, render: function (v, el) { el.appendChild(h("p", { cls: "muted", text: "No panel named " + id + " was registered." })); } };
+    }
+    if (!p || (p.available && !p.available())) return null;
+    return p;
+  }
+
+  function enabled() {
+    var ids = (config.panels || []).slice();
+    Object.keys(LT._panels).forEach(function (id) { if (ids.indexOf(id) < 0) ids.push(id); });
+    return ids;
+  }
+
+  function section(id, p, extraCls) {
+    var body = h("div", { cls: "body" });
+    var sec = h("section", { cls: "panel" + (p.wide ? " wide" : "") + (extraCls || ""), "data-panel": id },
+      h("h2", { text: p.title || id }), body);
+    sections[id] = { panel: p, body: body, sec: sec };
+    return sec;
+  }
+
+  function tabGroup(ids, key) {
+    var shown = ids.filter(function (id) { return usable(id); });
+    if (!shown.length) return null;
+    if (shown.length === 1) return section(shown[0], usable(shown[0]));
+    var active = LT._tabs[key] && shown.indexOf(LT._tabs[key]) >= 0 ? LT._tabs[key] : shown[0];
+    var bar = h("div", { cls: "tabbar", role: "tablist" });
+    var group = h("section", { cls: "panel tabs", "data-group": key }, bar);
+    shown.forEach(function (id) {
+      var p = usable(id), body = h("div", { cls: "body" });
+      var tab = h("button", { cls: "tab", role: "tab", "data-tab": id, text: p.title || id,
+        onclick: function () { activate(key, id); } });
+      bar.appendChild(tab);
+      var pane = h("div", { cls: "pane", "data-panel": id }, body);
+      group.appendChild(pane);
+      sections[id] = { panel: p, body: body, sec: pane, group: key, tab: tab };
+    });
+    LT._tabs[key] = active;
+    showTab(key);
+    return group;
+  }
+
+  function showTab(key) {
+    Object.keys(sections).forEach(function (id) {
+      var s = sections[id];
+      if (s.group !== key) return;
+      var on = LT._tabs[key] === id;
+      s.sec.hidden = !on;
+      s.tab.classList.toggle("active", on);
+      s.tab.setAttribute("aria-selected", on ? "true" : "false");
+    });
+  }
+
+  function activate(key, id) { LT._tabs[key] = id; showTab(key); render(); }
+
+  function screenLayout(main) {
+    var on = enabled();
+    var placed = {};
+    var areas = {};
+    Object.keys(SCREEN).forEach(function (area) {
+      areas[area] = SCREEN[area].map(function (entry) {
+        var ids = (Array.isArray(entry) ? entry : [entry]).filter(function (id) { return on.indexOf(id) >= 0; });
+        ids.forEach(function (id) { placed[id] = true; });
+        return ids;
+      }).filter(function (ids) { return ids.length; });
+    });
+    // panels of yours (and any not placed) join the left tabs
+    var rest = on.filter(function (id) { return !placed[id]; });
+    if (rest.length) {
+      var tabs = areas.left.filter(function (ids) { return ids.length > 1; })[0];
+      if (tabs) Array.prototype.push.apply(tabs, rest); else areas.left.push(rest);
+    }
+    // no scene: the tabs take the centre instead
+    if (!usable("scene")) {
+      var moved = areas.left.filter(function (ids) { return ids.length > 1 || ids[0] !== "plan"; });
+      areas.left = areas.left.filter(function (ids) { return moved.indexOf(ids) < 0; });
+      areas.center = areas.center.concat(moved);
+    }
+    var top = h("div", { cls: "top" });
+    areas.top.forEach(function (ids, i) {
+      var g = tabGroup(ids, "top" + i);
+      if (g) { g.classList.add("fit", "compact"); top.appendChild(g); }
+    });
+    if (top.childNodes.length) main.appendChild(top);
+    var grid = h("div", { cls: "columns" }), widths = [];
+    ["left", "center", "right"].forEach(function (area) {
+      var col = h("div", { cls: "col col-" + area });
+      areas[area].forEach(function (ids, i) {
+        var g = tabGroup(ids, area + i);
+        if (!g) return;
+        if (ids.length === 1 && FIT.indexOf(ids[0]) >= 0) g.classList.add("fit");
+        if (ids.length === 1 && ids[0] === "plan") g.classList.add("tall");
+        col.appendChild(g);
+      });
+      if (!col.childNodes.length) return;
+      grid.appendChild(col);
+      widths.push(area === "center" ? "minmax(0, 1fr)" : "minmax(280px, 26%)");
+    });
+    grid.style.gridTemplateColumns = widths.join(" ");
+    main.appendChild(grid);
+  }
+
   function layout() {
     var main = document.getElementById("panels");
     main.textContent = "";
     sections = {};
-    var ids = (config.panels || []).slice();
-    Object.keys(LT._panels).forEach(function (id) { if (ids.indexOf(id) < 0) ids.push(id); });
-    ids.forEach(function (id) {
-      var p = panelFor(id);
-      if (!p) {
-        if (!LT._started) return;
-        p = { title: id, render: function (v, el) { el.appendChild(h("p", { cls: "muted", text: "No panel named " + id + " was registered." })); } };
-      }
-      if (p.available && !p.available()) return;
-      var body = h("div");
-      var sec = h("section", { cls: "panel" + (p.wide ? " wide" : ""), "data-panel": id },
-        h("h2", { text: p.title || id }), body);
-      main.appendChild(sec);
-      sections[id] = { panel: p, body: body };
+    var screen = (config.layout || "screen") === "screen";
+    document.body.classList.toggle("screen", screen);
+    if (screen) { screenLayout(main); return; }
+    enabled().forEach(function (id) {
+      var p = usable(id);
+      if (p) main.appendChild(section(id, p));
     });
   }
 
@@ -634,6 +797,7 @@
     header(view);
     Object.keys(sections).forEach(function (id) {
       var s = sections[id];
+      if (s.group && LT._tabs[s.group] !== id && !s.panel.keep) return; // hidden tab
       if (!s.panel.keep) s.body.textContent = "";
       try { s.panel.render(view, s.body); }
       catch (err) { s.body.textContent = "panel error: " + err.message; }

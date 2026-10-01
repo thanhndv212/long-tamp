@@ -296,3 +296,39 @@ def test_bad_json_is_an_output_error():
         OpenAIClient(spec=parse_model("openai:m"), sdk=sdk).complete_json(
             "s", "u", SCHEMA
         )
+
+
+def test_configure_falls_back_to_the_user_config_file(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(ai_config, "in_container", lambda: False)
+    assert configure() == []  # no file: nothing loaded
+    path = ai_config.default_env_file()
+    assert str(path).startswith(os.environ["XDG_CONFIG_HOME"])  # see conftest
+    path.parent.mkdir(parents=True)
+    path.write_text("export OPENAI_API_KEY=k\n")
+    assert configure() == ["OPENAI_API_KEY"]
+    other = tmp_path / "named.env"
+    other.write_text("export OTHER_VAR=1\n")
+    monkeypatch.setenv("LONG_TAMP_AI_ENV", str(other))
+    assert configure() == ["OTHER_VAR"]  # a named file wins
+
+
+def test_the_default_model_comes_from_the_environment(monkeypatch):
+    from long_tamp.ai import default_model, parse_model
+
+    assert str(parse_model(None)) == "anthropic:claude-opus-5-5"
+    monkeypatch.setenv("LONG_TAMP_GOAL_MODEL", "openai:m1")
+    assert str(parse_model(None)) == "openai:m1"
+    # a bare gateway id: the one configured endpoint's API
+    monkeypatch.setenv("LONG_TAMP_GOAL_MODEL", "cx/gpt-x")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://gw/v1")
+    monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
+    assert str(default_model()) == "openai:cx/gpt-x"
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://gw2")
+    with pytest.raises(ValueError, match="can't be guessed"):
+        default_model()
+    monkeypatch.setenv("LONG_TAMP_GOAL_MODEL", "claude-x")
+    assert str(default_model()) == "anthropic:claude-x"
+    assert str(parse_model("openai:named")) == "openai:named"  # a name wins

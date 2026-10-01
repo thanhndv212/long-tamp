@@ -45,6 +45,13 @@ class ExecutionControl:
             self.stopped = True
             self._cond.notify_all()
 
+    def reset(self) -> None:
+        """Clear a pause and a stop, for the next run (breakpoints stay)."""
+        with self._cond:
+            self.paused = False
+            self.stopped = False
+            self._cond.notify_all()
+
     def add_breakpoint(self, step_id: str, when: str = "before") -> None:
         if when not in _WHEN:
             raise ValueError(f"when must be one of {_WHEN}, got {when!r}")
