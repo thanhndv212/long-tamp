@@ -129,6 +129,30 @@ Your own events show up too. Anything a sink writes, such as a `role` the viewer
 know (for example `make_event("vision", "detection", ...)`), lands in the event list with
 its own role toggle. Your panels can read those events.
 
+### The mission UI
+
+One command starts the whole thing (in the HPP environment):
+
+```bash
+cd script/screw_assembly
+python mission_ui.py                     # MuJoCo; --backend playback for planned paths only
+```
+
+It prints the page's URL (and opens a browser, outside a container). Then:
+
+1. In the chat, type an instruction, such as *assemble parts 1 and 2, with part 2 first*. The
+   model writes the goal, and the task planner builds the plan.
+2. The plan shows as a card in the chat, and in the plan tree, with a **Start mission**
+   button.
+3. **Start mission** runs it without asking the model, and brings the plan monitor into view.
+   The plan tree, the timeline and the events follow the run live, and the scene plays the
+   motion. **pause**, **resume** and **stop** act at step boundaries. A stop ends that run,
+   not the chat: you can change the plan and start again. The model sees the run in the
+   chat history, so you can ask *why did that step fail?*
+
+The model and its endpoint come from the AI env file (see [AI models](ai-models.md)).
+`--model API:MODEL` overrides it, and arguments after `--` go to `task_screw_assembly.py`.
+
 ### The chat panel
 
 The operator chat (`--chat`) also works from the viewer. Run it with `--web-port`:
@@ -151,7 +175,14 @@ from long_tamp.viewer import ChatBridge
 
 bridge = ChatBridge(session).attach(server)  # POST/GET /api/chat
 bridge.turn("plan part 2 first")             # a terminal turn, shown on the page too
+
+# a button that acts without the model, when enabled
+bridge.add_action("start", "Start mission", lambda: session.call("run", {}),
+                  enabled=lambda: work.document is not None)
 ```
+
+A tool result with a `plan` list of step labels shows as a plan card. The `start` action's
+button sits on the latest card, and other actions sit under the chat.
 
 ### The live server
 
@@ -169,8 +200,8 @@ server.route("GET", "/api/cell", lambda body, query: {"door": "closed"})
 ```
 
 Its routes are JSON: `GET /api/events?since=N`, `POST /api/control` (`pause`, `resume`,
-`stop`, only when a control is given), `POST /api/chat` and `GET /api/chat?since=N` (with
-a `ChatBridge`), and whatever you add with `route(method, path,
+`stop`, only when a control is given), `POST /api/chat`, `GET /api/chat?since=N` and
+`POST /api/action` (with a `ChatBridge`), `GET /api/features`, and whatever you add with `route(method, path,
 handler)`. The server binds to `127.0.0.1` by default because the control and chat routes move a
 robot. Pass `host="0.0.0.0"` only on a network you trust: the server has no
 authentication.

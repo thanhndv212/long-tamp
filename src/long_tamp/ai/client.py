@@ -331,8 +331,8 @@ class OpenAIClient(ModelClient):
 
 
 def make_client(model: str | ModelSpec | None = None, **kwargs: Any) -> ModelClient:
-    """A client for ``model`` (``"<api>:<model>"``; default
-    ``anthropic:claude-opus-5-5``). ``base_url`` defaults to the API's
+    """A client for ``model`` (``"<api>:<model>"``; default: ``default_model()``,
+    ``$LONG_TAMP_GOAL_MODEL`` or ``anthropic:claude-opus-5-5``). ``base_url`` defaults to the API's
     environment variable, with ``localhost`` mapped inside a container."""
     import os
 

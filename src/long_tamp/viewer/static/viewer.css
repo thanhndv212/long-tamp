@@ -179,6 +179,7 @@ dl.kv dd { margin: 0; word-break: break-word; }
 
 /* chat */
 .chat .log { max-height: 420px; overflow: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.chat .log > * { flex-shrink: 0; }
 .chat .msg { padding: 6px 9px; border-radius: 8px; max-width: 92%; white-space: pre-wrap; word-break: break-word; }
 .chat .operator { align-self: flex-end; background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .chat .model { align-self: flex-start; background: color-mix(in srgb, var(--fg) 7%, transparent); }
@@ -190,3 +191,11 @@ dl.kv dd { margin: 0; word-break: break-word; }
 .chat form { display: flex; gap: 6px; }
 .chat form input { flex: 1; min-width: 0; }
 .chat .busy { color: var(--muted); font-size: 12px; min-height: 1.4em; }
+.chat .plan-card { align-self: stretch; max-width: none; border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.chat .plan-card ol { margin: 6px 0; padding-left: 22px; }
+.chat .card-actions:empty { display: none; }
+.chat .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.chat .actions:empty { display: none; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button:disabled { opacity: 0.5; cursor: default; }
+.panel.flash { outline: 3px solid var(--accent); transition: outline-color 1.5s; }

@@ -533,9 +533,50 @@
   };
 
   // chat (#90): the operator chat of a live server, next to everything else
-  var chat = { entries: [], busy: false, ended: false, log: null, status: null, input: null };
+  var chat = { entries: [], busy: false, ended: false, log: null, status: null, input: null,
+               actions: [], bar: null, cards: [] };
+
+  function actionButton(a, primary) {
+    return h("button", { cls: primary ? "primary" : null, disabled: !a.enabled || chat.busy || chat.ended,
+      "data-action": a.name, text: a.label, onclick: function () { runAction(a.name); } });
+  }
+
+  function runAction(name) {
+    post("api/action", { name: name }).then(function (r) {
+      if (r.error) { chat.log.appendChild(chatEntry({ who: "error", text: r.error, t: Date.now() / 1000 })); return; }
+      chat.busy = true;
+      chatStatus();
+      if (name === "start") openMonitor();
+    });
+  }
+
+  // Start: follow the run live, with the plan monitor in view.
+  function openMonitor() {
+    LT.follow = true;
+    seek(LT.events.length);
+    var target = document.querySelector('[data-panel="monitor"]') || document.querySelector('[data-panel="plan"]');
+    if (target) {
+      target.classList.add("flash");
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      setTimeout(function () { target.classList.remove("flash"); }, 1600);
+    }
+  }
+  LT.openMonitor = openMonitor;
+
+  function planCard(e) {
+    var start = chat.actions.filter(function (a) { return a.name === "start"; })[0];
+    var card = h("div", { cls: "msg plan-card" },
+      h("b", { text: "Plan: " + e.steps.length + " step" + (e.steps.length === 1 ? "" : "s") }),
+      h("ol", null, e.steps.map(function (s) { return h("li", { text: s }); })));
+    var bar = h("div", { cls: "card-actions" });
+    if (start) bar.appendChild(actionButton(start, true));
+    card.appendChild(bar);
+    chat.cards.push(bar);
+    return card;
+  }
 
   function chatEntry(e) {
+    if (e.who === "plan") return planCard(e);
     var cls = "msg " + e.who + (e.who === "tool" && !e.ok ? " rejected" : "");
     var text = e.who === "operator" && e.source && e.source !== "web" ? e.text + "  (" + e.source + ")" : e.text;
     return h("div", { cls: cls, title: new Date(e.t * 1000).toLocaleTimeString() }, text || "\u2026");
@@ -543,8 +584,20 @@
 
   function chatStatus() {
     if (!chat.status) return;
-    chat.status.textContent = chat.ended ? "The chat has ended." : chat.busy ? "The model is working\u2026" : "";
+    var last = chat.entries.length ? chat.entries[chat.entries.length - 1] : null;
+    var acting = chat.busy && last && last.who === "operator" && last.action;
+    chat.status.textContent = chat.ended ? "The chat has ended." :
+      acting ? last.text + ": running\u2026" : chat.busy ? "The model is working\u2026" : "";
     chat.input.disabled = chat.ended;
+    // action buttons: the bar under the log, and the latest plan card's
+    chat.bar.textContent = "";
+    var onCard = chat.cards.length ? "start" : null; // the latest plan card has it
+    chat.actions.forEach(function (a) { if (a.name !== onCard) chat.bar.appendChild(actionButton(a, false)); });
+    chat.cards.forEach(function (bar, i) {
+      bar.textContent = "";
+      var start = chat.actions.filter(function (a) { return a.name === "start"; })[0];
+      if (start && i === chat.cards.length - 1) bar.appendChild(actionButton(start, true));
+    });
   }
 
   function chatPoll() {
@@ -556,7 +609,7 @@
           data.entries.forEach(function (e) { chat.entries.push(e); if (chat.log) chat.log.appendChild(chatEntry(e)); });
           if (chat.log) chat.log.scrollTop = chat.log.scrollHeight;
         }
-        chat.busy = data.busy; chat.ended = data.ended;
+        chat.busy = data.busy; chat.ended = data.ended; chat.actions = data.actions || [];
         chatStatus();
       })
       .catch(function () {})
@@ -572,8 +625,10 @@
     keep: true,
     render: function (view, el) {
       if (chat.log && el.contains(chat.log)) return;
+      chat.cards = [];
       chat.log = h("div", { cls: "log", "aria-live": "polite" }, chat.entries.map(chatEntry));
       chat.status = h("div", { cls: "busy" });
+      chat.bar = h("div", { cls: "actions" });
       chat.input = h("input", { type: "text", placeholder: "Ask the mission model, e.g. \u201cplan part 2 first\u201d", "aria-label": "message to the model" });
       var form = h("form", { onsubmit: function (e) {
         e.preventDefault();
@@ -584,7 +639,7 @@
           else { chat.input.value = ""; chat.busy = !r.ended; chat.ended = r.ended; chatStatus(); }
         });
       } }, chat.input, h("button", { type: "submit", text: "Send" }));
-      el.appendChild(h("div", { cls: "chat" }, chat.log, chat.status, form));
+      el.appendChild(h("div", { cls: "chat" }, chat.log, chat.status, chat.bar, form));
       chatStatus();
     },
   };
