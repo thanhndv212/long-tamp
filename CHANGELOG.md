@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- One gateway to AI models (#86, ADR-0006), `long_tamp.ai`.
+  - Any model behind an Anthropic- or OpenAI-compatible API, named `<api>:<model>`
+    (`anthropic:claude-opus-5-5`, `openai:<model>`). `make_client(model)` returns a client
+    whose `complete_json(system, user, schema, role)` returns the parsed JSON answer.
+  - Structured output, falling back to plain JSON mode where an endpoint refuses a schema.
+    Claude on Anthropic's endpoint also gets an effort level and the refusal fallback.
+  - Typed errors from either SDK (`AIAuthError`, `AIBillingError`, `AIRateLimitError`,
+    `AIConnectionError`, `AIRefusalError`, `AIOutputError`, `AIRequestError`).
+  - Each call becomes a `CallRecord` (role, model, tokens, seconds, error), which the mission
+    writes to `events.jsonl` as `model` events.
+  - Configuration: `configure()` / `load_env_file()` read env files the way a shell does
+    (`--ai-env` or `LONG_TAMP_AI_ENV`). Inside a container, endpoints on `localhost` map to
+    `host.docker.internal`.
+  - Extras `ai-anthropic`, `ai-openai` and `ai`. Setup guide: `docs/usage/ai-models.md`.
 - Goals from natural language (#22), `long_tamp.tasks.task_planning.language`. A model
   writes the goal of the planning problem, never the plan.
   - `goal_from_instruction(instruction, writer, vocabulary, reachable)` checks each written
@@ -20,16 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     deterministically, never through the model.
   - `Vocabulary.from_domain` builds what a goal may say from the capabilities' literals,
     the objects and the state, with free-text notes.
-  - `ClaudeGoalWriter` writes goals with Claude (`claude-opus-5-5` by default; structured
-    JSON output, server-side fallback on a refusal). It needs the new `language` extra
-    (`pip install long-tamp[language]`) and Anthropic API credentials.
-  - `OpenAIGoalWriter` writes goals with any model behind an OpenAI-compatible endpoint
-    (`OPENAI_BASE_URL`, `OPENAI_API_KEY`; the `language-openai` extra). It uses a JSON
-    schema, or plain JSON mode where the endpoint lacks one.
-  - `task_screw_assembly.py --instruction "assemble part 2"` plans the written goal with the
-    task planner (implies `--planner up`). `screw_domain.goal_vocabulary` describes the
-    domain, and `pddl_problem(goal=...)` takes a goal other than the full mission's.
-    `--goal-api openai --goal-model M` picks an OpenAI-compatible model.
+  - `ModelGoalWriter` writes goals through the gateway; `goal_writer(model)` builds one.
+  - `task_screw_assembly.py --instruction "assemble part 2" --goal-model <api>:<model>
+    [--ai-env FILE]` plans the written goal with the task planner (implies
+    `--planner up`). `screw_domain.goal_vocabulary` describes the domain, and
+    `pddl_problem(goal=...)` takes a goal other than the full mission's.
 
 ## [0.6.0] - 2026-10-01
 

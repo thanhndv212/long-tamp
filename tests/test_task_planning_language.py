@@ -8,7 +8,6 @@ import pytest
 
 from long_tamp.tasks.task_planning import CapabilityDescriptor
 from long_tamp.tasks.task_planning.language import (
-    ClaudeGoalWriter,
     GoalError,
     Vocabulary,
     check_goal,
@@ -102,67 +101,75 @@ def test_attempts_run_out():
     assert len(caught.value.attempts) == 3
 
 
-# -- ClaudeGoalWriter, against a fake client -------------------------------
+# -- ModelGoalWriter, through the gateway with a fake SDK --------------------
 
 
-class FakeClient:
-    """Stands in for anthropic.Anthropic(): records requests, replays answers."""
+def _writer(*answers):
+    """A goal writer on an OpenAI-compatible client whose SDK replays
+    ``answers`` (JSON-able dicts, or exceptions)."""
+    from long_tamp.ai import make_client
 
-    def __init__(self, *responses):
-        self.responses, self.requests = list(responses), []
-        self.beta = SimpleNamespace(messages=SimpleNamespace(create=self._create))
+    requests = []
 
-    def _create(self, **kwargs):
-        self.requests.append(kwargs)
-        return self.responses.pop(0)
+    def create(**kwargs):
+        requests.append(kwargs)
+        answer = answers_left.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        msg = SimpleNamespace(content=json.dumps(answer), refusal=None)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=msg, finish_reason="stop")], usage=None
+        )
 
+    answers_left = list(answers)
+    sdk = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+    from long_tamp.tasks.task_planning.language import ModelGoalWriter
 
-def _answer(goal, unsupported="", stop_reason="end_turn"):
-    text = json.dumps({"goal": goal, "unsupported": unsupported})
-    return SimpleNamespace(
-        stop_reason=stop_reason,
-        stop_details=None,
-        content=[SimpleNamespace(type="text", text=text)],
+    return (
+        ModelGoalWriter(make_client("openai:m", sdk=sdk, base_url="http://gw")),
+        requests,
     )
 
 
-def test_claude_writes_a_structured_goal():
-    client = FakeClient(_answer(["screwed(part2, part2/hole)"]))
-    writer = ClaudeGoalWriter(client=client)
+def test_a_model_writes_a_checked_goal():
+    writer, requests = _writer(
+        {"goal": ["screwed(part2, part2/hole)"], "unsupported": ""}
+    )
     goal = goal_from_instruction("screw part 2", writer, _vocabulary())
     assert goal == ["screwed(part2, part2/hole)"]
-    (request,) = client.requests
-    assert request["model"] == "claude-opus-5-5"
-    assert request["output_config"]["format"]["type"] == "json_schema"
-    assert request["fallbacks"] == "default"
-    prompt = request["messages"][0]["content"]
-    assert "screwed/2" in prompt and "part2/hole" in prompt
-    assert "holds(left, part1/h)" in prompt and "Instruction: screw part 2" in prompt
-    assert "never write the plan" in request["system"]
+    (request,) = requests
+    assert "never write the plan" in request["messages"][0]["content"]
+    prompt = request["messages"][1]["content"]
+    assert "screwed/2" in prompt and "holds(left, part1/h)" in prompt
+    assert "Instruction: screw part 2" in prompt
+    assert writer.client.records[0].role == "goal"
 
 
 def test_feedback_reaches_the_next_prompt():
-    client = FakeClient(
-        _answer(["glued(a, b)"]), _answer(["screwed(part2, part2/hole)"])
+    writer, requests = _writer(
+        {"goal": ["glued(a, b)"], "unsupported": ""},
+        {"goal": ["screwed(part2, part2/hole)"], "unsupported": ""},
     )
-    goal_from_instruction(
-        "screw part 2", ClaudeGoalWriter(client=client), _vocabulary()
-    )
-    assert "unknown predicate 'glued'" in client.requests[1]["messages"][0]["content"]
+    goal_from_instruction("screw part 2", writer, _vocabulary())
+    assert "unknown predicate 'glued'" in requests[1]["messages"][1]["content"]
 
 
 def test_an_instruction_the_domain_cant_express_is_reported():
-    client = FakeClient(_answer([], unsupported="no painting predicate"))
+    writer, _ = _writer({"goal": [], "unsupported": "no painting predicate"})
     with pytest.raises(GoalError, match="can't be expressed: no painting"):
-        goal_from_instruction(
-            "paint part 1", ClaudeGoalWriter(client=client), _vocabulary()
-        )
+        goal_from_instruction("paint part 1", writer, _vocabulary())
 
 
-def test_a_refusal_is_an_error_not_a_goal():
-    client = FakeClient(_answer([], stop_reason="refusal"))
-    with pytest.raises(GoalError, match="declined"):
-        goal_from_instruction("...", ClaudeGoalWriter(client=client), _vocabulary())
+def test_an_api_error_is_a_goal_error_with_its_type():
+    error = type(
+        "AuthenticationError", (Exception,), {"__module__": "openai._exceptions"}
+    )("bad key")
+    error.status_code, error.message = 401, "bad key"
+    writer, _ = _writer(error)
+    with pytest.raises(GoalError, match="AIAuthError: bad key"):
+        goal_from_instruction("...", writer, _vocabulary())
 
 
 def test_the_screw_domain_vocabulary_and_a_written_goal_plan():
@@ -189,88 +196,3 @@ def test_the_screw_domain_vocabulary_and_a_written_goal_plan():
     assert check_goal(goal, v) == []
     export = screw_domain.pddl_problem(2, goal=goal)
     assert "part1" not in export.problem.split(":goal")[1]  # only part 2 asked for
-
-
-def test_an_api_error_fails_with_a_clear_message():
-    class APIStatusError(Exception):  # stands in for the SDK's error class
-        __module__ = "anthropic._exceptions"
-        message = "Your credit balance is too low"
-
-    client = FakeClient()
-    client.beta.messages.create = lambda **kwargs: (_ for _ in ()).throw(
-        APIStatusError()
-    )
-    with pytest.raises(GoalError, match="Anthropic API error: Your credit balance"):
-        goal_from_instruction("...", ClaudeGoalWriter(client=client), _vocabulary())
-
-
-# -- OpenAIGoalWriter, against a fake client --------------------------------
-
-
-class FakeOpenAI:
-    """Stands in for openai.OpenAI(): records requests, replays answers;
-    an exception in the answers is raised instead."""
-
-    def __init__(self, *responses):
-        self.responses, self.requests = list(responses), []
-        completions = SimpleNamespace(create=self._create)
-        self.chat = SimpleNamespace(completions=completions)
-
-    def _create(self, **kwargs):
-        self.requests.append(kwargs)
-        answer = self.responses.pop(0)
-        if isinstance(answer, Exception):
-            raise answer
-        return answer
-
-
-def _completion(goal, unsupported="", finish_reason="stop", refusal=None):
-    text = json.dumps({"goal": goal, "unsupported": unsupported})
-    message = SimpleNamespace(content=text, refusal=refusal)
-    return SimpleNamespace(
-        choices=[SimpleNamespace(message=message, finish_reason=finish_reason)]
-    )
-
-
-def test_an_openai_compatible_model_writes_a_goal():
-    from long_tamp.tasks.task_planning.language import OpenAIGoalWriter
-
-    client = FakeOpenAI(_completion(["screwed(part2, part2/hole)"]))
-    writer = OpenAIGoalWriter(model="some-model", client=client)
-    goal = goal_from_instruction("screw part 2", writer, _vocabulary())
-    assert goal == ["screwed(part2, part2/hole)"]
-    (request,) = client.requests
-    assert request["model"] == "some-model"
-    assert request["response_format"]["type"] == "json_schema"
-    assert request["messages"][0]["role"] == "system"
-    assert "Instruction: screw part 2" in request["messages"][1]["content"]
-
-
-def test_an_endpoint_without_json_schema_falls_back_to_json_mode():
-    from long_tamp.tasks.task_planning.language import OpenAIGoalWriter
-
-    class BadRequestError(Exception):  # stands in for the SDK's error class
-        __module__ = "openai._exceptions"
-        status_code = 400
-
-    client = FakeOpenAI(BadRequestError(), _completion(["screwed(part2, part2/hole)"]))
-    writer = OpenAIGoalWriter(model="m", client=client)
-    assert goal_from_instruction("screw part 2", writer, _vocabulary())
-    assert client.requests[1]["response_format"] == {"type": "json_object"}
-    assert '"goal"' in client.requests[1]["messages"][0]["content"]
-
-
-def test_an_openai_refusal_or_bad_json_is_an_error():
-    from long_tamp.tasks.task_planning.language import OpenAIGoalWriter
-
-    client = FakeOpenAI(_completion([], refusal="no"))
-    with pytest.raises(GoalError, match="declined"):
-        goal_from_instruction(
-            "...", OpenAIGoalWriter("m", client=client), _vocabulary()
-        )
-    broken = _completion([])
-    broken.choices[0].message.content = "not json"
-    with pytest.raises(GoalError, match="not JSON"):
-        goal_from_instruction(
-            "...", OpenAIGoalWriter("m", client=FakeOpenAI(broken)), _vocabulary()
-        )

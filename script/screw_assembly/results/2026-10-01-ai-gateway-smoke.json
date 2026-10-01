@@ -1,0 +1,28 @@
+{
+  "date": "2026-10-01",
+  "validation": "#86 smoke mission through the AI gateway: --ai-env and --goal-model openai:<model>, from inside the container with no manual steps",
+  "environment": "hpp-agimus-arm64 (source-built HPP), MuJoCo 3.11, two-part scene, seed 2; local OpenAI-compatible gateway on the host (localhost mapped to host.docker.internal)",
+  "instruction": "assemble part 1, leave part 2 alone, and rack the driver when done",
+  "goal": [
+    "screwed(part1, part1/h_hole1)",
+    "screwed(part1, part1/h_hole2)",
+    "not screwed(part2, part2/h_hole1)",
+    "not screwed(part2, part2/h_hole2)",
+    "not holds(_, part2/h_grasp)",
+    "not holds(_, part2/h_seat)",
+    "not holds(ur10_left/gripper, _)",
+    "holds(fixtures/rack_hold, driver/h_rack)"
+  ],
+  "goal_attempts": 1,
+  "model_call": {
+    "status": "SUCCESS",
+    "input_tokens": 620,
+    "output_tokens": 386,
+    "seconds": 23.8,
+    "recorded_in": "events.jsonl (role model)"
+  },
+  "task_plan_steps": 5,
+  "success": true,
+  "mission_seconds": 209.08,
+  "notes": "the model expressed 'leave part 2 alone' as constraints (unscrewed, not held), which the checks and planner accepted. A live call to Claude still waits for API credit."
+}
