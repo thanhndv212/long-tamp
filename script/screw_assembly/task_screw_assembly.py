@@ -770,13 +770,18 @@ def run_supervised(
     return result
 
 
-def run_chat(task, planner, n_parts, q_start, recorded, mission, client, events):
+def run_chat(
+    task, planner, n_parts, q_start, recorded, mission, client, events, web=None
+):
     """An operator's chat with a model acting through gated mission tools
     (``--chat``, #89): reads operator messages from stdin until EOF or
-    "quit", and writes every tool call to the event stream."""
+    "quit", and writes every tool call to the event stream. With ``web`` (the
+    ``--web-port`` viewer), the same chat is also in the viewer's chat panel
+    (#90); after stdin closes, it goes on there until "quit" or Ctrl-C."""
     from chat_tools import INTRO, MissionChat
 
     from long_tamp.ai.chat import ChatSession
+    from long_tamp.viewer import ChatBridge
 
     work = MissionChat(
         sys.modules[__name__],
@@ -800,16 +805,33 @@ def run_chat(task, planner, n_parts, q_start, recorded, mission, client, events)
                 metrics={"arguments": call.arguments},
             )
         )
+        if call.tool == "plan" and call.ok and work.document is not None:
+            events(plan_event(work.document, "planned in the chat"))
 
     session = ChatSession(
         client, work.tools(), INTRO + "\n\n" + work.domain(), on_tool=on_tool
     )
+    bridge = ChatBridge(session)
+    if web is not None:
+        bridge.attach(web)
+        print(f"chat: also in the web viewer, {web.url}", flush=True)
     echo = not sys.stdin.isatty()  # piped messages: show them in the log
     print("chat: type an instruction, 'quit' or Ctrl-D to end", flush=True)
     while True:
         try:
             line = input("operator> ")
         except EOFError:
+            if web is not None and not bridge.ended.is_set():
+                print(
+                    "chat: stdin closed; the chat goes on in the web viewer "
+                    "('quit' there or Ctrl-C ends it)",
+                    flush=True,
+                )
+                try:
+                    bridge.ended.wait()
+                except KeyboardInterrupt:
+                    pass
+                bridge.wait()
             break
         if echo:
             print(line, flush=True)
@@ -817,7 +839,10 @@ def run_chat(task, planner, n_parts, q_start, recorded, mission, client, events)
             break
         if not line.strip():
             continue
-        turn = session.turn(line.strip())
+        turn = bridge.turn(line.strip())
+        if turn is None:  # the error is in the transcript
+            print(f"  [error] {bridge.transcript()[-1]['text']}", flush=True)
+            continue
         for call in turn.calls:
             print(f"  [tool] {call.as_text()[:400]}", flush=True)
         if turn.error:
@@ -1425,7 +1450,7 @@ def main() -> int:
             closures=closures,
         )
         atexit.register(live_viewer.close)
-    control = None
+    control, web = None, None
     if args.web_port is not None:
         from long_tamp.execution import ExecutionControl
         from long_tamp.viewer import ViewerConfig, ViewerServer
@@ -1496,7 +1521,7 @@ def main() -> int:
             client = make_client(args.goal_model, on_call=on_call)
         if args.chat:
             result = run_chat(
-                task, planner, n_parts, q_start, recorded, mission, client, events
+                task, planner, n_parts, q_start, recorded, mission, client, events, web
             )
         elif args.instruction:
             goal, constraints = understand_instruction(
