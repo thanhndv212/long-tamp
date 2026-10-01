@@ -618,6 +618,7 @@
 
   function controls() {
     var box = document.getElementById("controls");
+    box.textContent = "";
     if (!boot.control) return;
     ["pause", "resume", "stop"].forEach(function (action) {
       box.appendChild(h("button", { text: action, onclick: function () {
@@ -637,12 +638,26 @@
     });
   }
 
+  // What the server offers can change after the page was made (a chat
+  // attached later), and a separate front process does not know it.
+  function features() {
+    fetch("api/features").then(function (r) { return r.json(); })
+      .then(function (f) {
+        var changed = !!f.control !== !!boot.control || !!f.chat !== !!boot.chat;
+        boot.control = !!f.control; boot.chat = !!f.chat;
+        if (changed) { layout(); controls(); render(); LT._featureHooks.forEach(function (fn) { fn(f); }); }
+      })
+      .catch(function () {})
+      .then(function () { setTimeout(features, 5000); });
+  }
+  LT._featureHooks = [];
+
   LT.start = function () {
     LT._started = true;
     theme();
     layout();
     controls();
     seek(LT.events.length);
-    if (LT.live) poll();
+    if (LT.live) { poll(); features(); }
   };
 })();

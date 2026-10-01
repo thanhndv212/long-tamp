@@ -4,9 +4,18 @@
 the viewer page, which polls for new events. Routes (all JSON):
 
 - ``GET /`` the page; ``GET /api/events?since=N`` the events from index ``N``;
+- ``GET /api/features`` what the page can offer (control, chat);
 - ``POST /api/control`` ``{"action": "pause" | "resume" | "stop"}``, with an
   ``ExecutionControl``;
 - more with ``route(method, path, handler)``.
+
+With ``separate_process=True``, the page and the events are served by a
+child process (``long_tamp.viewer.front``) and only the other routes by the
+mission's process. Use it when the mission's Python thread spends long
+stretches in C++ that holds the GIL, as HPP planning does: in-process, the
+page then answers in seconds instead of milliseconds. Control and chat
+requests still wait for the mission process, which is fine: they act at step
+boundaries anyway.
 
 It binds to 127.0.0.1 by default: control routes can pause or stop a robot,
 so expose it beyond the machine on purpose (``host="0.0.0.0"``), not by
@@ -16,6 +25,9 @@ accident.
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 import threading
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -66,7 +78,8 @@ class ViewerServer:
     """The live viewer of the mission writing ``events``.
 
     ``control`` (an ``ExecutionControl``) adds pause, resume and stop
-    buttons. ``start()`` serves from a daemon thread and returns the URL.
+    buttons. ``start()`` serves from a daemon thread (and, with
+    ``separate_process``, a child process) and returns the URL.
     """
 
     def __init__(
@@ -76,18 +89,23 @@ class ViewerServer:
         port: int = 8090,
         host: str = "127.0.0.1",
         control: Any = None,
+        separate_process: bool = False,
     ) -> None:
+        self.events_path = Path(events)
         self.tail = EventTail(events)
         self.config = config or ViewerConfig()
         self.control = control
         self.host, self.port = host, port
+        self.separate_process = separate_process
         self._routes: dict[tuple[str, str], Handler] = {
             ("GET", "/api/events"): self._events,
+            ("GET", "/api/features"): self._features,
         }
         if control is not None:
             self.route("POST", "/api/control", self._control)
         self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
+        self._front: subprocess.Popen | None = None
 
     def route(self, method: str, path: str, handler: Handler) -> None:
         """Serve ``handler`` at ``method path`` (an ``/api/...`` path)."""
@@ -107,15 +125,54 @@ class ViewerServer:
         return f"http://{host}:{self.port}/"
 
     def start(self) -> str:
-        self._httpd = ThreadingHTTPServer((self.host, self.port), _handler(self))
-        self.port = self._httpd.server_address[1]  # port 0: the one picked
+        # In a separate process, this one only answers the front's proxied
+        # requests, on a local port of its own.
+        host, port = (
+            ("127.0.0.1", 0) if self.separate_process else (self.host, self.port)
+        )
+        self._httpd = ThreadingHTTPServer((host, port), _handler(self))
         self._thread = threading.Thread(
             target=self._httpd.serve_forever, name="viewer", daemon=True
         )
         self._thread.start()
+        if not self.separate_process:
+            self.port = self._httpd.server_address[1]  # port 0: the one picked
+            return self.url
+        settings = {
+            "events": str(self.events_path),
+            "host": self.host,
+            "port": self.port,
+            "backend": f"http://127.0.0.1:{self._httpd.server_address[1]}",
+            "config": {
+                **self.config.page_settings(),
+                "extra_css": self.config.extra_css,
+                "extra_js": self.config.extra_js,
+            },
+            "parent": os.getpid(),
+        }
+        self._front = subprocess.Popen(
+            [sys.executable, "-m", "long_tamp.viewer.front"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        self._front.stdin.write(json.dumps(settings))
+        self._front.stdin.close()
+        line = self._front.stdout.readline()
+        if not line.startswith("PORT "):
+            self.close()
+            raise RuntimeError(f"the viewer process did not start: {line!r}")
+        self.port = int(line.split()[1])
         return self.url
 
     def close(self) -> None:
+        if self._front is not None:
+            self._front.terminate()
+            try:
+                self._front.wait(5)
+            except subprocess.TimeoutExpired:
+                self._front.kill()
+            self._front = None
         if self._httpd is not None:
             self._httpd.shutdown()
             self._httpd.server_close()
@@ -137,6 +194,12 @@ class ViewerServer:
             raise ValueError("since must be an integer") from error
         events = self.tail.since(since)
         return {"since": since, "events": events}
+
+    def _features(self, _body: Any, _query: dict[str, list[str]]) -> Any:
+        return {
+            "control": self.control is not None,
+            "chat": ("POST", "/api/chat") in self._routes,
+        }
 
     def _control(self, body: Any, _query: dict[str, list[str]]) -> Any:
         action = (body or {}).get("action")
@@ -172,14 +235,21 @@ def _handler(server: ViewerServer) -> type[BaseHTTPRequestHandler]:
                 self._send(200, server.page().encode(), "text/html; charset=utf-8")
                 return
             handler = server._routes.get((method, url.path))
+            raw = None
+            if method == "POST":
+                raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            proxy = getattr(server, "proxy", None)  # the front process
+            if handler is None and proxy is not None and url.path.startswith("/api/"):
+                code, answer = proxy(method, self.path, raw)
+                self._send(code, answer, "application/json")
+                return
             if handler is None:
                 self._json(404, {"error": f"no route {method} {url.path}"})
                 return
             body = None
             if method == "POST":
-                length = int(self.headers.get("Content-Length", 0))
                 try:
-                    body = json.loads(self.rfile.read(length) or b"null")
+                    body = json.loads(raw or b"null")
                 except json.JSONDecodeError:
                     self._json(400, {"error": "the body is not JSON"})
                     return
