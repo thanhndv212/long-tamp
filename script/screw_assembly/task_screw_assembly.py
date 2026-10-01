@@ -580,6 +580,16 @@ def _injected(ctx: dict[str, Any], capability: str, binding: dict[str, Any]) -> 
     return False
 
 
+def parse_watchdog(text: str) -> tuple[float, float]:
+    """``SOFT[,HARD]`` seconds -> (soft, hard); hard defaults to 3 x soft."""
+    parts = [float(v) for v in text.split(",")]
+    soft = parts[0]
+    hard = parts[1] if len(parts) > 1 else 3 * soft
+    if not 0 < soft <= hard:
+        raise ValueError(f"--watchdog {text!r}: need 0 < SOFT <= HARD")
+    return soft, hard
+
+
 def parse_injection(text: str) -> dict[str, Any]:
     """``capability:key=value,key=value`` -> an injection spec."""
     capability, _, rest = text.partition(":")
@@ -771,7 +781,16 @@ def run_supervised(
 
 
 def run_chat(
-    task, planner, n_parts, q_start, recorded, mission, client, events, web=None
+    task,
+    planner,
+    n_parts,
+    q_start,
+    recorded,
+    mission,
+    client,
+    events,
+    web=None,
+    watchdog=None,
 ):
     """An operator's chat with a model acting through gated mission tools
     (``--chat``, #89): reads operator messages from stdin until EOF or
@@ -812,6 +831,23 @@ def run_chat(
         client, work.tools(), INTRO + "\n\n" + work.domain(), on_tool=on_tool
     )
     bridge = ChatBridge(session)
+    if watchdog is not None:  # its decisions show in the chat too (#109)
+        printed = watchdog.on_decision
+
+        def on_decision(watch, decision):
+            if printed is not None:
+                printed(watch, decision)
+            bridge.note(
+                f"watchdog ({decision.by}) on {watch.label}: {decision.action}"
+                + (
+                    f" {decision.wait_s / 60:.1f} min more"
+                    if decision.action == "wait" and decision.wait_s
+                    else ""
+                )
+                + f": {decision.reason}"
+            )
+
+        watchdog.on_decision = on_decision
 
     def start():
         """The page's Start button (#104): run the plan, no model involved;
@@ -1071,7 +1107,11 @@ def run_mission(
         "timing": run.timing or None,
         "final_config": ctx["q"],
         "failure": (
-            None if run.success else ctx.get("failure") or execution_failure(run)
+            None
+            if run.success
+            else ctx.get("failure")
+            or execution_failure(run)
+            or stopped_failure(run, session)
         ),
     }
 
@@ -1185,6 +1225,23 @@ def parse_drift(spec: str) -> tuple[str, str, float]:
     return label, joint, float(delta)
 
 
+def stopped_failure(run, session) -> dict[str, Any] | None:
+    """Where a run ended that neither planning nor execution reported as a
+    failure: a step aborted or stopped (#108). ``step`` is its label."""
+    if run.failed_step is None:
+        return None
+    labels, stack = {}, [session.plan.document["root"]]
+    while stack:
+        node = stack.pop()
+        labels[node["id"]] = node.get("label", node["id"])
+        stack += node.get("children", []) + ([node["child"]] if "child" in node else [])
+    return {
+        "step": labels.get(run.failed_step, run.failed_step),
+        "facts": [],
+        "message": run.message,
+    }
+
+
 def execution_failure(run) -> dict[str, Any] | None:
     """The failure facts of a step whose execution failed (a skill reporting
     ``screw_misaligned``, say), in the shape planning failures have."""
@@ -1234,6 +1291,13 @@ def main() -> int:
         "--no-viewer",
         action="store_true",
         help="run without the live Viser viewer or path playback",
+    )
+    ap.add_argument(
+        "--watchdog",
+        metavar="SOFT[,HARD]",
+        help="seconds a step may plan before the watchdog decides: wait, skip its "
+        "search or abort it (the chat's model decides when there is one, else a rule); "
+        "at HARD (default 3 x SOFT) it aborts. E.g. 300,900 (#109)",
     )
     ap.add_argument(
         "--web-port",
@@ -1536,9 +1600,45 @@ def main() -> int:
             from long_tamp.ai import make_client
 
             client = make_client(args.goal_model, on_call=on_call)
+        watchdog = None
+        if args.watchdog:
+            from long_tamp.execution import ExecutionControl
+            from long_tamp.execution.watchdog import StepWatchdog, model_decider
+
+            if control is None:
+                control = mission["control"] = ExecutionControl()
+            soft, hard = parse_watchdog(args.watchdog)
+            watchdog = StepWatchdog(
+                control,
+                soft,
+                hard,
+                decide=model_decider(client) if client is not None else None,
+                sink=events,
+                on_decision=lambda watch, decision: print(
+                    f"watchdog: {watch.label}: {decision.action} ({decision.by}): "
+                    f"{decision.reason}",
+                    flush=True,
+                ),
+            ).start()
+            atexit.register(watchdog.close)
+
+            def watched(event, _write=events):
+                _write(event)
+                watchdog.observe(event)
+
+            mission["on_event"] = watched
         if args.chat:
             result = run_chat(
-                task, planner, n_parts, q_start, recorded, mission, client, events, web
+                task,
+                planner,
+                n_parts,
+                q_start,
+                recorded,
+                mission,
+                client,
+                events,
+                web,
+                watchdog,
             )
         elif args.instruction:
             goal, constraints = understand_instruction(

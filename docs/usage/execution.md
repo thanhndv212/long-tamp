@@ -98,6 +98,34 @@ activity.checkpoint("step")                  # an abort ends the step here
 - **Where the planner reports and checks:** each lookahead round and candidate, each
   phase, and each replan.
 
+### A watchdog for steps that plan too long
+
+`StepWatchdog` (`long_tamp.execution.watchdog`) follows the event stream. When the step being
+planned passes `soft` seconds, it picks from a fixed menu:
+
+- `wait` for longer, but never past `hard`;
+- `skip` the search the step is in;
+- `abort_step`.
+
+A model decides when a client is given. This is a checked role (ADR-0006): a decision that
+fails its check, or a model that can't be reached, falls back to the rule. Without a
+client, the rule decides: skip while in a search, otherwise wait. At `hard`, the step is
+aborted, whatever was decided before.
+
+```python
+from long_tamp.execution.watchdog import StepWatchdog, model_decider
+
+watchdog = StepWatchdog(control, soft=300, hard=900,
+                        decide=model_decider(client),   # or None: the rule
+                        sink=events).start()
+executor = PlanExecutor(session, backend, control=control,
+                        on_event=lambda e: (events(e), watchdog.observe(e)))
+```
+
+Every decision is a `watchdog` event, and the viewer and the chat show it. An operator's
+pending request always comes first, and so does a pause. In the screw assembly, use
+`--watchdog 300,900`. `mission_ui.py` turns it on by default.
+
 `MockBackend` (scriptable: busy starts, failures, stalls, slow real-time factor) is there
 for tests and demos.
 
