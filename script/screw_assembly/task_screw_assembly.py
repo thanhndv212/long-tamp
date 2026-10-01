@@ -768,6 +768,73 @@ def run_supervised(
     return result
 
 
+def run_chat(task, planner, n_parts, q_start, recorded, mission, client, events):
+    """An operator's chat with a model acting through gated mission tools
+    (``--chat``, #89): reads operator messages from stdin until EOF or
+    "quit", and writes every tool call to the event stream."""
+    from chat_tools import INTRO, MissionChat
+
+    from long_tamp.ai.chat import ChatSession
+
+    work = MissionChat(
+        sys.modules[__name__],
+        task,
+        planner,
+        recorded,
+        n_parts,
+        mission,
+        q_start,
+        client=client,
+    )
+
+    def on_tool(call):
+        events(
+            make_event(
+                "chat",
+                "tool",
+                call.tool,
+                "SUCCESS" if call.ok else "FAILURE",
+                message=call.error,
+                metrics={"arguments": call.arguments},
+            )
+        )
+
+    session = ChatSession(
+        client, work.tools(), INTRO + "\n\n" + work.domain(), on_tool=on_tool
+    )
+    echo = not sys.stdin.isatty()  # piped messages: show them in the log
+    print("chat: type an instruction, 'quit' or Ctrl-D to end", flush=True)
+    while True:
+        try:
+            line = input("operator> ")
+        except EOFError:
+            break
+        if echo:
+            print(line, flush=True)
+        if line.strip().lower() in ("quit", "exit"):
+            break
+        if not line.strip():
+            continue
+        turn = session.turn(line.strip())
+        for call in turn.calls:
+            print(f"  [tool] {call.as_text()[:400]}", flush=True)
+        if turn.error:
+            print(f"  [error] {turn.error}", flush=True)
+        print(f"model> {turn.say}", flush=True)
+    last = work.last or {"success": True, "seconds": 0.0, "failure": None}
+    result = dict(last)
+    result.setdefault("final_config", work.q)
+    result["chat"] = {
+        "turns": [
+            {"user": t.user, "say": t.say, "calls": [c.as_text() for c in t.calls]}
+            for t in session.turns
+        ],
+        "goal": work.goal,
+        "constraints": work.constraints,
+    }
+    return result
+
+
 def world_atoms(planner: GraspSequencePlanner, recorded: RecordedFacts) -> list[str]:
     """The world state as ground atoms: held grasps plus recorded facts."""
     state = CompositeWorldState(GraspTrackerState(planner), recorded)()
@@ -1211,6 +1278,13 @@ def main() -> int:
         "default anthropic:claude-opus-5-5. See docs/usage/ai-models.md",
     )
     ap.add_argument(
+        "--chat",
+        action="store_true",
+        help="talk to a model that plans and runs missions through checked tools "
+        "(set the goal, add constraints, plan, run, explain a failure); reads "
+        "operator messages from stdin (#89)",
+    )
+    ap.add_argument(
         "--supervise",
         action="store_true",
         help="with --instruction: when the repair loop gives up, a model decides "
@@ -1266,8 +1340,10 @@ def main() -> int:
         help="load the scene, validate the start configuration, then exit",
     )
     args = ap.parse_args()
-    if args.instruction:
+    if args.instruction or args.chat:
         args.planner = "up"  # the instruction is a goal: a task planner plans it
+    if args.chat and (args.instruction or args.supervise or args.replan):
+        ap.error("--chat runs on its own (no --instruction, --supervise or --replan)")
     if args.supervise and not args.instruction:
         ap.error("--supervise needs --instruction")
     if args.resume and args.run_dir is None:
@@ -1361,7 +1437,8 @@ def main() -> int:
             inject=inject,
         )
         goal, constraints = None, []
-        if args.instruction:
+        client = None
+        if args.instruction or args.chat:
             from long_tamp.ai import configure
 
             configure(args.ai_env)  # endpoints, keys; localhost in a container
@@ -1381,6 +1458,11 @@ def main() -> int:
             from long_tamp.ai import make_client
 
             client = make_client(args.goal_model, on_call=on_call)
+        if args.chat:
+            result = run_chat(
+                task, planner, n_parts, q_start, recorded, mission, client, events
+            )
+        elif args.instruction:
             goal, constraints = understand_instruction(
                 args.instruction,
                 n_parts,
@@ -1388,7 +1470,9 @@ def main() -> int:
                 clamps=clamp_seats(task.task_config.VALID_PAIRS),
                 client=client,
             )
-        if args.supervise:
+        if args.chat:
+            pass  # the chat ran the missions it was asked to
+        elif args.supervise:
             result = run_supervised(
                 task,
                 planner,

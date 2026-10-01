@@ -131,3 +131,28 @@ long_tamp checks its syntax, predicates and objects, then whether the task plann
 it from the observed state. The plan reviewer turns what the instruction rules out into
 constraints. The planner plans the goal under those constraints, and the mission executes the
 plan.
+
+## Talking to the mission
+
+```bash
+python3 task_screw_assembly.py --backend mujoco \
+  --ai-env ~/devel/hpp/.anthropic/env --goal-model openai:my-model --chat
+```
+
+The operator types instructions, and the model acts through tools:
+
+| Tool | Does | Checked |
+|---|---|---|
+| `state` | world state, goal, constraints, plan | |
+| `write_goal` | the goal writer role turns the operator's words into a goal | like `--instruction` |
+| `set_goal` | sets the goal | vocabulary; reachable under the constraints |
+| `add_constraint` / `remove_constraint` | forbid or allow a choice | real capability, parameters and objects; goal still reachable |
+| `plan` | the task planner's plan, optionally reaching some goal literals `first` | `first` must be part of the goal; the planner orders every step |
+| `run` | executes the plan on the backend | needs a plan |
+| `explain_failure` | the last run's failure, as the refiner reported it | |
+
+A rejected call comes back to the model with the reason. The model knows the domain
+(predicates, objects, notes) and calls `run` only when the operator asks to run. Every tool call is written to
+`events.jsonl` (`role: tool`). Other front ends (e.g. the web viewer, #90) can use the same
+`ChatSession` and tools.
+
