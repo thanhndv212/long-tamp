@@ -100,7 +100,7 @@
     return (config.metric_labels && config.metric_labels[key]) || key;
   }
 
-  function stateClass(state) { return "st-" + state; }
+  function stateClass(state) { return "st-" + (state === "unmet" ? "idle" : state); }
 
   function isSide(event) { return PLAN_ROLES.indexOf(event.role) < 0; }
 
@@ -146,6 +146,9 @@
       if (parent) { n.parent = parent.id; parent.children.push(def.id); }
       else view.roots.push(def.id);
       var kids = def.children || (def.child ? [def.child] : []);
+      if (def.type === "transaction" && kids.length === 1 && kids[0].type === "operation") {
+        return; // its operation is what it runs: shown on it (call), not as a node
+      }
       kids.forEach(function (k) { walk(k, n); });
     })(event.plan.root, null);
   }
@@ -227,6 +230,7 @@
 
   function nodeState(n) {
     if (n.paused) return "paused";
+    if (n.type === "condition" && n.status === "FAILURE") return "unmet";
     if (n.skipped && n.status !== "FAILURE" && n.attempt === 0) return "skipped";
     if (n.status === "RUNNING") return "running";
     if (n.status === "SUCCESS") return "success";
@@ -314,6 +318,10 @@
   }
 
   function call(def) {
+    if (def && !def.capability && def.type === "transaction") {
+      var kids = def.children || (def.child ? [def.child] : []);
+      def = kids.length === 1 ? kids[0] : def;
+    }
     if (!def || !def.capability) return null;
     var p = def.parameters || {};
     var args = Object.keys(p).sort().map(function (k) { return p[k]; }).join(", ");
@@ -336,7 +344,7 @@
           caret,
           h("span", { cls: "kind", title: n.type || "", text: KIND_ICONS[n.type] || "·" }),
           h("span", { text: n.label }),
-          c ? h("span", { cls: "call mono", text: c }) : null,
+          c ? h("span", { cls: "call mono", title: c, text: c.length > 60 ? c.slice(0, 59) + "\u2026" : c }) : null,
           h("span", { cls: "pill " + stateClass(state), text: state }),
           badges(n, view)));
         if (kids.length) li.appendChild(h("ul", null, kids.map(item)));
