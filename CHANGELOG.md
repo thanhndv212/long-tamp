@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The BehaviorTree.CPP session path on the screw-assembly cell (#58).
+  - `host.create_screw_session` builds a short seeded plan: pick the driver, home it while
+    the left arm grasps part 1 (a `parallel` node), rack it
+    (`script/screw_assembly/screw_bt_session.py`).
+  - `tests/test_screw_bt_session.py` runs it through the session on the real scene, in the
+    nightly. It replaces the TWIN session check, which passed or failed by chance.
+  - The opt-in `taskplan_bt_screw_cell` CTest runs the compiled tree in
+    `agimus_taskplan_bt`. It is the first real-scene run of BT.CPP's `Parallel` lowering,
+    and it passes (131 s).
+
+### Added
+
 - Partial-order plans (#21, ADR-0005), `long_tamp.tasks.task_planning.partial_order`.
   - A `parallel` node in the TaskPlan IR: lanes of steps with no ordering constraint between
     them. At load time, no step of a lane may depend on another lane's.

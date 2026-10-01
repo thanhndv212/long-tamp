@@ -34,7 +34,8 @@ int main(int argc, char** argv)
   try
   {
     const std::set<std::string> allowed_factories = {
-      "create_fake_session", "create_twin_session", "create_twin_regrasp_session"
+      "create_fake_session", "create_twin_session", "create_twin_regrasp_session",
+      "create_screw_session"
     };
     if(allowed_factories.count(factory_name) == 0)
     {
