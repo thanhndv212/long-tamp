@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     plan without the model and brings the monitor into view.
   - `ChatBridge.add_action` adds buttons that act without the model, and
     `ExecutionControl.reset()` lets a stopped chat run be started again.
+- The chat shows a turn as it unfolds: each of the model's messages, then the tool calls it
+  makes, as they come (`ChatSession(on_message=...)`).
 - The viewer fits on one screen by default (`ViewerConfig.layout = "screen"`, areas set with
   `screen`). Each panel scrolls inside, Details and Events share a tab group, and narrow
   screens stack the panels.

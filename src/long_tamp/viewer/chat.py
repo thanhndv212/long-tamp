@@ -52,6 +52,23 @@ class ChatBridge:
         self._log: list[dict[str, Any]] = []
         self._worker: threading.Thread | None = None
         self.actions: dict[str, Action] = {}
+        # A ChatSession reports each message and tool call as it comes: the
+        # page shows the turn as it unfolds, not only once it is over.
+        self._live = hasattr(session, "on_tool") and hasattr(session, "on_message")
+        if self._live:
+            tool, message = session.on_tool, session.on_message
+
+            def on_tool(call: Any) -> None:
+                if tool is not None:
+                    tool(call)
+                self._tool(call)
+
+            def on_message(say: str) -> None:
+                if message is not None:
+                    message(say)
+                self._add("model", say)
+
+            session.on_tool, session.on_message = on_tool, on_message
 
     @property
     def busy(self) -> bool:
@@ -96,7 +113,8 @@ class ChatBridge:
                     self._add("error", f"{type(error).__name__}: {error}")
                     return
                 if hasattr(result, "as_text"):
-                    self._tool(result)
+                    if not self._live:  # else on_tool showed it
+                        self._tool(result)
                 elif result is not None:
                     self._add("system", str(result))
             finally:
@@ -166,11 +184,13 @@ class ChatBridge:
         except Exception as error:  # noqa: BLE001 - shown, the chat goes on
             self._add("error", f"{type(error).__name__}: {error}")
             return None
-        for call in turn.calls:
-            self._tool(call)
+        if not self._live:
+            for call in turn.calls:
+                self._tool(call)
         if turn.error:
             self._add("error", turn.error)
-        self._add("model", turn.say)
+        if not self._live or not turn.say:
+            self._add("model", turn.say)
         return turn
 
     def _tool(self, call: Any) -> None:
