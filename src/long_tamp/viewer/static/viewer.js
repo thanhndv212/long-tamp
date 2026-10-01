@@ -54,7 +54,12 @@
   LT.onEvent = function (fn) { LT._eventHooks.push(fn); };
   LT.addBadge = function (fn) { LT._badges.push(fn); };
   LT.formatMetric = function (key, fn) { LT._formatters[key] = fn; };
-  LT.select = function (id) { LT.selected = id; render(); };
+  LT.select = function (id) {
+    LT.selected = id;
+    var d = sections.details;
+    if (d && d.group) { LT._tabs[d.group] = "details"; showTab(d.group); }
+    render();
+  };
 
   // -- helpers -------------------------------------------------------------
 
@@ -343,7 +348,7 @@
             onclick: function () { LT.select(id); } },
           caret,
           h("span", { cls: "kind", title: n.type || "", text: KIND_ICONS[n.type] || "·" }),
-          h("span", { text: n.label }),
+          h("span", { text: n.label, title: c || null }),
           c ? h("span", { cls: "call mono", title: c, text: c.length > 60 ? c.slice(0, 59) + "\u2026" : c }) : null,
           h("span", { cls: "pill " + stateClass(state), text: state }),
           badges(n, view)));
@@ -652,24 +657,127 @@
     return LT._panels[id] || builtins[id] || null;
   }
 
+  // Where each panel goes on one screen (ViewerConfig.layout "screen"): a
+  // list per area; an inner list is a group of tabs.
+  var SCREEN = config.screen || { top: ["summary"], left: ["plan", ["details", "events"]],
+                 center: ["scene", "timeline"], right: ["chat"] };
+  var FIT = ["summary", "timeline"]; // their natural height, the rest share
+  LT._tabs = {};
+
+  function usable(id) {
+    var p = panelFor(id);
+    if (!p && LT._started && (config.panels || []).indexOf(id) >= 0) {
+      p = { title: id, render: function (v, el) { el.appendChild(h("p", { cls: "muted", text: "No panel named " + id + " was registered." })); } };
+    }
+    if (!p || (p.available && !p.available())) return null;
+    return p;
+  }
+
+  function enabled() {
+    var ids = (config.panels || []).slice();
+    Object.keys(LT._panels).forEach(function (id) { if (ids.indexOf(id) < 0) ids.push(id); });
+    return ids;
+  }
+
+  function section(id, p, extraCls) {
+    var body = h("div", { cls: "body" });
+    var sec = h("section", { cls: "panel" + (p.wide ? " wide" : "") + (extraCls || ""), "data-panel": id },
+      h("h2", { text: p.title || id }), body);
+    sections[id] = { panel: p, body: body, sec: sec };
+    return sec;
+  }
+
+  function tabGroup(ids, key) {
+    var shown = ids.filter(function (id) { return usable(id); });
+    if (!shown.length) return null;
+    if (shown.length === 1) return section(shown[0], usable(shown[0]));
+    var active = LT._tabs[key] && shown.indexOf(LT._tabs[key]) >= 0 ? LT._tabs[key] : shown[0];
+    var bar = h("div", { cls: "tabbar", role: "tablist" });
+    var group = h("section", { cls: "panel tabs", "data-group": key }, bar);
+    shown.forEach(function (id) {
+      var p = usable(id), body = h("div", { cls: "body" });
+      var tab = h("button", { cls: "tab", role: "tab", "data-tab": id, text: p.title || id,
+        onclick: function () { activate(key, id); } });
+      bar.appendChild(tab);
+      var pane = h("div", { cls: "pane", "data-panel": id }, body);
+      group.appendChild(pane);
+      sections[id] = { panel: p, body: body, sec: pane, group: key, tab: tab };
+    });
+    LT._tabs[key] = active;
+    showTab(key);
+    return group;
+  }
+
+  function showTab(key) {
+    Object.keys(sections).forEach(function (id) {
+      var s = sections[id];
+      if (s.group !== key) return;
+      var on = LT._tabs[key] === id;
+      s.sec.hidden = !on;
+      s.tab.classList.toggle("active", on);
+      s.tab.setAttribute("aria-selected", on ? "true" : "false");
+    });
+  }
+
+  function activate(key, id) { LT._tabs[key] = id; showTab(key); render(); }
+
+  function screenLayout(main) {
+    var on = enabled();
+    var placed = {};
+    var areas = {};
+    Object.keys(SCREEN).forEach(function (area) {
+      areas[area] = SCREEN[area].map(function (entry) {
+        var ids = (Array.isArray(entry) ? entry : [entry]).filter(function (id) { return on.indexOf(id) >= 0; });
+        ids.forEach(function (id) { placed[id] = true; });
+        return ids;
+      }).filter(function (ids) { return ids.length; });
+    });
+    // panels of yours (and any not placed) join the left tabs
+    var rest = on.filter(function (id) { return !placed[id]; });
+    if (rest.length) {
+      var tabs = areas.left.filter(function (ids) { return ids.length > 1; })[0];
+      if (tabs) Array.prototype.push.apply(tabs, rest); else areas.left.push(rest);
+    }
+    // no scene: the tabs take the centre instead
+    if (!usable("scene")) {
+      var moved = areas.left.filter(function (ids) { return ids.length > 1 || ids[0] !== "plan"; });
+      areas.left = areas.left.filter(function (ids) { return moved.indexOf(ids) < 0; });
+      areas.center = areas.center.concat(moved);
+    }
+    var top = h("div", { cls: "top" });
+    areas.top.forEach(function (ids, i) {
+      var g = tabGroup(ids, "top" + i);
+      if (g) { g.classList.add("fit", "compact"); top.appendChild(g); }
+    });
+    if (top.childNodes.length) main.appendChild(top);
+    var grid = h("div", { cls: "columns" }), widths = [];
+    ["left", "center", "right"].forEach(function (area) {
+      var col = h("div", { cls: "col col-" + area });
+      areas[area].forEach(function (ids, i) {
+        var g = tabGroup(ids, area + i);
+        if (!g) return;
+        if (ids.length === 1 && FIT.indexOf(ids[0]) >= 0) g.classList.add("fit");
+        if (ids.length === 1 && ids[0] === "plan") g.classList.add("tall");
+        col.appendChild(g);
+      });
+      if (!col.childNodes.length) return;
+      grid.appendChild(col);
+      widths.push(area === "center" ? "minmax(0, 1fr)" : "minmax(280px, 26%)");
+    });
+    grid.style.gridTemplateColumns = widths.join(" ");
+    main.appendChild(grid);
+  }
+
   function layout() {
     var main = document.getElementById("panels");
     main.textContent = "";
     sections = {};
-    var ids = (config.panels || []).slice();
-    Object.keys(LT._panels).forEach(function (id) { if (ids.indexOf(id) < 0) ids.push(id); });
-    ids.forEach(function (id) {
-      var p = panelFor(id);
-      if (!p) {
-        if (!LT._started) return;
-        p = { title: id, render: function (v, el) { el.appendChild(h("p", { cls: "muted", text: "No panel named " + id + " was registered." })); } };
-      }
-      if (p.available && !p.available()) return;
-      var body = h("div");
-      var sec = h("section", { cls: "panel" + (p.wide ? " wide" : ""), "data-panel": id },
-        h("h2", { text: p.title || id }), body);
-      main.appendChild(sec);
-      sections[id] = { panel: p, body: body };
+    var screen = (config.layout || "screen") === "screen";
+    document.body.classList.toggle("screen", screen);
+    if (screen) { screenLayout(main); return; }
+    enabled().forEach(function (id) {
+      var p = usable(id);
+      if (p) main.appendChild(section(id, p));
     });
   }
 
@@ -689,6 +797,7 @@
     header(view);
     Object.keys(sections).forEach(function (id) {
       var s = sections[id];
+      if (s.group && LT._tabs[s.group] !== id && !s.panel.keep) return; // hidden tab
       if (!s.panel.keep) s.body.textContent = "";
       try { s.panel.render(view, s.body); }
       catch (err) { s.body.textContent = "panel error: " + err.message; }

@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     plan without the model and brings the monitor into view.
   - `ChatBridge.add_action` adds buttons that act without the model, and
     `ExecutionControl.reset()` lets a stopped chat run be started again.
+- The viewer fits on one screen by default (`ViewerConfig.layout = "screen"`, areas set with
+  `screen`). Each panel scrolls inside, Details and Events share a tab group, and narrow
+  screens stack the panels.
 - AI defaults: `configure()` falls back to `~/.config/long-tamp/ai.env`, and
   `$LONG_TAMP_GOAL_MODEL` names the default model (`default_model()`), so neither
   `--ai-env` nor `--goal-model` is needed on every command.

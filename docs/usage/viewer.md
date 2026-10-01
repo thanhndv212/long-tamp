@@ -25,6 +25,15 @@ python task_screw_assembly.py --backend mujoco --web-port 8090
 
 ## What it shows
 
+By default everything fits on one screen:
+
+- **Top:** the summary.
+- **Left:** the plan tree, with Details and Events as tabs below it.
+- **Center:** the scene, with the timeline under it.
+- **Right:** the chat.
+
+Each panel scrolls inside itself, and you can rearrange the areas with `screen` (below).
+
 | Panel | What it shows |
 |---|---|
 | **Summary** | Elapsed time; steps done, skipped and failed out of the total; retries; time spent planning and in motion; drift replans; pauses. When a model took part, it adds model calls and tokens, tool calls, and the number of plans. |
@@ -83,6 +92,8 @@ The settings are plain data. You can set them in Python or keep them in a JSON f
 | `scene_url` | The page shown in the Scene panel. |
 | `extra_css`, `extra_js` | Files inlined into the page after the built-in style and script. A replay stays a single file. Relative paths are resolved against the JSON file's folder. |
 | `poll_ms` | How often a live page asks the server for new events. |
+| `layout` | `"screen"` (default) fits everything on one screen and each panel scrolls inside. Below 1000 px wide, the panels stack. `"page"` stacks the panels in a scrolling page. |
+| `screen` | Where each panel goes on one screen, by area: `top`, `left`, `center`, `right`. An inner list is a group of tabs. The default is `{"top": ["summary"], "left": ["plan", ["details", "events"]], "center": ["scene", "timeline"], "right": ["chat"]}`. Panels you don't place join the left tabs. Without a scene, the tabs move to the center. |
 
 ### Your own panels, badges and formats: `window.LongTamp`
 
