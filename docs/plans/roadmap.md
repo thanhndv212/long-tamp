@@ -145,7 +145,7 @@ within its limits with an escalation report.
 - [#23](https://github.com/thanhndv212/long-tamp/issues/23) Optional PDDLStream adapter
   (`long-tamp[pddlstream]`), also an independent cross-check (moved out of M6)
 - [#90](https://github.com/thanhndv212/long-tamp/issues/90) Chat panel in the web mission
-  viewer, best done with #24 (moved out of M6)
+  viewer: done, `long_tamp.viewer.ChatBridge`
 - [#98](https://github.com/thanhndv212/long-tamp/issues/98) One live Claude call through the
   gateway (needs API credit; follow-up of #86)
 - [#24](https://github.com/thanhndv212/long-tamp/issues/24) HTML mission viewer (replay/live) on the event stream: done, `long_tamp.viewer`

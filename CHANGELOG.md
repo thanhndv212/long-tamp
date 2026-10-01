@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Customizable: `ViewerConfig` (panels, colors, theme, metric labels, scene URL, JSON
     file) and `window.LongTamp` in your own scripts (panels, badges, metric formats, event
     hooks). See `docs/usage/viewer.md`.
+- Chat panel in the web mission viewer (#90). `ChatBridge` drives the operator chat's
+  `ChatSession` from the page (`POST`/`GET /api/chat`). It runs one turn at a time and shares
+  the session with the terminal. Tool calls land in the event list, and a plan made in the
+  chat replaces the plan tree. In the screw assembly, `--chat --web-port` puts the chat in
+  the page, next to the Viser scene.
 - Events: `plan` (opt-in, `plan_event(plan)`, carrying the IR document) and `pause` (from the
   executor, when an `ExecutionControl` holds it at a step boundary).
 

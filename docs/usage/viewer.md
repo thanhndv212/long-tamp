@@ -32,6 +32,7 @@ python task_screw_assembly.py --backend mujoco --web-port 8090
 | **Plan** | The plan tree: sequences (→), fallbacks (?), retries (↻), parallel groups (⇉), conditions (◇) and steps, each with its `capability(parameters)` and state. Badges show the attempt (k/N), *skipped: completed_this_run* when the step's effect already held, the motion time, *moving*, the number of drift replans, and ⏸ while paused there. Branches fold, and the running node scrolls into view. |
 | **Details** | The selected node: its call, state, attempts, why it was skipped, planning and motion time, start time and duration, failure messages, and all of its events. |
 | **Events** | The raw stream up to the cursor. You can filter it by text, show only failures, or toggle each role; `ready` and `precondition` are hidden by default. Click an event to move the cursor there. |
+| **Chat** | On a live page with a chat session: the operator chat with the mission model (see [AI models](ai-models.md)). It shows your messages, each tool call (accepted calls in green, rejected ones in red, with the reason) and the model's answers. Turns typed in the terminal show up here too. |
 | **Scene** | Another page embedded next to the rest, normally the Viser server the mission plays on (`scene_url`). |
 
 Everything is computed from the events up to the cursor. Scrubbing back shows the mission as
@@ -128,6 +129,30 @@ Your own events show up too. Anything a sink writes, such as a `role` the viewer
 know (for example `make_event("vision", "detection", ...)`), lands in the event list with
 its own role toggle. Your panels can read those events.
 
+### The chat panel
+
+The operator chat (`--chat`) also works from the viewer. Run it with `--web-port`:
+
+```bash
+python task_screw_assembly.py --chat --goal-model openai:my-model --web-port 8090
+```
+
+The terminal and the page share one session, and one turn runs at a time, whoever sends
+it. Everything the model does goes through the same gated tools as in the terminal. Tool
+calls appear in the event list (role `tool`). When the chat makes a new plan, the plan tree
+switches to it through a `plan` event. When the chat runs the plan, the mission's events and
+the Viser scene follow the run. After stdin closes, the chat goes on in the page until you
+send `quit` there or press Ctrl-C.
+
+In your own application, wrap any `ChatSession` and attach it to the server:
+
+```python
+from long_tamp.viewer import ChatBridge
+
+bridge = ChatBridge(session).attach(server)  # POST/GET /api/chat
+bridge.turn("plan part 2 first")             # a terminal turn, shown on the page too
+```
+
 ### The live server
 
 `ViewerServer` can be embedded in your own application:
@@ -144,7 +169,8 @@ server.route("GET", "/api/cell", lambda body, query: {"door": "closed"})
 ```
 
 Its routes are JSON: `GET /api/events?since=N`, `POST /api/control` (`pause`, `resume`,
-`stop`, only when a control is given), and whatever you add with `route(method, path,
-handler)`. The server binds to `127.0.0.1` by default because the control route moves a
+`stop`, only when a control is given), `POST /api/chat` and `GET /api/chat?since=N` (with
+a `ChatBridge`), and whatever you add with `route(method, path,
+handler)`. The server binds to `127.0.0.1` by default because the control and chat routes move a
 robot. Pass `host="0.0.0.0"` only on a network you trust: the server has no
 authentication.

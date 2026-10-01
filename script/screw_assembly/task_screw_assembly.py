@@ -1321,7 +1321,8 @@ def main() -> int:
         action="store_true",
         help="talk to a model that plans and runs missions through checked tools "
         "(set the goal, add constraints, plan, run, explain a failure); reads "
-        "operator messages from stdin (#89)",
+        "operator messages from stdin (#89), and from the web viewer's chat panel "
+        "with --web-port (#90)",
     )
     ap.add_argument(
         "--supervise",
