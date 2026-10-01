@@ -41,7 +41,7 @@ jobs:
   nightly-grasp-release:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -53,6 +53,12 @@ jobs:
         run: >-
           timeout --kill-after=30s 10m python -m pytest
           tests/test_grasp_release_screw.py -m slow_planning
+          --timeout=540 --timeout-method=thread
+      # The session the BehaviorTree.CPP host calls, on the same cell (#58).
+      - name: BT session path on the screw-assembly cell
+        run: >-
+          timeout --kill-after=30s 10m python -m pytest
+          tests/test_screw_bt_session.py -m slow_planning
           --timeout=540 --timeout-method=thread
 
   nightly-mission:
