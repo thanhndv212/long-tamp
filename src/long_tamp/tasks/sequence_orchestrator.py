@@ -227,24 +227,29 @@ def run_sequence(
                     next_gripper,
                     next_handle,
                 )
-            q_hint = seq_planner.find_feasible_phase_target(
-                phase_n=(gripper, handle),
-                phase_n1=(next_gripper, next_handle),
-                q_current=q_current,
-                q_scene_init=q_scene_init,
-                frozen_arms_n=(per_phase_frozen_arms or {}).get(phase_idx, []),
-                frozen_arms_n1=(per_phase_frozen_arms or {}).get(phase_idx + 1, []),
-                probe_timeout=lookahead_probe_timeout,
-                max_candidates=lookahead_max_candidates,
-                verbose=verbose,
-                also_reachable=[
-                    (
-                        grasp_sequence[j],
-                        (per_phase_frozen_arms or {}).get(j, []),
-                    )
-                    for j in lookahead_also_protect.get(phase_idx, ())
-                ],
-            )
+            from long_tamp.execution import activity
+
+            try:
+                q_hint = seq_planner.find_feasible_phase_target(
+                    phase_n=(gripper, handle),
+                    phase_n1=(next_gripper, next_handle),
+                    q_current=q_current,
+                    q_scene_init=q_scene_init,
+                    frozen_arms_n=(per_phase_frozen_arms or {}).get(phase_idx, []),
+                    frozen_arms_n1=(per_phase_frozen_arms or {}).get(phase_idx + 1, []),
+                    probe_timeout=lookahead_probe_timeout,
+                    max_candidates=lookahead_max_candidates,
+                    verbose=verbose,
+                    also_reachable=[
+                        (
+                            grasp_sequence[j],
+                            (per_phase_frozen_arms or {}).get(j, []),
+                        )
+                        for j in lookahead_also_protect.get(phase_idx, ())
+                    ],
+                )
+            except activity.SearchSkipped:
+                q_hint = None  # skipped by the operator: plan unhinted (#108)
             if q_hint is None and verbose:
                 logger.warning(
                     "[Orchestrator] Phase %d: lookahead found no candidate "

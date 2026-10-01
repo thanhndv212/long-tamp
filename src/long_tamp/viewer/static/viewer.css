@@ -81,7 +81,11 @@ button:hover { border-color: var(--accent); }
   z-index: 2;
 }
 #top h1 { font-size: 16px; margin: 0; }
-#controls { margin-left: auto; display: flex; gap: 6px; }
+#step-controls { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+#controls { display: flex; gap: 6px; }
+.step-buttons { display: inline-flex; gap: 6px; }
+.badge.activity { color: var(--st-running); border-color: var(--st-running); white-space: normal; }
+button.danger { color: var(--st-failure); border-color: var(--st-failure); }
 
 #panels {
   display: grid;
