@@ -1,6 +1,6 @@
 # 0006. AI model integration: one gateway, typed roles, gated tools
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-01
 
 ## Context
