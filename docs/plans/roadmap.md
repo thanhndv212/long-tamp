@@ -104,9 +104,11 @@ injected drift triggers a replan and the mission completes.
 
 ## M5 — Multi-arm partial-order execution
 
+**Released as 0.6.0 on 2026-10-01.**
+
 [Milestone 5](https://github.com/thanhndv212/long-tamp/milestone/5)
 
-- [ ] [#21](https://github.com/thanhndv212/long-tamp/issues/21) Partial-order plan skeletons (precedence constraints); concurrent arm execution
+- [x] [#21](https://github.com/thanhndv212/long-tamp/issues/21) Partial-order plan skeletons (precedence constraints); concurrent arm execution
       where the domain allows; BehaviorTree.CPP export lowers to `Parallel` + sync
 
 **Exit test:** the parallel mission beats the sequential baseline's wall-clock time.

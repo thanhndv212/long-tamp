@@ -8,8 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+## [0.6.0] - 2026-10-01
 
+Milestone M5: multi-arm partial-order execution. Plans become partial orders:
+`parallelize` groups steps with no ordering between them (by the resources capabilities
+declare and their literals) into `parallel` lanes, which BehaviorTree.CPP gets as
+`Parallel`. The executor plans a group's lanes, then runs their motions together,
+merged joint by joint and collision-checked in HPP, or one after another when they can't
+be merged. On identical plans, concurrent execution beats the sequential one on
+wall-clock for every seed tested (5/5, 5.8% of motion time saved on the two-part screw
+assembly). The BT session path is also checked on the real screw cell, in Python
+nightly and through the C++ host.
+### Added
 - The BehaviorTree.CPP session path on the screw-assembly cell (#58).
   - `host.create_screw_session` builds a short seeded plan: pick the driver, home it while
     the left arm grasps part 1 (a `parallel` node), rack it
@@ -19,9 +29,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The opt-in `taskplan_bt_screw_cell` CTest runs the compiled tree in
     `agimus_taskplan_bt`. It is the first real-scene run of BT.CPP's `Parallel` lowering,
     and it passes (131 s).
-
-### Added
-
 - Partial-order plans (#21, ADR-0005), `long_tamp.tasks.task_planning.partial_order`.
   - A `parallel` node in the TaskPlan IR: lanes of steps with no ordering constraint between
     them. At load time, no step of a lane may depend on another lane's.
@@ -612,7 +619,8 @@ First public release, on PyPI as `long-tamp`.
   in ~18s as the *second* phase of a multi-grasp sequence but failed 6/6 draws when built as
   the *only* phase of a single-gripper session. Not root-caused.
 
-[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/thanhndv212/long-tamp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/thanhndv212/long-tamp/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/thanhndv212/long-tamp/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/thanhndv212/long-tamp/compare/v0.2.0...v0.3.0
