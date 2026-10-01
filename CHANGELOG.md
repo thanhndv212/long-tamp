@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Typed model roles (#87, ADR-0006), `long_tamp.ai.roles`: a model proposes, a deterministic
+  checker accepts or explains, the explanation goes back to the model, for bounded rounds.
+  A fallback that needs no model covers API errors, refusals, instructions it can't
+  express, and rounds run out.
+  - `refine(propose, check, max_rounds, fallback)` runs that loop; `ModelRole` makes a
+    proposer from any gateway client. The goal writer is now one such role.
+  - Grounder (`language.ground_instruction`): which scene objects an instruction refers to,
+    checked against the cell. Its fallback matches names, and its result is a note for the
+    goal writer.
+  - Plan reviewer (`task_planning.review.review_constraints`): what an instruction rules out
+    ("don't use clamp 1"), as blocked bindings for the task planner, never steps. Each
+    constraint must name a real capability, parameter and object, and the planner must
+    still reach the goal with it. The fallback is no constraint.
+  - `task_screw_assembly.py --instruction` runs grounder, goal writer and plan reviewer on
+    one client. The constraints apply to planning and to every `--replan` round.
+  - An unusable answer (not JSON, cut off, malformed) costs a round, with feedback, not the
+    role. Constraints are read in the shapes models write, since not every gateway enforces
+    the schema.
 - One gateway to AI models (#86, ADR-0006), `long_tamp.ai`.
   - Any model behind an Anthropic- or OpenAI-compatible API, named `<api>:<model>`
     (`anthropic:claude-opus-5-5`, `openai:<model>`). `make_client(model)` returns a client

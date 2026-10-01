@@ -100,6 +100,22 @@ Every call, successful or not, produces a `CallRecord`: role, model, seconds, to
  "metrics": {"model": "openai:cx/gpt-6.1-sol", "input_tokens": 620, "output_tokens": 386, "seconds": 23.8}}
 ```
 
+## Roles
+
+Models act through roles (`long_tamp.ai.roles`). In each role, the model proposes and long-tamp
+checks:
+
+| Role | Writes | Checked by | Fallback |
+|---|---|---|---|
+| grounder | the objects an instruction refers to | known objects | name matching |
+| goal writer | the goal (final-state literals) | vocabulary, then the task planner reaches it | none: the mission stops |
+| plan reviewer | constraints: capability + parameters to avoid | known names, then the planner still reaches the goal | no constraint |
+
+A rejected proposal goes back to the model with the checker's reasons, for a bounded number
+of rounds. No role writes plan steps. A new role is a `ModelRole` (system prompt, JSON
+schema, how a request becomes a prompt, how an answer becomes a value), a checker and a
+fallback, run with `refine`.
+
 ## The screw-assembly mission
 
 ```bash
@@ -108,6 +124,8 @@ python3 task_screw_assembly.py --backend mujoco \
   --instruction "assemble part 1, leave part 2 alone, and rack the driver when done"
 ```
 
-The model writes the goal. long_tamp checks its syntax, predicates and objects, then whether
-the task planner can reach it from the observed state. Rejections go back to the model, up to
-three times. The planner then plans the goal, and the mission executes it.
+The grounder finds what the instruction refers to and the goal writer writes the goal.
+long_tamp checks its syntax, predicates and objects, then whether the task planner can reach
+it from the observed state. The plan reviewer turns what the instruction rules out into
+constraints. The planner plans the goal under those constraints, and the mission executes the
+plan.
