@@ -202,3 +202,75 @@ def test_an_api_error_fails_with_a_clear_message():
     )
     with pytest.raises(GoalError, match="Anthropic API error: Your credit balance"):
         goal_from_instruction("...", ClaudeGoalWriter(client=client), _vocabulary())
+
+
+# -- OpenAIGoalWriter, against a fake client --------------------------------
+
+
+class FakeOpenAI:
+    """Stands in for openai.OpenAI(): records requests, replays answers;
+    an exception in the answers is raised instead."""
+
+    def __init__(self, *responses):
+        self.responses, self.requests = list(responses), []
+        completions = SimpleNamespace(create=self._create)
+        self.chat = SimpleNamespace(completions=completions)
+
+    def _create(self, **kwargs):
+        self.requests.append(kwargs)
+        answer = self.responses.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+
+def _completion(goal, unsupported="", finish_reason="stop", refusal=None):
+    text = json.dumps({"goal": goal, "unsupported": unsupported})
+    message = SimpleNamespace(content=text, refusal=refusal)
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=message, finish_reason=finish_reason)]
+    )
+
+
+def test_an_openai_compatible_model_writes_a_goal():
+    from long_tamp.tasks.task_planning.language import OpenAIGoalWriter
+
+    client = FakeOpenAI(_completion(["screwed(part2, part2/hole)"]))
+    writer = OpenAIGoalWriter(model="some-model", client=client)
+    goal = goal_from_instruction("screw part 2", writer, _vocabulary())
+    assert goal == ["screwed(part2, part2/hole)"]
+    (request,) = client.requests
+    assert request["model"] == "some-model"
+    assert request["response_format"]["type"] == "json_schema"
+    assert request["messages"][0]["role"] == "system"
+    assert "Instruction: screw part 2" in request["messages"][1]["content"]
+
+
+def test_an_endpoint_without_json_schema_falls_back_to_json_mode():
+    from long_tamp.tasks.task_planning.language import OpenAIGoalWriter
+
+    class BadRequestError(Exception):  # stands in for the SDK's error class
+        __module__ = "openai._exceptions"
+        status_code = 400
+
+    client = FakeOpenAI(BadRequestError(), _completion(["screwed(part2, part2/hole)"]))
+    writer = OpenAIGoalWriter(model="m", client=client)
+    assert goal_from_instruction("screw part 2", writer, _vocabulary())
+    assert client.requests[1]["response_format"] == {"type": "json_object"}
+    assert '"goal"' in client.requests[1]["messages"][0]["content"]
+
+
+def test_an_openai_refusal_or_bad_json_is_an_error():
+    from long_tamp.tasks.task_planning.language import OpenAIGoalWriter
+
+    client = FakeOpenAI(_completion([], refusal="no"))
+    with pytest.raises(GoalError, match="declined"):
+        goal_from_instruction(
+            "...", OpenAIGoalWriter("m", client=client), _vocabulary()
+        )
+    broken = _completion([])
+    broken.choices[0].message.content = "not json"
+    with pytest.raises(GoalError, match="not JSON"):
+        goal_from_instruction(
+            "...", OpenAIGoalWriter("m", client=FakeOpenAI(broken)), _vocabulary()
+        )

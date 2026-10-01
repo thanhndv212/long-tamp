@@ -654,16 +654,20 @@ def goal_from_text(
     state: list[str],
     clamps: list[tuple[str, str]] | None = None,
     model: str | None = None,
+    api: str = "anthropic",
 ) -> list[str]:
     """The goal for an operator's ``instruction`` (``--instruction``, #22).
 
-    Claude writes it from the domain's vocabulary and the current ``state``.
+    A model writes it from the domain's vocabulary and the current ``state``:
+    Claude (``api="anthropic"``), or ``model`` behind an OpenAI-compatible
+    endpoint (``api="openai"``; ``OPENAI_BASE_URL``, ``OPENAI_API_KEY``).
     It is checked (syntax, predicates, objects), then the task planner must
     reach it from ``state``; what fails goes back to the model, up to three
     times. The model never writes the plan.
     """
     from long_tamp.tasks.task_planning.language import (
         ClaudeGoalWriter,
+        OpenAIGoalWriter,
         goal_from_instruction,
     )
     from long_tamp.tasks.task_planning.skeleton import default_planner
@@ -677,7 +681,12 @@ def goal_from_text(
             return str(error).splitlines()[0][:300] or type(error).__name__
         return None
 
-    writer = ClaudeGoalWriter(model=model) if model else ClaudeGoalWriter()
+    if api == "openai":
+        if not model:
+            raise SystemExit("--goal-api openai needs --goal-model")
+        writer = OpenAIGoalWriter(model=model)
+    else:
+        writer = ClaudeGoalWriter(model=model) if model else ClaudeGoalWriter()
     t0 = time.time()
     goal = goal_from_instruction(
         instruction, writer, goal_vocabulary(n_parts, state, clamps), reachable
@@ -1036,8 +1045,16 @@ def main() -> int:
     ap.add_argument(
         "--goal-model",
         metavar="MODEL",
-        help="with --instruction: the Claude model that writes the goal "
-        "(default: claude-opus-5-5)",
+        help="with --instruction: the model that writes the goal (default for "
+        "--goal-api anthropic: claude-opus-5-5; required for openai)",
+    )
+    ap.add_argument(
+        "--goal-api",
+        choices=("anthropic", "openai"),
+        default="anthropic",
+        help="with --instruction: the API the goal model is reached through: "
+        "anthropic (the default) or an OpenAI-compatible endpoint "
+        "(OPENAI_BASE_URL, OPENAI_API_KEY)",
     )
     ap.add_argument(
         "--replan",
@@ -1181,6 +1198,7 @@ def main() -> int:
                 world_atoms(planner, recorded),
                 clamps=clamp_seats(task.task_config.VALID_PAIRS),
                 model=args.goal_model,
+                api=args.goal_api,
             )
         if args.replan:
             result = run_with_repair(

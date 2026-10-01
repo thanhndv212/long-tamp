@@ -23,9 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ClaudeGoalWriter` writes goals with Claude (`claude-opus-5-5` by default; structured
     JSON output, server-side fallback on a refusal). It needs the new `language` extra
     (`pip install long-tamp[language]`) and Anthropic API credentials.
+  - `OpenAIGoalWriter` writes goals with any model behind an OpenAI-compatible endpoint
+    (`OPENAI_BASE_URL`, `OPENAI_API_KEY`; the `language-openai` extra). It uses a JSON
+    schema, or plain JSON mode where the endpoint lacks one.
   - `task_screw_assembly.py --instruction "assemble part 2"` plans the written goal with the
     task planner (implies `--planner up`). `screw_domain.goal_vocabulary` describes the
     domain, and `pddl_problem(goal=...)` takes a goal other than the full mission's.
+    `--goal-api openai --goal-model M` picks an OpenAI-compatible model.
 
 ## [0.6.0] - 2026-10-01
 

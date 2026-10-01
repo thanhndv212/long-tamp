@@ -19,7 +19,8 @@ whether the task planner finds a plan to it from the current state. What
 fails goes back to the model as feedback, for up to ``max_rounds`` attempts.
 
 ``ClaudeGoalWriter`` writes goals with Claude (``pip install long-tamp[language]``);
-any object with ``write_goal`` works.
+``OpenAIGoalWriter`` with any model behind an OpenAI-compatible endpoint
+(``long-tamp[language-openai]``). Any object with ``write_goal`` works.
 """
 
 from __future__ import annotations
@@ -277,3 +278,102 @@ class ClaudeGoalWriter:
                 f"the instruction can't be expressed: {answer['unsupported']}"
             )
         return [str(literal) for literal in answer["goal"]]
+
+
+# -- OpenAI-compatible endpoints ---------------------------------------------
+
+
+@dataclass
+class OpenAIGoalWriter:
+    """Writes goals with a model behind an OpenAI-compatible endpoint
+    (``/chat/completions``): OpenAI, Azure OpenAI, vLLM, Ollama, gateways.
+
+    Needs ``pip install long-tamp[language-openai]``. The endpoint and key come
+    from ``OPENAI_BASE_URL`` and ``OPENAI_API_KEY`` (or ``base_url`` /
+    ``api_key``); ``model`` is required. The answer is requested as JSON
+    (a JSON schema, or plain JSON mode where the endpoint doesn't take one).
+    Same prompt and checks as ``ClaudeGoalWriter``.
+    """
+
+    model: str
+    base_url: str | None = None
+    api_key: str | None = None
+    max_tokens: int = 16000
+    client: Any = None
+    transcript: list[dict[str, Any]] = field(default_factory=list)
+    _json_schema: bool = True
+
+    def _client(self) -> Any:
+        if self.client is None:
+            try:
+                import openai
+            except ImportError as error:  # pragma: no cover - depends on the extra
+                raise ImportError(
+                    "OpenAIGoalWriter needs the OpenAI SDK: "
+                    "pip install long-tamp[language-openai]"
+                ) from error
+            self.client = openai.OpenAI(base_url=self.base_url, api_key=self.api_key)
+        return self.client
+
+    def _request(self, content: str) -> Any:
+        if self._json_schema:
+            response_format = {
+                "type": "json_schema",
+                "json_schema": {"name": "goal", "schema": _SCHEMA, "strict": True},
+            }
+        else:
+            response_format = {"type": "json_object"}
+        system = _SYSTEM
+        if not self._json_schema:
+            system += (
+                '\nAnswer with a JSON object: {"goal": [literal strings], '
+                '"unsupported": "why, or empty"}.'
+            )
+        return self._client().chat.completions.create(
+            model=self.model,
+            max_completion_tokens=self.max_tokens,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": content},
+            ],
+            response_format=response_format,
+        )
+
+    def write_goal(
+        self, instruction: str, vocabulary: Vocabulary, feedback: Sequence[str]
+    ) -> list[str]:
+        content = ClaudeGoalWriter.prompt(instruction, vocabulary, feedback)
+        try:
+            try:
+                response = self._request(content)
+            except Exception as error:
+                # Endpoints that don't take a JSON schema: plain JSON mode.
+                status = getattr(error, "status_code", None)
+                if not (self._json_schema and status in (400, 422)):
+                    raise
+                self._json_schema = False
+                response = self._request(content)
+        except Exception as error:
+            if type(error).__module__.startswith("openai"):
+                message = getattr(error, "message", None) or str(error)
+                raise GoalError(f"API error: {message}") from error
+            raise
+        choice = response.choices[0]
+        if choice.finish_reason == "length":
+            raise GoalError("the model's answer was cut off (max_tokens)")
+        refusal = getattr(choice.message, "refusal", None)
+        if refusal:
+            raise GoalError(f"the model declined the instruction: {refusal}")
+        text = choice.message.content or ""
+        self.transcript.append({"prompt": content, "response": text})
+        try:
+            answer = json.loads(text)
+        except json.JSONDecodeError as error:
+            raise GoalError(
+                f"the model's answer is not JSON: {text[:200]!r}"
+            ) from error
+        if answer.get("unsupported") and not answer.get("goal"):
+            raise GoalError(
+                f"the instruction can't be expressed: {answer['unsupported']}"
+            )
+        return [str(literal) for literal in answer.get("goal", [])]

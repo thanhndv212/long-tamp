@@ -86,6 +86,10 @@ planning = [
 language = [
     "anthropic>=1.0",
 ]
+# ...or with any model behind an OpenAI-compatible endpoint (OpenAIGoalWriter).
+language-openai = [
+    "openai>=1.0",
+]
 
 # MuJoCo export of a task's scene (long_tamp.sim). trimesh + pycollada convert
 # the COLLADA meshes MuJoCo can't read. Tested with MuJoCo 3.11 and 3.14.
