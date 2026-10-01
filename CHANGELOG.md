@@ -8,6 +8,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-01
+
+Milestone M5: multi-arm partial-order execution. Plans become partial orders:
+`parallelize` groups steps with no ordering between them (by the resources capabilities
+declare and their literals) into `parallel` lanes, which BehaviorTree.CPP gets as
+`Parallel`. The executor plans a group's lanes, then runs their motions together,
+merged joint by joint and collision-checked in HPP, or one after another when they can't
+be merged. On identical plans, concurrent execution beats the sequential one on
+wall-clock for every seed tested (5/5, 5.8% of motion time saved on the two-part screw
+assembly). The BT session path is also checked on the real screw cell, in Python
+nightly and through the C++ host.
+### Added
+- The BehaviorTree.CPP session path on the screw-assembly cell (#58).
+  - `host.create_screw_session` builds a short seeded plan: pick the driver, home it while
+    the left arm grasps part 1 (a `parallel` node), rack it
+    (`script/screw_assembly/screw_bt_session.py`).
+  - `tests/test_screw_bt_session.py` runs it through the session on the real scene, in the
+    nightly. It replaces the TWIN session check, which passed or failed by chance.
+  - The opt-in `taskplan_bt_screw_cell` CTest runs the compiled tree in
+    `agimus_taskplan_bt`. It is the first real-scene run of BT.CPP's `Parallel` lowering,
+    and it passes (131 s).
+- Partial-order plans (#21, ADR-0005), `long_tamp.tasks.task_planning.partial_order`.
+  - A `parallel` node in the TaskPlan IR: lanes of steps with no ordering constraint between
+    them. At load time, no step of a lane may depend on another lane's.
+  - `parallelize(document, registry)` rewrites runs of consecutive independent steps into
+    `parallel` nodes. Steps depend on each other when they share a resource (capabilities'
+    `resources` name the parameters a step holds; `ur10_left` and `ur10_left/gripper` are
+    the same arm), when their literals interfere, or when a step declares neither.
+  - The runner plans lanes one after another and reports each group to executors
+    (`on_group`). The BehaviorTree.CPP compiler (1.2) lowers `parallel` to `Parallel`.
+    Mermaid and DOT diagrams show it.
+  - The screw assembly's capabilities declare their resources: each part's "right arm home"
+    runs alongside the left arm's release.
+- Concurrent arms (#21), `long_tamp.execution.concurrent`. With
+  `PlanExecutor(concurrent=True, validate_config=...)`, a `parallel` group's steps are
+  planned first, then their lanes' motions run together.
+  - `merge_lanes` pairs the lanes' k-th commands into one command whose path takes each
+    configuration entry from the lane that moves it. The lanes were planned one after
+    another, each with the other arms still, so each lane moves only its own entries.
+  - The merge is refused, and the group's motions run one after another in planning order,
+    when a lane has a skill command, when two lanes move the same entry, or when
+    `validate_config` (HPP's collision check) rejects a configuration along the merged
+    motion.
+  - The group's steps commit once all of it has run, with or without plan-ahead.
+    `PlanRun.timing` counts `merged_groups` and `sequential_groups`.
+  - `task_screw_assembly.py --concurrent`: independent steps run in parallel lanes. On the
+    planner-ordered two-part mission, the right arm goes home while the left arm releases
+    the part and grasps the next one. Motion time drops from 132 s to 115 s (seed 1).
+- `script/screw_assembly/concurrency_ab.py`: the #21 exit test on identical plans. It plans a
+  mission once, then runs the same motions sequentially and merged on fresh MuJoCo backends.
+  On the two-part mission, seeds 1-5, concurrent execution saves 6.5-10 s of motion on
+  every seed (5.8% on average), so it wins on wall-clock with planning shared.
+
 ## [0.5.0] - 2026-09-30
 
 Milestone M4: execution in simulation. The planning scene exports to MuJoCo, and a
@@ -566,7 +619,8 @@ First public release, on PyPI as `long-tamp`.
   in ~18s as the *second* phase of a multi-grasp sequence but failed 6/6 draws when built as
   the *only* phase of a single-gripper session. Not root-caused.
 
-[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/thanhndv212/long-tamp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/thanhndv212/long-tamp/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/thanhndv212/long-tamp/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/thanhndv212/long-tamp/compare/v0.2.0...v0.3.0

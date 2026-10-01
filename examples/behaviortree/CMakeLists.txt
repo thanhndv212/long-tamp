@@ -122,6 +122,17 @@ if(BUILD_TESTING)
       # up to 8 retries' worth of budget on the regrasp specifically.
       TIMEOUT 900
       ENVIRONMENT "PYTHONPATH=${PROJECT_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
+
+    # #58: the screw-assembly cell, seeded (script/screw_assembly/
+    # screw_bt_session.py): pick the driver, home it while the left arm
+    # grasps part 1 -- a parallel node, BT.CPP's Parallel -- then rack it.
+    add_test(NAME taskplan_bt_screw_cell
+             COMMAND agimus_taskplan_bt --factory create_screw_session)
+    set_tests_properties(
+      taskplan_bt_screw_cell PROPERTIES
+      PASS_REGULAR_EXPRESSION "Task plan status: SUCCESS"
+      TIMEOUT 600
+      ENVIRONMENT "PYTHONPATH=${PROJECT_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
   endif()
 endif()
 

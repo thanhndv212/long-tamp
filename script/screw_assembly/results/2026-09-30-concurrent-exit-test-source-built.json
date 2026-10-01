@@ -1,0 +1,101 @@
+{
+  "date": "2026-09-30",
+  "validation": "#21 exit test: sequential vs concurrent (--concurrent), two-part planner-ordered mission on MuJoCo at real-time speed (--sim-speed 1), seeds 1-5, no plan-ahead",
+  "environment": "hpp-agimus-arm64 (source-built HPP), MuJoCo 3.11, 2 missions at a time",
+  "command": "task_screw_assembly.py --seed N --no-viewer --backend mujoco --planner up --sim-speed 1 [--concurrent]",
+  "summary": {
+    "completed": "10/10",
+    "merged_groups": "15/15 (none refused by the collision check)",
+    "execution_median_s": {
+      "sequential": 135.9,
+      "concurrent": 121.9
+    },
+    "wall_median_s": {
+      "sequential": 446.0,
+      "concurrent": 472.9
+    }
+  },
+  "conclusion": "Concurrency cuts motion time (median -10%, better on 3 of 5 seeds) but the wall-clock exit criterion is not met: planning dominates wall-clock and varies between runs (same seed, different plans; a 921 s planning outlier on seed 2 concurrent), and paths differ between runs by more than merging saves. A fair comparison needs identical plans executed both ways.",
+  "runs": {
+    "1": {
+      "conc": {
+        "success": true,
+        "wall_s": 327.84,
+        "execution_s": 121.877,
+        "merged_groups": 3,
+        "sequential_groups": 0
+      },
+      "seq": {
+        "success": true,
+        "wall_s": 302.78,
+        "execution_s": 98.3,
+        "merged_groups": 0,
+        "sequential_groups": 0
+      }
+    },
+    "2": {
+      "conc": {
+        "success": true,
+        "wall_s": 920.81,
+        "execution_s": 117.488,
+        "merged_groups": 3,
+        "sequential_groups": 0
+      },
+      "seq": {
+        "success": true,
+        "wall_s": 445.97,
+        "execution_s": 150.672,
+        "merged_groups": 0,
+        "sequential_groups": 0
+      }
+    },
+    "3": {
+      "conc": {
+        "success": true,
+        "wall_s": 500.33,
+        "execution_s": 137.828,
+        "merged_groups": 3,
+        "sequential_groups": 0
+      },
+      "seq": {
+        "success": true,
+        "wall_s": 565.55,
+        "execution_s": 165.191,
+        "merged_groups": 0,
+        "sequential_groups": 0
+      }
+    },
+    "4": {
+      "conc": {
+        "success": true,
+        "wall_s": 472.86,
+        "execution_s": 148.265,
+        "merged_groups": 3,
+        "sequential_groups": 0
+      },
+      "seq": {
+        "success": true,
+        "wall_s": 470.37,
+        "execution_s": 135.938,
+        "merged_groups": 0,
+        "sequential_groups": 0
+      }
+    },
+    "5": {
+      "conc": {
+        "success": true,
+        "wall_s": 423.17,
+        "execution_s": 116.097,
+        "merged_groups": 3,
+        "sequential_groups": 0
+      },
+      "seq": {
+        "success": true,
+        "wall_s": 367.78,
+        "execution_s": 130.176,
+        "merged_groups": 0,
+        "sequential_groups": 0
+      }
+    }
+  }
+}

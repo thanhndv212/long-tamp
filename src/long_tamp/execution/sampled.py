@@ -43,6 +43,13 @@ class SampledPath:
     def length(self) -> float:
         return self._length
 
+    @property
+    def configurations(self) -> np.ndarray:
+        """The samples, one configuration per row (read-only)."""
+        view = self._q.view()
+        view.flags.writeable = False
+        return view
+
     def eval(self, t: float) -> tuple[np.ndarray, bool]:
         t = min(max(float(t), 0.0), self._length)
         if self._length <= 0.0:

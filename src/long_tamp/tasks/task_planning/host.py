@@ -218,3 +218,22 @@ def create_twin_regrasp_session(options_json: str = "{}") -> HostSession:
     from twin_bt_session import build_twin_regrasp_session
 
     return build_twin_regrasp_session(options_json)
+
+
+def create_screw_session(options_json: str = "{}") -> HostSession:
+    """Real-mission factory: the screw-assembly cell (#58).
+
+    A short seeded plan (pick the driver; home it while the left arm grasps
+    part 1, in a ``parallel`` node; rack it) built by
+    ``script/screw_assembly/screw_bt_session.py``, imported lazily for the
+    same reason as ``create_twin_session``. Options: ``seed``.
+    """
+    import sys
+    from pathlib import Path
+
+    screw_dir = Path(__file__).resolve().parents[4] / "script" / "screw_assembly"
+    if str(screw_dir) not in sys.path:
+        sys.path.insert(0, str(screw_dir))
+    from screw_bt_session import build_screw_session
+
+    return build_screw_session(options_json)

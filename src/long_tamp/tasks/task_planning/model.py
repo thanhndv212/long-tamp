@@ -24,6 +24,7 @@ from .predicates import (
 _ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$")
 _SUPPORTED_NODE_TYPES = {
     "sequence",
+    "parallel",
     "fallback",
     "retry",
     "condition",
@@ -110,6 +111,44 @@ class TaskPlan:
         if not isinstance(value, str) or not _ID_PATTERN.fullmatch(value):
             raise PlanValidationError(f"invalid {field}")
 
+    @staticmethod
+    def _validate_lanes(children: list[Any]) -> None:
+        """A parallel node's lanes: steps, or sequences of steps."""
+        if len(children) < 2:
+            raise PlanValidationError("parallel requires at least two lanes")
+        for lane in children:
+            if not isinstance(lane, dict):
+                raise PlanValidationError("plan node must be an object")
+            kind = lane.get("type")
+            inner = lane.get("children") if kind == "sequence" else [lane]
+            if not isinstance(inner, list) or not all(
+                isinstance(step, dict)
+                and step.get("type") in ("transaction", "operation")
+                for step in inner
+            ):
+                raise PlanValidationError(
+                    "a parallel lane is a step or a sequence of steps"
+                )
+
+    @staticmethod
+    def _check_independent(node: dict[str, Any], registry: CapabilityRegistry) -> None:
+        """No step of a lane may depend on a step of another lane."""
+        from .partial_order import depends, footprint, lane_steps
+
+        prints = [
+            [(s["id"], footprint(s, registry)) for s in lane_steps(lane)]
+            for lane in node["children"]
+        ]
+        for i, lane in enumerate(prints):
+            for other in prints[i + 1 :]:
+                for a_id, a in lane:
+                    for b_id, b in other:
+                        if depends(a, b) or depends(b, a):
+                            raise PlanValidationError(
+                                f"parallel {node['id']}: {a_id} and {b_id} "
+                                "are not independent"
+                            )
+
     @classmethod
     def _validate_node(
         cls,
@@ -129,10 +168,12 @@ class TaskPlan:
             raise PlanValidationError(f"duplicate node id: {node_id}")
         seen.add(node_id)
 
-        if node_type in {"sequence", "fallback", "transaction"}:
+        if node_type in {"sequence", "parallel", "fallback", "transaction"}:
             children = node.get("children")
             if not isinstance(children, list):
                 raise PlanValidationError(f"{node_type} requires children")
+            if node_type == "parallel":
+                cls._validate_lanes(children)
             if node_type == "transaction":
                 if not isinstance(node.get("restart_state"), list):
                     raise PlanValidationError("transaction requires restart_state")
@@ -150,6 +191,8 @@ class TaskPlan:
                         "transaction capability must be restartable"
                     )
                 effective_attempts[node_id] = effective_attempts[child["id"]]
+            if node_type == "parallel":
+                cls._check_independent(node, registry)
             return
 
         if node_type == "retry":
@@ -279,7 +322,9 @@ def _simulate(
         return successes | done, failures
     if node_type == "retry":
         return _simulate(node["child"], registry, states)
-    if node_type == "sequence":
+    if node_type in ("sequence", "parallel"):
+        # Lanes are independent (checked at load), so any interleaving
+        # reaches the same states as running them in order.
         current, failures = set(states), set()
         for child in node["children"]:
             if not current:

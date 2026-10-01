@@ -13,8 +13,8 @@ from .model import TaskPlan
 
 # 1.1: every element emitted for an IR node carries ``_ir_id`` and
 # ``_ir_role`` (see events.py); BehaviorTree.CPP keeps them as non-port
-# attributes.
-COMPILER_VERSION = "1.1"
+# attributes. 1.2: ``parallel`` nodes lower to ``Parallel``.
+COMPILER_VERSION = "1.2"
 
 
 @dataclass(frozen=True)
@@ -130,6 +130,23 @@ def _compile_node(
         _compile_node(plan, node["child"], element, source_map, node_path)
         return
 
+    if node_type == "parallel":
+        # Every lane must succeed; the first failure fails the node (and
+        # halts the other lanes). Planning stays sequential: a host's
+        # ExecuteTaskStep completes within its tick.
+        element = ET.SubElement(
+            parent,
+            "Parallel",
+            stamp(
+                "parallel",
+                name=label,
+                success_count=str(len(node["children"])),
+                failure_count="1",
+            ),
+        )
+        for child in node["children"]:
+            _compile_node(plan, child, element, source_map, node_path)
+        return
     tag = "Sequence" if node_type == "sequence" else "Fallback"
     element = ET.SubElement(parent, tag, stamp(node_type, name=label))
     for child in node["children"]:

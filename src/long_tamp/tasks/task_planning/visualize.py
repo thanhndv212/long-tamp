@@ -51,6 +51,8 @@ def _lines(
     attempts = plan.effective_attempts.get(node["id"], 1)
     if kind == "sequence":
         return kind, [f"→ {label}"]
+    if kind == "parallel":
+        return kind, [f"⇉ {label}"]
     if kind == "fallback":
         return kind, [f"? {label}"]
     if kind == "retry":
@@ -81,6 +83,7 @@ def to_mermaid(plan: TaskPlan, registry: CapabilityRegistry | None = None) -> st
     """A Mermaid ``flowchart TD`` of the plan (top-down, one box per node)."""
     shapes = {
         "sequence": '["{}"]',
+        "parallel": '[["{}"]]',
         "fallback": '{{{{"{}"}}}}',
         "retry": '(["{}"])',
         "condition": '{{"{}"}}',
@@ -106,6 +109,7 @@ def to_dot(plan: TaskPlan, registry: CapabilityRegistry | None = None) -> str:
     """A Graphviz ``digraph`` of the plan, with the same shapes as Mermaid."""
     shapes = {
         "sequence": "box",
+        "parallel": "box, peripheries=2",
         "fallback": "hexagon",
         "retry": "box, style=rounded",
         "condition": "diamond",
