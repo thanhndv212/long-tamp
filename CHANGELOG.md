@@ -20,6 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The operator chat (#89, ADR-0006), `long_tamp.ai.chat`. A model talks with the operator and
+  acts only through gated tools.
+  - Each answer is one JSON object (`say`, `actions`, `done`). Tools run in order, and their
+    results go back to the model, for up to `max_steps` model calls per message.
+  - A tool refuses its arguments with a reason (`ToolRejected`), which goes back to the
+    model. This works on every endpoint the gateway reaches, since it needs no
+    provider-specific function calling.
+  - `task_screw_assembly.py --chat` reads operator messages from stdin. The tools are
+    `state`, `set_goal`, `add_constraint` / `remove_constraint`, `plan` (optionally reaching
+    some goal literals `first`, e.g. part 2 before part 1; the planner orders the rest),
+    `run`, and `explain_failure`, plus `write_goal`, which hands an instruction to the goal
+    writer role. Each is checked like the Python API, and every call is written to
+    `events.jsonl` as a `tool` event. The chat model is given the domain (predicates,
+    objects, notes) and moves the robot only when the operator asks it to run.
 - The execution supervisor (#88, ADR-0006), `long_tamp.tasks.task_planning.supervisor`. When
   the deterministic repair loop gives up, a model decides at goal level, within limits, and
   never improvises.
