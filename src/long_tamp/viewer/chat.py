@@ -8,7 +8,6 @@
 - ``GET /api/chat?since=N`` the transcript from entry ``N``, and whether a
   turn is running.
 
-<<<<<<< HEAD
 - ``POST /api/action`` ``{"name": name}`` runs an operator action
   (``add_action``): a button on the page that acts without the model, such
   as "Start mission" running the plan the chat built (#104).
@@ -16,10 +15,6 @@
 One turn (or action) runs at a time, whoever sends it: a terminal front end
 calls ``turn()`` on the same bridge, and the page shows its turns too. A
 tool result with a ``plan`` list of step labels also shows as a plan card. The tools'
-=======
-One turn runs at a time, whoever sends it: a terminal front end calls
-``turn()`` on the same bridge, and the page shows its turns too. The tools'
->>>>>>> origin/dev
 calls reach the event stream through the session's ``on_tool``, as in the
 terminal chat, so their results show in the event list and, for a new plan,
 in the plan tree (a ``plan`` event).
@@ -29,17 +24,13 @@ from __future__ import annotations
 
 import threading
 import time
-<<<<<<< HEAD
 from collections.abc import Callable
 from dataclasses import dataclass
-=======
->>>>>>> origin/dev
 from typing import Any
 
 QUIT = ("quit", "exit")
 
 
-<<<<<<< HEAD
 @dataclass
 class Action:
     """An operator action: a page button that runs ``run()`` without the
@@ -52,8 +43,6 @@ class Action:
     enabled: Callable[[], bool]
 
 
-=======
->>>>>>> origin/dev
 class ChatBridge:
     def __init__(self, session: Any) -> None:
         self.session = session
@@ -62,7 +51,6 @@ class ChatBridge:
         self._log_lock = threading.Lock()
         self._log: list[dict[str, Any]] = []
         self._worker: threading.Thread | None = None
-<<<<<<< HEAD
         self.actions: dict[str, Action] = {}
         # A ChatSession reports each message and tool call as it comes: the
         # page shows the turn as it unfolds, not only once it is over.
@@ -81,8 +69,6 @@ class ChatBridge:
                 self._add("model", say)
 
             session.on_tool, session.on_message = on_tool, on_message
-=======
->>>>>>> origin/dev
 
     @property
     def busy(self) -> bool:
@@ -91,7 +77,6 @@ class ChatBridge:
     def attach(self, server: Any) -> ChatBridge:
         server.route("POST", "/api/chat", self._post)
         server.route("GET", "/api/chat", self._get)
-<<<<<<< HEAD
         server.route("POST", "/api/action", self._post_action)
         return self
 
@@ -138,10 +123,6 @@ class ChatBridge:
         self._worker = threading.Thread(target=work, name="chat-action", daemon=True)
         self._worker.start()
 
-=======
-        return self
-
->>>>>>> origin/dev
     def turn(self, text: str, source: str = "terminal") -> Any:
         """Run one operator message to its end (blocks while another runs)."""
         with self._turn_lock:
@@ -203,7 +184,6 @@ class ChatBridge:
         except Exception as error:  # noqa: BLE001 - shown, the chat goes on
             self._add("error", f"{type(error).__name__}: {error}")
             return None
-<<<<<<< HEAD
         if not self._live:
             for call in turn.calls:
                 self._tool(call)
@@ -226,15 +206,6 @@ class ChatBridge:
         self.act(name)
         return {"accepted": True}
 
-=======
-        for call in turn.calls:
-            self._add("tool", call.as_text(), tool=call.tool, ok=call.ok)
-        if turn.error:
-            self._add("error", turn.error)
-        self._add("model", turn.say)
-        return turn
-
->>>>>>> origin/dev
     def _post(self, body: Any, _query: dict[str, list[str]]) -> Any:
         message = (body or {}).get("message") if isinstance(body, dict) else None
         if not isinstance(message, str):
@@ -252,7 +223,6 @@ class ChatBridge:
             "entries": self.transcript(since),
             "busy": self.busy,
             "ended": self.ended.is_set(),
-<<<<<<< HEAD
             "actions": [
                 {"name": a.name, "label": a.label, "enabled": _safe(a.enabled)}
                 for a in self.actions.values()
@@ -265,6 +235,3 @@ def _safe(enabled: Callable[[], bool]) -> bool:
         return bool(enabled())
     except Exception:  # noqa: BLE001 - a broken predicate disables its button
         return False
-=======
-        }
->>>>>>> origin/dev

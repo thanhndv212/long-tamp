@@ -179,10 +179,7 @@ dl.kv dd { margin: 0; word-break: break-word; }
 
 /* chat */
 .chat .log { max-height: 420px; overflow: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
-<<<<<<< HEAD
 .chat .log > * { flex-shrink: 0; }
-=======
->>>>>>> origin/dev
 .chat .msg { padding: 6px 9px; border-radius: 8px; max-width: 92%; white-space: pre-wrap; word-break: break-word; }
 .chat .operator { align-self: flex-end; background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .chat .model { align-self: flex-start; background: color-mix(in srgb, var(--fg) 7%, transparent); }
@@ -194,7 +191,6 @@ dl.kv dd { margin: 0; word-break: break-word; }
 .chat form { display: flex; gap: 6px; }
 .chat form input { flex: 1; min-width: 0; }
 .chat .busy { color: var(--muted); font-size: 12px; min-height: 1.4em; }
-<<<<<<< HEAD
 .chat .plan-card { align-self: stretch; max-width: none; border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .chat .plan-card ol { margin: 6px 0; padding-left: 22px; }
 .chat .card-actions:empty { display: none; }
@@ -242,5 +238,3 @@ body.screen .scene iframe { height: 100%; min-height: 240px; }
   body.screen .chat .log { max-height: 420px; }
   body.screen .scene iframe { height: 420px; }
 }
-=======
->>>>>>> origin/dev

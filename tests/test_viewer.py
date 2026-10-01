@@ -175,14 +175,11 @@ def test_config_from_json_with_custom_panels_and_scripts(tmp_path):
 def test_unknown_config_keys_are_rejected():
     with pytest.raises(ValueError, match="colour"):
         ViewerConfig.from_dict({"colour": "red"})
-<<<<<<< HEAD
     with pytest.raises(ValueError, match="layout"):
         ViewerConfig.from_dict({"layout": "grid"})
     config = ViewerConfig.from_dict({"layout": "page", "screen": {"left": ["plan"]}})
     assert config.page_settings()["screen"] == {"left": ["plan"]}
     assert ViewerConfig().layout == "screen"
-=======
->>>>>>> origin/dev
     assert ViewerConfig().panels == list(PANELS)
 
 

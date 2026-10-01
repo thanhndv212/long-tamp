@@ -36,7 +36,6 @@ class ViewerConfig:
       the JS can register panels and hooks through ``window.LongTamp``
       (``docs/usage/viewer.md``).
     - ``poll_ms``: how often a live page asks for new events.
-<<<<<<< HEAD
     - ``layout``: ``"screen"`` (default) fits everything on one screen,
       panels scrolling inside; ``"page"`` stacks them in a scrolling page.
       Below 1000 px wide, ``screen`` stacks them too.
@@ -45,8 +44,6 @@ class ViewerConfig:
       Default: ``{"top": ["summary"], "left": ["plan", ["details", "events"]],
       "center": ["scene", "timeline"], "right": ["chat"]}``. Panels not placed
       join the left tabs; without a scene, the tabs take the centre.
-=======
->>>>>>> origin/dev
     """
 
     title: str = "long-tamp mission"
@@ -59,7 +56,6 @@ class ViewerConfig:
     extra_css: list[str] = field(default_factory=list)
     extra_js: list[str] = field(default_factory=list)
     poll_ms: int = 500
-<<<<<<< HEAD
     layout: str = "screen"
     screen: dict[str, list[Any]] | None = None
 
@@ -67,11 +63,6 @@ class ViewerConfig:
     def from_dict(cls, data: dict[str, Any]) -> ViewerConfig:
         if data.get("layout", "screen") not in ("screen", "page"):
             raise ValueError('layout must be "screen" or "page"')
-=======
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> ViewerConfig:
->>>>>>> origin/dev
         known = {f.name for f in fields(cls)}
         unknown = sorted(set(data) - known)
         if unknown:

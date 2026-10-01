@@ -54,16 +54,12 @@
   LT.onEvent = function (fn) { LT._eventHooks.push(fn); };
   LT.addBadge = function (fn) { LT._badges.push(fn); };
   LT.formatMetric = function (key, fn) { LT._formatters[key] = fn; };
-<<<<<<< HEAD
   LT.select = function (id) {
     LT.selected = id;
     var d = sections.details;
     if (d && d.group) { LT._tabs[d.group] = "details"; showTab(d.group); }
     render();
   };
-=======
-  LT.select = function (id) { LT.selected = id; render(); };
->>>>>>> origin/dev
 
   // -- helpers -------------------------------------------------------------
 
@@ -352,11 +348,7 @@
             onclick: function () { LT.select(id); } },
           caret,
           h("span", { cls: "kind", title: n.type || "", text: KIND_ICONS[n.type] || "·" }),
-<<<<<<< HEAD
           h("span", { text: n.label, title: c || null }),
-=======
-          h("span", { text: n.label }),
->>>>>>> origin/dev
           c ? h("span", { cls: "call mono", title: c, text: c.length > 60 ? c.slice(0, 59) + "\u2026" : c }) : null,
           h("span", { cls: "pill " + stateClass(state), text: state }),
           badges(n, view)));
@@ -546,7 +538,6 @@
   };
 
   // chat (#90): the operator chat of a live server, next to everything else
-<<<<<<< HEAD
   var chat = { entries: [], busy: false, ended: false, log: null, status: null, input: null,
                actions: [], bar: null, cards: [] };
 
@@ -591,11 +582,6 @@
 
   function chatEntry(e) {
     if (e.who === "plan") return planCard(e);
-=======
-  var chat = { entries: [], busy: false, ended: false, log: null, status: null, input: null };
-
-  function chatEntry(e) {
->>>>>>> origin/dev
     var cls = "msg " + e.who + (e.who === "tool" && !e.ok ? " rejected" : "");
     var text = e.who === "operator" && e.source && e.source !== "web" ? e.text + "  (" + e.source + ")" : e.text;
     return h("div", { cls: cls, title: new Date(e.t * 1000).toLocaleTimeString() }, text || "\u2026");
@@ -603,7 +589,6 @@
 
   function chatStatus() {
     if (!chat.status) return;
-<<<<<<< HEAD
     var last = chat.entries.length ? chat.entries[chat.entries.length - 1] : null;
     var acting = chat.busy && last && last.who === "operator" && last.action;
     chat.status.textContent = chat.ended ? "The chat has ended." :
@@ -618,10 +603,6 @@
       var start = chat.actions.filter(function (a) { return a.name === "start"; })[0];
       if (start && i === chat.cards.length - 1) bar.appendChild(actionButton(start, true));
     });
-=======
-    chat.status.textContent = chat.ended ? "The chat has ended." : chat.busy ? "The model is working\u2026" : "";
-    chat.input.disabled = chat.ended;
->>>>>>> origin/dev
   }
 
   function chatPoll() {
@@ -633,11 +614,7 @@
           data.entries.forEach(function (e) { chat.entries.push(e); if (chat.log) chat.log.appendChild(chatEntry(e)); });
           if (chat.log) chat.log.scrollTop = chat.log.scrollHeight;
         }
-<<<<<<< HEAD
         chat.busy = data.busy; chat.ended = data.ended; chat.actions = data.actions || [];
-=======
-        chat.busy = data.busy; chat.ended = data.ended;
->>>>>>> origin/dev
         chatStatus();
       })
       .catch(function () {})
@@ -653,15 +630,10 @@
     keep: true,
     render: function (view, el) {
       if (chat.log && el.contains(chat.log)) return;
-<<<<<<< HEAD
       chat.cards = [];
       chat.log = h("div", { cls: "log", "aria-live": "polite" }, chat.entries.map(chatEntry));
       chat.status = h("div", { cls: "busy" });
       chat.bar = h("div", { cls: "actions" });
-=======
-      chat.log = h("div", { cls: "log", "aria-live": "polite" }, chat.entries.map(chatEntry));
-      chat.status = h("div", { cls: "busy" });
->>>>>>> origin/dev
       chat.input = h("input", { type: "text", placeholder: "Ask the mission model, e.g. \u201cplan part 2 first\u201d", "aria-label": "message to the model" });
       var form = h("form", { onsubmit: function (e) {
         e.preventDefault();
@@ -672,11 +644,7 @@
           else { chat.input.value = ""; chat.busy = !r.ended; chat.ended = r.ended; chatStatus(); }
         });
       } }, chat.input, h("button", { type: "submit", text: "Send" }));
-<<<<<<< HEAD
       el.appendChild(h("div", { cls: "chat" }, chat.log, chat.status, chat.bar, form));
-=======
-      el.appendChild(h("div", { cls: "chat" }, chat.log, chat.status, form));
->>>>>>> origin/dev
       chatStatus();
     },
   };
@@ -689,7 +657,6 @@
     return LT._panels[id] || builtins[id] || null;
   }
 
-<<<<<<< HEAD
   // Where each panel goes on one screen (ViewerConfig.layout "screen"): a
   // list per area; an inner list is a group of tabs.
   var SCREEN = config.screen || { top: ["summary"], left: ["plan", ["details", "events"]],
@@ -801,35 +768,16 @@
     main.appendChild(grid);
   }
 
-=======
->>>>>>> origin/dev
   function layout() {
     var main = document.getElementById("panels");
     main.textContent = "";
     sections = {};
-<<<<<<< HEAD
     var screen = (config.layout || "screen") === "screen";
     document.body.classList.toggle("screen", screen);
     if (screen) { screenLayout(main); return; }
     enabled().forEach(function (id) {
       var p = usable(id);
       if (p) main.appendChild(section(id, p));
-=======
-    var ids = (config.panels || []).slice();
-    Object.keys(LT._panels).forEach(function (id) { if (ids.indexOf(id) < 0) ids.push(id); });
-    ids.forEach(function (id) {
-      var p = panelFor(id);
-      if (!p) {
-        if (!LT._started) return;
-        p = { title: id, render: function (v, el) { el.appendChild(h("p", { cls: "muted", text: "No panel named " + id + " was registered." })); } };
-      }
-      if (p.available && !p.available()) return;
-      var body = h("div");
-      var sec = h("section", { cls: "panel" + (p.wide ? " wide" : ""), "data-panel": id },
-        h("h2", { text: p.title || id }), body);
-      main.appendChild(sec);
-      sections[id] = { panel: p, body: body };
->>>>>>> origin/dev
     });
   }
 
@@ -849,10 +797,7 @@
     header(view);
     Object.keys(sections).forEach(function (id) {
       var s = sections[id];
-<<<<<<< HEAD
       if (s.group && LT._tabs[s.group] !== id && !s.panel.keep) return; // hidden tab
-=======
->>>>>>> origin/dev
       if (!s.panel.keep) s.body.textContent = "";
       try { s.panel.render(view, s.body); }
       catch (err) { s.body.textContent = "panel error: " + err.message; }
