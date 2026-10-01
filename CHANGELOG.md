@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Progress from a step's planning, and intervention mid-step (#108).
+  - `long_tamp.execution.activity` turns what a step is doing into `progress` events: each
+    lookahead round and candidate, each phase, each replan.
+  - The viewer shows the latest one on the running step.
+  - `ExecutionControl.request("skip")` abandons the lookahead search, and the block plans
+    without a hint. `request("abort_step")` fails the step and stops the run, with the
+    block's grasps rolled back.
+  - Both are buttons in the viewer and `POST /api/control` actions.
 - Web mission viewer, `long_tamp.viewer` (#24). It shows the plan tree with each node's state
   (attempt k/N, skipped because its effect held, drift, paused), a Gantt timeline you can play
   and scrub, the event list and per-node details.
