@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-01",
+  "validation": "#88 smoke mission: the execution supervisor decides after the repair loop gives up (injected failure), MuJoCo",
+  "environment": "hpp-agimus-arm64 (source-built HPP), MuJoCo 3.11, two parts, two clamps (one per part), seed 1; local OpenAI-compatible gateway",
+  "command": "task_screw_assembly.py --backend mujoco --instruction 'assemble both parts and rack the driver' --supervise --inject-failure clamp_and_screw:part=part2",
+  "what_happened": [
+    "part 1 assembled; part 2's clamp-and-screw failed (injected cannot_reach(fixtures/clamp2, part2/h_seat))",
+    "repair blocked clamp 2 for part 2, found no plan (part 2 has no other clamp) and gave up",
+    "supervisor: relax_goal, dropping exactly part 2's two literals, keeping part 1 and the clean-up (checked: subset of the original goal, reachable)",
+    "second repair loop: driver racked, part 2 released; mission complete"
+  ],
+  "final_goal": [
+    "screwed(part1, part1/h_hole1)",
+    "screwed(part1, part1/h_hole2)",
+    "not holds(ur10_left/gripper, _)",
+    "holds(fixtures/rack_hold, driver/h_rack)"
+  ],
+  "repair_loops": 2,
+  "decisions": 1,
+  "success": true,
+  "mission_seconds": 242.37,
+  "model_calls": [
+    "ground",
+    "goal",
+    "review",
+    "review",
+    "supervise"
+  ],
+  "notes": "escalation reports (abort, limits, no valid decision) are covered by tests/test_ai_supervisor.py with fakes; this run needed none"
+}

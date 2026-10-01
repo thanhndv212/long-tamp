@@ -639,9 +639,11 @@ def run_with_repair(
     outcome = plan_execute_repair(
         plan, execute, repair_policy, max_rounds=rounds, on_replan=on_replan
     )
-    result = dict(state["result"])
+    # No first plan at all: nothing ran.
+    result = dict(state["result"] or {"failure": None, "final_config": state["q"]})
     result.update(
         success=outcome.success,
+        repair_message=outcome.message,
         seconds=round(state["seconds"], 2),
         blocks=state["blocks"],
         skipped=state["skipped"],
@@ -650,6 +652,119 @@ def run_with_repair(
     )
     if not outcome.success:
         print(f"\n=== repair gave up: {outcome.message}")
+    return result
+
+
+def run_supervised(
+    task: ScrewAssemblyTask,
+    planner: GraspSequencePlanner,
+    n_parts: int,
+    q_start: list[float] | None,
+    recorded: RecordedFacts,
+    rounds: int,
+    mission: dict[str, Any],
+    instruction: str,
+    goal: list[str],
+    constraints: list[tuple[str, dict[str, str]]],
+    client,
+    run_dir: Path,
+) -> dict[str, Any]:
+    """Repair loops under the execution supervisor (``--supervise``, #88).
+
+    Each repair loop (``run_with_repair``) handles what the refiner can
+    explain. When one gives up, the supervisor role decides: retry, relax
+    the goal (keep a subset of it), abort, or escalate. Escalation and abort
+    write ``escalation.md`` / ``escalation.json`` to the run folder.
+    """
+    from long_tamp.tasks.task_planning.skeleton import default_planner
+    from long_tamp.tasks.task_planning.supervisor import Limits, Situation, supervise
+
+    clamps = clamp_seats(task.task_config.VALID_PAIRS)
+    where = {"q": q_start}
+    #: What every repair loop ran, for the mission's summary.
+    total = {"seconds": 0.0, "blocks": [], "skipped": [], "loops": 0}
+    task_planner = default_planner("auto")
+
+    def run_repair(current_goal):
+        result = run_with_repair(
+            task,
+            planner,
+            n_parts,
+            where["q"],
+            recorded,
+            rounds,
+            mission,
+            current_goal,
+            constraints,
+        )
+        where["q"] = result.get("final_config") or where["q"]
+        total["seconds"] += result.get("seconds", 0.0)
+        total["blocks"] += result.get("blocks", [])
+        total["skipped"] += result.get("skipped", [])
+        total["loops"] += 1
+        return result
+
+    def situation_of(result, current_goal):
+        state = world_atoms(planner, recorded)
+        return Situation(
+            instruction=instruction,
+            original_goal=goal,
+            goal=current_goal,
+            failure=result.get("failure"),
+            message=result.get("repair_message", ""),
+            blocked=result.get("blocked", []),
+            vocabulary=goal_vocabulary(n_parts, state, clamps),
+        )
+
+    def reachable(candidate):
+        try:
+            task_planner.solve(
+                pddl_problem(
+                    n_parts,
+                    world_atoms(planner, recorded),
+                    constraints,
+                    clamps,
+                    candidate,
+                )
+            )
+        except Exception as error:  # noqa: BLE001 - the planner's verdict
+            return str(error).splitlines()[0][:300] or type(error).__name__
+        return None
+
+    outcome = supervise(
+        run_repair,
+        situation_of,
+        instruction,
+        goal,
+        client,
+        Limits(max_decisions=3, max_tokens=200_000),
+        reachable,
+        report_dir=run_dir,
+    )
+    for i, d in enumerate(outcome.decisions, 1):
+        print(
+            f"\n=== supervisor decision {i}: {d['action']}"
+            + (f" (fallback: {d['fallback']})" if d["fallback"] else "")
+            + f"\n    {d['reason']}"
+            + (f"\n    goal now: {d['goal']}" if d["action"] == "relax_goal" else ""),
+            flush=True,
+        )
+    if outcome.report is not None:
+        print(f"\n=== escalation report: {outcome.report}", flush=True)
+    result = dict(outcome.last)
+    result.update(
+        success=outcome.success,
+        seconds=round(total["seconds"], 2),
+        blocks=total["blocks"],
+        skipped=total["skipped"],
+    )
+    result["supervisor"] = {
+        "final_goal": outcome.goal,
+        "decisions": outcome.decisions,
+        "stopped": outcome.stopped,
+        "repair_loops": total["loops"],
+        "report": str(outcome.report) if outcome.report else None,
+    }
     return result
 
 
@@ -666,6 +781,7 @@ def understand_instruction(
     clamps: list[tuple[str, str]] | None = None,
     model: str | None = None,
     on_call=None,
+    client=None,
 ) -> tuple[list[str], list[tuple[str, dict[str, str]]]]:
     """The goal and the constraints in an operator's ``instruction``
     (``--instruction``; #22, #87), through three model roles on one client
@@ -703,7 +819,7 @@ def understand_instruction(
             return str(error).splitlines()[0][:300] or type(error).__name__
         return None
 
-    client = make_client(model, on_call=on_call)
+    client = client or make_client(model, on_call=on_call)
     vocabulary = goal_vocabulary(n_parts, state, clamps)
     t0 = time.time()
     grounding = ground_instruction(instruction, vocabulary, client)
@@ -1095,6 +1211,13 @@ def main() -> int:
         "default anthropic:claude-opus-5-5. See docs/usage/ai-models.md",
     )
     ap.add_argument(
+        "--supervise",
+        action="store_true",
+        help="with --instruction: when the repair loop gives up, a model decides "
+        "(retry, relax the goal, abort, escalate) within limits; stops write an "
+        "escalation report to the run folder (#88)",
+    )
+    ap.add_argument(
         "--ai-env",
         metavar="FILE",
         type=Path,
@@ -1145,6 +1268,8 @@ def main() -> int:
     args = ap.parse_args()
     if args.instruction:
         args.planner = "up"  # the instruction is a goal: a task planner plans it
+    if args.supervise and not args.instruction:
+        ap.error("--supervise needs --instruction")
     if args.resume and args.run_dir is None:
         ap.error("--resume needs --run-dir")
     if args.replan and args.planner != "up":
@@ -1253,15 +1378,32 @@ def main() -> int:
                     )
                 )
 
+            from long_tamp.ai import make_client
+
+            client = make_client(args.goal_model, on_call=on_call)
             goal, constraints = understand_instruction(
                 args.instruction,
                 n_parts,
                 world_atoms(planner, recorded),
                 clamps=clamp_seats(task.task_config.VALID_PAIRS),
-                model=args.goal_model,
-                on_call=on_call,
+                client=client,
             )
-        if args.replan:
+        if args.supervise:
+            result = run_supervised(
+                task,
+                planner,
+                n_parts,
+                q_start,
+                recorded,
+                args.replan or 3,
+                mission,
+                args.instruction,
+                goal,
+                constraints,
+                client,
+                run_dir,
+            )
+        elif args.replan:
             result = run_with_repair(
                 task,
                 planner,
