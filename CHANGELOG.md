@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Goals from natural language (#22), `long_tamp.tasks.task_planning.language`. A model
+  writes the goal of the planning problem, never the plan.
+  - `goal_from_instruction(instruction, writer, vocabulary, reachable)` checks each written
+    goal (syntax, known predicates and arities, known objects; `check_goal`), then whether
+    the task planner reaches it from the current state. What fails goes back to the model,
+    for up to three attempts.
+  - The initial state stays the observed one; motion failures are still replanned
+    deterministically, never through the model.
+  - `Vocabulary.from_domain` builds what a goal may say from the capabilities' literals,
+    the objects and the state, with free-text notes.
+  - `ClaudeGoalWriter` writes goals with Claude (`claude-opus-5-5` by default; structured
+    JSON output, server-side fallback on a refusal). It needs the new `language` extra
+    (`pip install long-tamp[language]`) and Anthropic API credentials.
+  - `task_screw_assembly.py --instruction "assemble part 2"` plans the written goal with the
+    task planner (implies `--planner up`). `screw_domain.goal_vocabulary` describes the
+    domain, and `pddl_problem(goal=...)` takes a goal other than the full mission's.
+
 ## [0.6.0] - 2026-10-01
 
 Milestone M5: multi-arm partial-order execution. Plans become partial orders:

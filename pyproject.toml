@@ -81,6 +81,12 @@ planning = [
     "up-pyperplan>=1.1",
 ]
 
+# Goals from natural language (long_tamp.tasks.task_planning.language):
+# ClaudeGoalWriter calls Claude through the Anthropic API.
+language = [
+    "anthropic>=1.0",
+]
+
 # MuJoCo export of a task's scene (long_tamp.sim). trimesh + pycollada convert
 # the COLLADA meshes MuJoCo can't read. Tested with MuJoCo 3.11 and 3.14.
 sim = [
