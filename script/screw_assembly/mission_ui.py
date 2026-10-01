@@ -51,6 +51,12 @@ def main(argv: list[str] | None = None) -> int:
         choices=("mujoco", "playback", "mock", "none"),
         help="what executes the motion (default: mujoco)",
     )
+    ap.add_argument(
+        "--watchdog",
+        default="300,900",
+        help="SOFT,HARD seconds a step may plan before the watchdog acts (default "
+        "300,900; 'off' turns it off)",
+    )
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--model", help="API:MODEL (default: $LONG_TAMP_GOAL_MODEL)")
     ap.add_argument("--run-dir", type=Path, help="default: runs/ui_<time>/")
@@ -75,6 +81,8 @@ def main(argv: list[str] | None = None) -> int:
     ]  # fmt: skip
     if args.model:
         command += ["--goal-model", args.model]
+    if args.watchdog != "off":
+        command += ["--watchdog", args.watchdog]
     command += extra
     log_path = run_dir / "ui.out"
     print(f"mission UI: starting (log: {log_path})", flush=True)

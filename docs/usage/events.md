@@ -42,6 +42,7 @@ Roles:
 | `drift` | before a step's motion, the robot was further than `max_start_drift` from where the plan starts: `FAILURE`, with `start_drift`; the step is replanned (Python executor only) | none |
 | `pause` | execution held at a step boundary by an `ExecutionControl` (pause or breakpoint): `RUNNING`, then `SUCCESS` when resumed or `FAILURE` when stopped; `metrics.when` is `before` or `after` the step (Python executor only) | none |
 | `progress` | opt-in, from planning code (`long_tamp.execution.activity.progress`): what the step being planned is doing now (`RUNNING`, the `message`); `metrics.elapsed` since its attempt started, `metrics.search` while in a search that `skip` may abandon, plus the caller's numbers (Python executor only) | none |
+| `watchdog` | a `StepWatchdog` decision on a step that planned too long: `SUCCESS`, the `message` is the action and why; `metrics`: `action` (`wait`, `skip`, `abort_step`), `by` (`model` or `rule`), `elapsed`, `wait_s` | none |
 | `plan` | opt-in, from `plan_event(plan)`: the plan about to run, its IR document in the `plan` field, `metrics.attempts` the retry budget per node; emitted again when a new plan replaces it. `run_plan` does not emit it | none |
 
 Transitions follow BehaviorTree.CPP: composites go `RUNNING`, then `SUCCESS` or `FAILURE`;

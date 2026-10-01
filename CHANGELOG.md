@@ -18,6 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     without a hint. `request("abort_step")` fails the step and stops the run, with the
     block's grasps rolled back.
   - Both are buttons in the viewer and `POST /api/control` actions.
+- Step watchdog, `long_tamp.execution.watchdog` (#109). When a step plans past a soft limit,
+  a model or a rule decides to wait, skip its search or abort it.
+  - The model's decision is a checked role, and the rule decides when it can't.
+  - The step is aborted at the hard limit.
+  - Decisions are `watchdog` events, shown in the viewer and the chat. An operator's request
+    wins.
+  - The screw assembly takes `--watchdog SOFT[,HARD]`. `mission_ui.py` uses 300,900 s by
+    default.
 - Web mission viewer, `long_tamp.viewer` (#24). It shows the plan tree with each node's state
   (attempt k/N, skipped because its effect held, drift, paused), a Gantt timeline you can play
   and scrub, the event list and per-node details.
