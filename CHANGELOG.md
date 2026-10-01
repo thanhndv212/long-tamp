@@ -20,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The execution supervisor (#88, ADR-0006), `long_tamp.tasks.task_planning.supervisor`. When
+  the deterministic repair loop gives up, a model decides at goal level, within limits, and
+  never improvises.
+  - Actions: `retry`, `relax_goal` (keep a strict subset of the original goal's literals,
+    checked and reachable), `abort`, `escalate`.
+  - Limits: decisions, wall-clock, model tokens, and an allowlist of actions. Past a limit,
+    or without a valid decision, it escalates.
+  - Abort and escalation write `escalation.json` and `escalation.md` to the run folder: what
+    failed, what was tried, the decisions, the state.
+  - `task_screw_assembly.py --instruction ... --supervise` runs repair loops under it.
+    `run_with_repair` now also works when no first plan exists, and reports why repair
+    gave up.
 - Typed model roles (#87, ADR-0006), `long_tamp.ai.roles`: a model proposes, a deterministic
   checker accepts or explains, the explanation goes back to the model, for bounded rounds.
   A fallback that needs no model covers API errors, refusals, instructions it can't

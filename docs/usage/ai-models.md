@@ -110,9 +110,11 @@ checks:
 | grounder | the objects an instruction refers to | known objects | name matching |
 | goal writer | the goal (final-state literals) | vocabulary, then the task planner reaches it | none: the mission stops |
 | plan reviewer | constraints: capability + parameters to avoid | known names, then the planner still reaches the goal | no constraint |
+| execution supervisor | after repair gives up: retry, relax the goal, abort, escalate | allowed action; a relaxed goal keeps a subset of the original and is reachable | escalate, with a report |
 
 A rejected proposal goes back to the model with the checker's reasons, for a bounded number
-of rounds. No role writes plan steps. A new role is a `ModelRole` (system prompt, JSON
+of rounds. The supervisor (`--supervise`) also runs under limits (decisions, time, model
+tokens). When it stops, it writes `escalation.md` and `escalation.json` to the run folder. No role writes plan steps. A new role is a `ModelRole` (system prompt, JSON
 schema, how a request becomes a prompt, how an answer becomes a value), a checker and a
 fallback, run with `refine`.
 
