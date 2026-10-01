@@ -116,6 +116,8 @@ Revisit against ScheduleStream before starting.
 
 ## M6 — AI model integration
 
+**Released as 0.7.0 on 2026-10-01.**
+
 [Milestone 6](https://github.com/thanhndv212/long-tamp/milestone/6) · Design:
 [ADR-0006](../adr/0006-ai-model-integration.md)
 
@@ -124,17 +126,15 @@ interactive and autonomous operation. A model writes the problem, never the plan
 
 - [x] [#22](https://github.com/thanhndv212/long-tamp/issues/22) A model writes a mission's
       goal from an instruction, through the same validation gate (PR #85)
-- [ ] [#86](https://github.com/thanhndv212/long-tamp/issues/86) One model gateway for
+- [x] [#86](https://github.com/thanhndv212/long-tamp/issues/86) One model gateway for
       Anthropic- and OpenAI-compatible APIs (`long_tamp.ai`)
-- [ ] [#87](https://github.com/thanhndv212/long-tamp/issues/87) Typed model roles (contracts,
+- [x] [#87](https://github.com/thanhndv212/long-tamp/issues/87) Typed model roles (contracts,
       checkers, fallbacks); grounder and plan reviewer
-- [ ] [#88](https://github.com/thanhndv212/long-tamp/issues/88) Execution supervisor role with
+- [x] [#88](https://github.com/thanhndv212/long-tamp/issues/88) Execution supervisor role with
       autonomy limits and escalation
-- [ ] [#89](https://github.com/thanhndv212/long-tamp/issues/89) Interactive mission session:
+- [x] [#89](https://github.com/thanhndv212/long-tamp/issues/89) Interactive mission session:
       gated tools and a terminal chat
-- [ ] [#90](https://github.com/thanhndv212/long-tamp/issues/90) Chat panel in the web mission
-      viewer
-- [ ] [#91](https://github.com/thanhndv212/long-tamp/issues/91) Exit test
+- [x] [#91](https://github.com/thanhndv212/long-tamp/issues/91) Exit test
 
 **Exit test:** from one instruction, the screw-assembly mission runs in MuJoCo to the end with
 no human input, through an injected failure that needs a goal-level decision, or it stops
@@ -144,6 +144,10 @@ within its limits with an escalation report.
 
 - [#23](https://github.com/thanhndv212/long-tamp/issues/23) Optional PDDLStream adapter
   (`long-tamp[pddlstream]`), also an independent cross-check (moved out of M6)
+- [#90](https://github.com/thanhndv212/long-tamp/issues/90) Chat panel in the web mission
+  viewer, best done with #24 (moved out of M6)
+- [#98](https://github.com/thanhndv212/long-tamp/issues/98) One live Claude call through the
+  gateway (needs API credit; follow-up of #86)
 - [#24](https://github.com/thanhndv212/long-tamp/issues/24) HTML mission viewer (replay/live) on the event stream
 - [#25](https://github.com/thanhndv212/long-tamp/issues/25) BehaviorTree.CPP node plugin library for ROS 2 / Nav2 users
 - [#26](https://github.com/thanhndv212/long-tamp/issues/26) Re-enable the spline path optimizer once hpp-core caps the QP solve

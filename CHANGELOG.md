@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-01
+
+Milestone M6: AI model integration (ADR-0006). Any model behind an Anthropic- or
+OpenAI-compatible API works through one gateway (`long_tamp.ai`), and models act through
+typed, checked roles: the grounder, the goal writer, the plan reviewer and the execution
+supervisor. A model writes problems and decisions, never plans, and every proposal passes a
+deterministic check. An operator can talk to the mission through gated tools (`--chat`),
+and a mission can run from one instruction to the end without a human (`--instruction ...
+--supervise`). Exit test: 10/10 such missions completed in MuJoCo through an injected
+failure, with every decision audited. The spline path optimizer is also back on, with its QP
+solve capped (needs the hpp-core patch; without it, the optimizer stays off).
+
 ### Changed
 
 - The spline path optimizer is back on in the screw assembly, with its QP solve capped (#26).
@@ -723,7 +735,8 @@ First public release, on PyPI as `long-tamp`.
   in ~18s as the *second* phase of a multi-grasp sequence but failed 6/6 draws when built as
   the *only* phase of a single-gripper session. Not root-caused.
 
-[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/thanhndv212/long-tamp/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/thanhndv212/long-tamp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/thanhndv212/long-tamp/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/thanhndv212/long-tamp/compare/v0.3.0...v0.4.0
