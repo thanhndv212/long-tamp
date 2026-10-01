@@ -235,6 +235,27 @@ def test_the_live_server_has_no_control_route_without_a_control(run_dir):
         assert _post(server.url + "api/control", b'{"action": "stop"}')[0] == 404
 
 
+def test_a_separate_process_serves_the_page_while_this_one_is_busy(run_dir):
+    control = ExecutionControl()
+    server = ViewerServer(
+        run_dir / "events.jsonl", port=0, control=control, separate_process=True
+    )
+    with server:
+        url = server.url
+        assert server._front is not None and server._front.poll() is None
+        assert _boot(_get(url)[1])["live"]
+        events = json.loads(_get(url + "api/events?since=0")[1])["events"]
+        assert events[0]["role"] == PLAN_ROLE
+        features = json.loads(_get(url + "api/features")[1])  # proxied
+        assert features == {"control": True, "chat": False}
+        assert _post(url + "api/control", b'{"action": "pause"}')[0] == 200
+        assert control.paused
+        assert _post(url + "api/control", b'{"action": "jump"}')[0] == 400
+        assert _post(url + "api/nothing", b"{}")[0] == 404
+        front = server._front
+    assert front.poll() is not None  # closed with the server
+
+
 def test_extra_routes(run_dir):
     with ViewerServer(run_dir / "events.jsonl", port=0) as server:
         server.route("POST", "/api/echo", lambda body, query: {"got": body})

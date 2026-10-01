@@ -548,6 +548,8 @@
   }
 
   function chatPoll() {
+    if (chat.polling) return;
+    chat.polling = true;
     fetch("api/chat?since=" + chat.entries.length).then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.since === chat.entries.length && data.entries.length) {
@@ -558,7 +560,10 @@
         chatStatus();
       })
       .catch(function () {})
-      .then(function () { if (!chat.ended) setTimeout(chatPoll, config.poll_ms || 500); });
+      .then(function () {
+        chat.polling = false;
+        if (!chat.ended) setTimeout(chatPoll, config.poll_ms || 500);
+      });
   }
 
   builtins.chat = {
@@ -566,7 +571,7 @@
     available: function () { return !!boot.chat; },
     keep: true,
     render: function (view, el) {
-      if (chat.log) return;
+      if (chat.log && el.contains(chat.log)) return;
       chat.log = h("div", { cls: "log", "aria-live": "polite" }, chat.entries.map(chatEntry));
       chat.status = h("div", { cls: "busy" });
       chat.input = h("input", { type: "text", placeholder: "Ask the mission model, e.g. \u201cplan part 2 first\u201d", "aria-label": "message to the model" });
@@ -670,6 +675,7 @@
 
   function controls() {
     var box = document.getElementById("controls");
+    box.textContent = "";
     if (!boot.control) return;
     ["pause", "resume", "stop"].forEach(function (action) {
       box.appendChild(h("button", { text: action, onclick: function () {
@@ -689,13 +695,31 @@
     });
   }
 
+  // What the server offers can change after the page was made (a chat
+  // attached later), and a separate front process does not know it.
+  function features() {
+    fetch("api/features").then(function (r) { return r.json(); })
+      .then(function (f) {
+        var changed = !!f.control !== !!boot.control || !!f.chat !== !!boot.chat;
+        boot.control = !!f.control; boot.chat = !!f.chat;
+        if (changed) { layout(); controls(); render(); LT._featureHooks.forEach(function (fn) { fn(f); }); }
+      })
+      .catch(function () {})
+      .then(function () { setTimeout(features, 5000); });
+  }
+  LT._featureHooks = [];
+
   LT.start = function () {
     LT._started = true;
     theme();
     layout();
     controls();
     seek(LT.events.length);
-    if (LT.live) poll();
-    if (LT.live && boot.chat) chatPoll();
+    if (LT.live) {
+      poll();
+      features();
+      if (boot.chat) chatPoll();
+      LT._featureHooks.push(function (f) { if (f.chat) chatPoll(); });
+    }
   };
 })();

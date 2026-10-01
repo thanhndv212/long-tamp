@@ -1469,6 +1469,7 @@ def main() -> int:
             ),
             port=args.web_port,
             control=control,
+            separate_process=True,  # planning holds the GIL for seconds
         )
         print(f"web viewer: {web.start()}", flush=True)
         atexit.register(web.close)
