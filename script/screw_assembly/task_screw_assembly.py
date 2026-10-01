@@ -1107,7 +1107,11 @@ def run_mission(
         "timing": run.timing or None,
         "final_config": ctx["q"],
         "failure": (
-            None if run.success else ctx.get("failure") or execution_failure(run)
+            None
+            if run.success
+            else ctx.get("failure")
+            or execution_failure(run)
+            or stopped_failure(run, session)
         ),
     }
 
@@ -1219,6 +1223,23 @@ def parse_drift(spec: str) -> tuple[str, str, float]:
     """``--inject-drift "LABEL:JOINT:RAD"``."""
     label, joint, delta = spec.rsplit(":", 2)
     return label, joint, float(delta)
+
+
+def stopped_failure(run, session) -> dict[str, Any] | None:
+    """Where a run ended that neither planning nor execution reported as a
+    failure: a step aborted or stopped (#108). ``step`` is its label."""
+    if run.failed_step is None:
+        return None
+    labels, stack = {}, [session.plan.document["root"]]
+    while stack:
+        node = stack.pop()
+        labels[node["id"]] = node.get("label", node["id"])
+        stack += node.get("children", []) + ([node["child"]] if "child" in node else [])
+    return {
+        "step": labels.get(run.failed_step, run.failed_step),
+        "facts": [],
+        "message": run.message,
+    }
 
 
 def execution_failure(run) -> dict[str, Any] | None:

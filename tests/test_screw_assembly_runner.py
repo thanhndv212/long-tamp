@@ -148,3 +148,26 @@ def test_a_failing_block_stops_the_mission():
     assert not ok
     assert mission.ran[-1] == "part1 A: clamp + screw"
     assert json.loads(mission.session.get_report())["completed"]  # earlier steps
+
+
+def test_an_aborted_step_is_the_runs_failure():
+    """#108: a step aborted mid-planning reported no failure of its own."""
+    import pytest
+    from types import SimpleNamespace
+
+    T = pytest.importorskip("task_screw_assembly")
+    plan = SimpleNamespace(
+        document={
+            "root": {
+                "id": "mission",
+                "children": [{"id": "b07", "label": "part1 A: clamp + screw"}],
+            }
+        }
+    )
+    run = SimpleNamespace(failed_step="b07", message="aborted (abort_step by operator)")
+    assert T.stopped_failure(run, SimpleNamespace(plan=plan)) == {
+        "step": "part1 A: clamp + screw",
+        "facts": [],
+        "message": "aborted (abort_step by operator)",
+    }
+    assert T.stopped_failure(SimpleNamespace(failed_step=None), None) is None
