@@ -1,0 +1,28 @@
+{
+  "date": "2026-10-01",
+  "validation": "#89 smoke: an operator chat through gated tools, live model, MuJoCo",
+  "environment": "hpp-agimus-arm64 (source-built HPP), MuJoCo 3.11, two parts, seed 1; local OpenAI-compatible gateway; messages piped to --chat",
+  "session_1": {
+    "messages": [
+      "assemble parts 1 and 2, and rack the driver at the end",
+      "do part 2 first",
+      "run it",
+      "why did that step fail?"
+    ],
+    "injected": "clamp_and_screw:part=part2 (fires once)",
+    "what_happened": [
+      "write_goal produced the full goal (both holes of both parts, gripper empty, driver racked); planned; ran without being asked to run (fixed: see session 2); part 1 assembled, part 2 failed (injected)",
+      "'do part 2 first': add_constraint forbidding clamp 2 for part 2 was REJECTED (no plan finishes without it); the model explained part 1 was already done and re-planned part 2 first",
+      "'run it': succeeded (both parts assembled, driver racked)",
+      "'why did that step fail?': explained cannot_reach(fixtures/clamp2, part2/h_seat) from the refiner's report, and said the report doesn't explain why the retry worked"
+    ],
+    "tool_events": 9
+  },
+  "session_2": {
+    "messages": [
+      "assemble parts 1 and 2, and rack the driver at the end"
+    ],
+    "what_happened": "after the rule 'run only when the operator asks': write_goal, set_goal, plan, then 'Nothing has been executed yet. Would you like me to run the plan?'"
+  },
+  "earlier_run": "without the domain in its instructions, the model guessed predicates (racked, stored), refused by set_goal; it now gets the predicates, objects and notes, and a write_goal tool (the goal writer role)"
+}

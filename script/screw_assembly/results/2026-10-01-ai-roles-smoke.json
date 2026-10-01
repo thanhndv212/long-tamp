@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-01",
+  "validation": "#87 smoke mission: grounder, goal writer and plan reviewer roles on one gateway client; two parts, three clamps, MuJoCo",
+  "environment": "hpp-agimus-arm64 (source-built HPP), MuJoCo 3.11, seed 1; local OpenAI-compatible gateway",
+  "instruction": "assemble both parts but do not use clamp 1, then rack the driver",
+  "grounding": {
+    "objects": [
+      "driver/h_grip",
+      "driver/h_rack",
+      "fixtures/clamp1"
+    ],
+    "fallback": "name matching (the model answered in plain text instead of JSON; such answers now cost a round with feedback, not the role)"
+  },
+  "goal": [
+    "screwed(part1, part1/h_hole1)",
+    "screwed(part1, part1/h_hole2)",
+    "screwed(part2, part2/h_hole1)",
+    "screwed(part2, part2/h_hole2)",
+    "not holds(ur10_left/gripper, _)",
+    "holds(fixtures/rack_hold, driver/h_rack)"
+  ],
+  "constraints": [
+    [
+      "clamp_and_screw",
+      {
+        "clamp": "fixtures/clamp1"
+      }
+    ]
+  ],
+  "clamps_used": {
+    "part1": "fixtures/clamp3",
+    "part2": "fixtures/clamp2"
+  },
+  "success": true,
+  "mission_seconds": 344.05,
+  "earlier_runs": [
+    "the goal writer declined the whole instruction because 'don't use clamp 1' isn't a final state: its prompt now leaves how-constraints to the plan reviewer",
+    "the plan reviewer's answers ignored the schema (the gateway doesn't enforce it) and were rejected, so the constraint fell back to none: constraints are now read in the shapes models write, and rejections carry an example"
+  ]
+}

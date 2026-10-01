@@ -58,7 +58,10 @@ from long_tamp.tasks.task_planning import (  # noqa: E402
     TaskPlanningSession,
     parallelize,
 )
-from long_tamp.tasks.task_planning.events import JsonlEventWriter  # noqa: E402
+from long_tamp.tasks.task_planning.events import (  # noqa: E402
+    JsonlEventWriter,
+    make_event,
+)
 from long_tamp.tasks.task_planning.skills import SkillCommand  # noqa: E402
 from long_tamp.sim.skills import SCREW  # noqa: E402
 from long_tamp.tasks.task_planning.predicates import holds  # noqa: E402
@@ -79,6 +82,7 @@ from screw_domain import (  # noqa: E402
     block_for,
     clamp_seats,
     descriptors,
+    goal_vocabulary,
     pddl_problem,
     planned_document,
     refinement_step,
@@ -123,6 +127,11 @@ class ScrewAssemblyTask(ManipulationTask):
         return self._loader.build_initial_config(objects=self.task_config.OBJECTS)
 
 
+#: SplineGradientBased's QP iteration cap (proxsuite's default is 10000 and
+#: doesn't bound a hard problem).
+QP_MAX_ITERATIONS = 1000
+
+
 def seed_everything(seed: int) -> None:
     """HPP's configuration shooter draws from libc rand() and pinocchio's
     RNG, which nothing seeds: unseeded, every process replays the same
@@ -148,10 +157,12 @@ def setup(
     )
     # Paths here are short arm moves; optimization rarely pays off, and at
     # the 30 s default each part release spent ~60 s in two optimizer passes.
-    # No spline optimizer: its inner QP solve ignores the timeout, and a
-    # mission hung 11+ minutes in a single solve. Shortcuts suffice here.
+    # The spline optimizer's inner QP solve ignores that timeout (a mission
+    # hung 11+ minutes in one solve): its iterations are capped, which needs
+    # an hpp-core with SplineGradientBased/QPMaxIterations. Without one, the
+    # backend drops the spline optimizer, as before (#26).
     task.planner.configure_transition_planner(
-        path_optimizer_timeout=5.0, spline_optimizer=False
+        path_optimizer_timeout=5.0, qp_max_iterations=QP_MAX_ITERATIONS
     )
     planner = GraspSequencePlanner(
         graph_builder=task.graph_builder,
@@ -583,6 +594,8 @@ def run_with_repair(
     recorded: RecordedFacts,
     rounds: int,
     mission: dict[str, Any],
+    goal: list[str] | None = None,
+    constraints: list[tuple[str, dict[str, str]]] | None = None,
 ) -> dict[str, Any]:
     """Plan, run, and replan around failures (``--replan``, issue #15).
 
@@ -597,7 +610,11 @@ def run_with_repair(
 
     def plan(blocked):
         return plan_from_goal(
-            n_parts, world_atoms(planner, recorded), blocked=blocked, clamps=clamps
+            n_parts,
+            world_atoms(planner, recorded),
+            blocked=[*(constraints or []), *blocked],
+            clamps=clamps,
+            goal=goal,
         )
 
     def execute(document):
@@ -622,9 +639,11 @@ def run_with_repair(
     outcome = plan_execute_repair(
         plan, execute, repair_policy, max_rounds=rounds, on_replan=on_replan
     )
-    result = dict(state["result"])
+    # No first plan at all: nothing ran.
+    result = dict(state["result"] or {"failure": None, "final_config": state["q"]})
     result.update(
         success=outcome.success,
+        repair_message=outcome.message,
         seconds=round(state["seconds"], 2),
         blocks=state["blocks"],
         skipped=state["skipped"],
@@ -636,10 +655,275 @@ def run_with_repair(
     return result
 
 
+def run_supervised(
+    task: ScrewAssemblyTask,
+    planner: GraspSequencePlanner,
+    n_parts: int,
+    q_start: list[float] | None,
+    recorded: RecordedFacts,
+    rounds: int,
+    mission: dict[str, Any],
+    instruction: str,
+    goal: list[str],
+    constraints: list[tuple[str, dict[str, str]]],
+    client,
+    run_dir: Path,
+) -> dict[str, Any]:
+    """Repair loops under the execution supervisor (``--supervise``, #88).
+
+    Each repair loop (``run_with_repair``) handles what the refiner can
+    explain. When one gives up, the supervisor role decides: retry, relax
+    the goal (keep a subset of it), abort, or escalate. Escalation and abort
+    write ``escalation.md`` / ``escalation.json`` to the run folder.
+    """
+    from long_tamp.tasks.task_planning.skeleton import default_planner
+    from long_tamp.tasks.task_planning.supervisor import Limits, Situation, supervise
+
+    clamps = clamp_seats(task.task_config.VALID_PAIRS)
+    where = {"q": q_start}
+    #: What every repair loop ran, for the mission's summary.
+    total = {"seconds": 0.0, "blocks": [], "skipped": [], "loops": 0}
+    task_planner = default_planner("auto")
+
+    def run_repair(current_goal):
+        result = run_with_repair(
+            task,
+            planner,
+            n_parts,
+            where["q"],
+            recorded,
+            rounds,
+            mission,
+            current_goal,
+            constraints,
+        )
+        where["q"] = result.get("final_config") or where["q"]
+        total["seconds"] += result.get("seconds", 0.0)
+        total["blocks"] += result.get("blocks", [])
+        total["skipped"] += result.get("skipped", [])
+        total["loops"] += 1
+        return result
+
+    def situation_of(result, current_goal):
+        state = world_atoms(planner, recorded)
+        return Situation(
+            instruction=instruction,
+            original_goal=goal,
+            goal=current_goal,
+            failure=result.get("failure"),
+            message=result.get("repair_message", ""),
+            blocked=result.get("blocked", []),
+            vocabulary=goal_vocabulary(n_parts, state, clamps),
+        )
+
+    def reachable(candidate):
+        try:
+            task_planner.solve(
+                pddl_problem(
+                    n_parts,
+                    world_atoms(planner, recorded),
+                    constraints,
+                    clamps,
+                    candidate,
+                )
+            )
+        except Exception as error:  # noqa: BLE001 - the planner's verdict
+            return str(error).splitlines()[0][:300] or type(error).__name__
+        return None
+
+    outcome = supervise(
+        run_repair,
+        situation_of,
+        instruction,
+        goal,
+        client,
+        Limits(max_decisions=3, max_tokens=200_000),
+        reachable,
+        report_dir=run_dir,
+    )
+    for i, d in enumerate(outcome.decisions, 1):
+        print(
+            f"\n=== supervisor decision {i}: {d['action']}"
+            + (f" (fallback: {d['fallback']})" if d["fallback"] else "")
+            + f"\n    {d['reason']}"
+            + (f"\n    goal now: {d['goal']}" if d["action"] == "relax_goal" else ""),
+            flush=True,
+        )
+    if outcome.report is not None:
+        print(f"\n=== escalation report: {outcome.report}", flush=True)
+    result = dict(outcome.last)
+    result.update(
+        success=outcome.success,
+        seconds=round(total["seconds"], 2),
+        blocks=total["blocks"],
+        skipped=total["skipped"],
+    )
+    result["supervisor"] = {
+        "original_goal": goal,
+        "final_goal": outcome.goal,
+        "decisions": outcome.decisions,
+        "stopped": outcome.stopped,
+        "repair_loops": total["loops"],
+        "report": str(outcome.report) if outcome.report else None,
+    }
+    return result
+
+
+def run_chat(task, planner, n_parts, q_start, recorded, mission, client, events):
+    """An operator's chat with a model acting through gated mission tools
+    (``--chat``, #89): reads operator messages from stdin until EOF or
+    "quit", and writes every tool call to the event stream."""
+    from chat_tools import INTRO, MissionChat
+
+    from long_tamp.ai.chat import ChatSession
+
+    work = MissionChat(
+        sys.modules[__name__],
+        task,
+        planner,
+        recorded,
+        n_parts,
+        mission,
+        q_start,
+        client=client,
+    )
+
+    def on_tool(call):
+        events(
+            make_event(
+                "chat",
+                "tool",
+                call.tool,
+                "SUCCESS" if call.ok else "FAILURE",
+                message=call.error,
+                metrics={"arguments": call.arguments},
+            )
+        )
+
+    session = ChatSession(
+        client, work.tools(), INTRO + "\n\n" + work.domain(), on_tool=on_tool
+    )
+    echo = not sys.stdin.isatty()  # piped messages: show them in the log
+    print("chat: type an instruction, 'quit' or Ctrl-D to end", flush=True)
+    while True:
+        try:
+            line = input("operator> ")
+        except EOFError:
+            break
+        if echo:
+            print(line, flush=True)
+        if line.strip().lower() in ("quit", "exit"):
+            break
+        if not line.strip():
+            continue
+        turn = session.turn(line.strip())
+        for call in turn.calls:
+            print(f"  [tool] {call.as_text()[:400]}", flush=True)
+        if turn.error:
+            print(f"  [error] {turn.error}", flush=True)
+        print(f"model> {turn.say}", flush=True)
+    last = work.last or {"success": True, "seconds": 0.0, "failure": None}
+    result = dict(last)
+    result.setdefault("final_config", work.q)
+    result["chat"] = {
+        "turns": [
+            {"user": t.user, "say": t.say, "calls": [c.as_text() for c in t.calls]}
+            for t in session.turns
+        ],
+        "goal": work.goal,
+        "constraints": work.constraints,
+    }
+    return result
+
+
 def world_atoms(planner: GraspSequencePlanner, recorded: RecordedFacts) -> list[str]:
     """The world state as ground atoms: held grasps plus recorded facts."""
     state = CompositeWorldState(GraspTrackerState(planner), recorded)()
     return sorted(str(atom) for atom in state)
+
+
+def understand_instruction(
+    instruction: str,
+    n_parts: int,
+    state: list[str],
+    clamps: list[tuple[str, str]] | None = None,
+    model: str | None = None,
+    on_call=None,
+    client=None,
+) -> tuple[list[str], list[tuple[str, dict[str, str]]]]:
+    """The goal and the constraints in an operator's ``instruction``
+    (``--instruction``; #22, #87), through three model roles on one client
+    (``model``: ``"<api>:<model>"``, default ``anthropic:claude-opus-5-5``):
+
+    1. the grounder finds the objects the instruction refers to (fallback:
+       matching their names);
+    2. the goal writer writes the goal, checked against the vocabulary and
+       reachable by the task planner from ``state``;
+    3. the plan reviewer turns what the instruction rules out ("don't use
+       clamp 1") into blocked bindings, kept only if the planner still
+       reaches the goal (fallback: none).
+
+    No role writes steps. ``on_call`` receives each model call's record.
+    """
+    from long_tamp.ai import make_client
+    from long_tamp.tasks.task_planning.language import (
+        ModelGoalWriter,
+        goal_from_instruction,
+        ground_instruction,
+        with_grounding,
+    )
+    from long_tamp.tasks.task_planning.review import ReviewRequest, review_constraints
+    from long_tamp.tasks.task_planning.skeleton import default_planner
+
+    task_planner = default_planner("auto")
+
+    def solve(goal, blocked=None):
+        return task_planner.solve(pddl_problem(n_parts, state, blocked, clamps, goal))
+
+    def why_not(goal, blocked=None) -> str | None:
+        try:
+            solve(goal, blocked)
+        except Exception as error:  # noqa: BLE001 - the planner's verdict
+            return str(error).splitlines()[0][:300] or type(error).__name__
+        return None
+
+    client = client or make_client(model, on_call=on_call)
+    vocabulary = goal_vocabulary(n_parts, state, clamps)
+    t0 = time.time()
+    grounding = ground_instruction(instruction, vocabulary, client)
+    vocabulary = with_grounding(vocabulary, grounding.value)
+    goal = goal_from_instruction(
+        instruction, ModelGoalWriter(client), vocabulary, lambda g: why_not(g)
+    )
+    plan = tuple(
+        f"{cap}({', '.join(f'{k}={v}' for k, v in params.items() if k != 'block')})"
+        for cap, params in solve(goal)
+    )
+    review = review_constraints(
+        ReviewRequest(instruction, vocabulary, descriptors(n_parts), plan),
+        client,
+        replannable=lambda blocked: why_not(goal, blocked),
+    )
+    print(
+        f"instruction {instruction!r} ({client.spec}, {time.time() - t0:.1f}s):\n"
+        f"  refers to: {', '.join(grounding.value.objects) or '-'}"
+        + (f" (fallback: {grounding.fallback})" if grounding.fallback else "")
+        + "\n  goal:\n    "
+        + "\n    ".join(goal)
+        + "\n  constraints: "
+        + (
+            "; ".join(f"no {c}{b}" for c, b in review.value)
+            if review.value
+            else "none" + (f" (fallback: {review.fallback})" if review.fallback else "")
+        ),
+        flush=True,
+    )
+    for name, outcome in (("grounder", grounding), ("plan reviewer", review)):
+        if outcome.fallback and outcome.attempts:
+            print(f"  {name} attempts rejected:", flush=True)
+            for attempt in outcome.attempts:
+                print(f"    {attempt}", flush=True)
+    return goal, list(review.value)
 
 
 def plan_from_goal(
@@ -648,6 +932,7 @@ def plan_from_goal(
     engine: str = "auto",
     blocked: list[tuple[str, dict[str, str]]] | None = None,
     clamps: list[tuple[str, str]] | None = None,
+    goal: list[str] | None = None,
 ) -> dict[str, Any]:
     """Plan the mission from ``state`` with a task planner (``--planner up``):
     the goal (``screw_domain.mission_goal``) as PDDL, a skeleton from Unified
@@ -657,7 +942,7 @@ def plan_from_goal(
     t0 = time.time()
     task_planner = default_planner(engine)
     name = planner_name(task_planner)
-    steps = task_planner.solve(pddl_problem(n_parts, state, blocked, clamps))
+    steps = task_planner.solve(pddl_problem(n_parts, state, blocked, clamps, goal))
     print(
         f"task planner ({name}): {len(steps)} steps in {time.time() - t0:.2f}s",
         flush=True,
@@ -820,7 +1105,9 @@ def contact_grasps(export) -> dict[str, Any]:
         root = model.body(int(model.jnt_bodyid[joint])).name
         table[(root, arm)] = closures.closed_values(gripper, handle)
     return {
-        "fingers": tuple(f"{arm}/robotiq_85_left_knuckle_joint" for arm in (LEFT, RIGHT)),
+        "fingers": tuple(
+            f"{arm}/robotiq_85_left_knuckle_joint" for arm in (LEFT, RIGHT)
+        ),
         "grip": GripTable(table),
         "pads": {**robotiq_pads(LEFT), **robotiq_pads(RIGHT)},
     }
@@ -978,6 +1265,41 @@ def main() -> int:
         "state; needs the 'planning' extra)",
     )
     ap.add_argument(
+        "--instruction",
+        metavar="TEXT",
+        help="what to do, in words (e.g. 'assemble part 2'): Claude writes the "
+        "goal, the task planner plans it (implies --planner up; needs the "
+        "'language' extra and Anthropic API credentials)",
+    )
+    ap.add_argument(
+        "--goal-model",
+        metavar="API:MODEL",
+        help="with --instruction: the model that writes the goal, as <api>:<model> "
+        "with <api> anthropic or openai (any OpenAI-compatible endpoint); "
+        "default anthropic:claude-opus-5-5. See docs/usage/ai-models.md",
+    )
+    ap.add_argument(
+        "--chat",
+        action="store_true",
+        help="talk to a model that plans and runs missions through checked tools "
+        "(set the goal, add constraints, plan, run, explain a failure); reads "
+        "operator messages from stdin (#89)",
+    )
+    ap.add_argument(
+        "--supervise",
+        action="store_true",
+        help="with --instruction: when the repair loop gives up, a model decides "
+        "(retry, relax the goal, abort, escalate) within limits; stops write an "
+        "escalation report to the run folder (#88)",
+    )
+    ap.add_argument(
+        "--ai-env",
+        metavar="FILE",
+        type=Path,
+        help="env file with the model endpoints and keys (default: "
+        "$LONG_TAMP_AI_ENV); read like a shell reads it",
+    )
+    ap.add_argument(
         "--replan",
         type=int,
         default=0,
@@ -1019,6 +1341,12 @@ def main() -> int:
         help="load the scene, validate the start configuration, then exit",
     )
     args = ap.parse_args()
+    if args.instruction or args.chat:
+        args.planner = "up"  # the instruction is a goal: a task planner plans it
+    if args.chat and (args.instruction or args.supervise or args.replan):
+        ap.error("--chat runs on its own (no --instruction, --supervise or --replan)")
+    if args.supervise and not args.instruction:
+        ap.error("--supervise needs --instruction")
     if args.resume and args.run_dir is None:
         ap.error("--resume needs --run-dir")
     if args.replan and args.planner != "up":
@@ -1109,9 +1437,68 @@ def main() -> int:
             on_event=events,
             inject=inject,
         )
-        if args.replan:
+        goal, constraints = None, []
+        client = None
+        if args.instruction or args.chat:
+            from long_tamp.ai import configure
+
+            configure(args.ai_env)  # endpoints, keys; localhost in a container
+
+            def on_call(record):
+                events(
+                    make_event(
+                        "ai",
+                        "model",
+                        record.role,
+                        "FAILURE" if record.error else "SUCCESS",
+                        message=record.error or "",
+                        metrics=record.metrics(),
+                    )
+                )
+
+            from long_tamp.ai import make_client
+
+            client = make_client(args.goal_model, on_call=on_call)
+        if args.chat:
+            result = run_chat(
+                task, planner, n_parts, q_start, recorded, mission, client, events
+            )
+        elif args.instruction:
+            goal, constraints = understand_instruction(
+                args.instruction,
+                n_parts,
+                world_atoms(planner, recorded),
+                clamps=clamp_seats(task.task_config.VALID_PAIRS),
+                client=client,
+            )
+        if args.chat:
+            pass  # the chat ran the missions it was asked to
+        elif args.supervise:
+            result = run_supervised(
+                task,
+                planner,
+                n_parts,
+                q_start,
+                recorded,
+                args.replan or 3,
+                mission,
+                args.instruction,
+                goal,
+                constraints,
+                client,
+                run_dir,
+            )
+        elif args.replan:
             result = run_with_repair(
-                task, planner, n_parts, q_start, recorded, args.replan, mission
+                task,
+                planner,
+                n_parts,
+                q_start,
+                recorded,
+                args.replan,
+                mission,
+                goal,
+                constraints,
             )
         else:
             result = run_mission(
@@ -1124,6 +1511,8 @@ def main() -> int:
                         n_parts,
                         world_atoms(planner, recorded),
                         clamps=clamp_seats(task.task_config.VALID_PAIRS),
+                        goal=goal,
+                        blocked=constraints,
                     )
                     if args.planner == "up"
                     else None

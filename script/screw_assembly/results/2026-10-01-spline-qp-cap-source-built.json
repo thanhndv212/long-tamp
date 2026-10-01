@@ -1,0 +1,103 @@
+{
+  "date": "2026-10-01",
+  "validation": "#26 V3 batch with the spline optimizer on, its QP solve capped (SplineGradientBased/QPMaxIterations=1000; local hpp-core patch fix/qp-max-iterations)",
+  "environment": "hpp-agimus-arm64 (source-built HPP with the patch), one mission at a time",
+  "command": "bash run_batch.sh 10 1 batch_v3; summarize.py batch_v3 --gate --baseline results/2026-09-28-taskplan-source-built.json",
+  "scene": "four-part screw assembly",
+  "gate": "PASS",
+  "notes": "no hang (longest mission 1185 s; the unbounded QP solve used to hang about 1 mission in 20). Median 958 s vs 913 s without the spline optimizer (dev, 2026-09-30): the smoothing pass costs some planning time.",
+  "parts": [
+    4
+  ],
+  "completed": 10,
+  "attempted": 10,
+  "replanning_blocks": 0,
+  "planning_blocks": 140,
+  "recovered_failures": 12,
+  "failure_episodes": 12,
+  "seconds_median": 958.0,
+  "seconds_min": 812.7,
+  "seconds_max": 1184.59,
+  "seeds": [
+    {
+      "seed": 1,
+      "success": true,
+      "seconds": 1043.16,
+      "blocks": 19,
+      "resumes": 1,
+      "replans": 0
+    },
+    {
+      "seed": 2,
+      "success": true,
+      "seconds": 916.12,
+      "blocks": 19,
+      "resumes": 3,
+      "replans": 0
+    },
+    {
+      "seed": 3,
+      "success": true,
+      "seconds": 999.89,
+      "blocks": 19,
+      "resumes": 2,
+      "replans": 0
+    },
+    {
+      "seed": 4,
+      "success": true,
+      "seconds": 1184.59,
+      "blocks": 19,
+      "resumes": 3,
+      "replans": 0
+    },
+    {
+      "seed": 5,
+      "success": true,
+      "seconds": 812.7,
+      "blocks": 19,
+      "resumes": 0,
+      "replans": 0
+    },
+    {
+      "seed": 6,
+      "success": true,
+      "seconds": 1007.58,
+      "blocks": 19,
+      "resumes": 1,
+      "replans": 0
+    },
+    {
+      "seed": 7,
+      "success": true,
+      "seconds": 855.96,
+      "blocks": 19,
+      "resumes": 1,
+      "replans": 0
+    },
+    {
+      "seed": 8,
+      "success": true,
+      "seconds": 1011.57,
+      "blocks": 19,
+      "resumes": 3,
+      "replans": 0
+    },
+    {
+      "seed": 9,
+      "success": true,
+      "seconds": 847.64,
+      "blocks": 19,
+      "resumes": 0,
+      "replans": 0
+    },
+    {
+      "seed": 10,
+      "success": true,
+      "seconds": 835.98,
+      "blocks": 19,
+      "resumes": 1,
+      "replans": 0
+    }
+  ]
+}

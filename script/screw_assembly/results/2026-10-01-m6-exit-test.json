@@ -1,0 +1,335 @@
+{
+  "date": "2026-10-01",
+  "validation": "M6 exit test (#91): one instruction runs to the end without a human, under the execution supervisor, through an injected failure; 10 seeds, MuJoCo",
+  "environment": "hpp-agimus-arm64 (source-built HPP), MuJoCo 3.11, two parts, two clamps (one per part), two missions at a time; a local OpenAI-compatible gateway",
+  "command": "autonomy_batch.py --seeds 10 --par 2 --env <ai env> --model openai:<model>",
+  "instruction": "assemble both parts and rack the driver",
+  "injected": "clamp_and_screw failure: part1 on odd seeds, part2 on even ones (repair can't route around it)",
+  "gate": "PASS",
+  "summary": {
+    "runs": 10,
+    "completed": 10,
+    "escalated": 0,
+    "unclean": 0,
+    "decisions": {
+      "relax_goal": 10
+    },
+    "unchecked_decisions": [],
+    "model_calls": 48,
+    "model_tokens": 41738,
+    "gate": "PASS"
+  },
+  "runs": [
+    {
+      "seed": 1,
+      "injected": "part1",
+      "exit": 0,
+      "wall_s": 440.6,
+      "outcome": "completed",
+      "mission_s": 385.44,
+      "stopped": "",
+      "repair_loops": 2,
+      "decisions": [
+        "relax_goal"
+      ],
+      "final_goal": [
+        "screwed(part2, part2/h_hole1)",
+        "screwed(part2, part2/h_hole2)",
+        "not holds(ur10_left/gripper, _)",
+        "holds(fixtures/rack_hold, driver/h_rack)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 1,
+        "goal": 1,
+        "review": 2,
+        "supervise": 1
+      },
+      "model_tokens": 4409,
+      "model_seconds": 50.4,
+      "model_errors": 0
+    },
+    {
+      "seed": 2,
+      "injected": "part2",
+      "exit": 0,
+      "wall_s": 346.1,
+      "outcome": "completed",
+      "mission_s": 292.72,
+      "stopped": "",
+      "repair_loops": 2,
+      "decisions": [
+        "relax_goal"
+      ],
+      "final_goal": [
+        "screwed(part1, part1/h_hole1)",
+        "screwed(part1, part1/h_hole2)",
+        "not holds(ur10_left/gripper, _)",
+        "holds(fixtures/rack_hold, driver/h_rack)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 1,
+        "goal": 1,
+        "review": 2,
+        "supervise": 1
+      },
+      "model_tokens": 4431,
+      "model_seconds": 48.4,
+      "model_errors": 1
+    },
+    {
+      "seed": 3,
+      "injected": "part1",
+      "exit": 0,
+      "wall_s": 329.0,
+      "outcome": "completed",
+      "mission_s": 282.62,
+      "stopped": "",
+      "repair_loops": 2,
+      "decisions": [
+        "relax_goal"
+      ],
+      "final_goal": [
+        "screwed(part2, part2/h_hole1)",
+        "screwed(part2, part2/h_hole2)",
+        "not holds(ur10_left/gripper, _)",
+        "holds(fixtures/rack_hold, driver/h_rack)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 1,
+        "goal": 1,
+        "review": 2,
+        "supervise": 1
+      },
+      "model_tokens": 4280,
+      "model_seconds": 41.6,
+      "model_errors": 1
+    },
+    {
+      "seed": 4,
+      "injected": "part2",
+      "exit": 0,
+      "wall_s": 472.7,
+      "outcome": "completed",
+      "mission_s": 430.34,
+      "stopped": "",
+      "repair_loops": 2,
+      "decisions": [
+        "relax_goal"
+      ],
+      "final_goal": [
+        "screwed(part1, part1/h_hole1)",
+        "screwed(part1, part1/h_hole2)",
+        "not holds(ur10_left/gripper, _)",
+        "holds(fixtures/rack_hold, driver/h_rack)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 1,
+        "goal": 1,
+        "review": 2,
+        "supervise": 1
+      },
+      "model_tokens": 4308,
+      "model_seconds": 37.5,
+      "model_errors": 1
+    },
+    {
+      "seed": 5,
+      "injected": "part1",
+      "exit": 0,
+      "wall_s": 388.7,
+      "outcome": "completed",
+      "mission_s": 348.17,
+      "stopped": "",
+      "repair_loops": 2,
+      "decisions": [
+        "relax_goal"
+      ],
+      "final_goal": [
+        "screwed(part2, part2/h_hole1)",
+        "screwed(part2, part2/h_hole2)",
+        "not holds(ur10_left/gripper, _)",
+        "holds(fixtures/rack_hold, driver/h_rack)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 1,
+        "goal": 1,
+        "review": 1,
+        "supervise": 1
+      },
+      "model_tokens": 3373,
+      "model_seconds": 35.7,
+      "model_errors": 0
+    },
+    {
+      "seed": 6,
+      "injected": "part2",
+      "exit": 0,
+      "wall_s": 432.5,
+      "outcome": "completed",
+      "mission_s": 383.22,
+      "stopped": "",
+      "repair_loops": 2,
+      "decisions": [
+        "relax_goal"
+      ],
+      "final_goal": [
+        "screwed(part1, part1/h_hole1)",
+        "screwed(part1, part1/h_hole2)",
+        "not holds(ur10_left/gripper, _)",
+        "holds(fixtures/rack_hold, driver/h_rack)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 1,
+        "goal": 1,
+        "review": 2,
+        "supervise": 1
+      },
+      "model_tokens": 4446,
+      "model_seconds": 44.5,
+      "model_errors": 0
+    },
+    {
+      "seed": 7,
+      "injected": "part1",
+      "exit": 0,
+      "wall_s": 506.1,
+      "outcome": "completed",
+      "mission_s": 462.24,
+      "stopped": "",
+      "repair_loops": 2,
+      "decisions": [
+        "relax_goal"
+      ],
+      "final_goal": [
+        "screwed(part2, part2/h_hole1)",
+        "screwed(part2, part2/h_hole2)",
+        "not holds(ur10_left/gripper, _)",
+        "holds(fixtures/rack_hold, driver/h_rack)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 1,
+        "goal": 1,
+        "review": 2,
+        "supervise": 1
+      },
+      "model_tokens": 4268,
+      "model_seconds": 39.3,
+      "model_errors": 1
+    },
+    {
+      "seed": 8,
+      "injected": "part2",
+      "exit": 0,
+      "wall_s": 337.5,
+      "outcome": "completed",
+      "mission_s": 282.72,
+      "stopped": "",
+      "repair_loops": 2,
+      "decisions": [
+        "relax_goal"
+      ],
+      "final_goal": [
+        "screwed(part1, part1/h_hole1)",
+        "screwed(part1, part1/h_hole2)",
+        "holds(fixtures/rack_hold, driver/h_rack)",
+        "not holds(ur10_left/gripper, _)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 1,
+        "goal": 1,
+        "review": 2,
+        "supervise": 1
+      },
+      "model_tokens": 4510,
+      "model_seconds": 50.2,
+      "model_errors": 1
+    },
+    {
+      "seed": 9,
+      "injected": "part1",
+      "exit": 0,
+      "wall_s": 451.9,
+      "outcome": "completed",
+      "mission_s": 399.68,
+      "stopped": "",
+      "repair_loops": 2,
+      "decisions": [
+        "relax_goal"
+      ],
+      "final_goal": [
+        "screwed(part2, part2/h_hole1)",
+        "screwed(part2, part2/h_hole2)",
+        "not holds(ur10_left/gripper, _)",
+        "holds(fixtures/rack_hold, driver/h_rack)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 1,
+        "goal": 1,
+        "review": 1,
+        "supervise": 1
+      },
+      "model_tokens": 3439,
+      "model_seconds": 47.6,
+      "model_errors": 0
+    },
+    {
+      "seed": 10,
+      "injected": "part2",
+      "exit": 0,
+      "wall_s": 369.8,
+      "outcome": "completed",
+      "mission_s": 321.3,
+      "stopped": "",
+      "repair_loops": 2,
+      "decisions": [
+        "relax_goal"
+      ],
+      "final_goal": [
+        "screwed(part1, part1/h_hole1)",
+        "screwed(part1, part1/h_hole2)",
+        "not holds(ur10_left/gripper, _)",
+        "holds(fixtures/rack_hold, driver/h_rack)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 1,
+        "goal": 1,
+        "review": 2,
+        "supervise": 1
+      },
+      "model_tokens": 4274,
+      "model_seconds": 44.0,
+      "model_errors": 1
+    }
+  ],
+  "first_batch": {
+    "summary": {
+      "runs": 10,
+      "completed": 8,
+      "escalated": 1,
+      "unclean": 1,
+      "decisions": {
+        "relax_goal": 8,
+        "escalate": 1
+      },
+      "unchecked_decisions": [],
+      "model_calls": 45,
+      "model_tokens": 38811,
+      "gate": "FAIL"
+    },
+    "notes": [
+      "seed 2 crashed before any model call: two missions started together wrote the same cached URDF (backends._urdf_paths); fixed with a per-process temporary file and an atomic rename, and a 16-thread test",
+      "seed 10 escalated cleanly: the model judged it unclear whether the part could use another clamp and asked for a human instead of dropping it (escalation.md written)",
+      "no unchecked decision in either batch"
+    ]
+  }
+}

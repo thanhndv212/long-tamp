@@ -8,6 +8,122 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-01
+
+Milestone M6: AI model integration (ADR-0006). Any model behind an Anthropic- or
+OpenAI-compatible API works through one gateway (`long_tamp.ai`), and models act through
+typed, checked roles: the grounder, the goal writer, the plan reviewer and the execution
+supervisor. A model writes problems and decisions, never plans, and every proposal passes a
+deterministic check. An operator can talk to the mission through gated tools (`--chat`),
+and a mission can run from one instruction to the end without a human (`--instruction ...
+--supervise`). Exit test: 10/10 such missions completed in MuJoCo through an injected
+failure, with every decision audited. The spline path optimizer is also back on, with its QP
+solve capped (needs the hpp-core patch; without it, the optimizer stays off).
+
+### Changed
+
+- The spline path optimizer is back on in the screw assembly, with its QP solve capped (#26).
+  - `PyHPPBackend.configure_transition_planner(qp_max_iterations=N)` sets hpp-core's
+    `SplineGradientBased/QPMaxIterations`, which bounds the optimizer by
+    `path_optimizer_timeout` plus one capped solve. The mission uses 1000.
+  - The parameter comes from a local hpp-core patch (`fix/qp-max-iterations`, see
+    `docs/bugs/hpp-core-unbounded-planning-loops.md`, bug 6). With an hpp-core that lacks
+    it, which includes the PyPI wheels, the backend drops the spline optimizer as before.
+
+### Added
+
+- The M6 exit test (#91), `script/screw_assembly/autonomy_batch.py`. Over N seeds, one
+  instruction runs to the end with no human input, under the supervisor, with a part's
+  clamping failure injected.
+  - Each run is classified as completed, escalated cleanly (a report in its folder), or
+    unclean.
+  - Each run is audited: every decision is an allowed action, and every relaxed goal is a
+    strict subset of the original.
+  - It totals model calls and tokens per run. The gate passes with no unclean run and no
+    unchecked decision.
+  - Result: 10/10 missions completed with no human input, each after one goal relaxation that
+    dropped only the failed part; 48 model calls, about 42k tokens. The first batch also
+    showed a clean escalation.
+
+- The operator chat (#89, ADR-0006), `long_tamp.ai.chat`. A model talks with the operator and
+  acts only through gated tools.
+  - Each answer is one JSON object (`say`, `actions`, `done`). Tools run in order, and their
+    results go back to the model, for up to `max_steps` model calls per message.
+  - A tool refuses its arguments with a reason (`ToolRejected`), which goes back to the
+    model. This works on every endpoint the gateway reaches, since it needs no
+    provider-specific function calling.
+  - `task_screw_assembly.py --chat` reads operator messages from stdin. The tools are
+    `state`, `set_goal`, `add_constraint` / `remove_constraint`, `plan` (optionally reaching
+    some goal literals `first`, e.g. part 2 before part 1; the planner orders the rest),
+    `run`, and `explain_failure`, plus `write_goal`, which hands an instruction to the goal
+    writer role. Each is checked like the Python API, and every call is written to
+    `events.jsonl` as a `tool` event. The chat model is given the domain (predicates,
+    objects, notes) and moves the robot only when the operator asks it to run.
+- The execution supervisor (#88, ADR-0006), `long_tamp.tasks.task_planning.supervisor`. When
+  the deterministic repair loop gives up, a model decides at goal level, within limits, and
+  never improvises.
+  - Actions: `retry`, `relax_goal` (keep a strict subset of the original goal's literals,
+    checked and reachable), `abort`, `escalate`.
+  - Limits: decisions, wall-clock, model tokens, and an allowlist of actions. Past a limit,
+    or without a valid decision, it escalates.
+  - Abort and escalation write `escalation.json` and `escalation.md` to the run folder: what
+    failed, what was tried, the decisions, the state.
+  - `task_screw_assembly.py --instruction ... --supervise` runs repair loops under it.
+    `run_with_repair` now also works when no first plan exists, and reports why repair
+    gave up.
+- Typed model roles (#87, ADR-0006), `long_tamp.ai.roles`: a model proposes, a deterministic
+  checker accepts or explains, the explanation goes back to the model, for bounded rounds.
+  A fallback that needs no model covers API errors, refusals, instructions it can't
+  express, and rounds run out.
+  - `refine(propose, check, max_rounds, fallback)` runs that loop; `ModelRole` makes a
+    proposer from any gateway client. The goal writer is now one such role.
+  - Grounder (`language.ground_instruction`): which scene objects an instruction refers to,
+    checked against the cell. Its fallback matches names, and its result is a note for the
+    goal writer.
+  - Plan reviewer (`task_planning.review.review_constraints`): what an instruction rules out
+    ("don't use clamp 1"), as blocked bindings for the task planner, never steps. Each
+    constraint must name a real capability, parameter and object, and the planner must
+    still reach the goal with it. The fallback is no constraint.
+  - `task_screw_assembly.py --instruction` runs grounder, goal writer and plan reviewer on
+    one client. The constraints apply to planning and to every `--replan` round.
+  - An unusable answer (not JSON, cut off, malformed) costs a round, with feedback, not the
+    role. Constraints are read in the shapes models write, since not every gateway enforces
+    the schema.
+- One gateway to AI models (#86, ADR-0006), `long_tamp.ai`.
+  - Any model behind an Anthropic- or OpenAI-compatible API, named `<api>:<model>`
+    (`anthropic:claude-opus-5-5`, `openai:<model>`). `make_client(model)` returns a client
+    whose `complete_json(system, user, schema, role)` returns the parsed JSON answer.
+  - Structured output, falling back to plain JSON mode where an endpoint refuses a schema.
+    Claude on Anthropic's endpoint also gets an effort level and the refusal fallback.
+  - Typed errors from either SDK (`AIAuthError`, `AIBillingError`, `AIRateLimitError`,
+    `AIConnectionError`, `AIRefusalError`, `AIOutputError`, `AIRequestError`).
+  - Each call becomes a `CallRecord` (role, model, tokens, seconds, error), which the mission
+    writes to `events.jsonl` as `model` events.
+  - Configuration: `configure()` / `load_env_file()` read env files the way a shell does
+    (`--ai-env` or `LONG_TAMP_AI_ENV`). Inside a container, endpoints on `localhost` map to
+    `host.docker.internal`.
+  - Extras `ai-anthropic`, `ai-openai` and `ai`. Setup guide: `docs/usage/ai-models.md`.
+- Goals from natural language (#22), `long_tamp.tasks.task_planning.language`. A model
+  writes the goal of the planning problem, never the plan.
+  - `goal_from_instruction(instruction, writer, vocabulary, reachable)` checks each written
+    goal (syntax, known predicates and arities, known objects; `check_goal`), then whether
+    the task planner reaches it from the current state. What fails goes back to the model,
+    for up to three attempts.
+  - The initial state stays the observed one; motion failures are still replanned
+    deterministically, never through the model.
+  - `Vocabulary.from_domain` builds what a goal may say from the capabilities' literals,
+    the objects and the state, with free-text notes.
+  - `ModelGoalWriter` writes goals through the gateway; `goal_writer(model)` builds one.
+  - `task_screw_assembly.py --instruction "assemble part 2" --goal-model <api>:<model>
+    [--ai-env FILE]` plans the written goal with the task planner (implies
+    `--planner up`). `screw_domain.goal_vocabulary` describes the domain, and
+    `pddl_problem(goal=...)` takes a goal other than the full mission's.
+
+### Fixed
+
+- Missions started together no longer crash writing the same cached URDF
+  (`backends._urdf_paths`): each writer uses its own temporary file and an atomic rename.
+
 ## [0.6.0] - 2026-10-01
 
 Milestone M5: multi-arm partial-order execution. Plans become partial orders:
@@ -619,7 +735,8 @@ First public release, on PyPI as `long-tamp`.
   in ~18s as the *second* phase of a multi-grasp sequence but failed 6/6 draws when built as
   the *only* phase of a single-gripper session. Not root-caused.
 
-[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/thanhndv212/long-tamp/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/thanhndv212/long-tamp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/thanhndv212/long-tamp/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/thanhndv212/long-tamp/compare/v0.3.0...v0.4.0
