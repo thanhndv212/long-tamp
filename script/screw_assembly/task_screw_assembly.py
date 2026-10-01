@@ -595,6 +595,7 @@ def run_with_repair(
     rounds: int,
     mission: dict[str, Any],
     goal: list[str] | None = None,
+    constraints: list[tuple[str, dict[str, str]]] | None = None,
 ) -> dict[str, Any]:
     """Plan, run, and replan around failures (``--replan``, issue #15).
 
@@ -611,7 +612,7 @@ def run_with_repair(
         return plan_from_goal(
             n_parts,
             world_atoms(planner, recorded),
-            blocked=blocked,
+            blocked=[*(constraints or []), *blocked],
             clamps=clamps,
             goal=goal,
         )
@@ -658,49 +659,87 @@ def world_atoms(planner: GraspSequencePlanner, recorded: RecordedFacts) -> list[
     return sorted(str(atom) for atom in state)
 
 
-def goal_from_text(
+def understand_instruction(
     instruction: str,
     n_parts: int,
     state: list[str],
     clamps: list[tuple[str, str]] | None = None,
     model: str | None = None,
     on_call=None,
-) -> list[str]:
-    """The goal for an operator's ``instruction`` (``--instruction``, #22).
+) -> tuple[list[str], list[tuple[str, dict[str, str]]]]:
+    """The goal and the constraints in an operator's ``instruction``
+    (``--instruction``; #22, #87), through three model roles on one client
+    (``model``: ``"<api>:<model>"``, default ``anthropic:claude-opus-5-5``):
 
-    A model writes it from the domain's vocabulary and the current ``state``,
-    through the AI gateway (``model``: ``"<api>:<model>"``, default
-    ``anthropic:claude-opus-5-5``). It is checked (syntax, predicates,
-    objects), then the task planner must reach it from ``state``; what fails
-    goes back to the model, up to three times. The model never writes the
-    plan. ``on_call`` receives each model call's record.
+    1. the grounder finds the objects the instruction refers to (fallback:
+       matching their names);
+    2. the goal writer writes the goal, checked against the vocabulary and
+       reachable by the task planner from ``state``;
+    3. the plan reviewer turns what the instruction rules out ("don't use
+       clamp 1") into blocked bindings, kept only if the planner still
+       reaches the goal (fallback: none).
+
+    No role writes steps. ``on_call`` receives each model call's record.
     """
+    from long_tamp.ai import make_client
     from long_tamp.tasks.task_planning.language import (
+        ModelGoalWriter,
         goal_from_instruction,
-        goal_writer,
+        ground_instruction,
+        with_grounding,
     )
+    from long_tamp.tasks.task_planning.review import ReviewRequest, review_constraints
     from long_tamp.tasks.task_planning.skeleton import default_planner
 
     task_planner = default_planner("auto")
 
-    def reachable(goal: list[str]) -> str | None:
+    def solve(goal, blocked=None):
+        return task_planner.solve(pddl_problem(n_parts, state, blocked, clamps, goal))
+
+    def why_not(goal, blocked=None) -> str | None:
         try:
-            task_planner.solve(pddl_problem(n_parts, state, None, clamps, goal))
+            solve(goal, blocked)
         except Exception as error:  # noqa: BLE001 - the planner's verdict
             return str(error).splitlines()[0][:300] or type(error).__name__
         return None
 
-    writer = goal_writer(model, on_call=on_call)
+    client = make_client(model, on_call=on_call)
+    vocabulary = goal_vocabulary(n_parts, state, clamps)
     t0 = time.time()
+    grounding = ground_instruction(instruction, vocabulary, client)
+    vocabulary = with_grounding(vocabulary, grounding.value)
     goal = goal_from_instruction(
-        instruction, writer, goal_vocabulary(n_parts, state, clamps), reachable
+        instruction, ModelGoalWriter(client), vocabulary, lambda g: why_not(g)
+    )
+    plan = tuple(
+        f"{cap}({', '.join(f'{k}={v}' for k, v in params.items() if k != 'block')})"
+        for cap, params in solve(goal)
+    )
+    review = review_constraints(
+        ReviewRequest(instruction, vocabulary, descriptors(n_parts), plan),
+        client,
+        replannable=lambda blocked: why_not(goal, blocked),
     )
     print(
-        f"goal for {instruction!r} ({writer.model}, {time.time() - t0:.1f}s):\n  "
-        + "\n  ".join(goal),
+        f"instruction {instruction!r} ({client.spec}, {time.time() - t0:.1f}s):\n"
+        f"  refers to: {', '.join(grounding.value.objects) or '-'}"
+        + (f" (fallback: {grounding.fallback})" if grounding.fallback else "")
+        + "\n  goal:\n    "
+        + "\n    ".join(goal)
+        + "\n  constraints: "
+        + (
+            "; ".join(f"no {c}{b}" for c, b in review.value)
+            if review.value
+            else "none" + (f" (fallback: {review.fallback})" if review.fallback else "")
+        ),
         flush=True,
     )
-    return goal
+    for name, outcome in (("grounder", grounding), ("plan reviewer", review)):
+        if outcome.fallback and outcome.attempts:
+            print(f"  {name} attempts rejected:", flush=True)
+            for attempt in outcome.attempts:
+                print(f"    {attempt}", flush=True)
+    return goal, list(review.value)
 
 
 def plan_from_goal(
@@ -1196,7 +1235,7 @@ def main() -> int:
             on_event=events,
             inject=inject,
         )
-        goal = None
+        goal, constraints = None, []
         if args.instruction:
             from long_tamp.ai import configure
 
@@ -1214,7 +1253,7 @@ def main() -> int:
                     )
                 )
 
-            goal = goal_from_text(
+            goal, constraints = understand_instruction(
                 args.instruction,
                 n_parts,
                 world_atoms(planner, recorded),
@@ -1224,7 +1263,15 @@ def main() -> int:
             )
         if args.replan:
             result = run_with_repair(
-                task, planner, n_parts, q_start, recorded, args.replan, mission, goal
+                task,
+                planner,
+                n_parts,
+                q_start,
+                recorded,
+                args.replan,
+                mission,
+                goal,
+                constraints,
             )
         else:
             result = run_mission(
@@ -1238,6 +1285,7 @@ def main() -> int:
                         world_atoms(planner, recorded),
                         clamps=clamp_seats(task.task_config.VALID_PAIRS),
                         goal=goal,
+                        blocked=constraints,
                     )
                     if args.planner == "up"
                     else None
