@@ -149,61 +149,76 @@ def run_block_with_recovery(
             "failure": None if success else failure,
         }
 
-    hints = hints_factory() if hints_factory else None
+    from long_tamp.execution import activity
 
-    while True:
-        # --- one attempt at the block, from its entry configuration -----
-        try:
-            result = seq_planner.plan_sequence(
-                grasp_sequence=list(block_seq),
-                q_init=q_init,
-                q_scene_init=q_scene_init,
-                frozen_arms_mode=mode,
-                per_phase_frozen_arms=frozen,
-                verbose=verbose,
-                phase_q_hints=hints,
-            )
-        except KeyboardInterrupt:
-            raise
-        except Exception as e:  # plan_sequence reports failure by raising
-            _log("plan_sequence failed: %s", e)
-            result = {"success": False}
-
-        if result.get("success"):
-            return _result(True, result["final_config"], "planned")
-
-        broken = _hint_chain_broken(seq_planner, hints)
-        if broken is not None:
-            reason, failure = broken
-        else:
-            reason = _resume_until_stuck(
-                seq_planner,
-                mode,
-                frozen,
-                hints,
-                resume_limit,
-                unreachable_resumes,
-                _maybe_unfreeze,
-                verbose,
-                _log,
-            )
-            total_resumes += reason["resumes"]
-            if reason["success"]:
-                return _result(True, reason["final_config"], "resumed")
-            failure = reason["failure"]
-            reason = reason["why"]
-
-        # --- level 3: discard the block's commitments and start over ----
-        if max_replans is not None and replans >= max_replans:
-            return _result(False, q_init, f"gave up after {replans} replans ({reason})")
-        replans += 1
-        _log("replanning from entry (replan %d): %s", replans, reason)
-        seq_planner.reset_grasp_tracker_to_call_start()
-        if replans % 5 == 0:
-            # Each replan rebuilds phase graphs and a lookahead round; the
-            # native bindings leave reference cycles gc must break.
-            gc.collect()
+    started = False
+    try:
         hints = hints_factory() if hints_factory else None
+
+        while True:
+            # --- one attempt at the block, from its entry configuration -----
+            try:
+                started = True  # the tracker's "call start" is this block's now
+                result = seq_planner.plan_sequence(
+                    grasp_sequence=list(block_seq),
+                    q_init=q_init,
+                    q_scene_init=q_scene_init,
+                    frozen_arms_mode=mode,
+                    per_phase_frozen_arms=frozen,
+                    verbose=verbose,
+                    phase_q_hints=hints,
+                )
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:  # plan_sequence reports failure by raising
+                _log("plan_sequence failed: %s", e)
+                result = {"success": False}
+
+            if result.get("success"):
+                return _result(True, result["final_config"], "planned")
+
+            broken = _hint_chain_broken(seq_planner, hints)
+            if broken is not None:
+                reason, failure = broken
+            else:
+                reason = _resume_until_stuck(
+                    seq_planner,
+                    mode,
+                    frozen,
+                    hints,
+                    resume_limit,
+                    unreachable_resumes,
+                    _maybe_unfreeze,
+                    verbose,
+                    _log,
+                )
+                total_resumes += reason["resumes"]
+                if reason["success"]:
+                    return _result(True, reason["final_config"], "resumed")
+                failure = reason["failure"]
+                reason = reason["why"]
+
+            # --- level 3: discard the block's commitments and start over ----
+            if max_replans is not None and replans >= max_replans:
+                return _result(
+                    False, q_init, f"gave up after {replans} replans ({reason})"
+                )
+            replans += 1
+            _log("replanning from entry (replan %d): %s", replans, reason)
+            activity.progress(f"replanning the block from its start ({replans})")
+            seq_planner.reset_grasp_tracker_to_call_start()
+            if replans % 5 == 0:
+                # Each replan rebuilds phase graphs and a lookahead round; the
+                # native bindings leave reference cycles gc must break.
+                gc.collect()
+            hints = hints_factory() if hints_factory else None
+
+    except activity.StepInterrupted:
+        # Aborted mid-block (#108): discard what the block committed, then let
+        # the executor fail the step.
+        if started:
+            seq_planner.reset_grasp_tracker_to_call_start()
+        raise
 
 
 def _hint_chain_broken(
@@ -389,22 +404,24 @@ def make_lookahead_hints_factory(
     ]
 
     def factory() -> dict[int, list[list[float]]] | None:
+        from long_tamp.execution import activity
+
         rounds = 0
         while max_rounds is None or rounds < max_rounds:
             rounds += 1
-            chain = seq_planner.find_feasible_phase_target(
-                phase_n=block_seq[n_idx],
-                phase_n1=block_seq[n1_idx],
-                q_current=q_current,
-                q_scene_init=q_scene,
-                frozen_arms_n=frozen.get(n_idx, []),
-                frozen_arms_n1=frozen.get(n1_idx, []),
-                probe_timeout=probe_timeout,
-                max_candidates=max_candidates,
-                verbose=verbose,
-                also_reachable=also,
-                verify_paths=verify_paths,
+            activity.progress(
+                f"lookahead round {rounds}"
+                + (f"/{max_rounds}" if max_rounds is not None else ""),
+                round=rounds,
             )
+            try:
+                chain = _search()
+            except activity.SearchSkipped as skipped:
+                logger.warning(
+                    "lookahead skipped (%s); planning unhinted", skipped.reason
+                )
+                activity.progress("lookahead skipped: planning without a hint")
+                return None
             if chain is not None:
                 return {n_idx: chain}
             if rounds % 5 == 0:
@@ -415,6 +432,21 @@ def make_lookahead_hints_factory(
                 rounds,
             )
         return None
+
+    def _search() -> list[list[float]] | None:
+        return seq_planner.find_feasible_phase_target(
+            phase_n=block_seq[n_idx],
+            phase_n1=block_seq[n1_idx],
+            q_current=q_current,
+            q_scene_init=q_scene,
+            frozen_arms_n=frozen.get(n_idx, []),
+            frozen_arms_n1=frozen.get(n1_idx, []),
+            probe_timeout=probe_timeout,
+            max_candidates=max_candidates,
+            verbose=verbose,
+            also_reachable=also,
+            verify_paths=verify_paths,
+        )
 
     return factory
 

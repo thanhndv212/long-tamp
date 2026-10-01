@@ -19,7 +19,8 @@
   var MAIN_ROLES = ["sequence", "fallback", "retry", "parallel", "condition",
                     "operation", "transaction"];
   var PLAN_ROLES = MAIN_ROLES.concat(["complete", "ready", "precondition",
-                    "attempts", "execute", "motion", "drift", "pause", "plan"]);
+                    "attempts", "execute", "motion", "drift", "pause", "plan",
+                    "progress"]);
   var KIND_ICONS = { sequence: "→", fallback: "?", retry: "↻",
                      parallel: "⇉", condition: "◇", operation: "▸",
                      transaction: "■" };
@@ -116,7 +117,7 @@
       plan: null, planVersion: 0, attemptsCap: {},
       nodes: {}, roots: [], stack: [],
       t0: null, t: null, applied: 0,
-      paused: null, side: [], roles: {},
+      paused: null, planning: null, side: [], roles: {},
       model: { calls: 0, tokens: 0, failures: 0 },
       tools: { calls: 0, failures: 0 },
     };
@@ -130,6 +131,7 @@
         status: "IDLE", skipped: false, skipReason: null, attempt: 0,
         maxAttempts: null, failures: [], drifts: 0, paused: false,
         moving: false, motions: 0, motionSeconds: 0, planSeconds: 0,
+        activity: null, progress: [],
         started: null, ended: null, events: [],
       };
     }
@@ -192,6 +194,7 @@
       if (!n.type) n.type = event.role;
       if (n.label === n.id && event.name) n.label = event.name.replace(/ transaction$/, "");
       n.status = event.status;
+      if (event.status !== "RUNNING") n.activity = null;
       if (event.status === "RUNNING") {
         if (n.started === null) n.started = event.t;
         n.ended = null;
@@ -209,6 +212,8 @@
         if (event.status === "SUCCESS") { n.skipped = true; n.skipReason = event.message || "effect holds"; }
         break;
       case "execute":
+        n.activity = null;
+        if (view.planning === n.id) view.planning = null;
         n.attempt = (event.metrics && event.metrics.attempt) || n.attempt + 1;
         n.planSeconds += (event.metrics && event.metrics.seconds) || 0;
         if (event.status === "FAILURE") n.failures.push(event.message || "attempt failed");
@@ -225,6 +230,12 @@
         break;
       case "drift":
         n.drifts += 1;
+        break;
+      case "progress":
+        n.activity = { message: event.message || "", metrics: event.metrics || {}, t: event.t };
+        n.progress.push(n.activity);
+        if (n.progress.length > 200) n.progress.shift();
+        view.planning = n.id;
         break;
       case "pause":
         n.paused = event.status === "RUNNING";
@@ -310,6 +321,11 @@
       if (state === "skipped") out.push(h("span", { cls: "badge", text: "skipped: " + n.skipReason }));
       if (n.motionSeconds) out.push(h("span", { cls: "badge", text: "motion " + fmtSeconds(n.motionSeconds) }));
       if (n.moving) out.push(h("span", { cls: "badge warn", text: "moving" }));
+    }
+    if (n.activity && n.status === "RUNNING") {
+      var a = n.activity, msg = a.message.length > 70 ? a.message.slice(0, 69) + "…" : a.message;
+      out.push(h("span", { cls: "badge activity", title: a.message,
+        text: msg + (a.metrics.elapsed !== undefined ? " · " + fmtSeconds(a.metrics.elapsed) : "") }));
     }
     if (n.drifts) out.push(h("span", { cls: "badge warn", text: "drift ×" + n.drifts }));
     if (n.paused) out.push(h("span", { cls: "badge warn", text: "⏸ paused" }));
@@ -517,6 +533,10 @@
       el.appendChild(h("dl", { cls: "kv" }, rows.filter(function (r) { return r[1] !== null && r[1] !== undefined; })
         .map(function (r) { return [h("dt", { text: r[0] }), h("dd", { text: String(r[1]) })]; })
         .reduce(function (a, b) { return a.concat(b); }, [])));
+      if (n.activity && n.status === "RUNNING") {
+        el.appendChild(h("p", null, h("b", { text: "Now: " }), n.activity.message));
+        el.appendChild(stepButtons(n));
+      }
       if (n.failures.length) {
         el.appendChild(h("p", { text: "Failures:" }));
         el.appendChild(h("ul", null, n.failures.map(function (f) { return h("li", { cls: "mono", text: f }); })));
@@ -781,7 +801,32 @@
     });
   }
 
+  // Skip search / Abort step, for the step being planned (#108)
+  function stepButtons(n) {
+    var box = h("span", { cls: "step-buttons" });
+    if (!boot.control || !LT.live || !n || n.status !== "RUNNING" || !n.activity) return box;
+    var label = n.label;
+    if (n.activity.metrics.search) {
+      box.appendChild(h("button", { text: "Skip search", title: "plan " + label + " without finishing: " + n.activity.metrics.search,
+        onclick: function () { post("api/control", { action: "skip" }); } }));
+    }
+    box.appendChild(h("button", { cls: "danger", text: "Abort step", title: "end " + label + " now, as a failure",
+      onclick: function () {
+        if (window.confirm("Abort " + label + "? The run stops at this step.")) post("api/control", { action: "abort_step" });
+      } }));
+    return box;
+  }
+
   function header(view) {
+    var slot = document.getElementById("step-controls");
+    if (slot) {
+      slot.textContent = "";
+      var pn = view.planning && view.nodes[view.planning];
+      if (pn && pn.status === "RUNNING" && pn.activity) {
+        slot.appendChild(h("span", { cls: "muted", text: pn.label + ": " }));
+        slot.appendChild(stepButtons(pn));
+      }
+    }
     document.getElementById("title").textContent = config.title;
     var root = view.roots.length ? view.nodes[view.roots[0]] : null;
     var state = view.paused ? "paused" : root ? nodeState(root) : "idle";

@@ -5,8 +5,9 @@ the viewer page, which polls for new events. Routes (all JSON):
 
 - ``GET /`` the page; ``GET /api/events?since=N`` the events from index ``N``;
 - ``GET /api/features`` what the page can offer (control, chat);
-- ``POST /api/control`` ``{"action": "pause" | "resume" | "stop"}``, with an
-  ``ExecutionControl``;
+- ``POST /api/control`` ``{"action": "pause" | "resume" | "stop" | "skip" |
+  "abort_step"}``, with an ``ExecutionControl`` (``skip`` and ``abort_step``
+  act inside the step being planned, see ``long_tamp.execution.activity``);
 - more with ``route(method, path, handler)``.
 
 With ``separate_process=True``, the page and the events are served by a
@@ -203,13 +204,17 @@ class ViewerServer:
 
     def _control(self, body: Any, _query: dict[str, list[str]]) -> Any:
         action = (body or {}).get("action")
-        if action not in ("pause", "resume", "stop"):
-            raise ValueError("action must be pause, resume or stop")
-        getattr(self.control, action)()
+        if action in ("skip", "abort_step"):  # inside the step planning (#108)
+            self.control.request(action, (body or {}).get("reason") or "operator")
+        elif action in ("pause", "resume", "stop"):
+            getattr(self.control, action)()
+        else:
+            raise ValueError("action must be pause, resume, stop, skip or abort_step")
         return {
             "paused": self.control.paused,
             "stopped": self.control.stopped,
             "waiting_at": self.control.waiting_at,
+            "pending": getattr(self.control, "pending", None),
         }
 
 

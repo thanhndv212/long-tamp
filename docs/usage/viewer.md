@@ -157,7 +157,10 @@ It prints the page's URL (and opens a browser, outside a container). Then:
    button.
 3. **Start mission** runs it without asking the model, and brings the plan monitor into view.
    The plan tree, the timeline and the events follow the run live, and the scene plays the
-   motion. **pause**, **resume** and **stop** act at step boundaries. A stop ends that run,
+   motion. While a step is planning, it shows what the step is doing, such as *searching a
+   part2/h_seat target …: 12 rejected so far* or *phase 3/5*. **Skip search** and
+   **Abort step** buttons act inside that step. **pause**, **resume** and **stop** act at
+   step boundaries. A stop ends that run,
    not the chat: you can change the plan and start again. The model sees the run in the
    chat history, so you can ask *why did that step fail?*
 

@@ -30,12 +30,14 @@ its motion has executed.
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from . import activity
 from long_tamp.tasks.task_planning.events import (
     DRIFT_ROLE,
     MOTION_ROLE,
@@ -68,15 +70,60 @@ class StepExecution:
 
 
 class _AttemptSession:
-    """The session, with a hook at the start of every execution attempt."""
+    """The session, with a hook at the start of every execution attempt, and
+    the step's planning marked for progress reports and interventions
+    (``activity``, #108): an aborted step fails and stops the run."""
 
-    def __init__(self, session: Any, on_attempt: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        session: Any,
+        on_attempt: Callable[[], None],
+        sink: EventSink | None = None,
+        control: ExecutionControl | None = None,
+    ) -> None:
         self._session = session
         self._on_attempt = on_attempt
+        self._sink, self._control = sink, control
+        self._labels: dict[str, str] | None = None
+
+    def _label(self, step_id: str) -> str:
+        if self._labels is None:
+            self._labels = {}
+            plan = getattr(self._session, "plan", None)
+            stack = [plan.document["root"]] if plan is not None else []
+            while stack:
+                node = stack.pop()
+                self._labels[node["id"]] = node.get("label", node["id"])
+                stack += node.get("children", []) + (
+                    [node["child"]] if "child" in node else []
+                )
+        return self._labels.get(step_id, step_id)
 
     def execute_step(self, step_id: str) -> str:
         self._on_attempt()
-        return self._session.execute_step(step_id)
+        if self._control is not None:
+            self._control.clear_request()  # one made between steps is stale
+        activity.begin(step_id, self._label(step_id), self._sink, self._control)
+        try:
+            return self._session.execute_step(step_id)
+        except activity.StepInterrupted as interrupted:
+            # abort_step (or a skip no search caught): the step fails and the
+            # run stops here, so neither its attempts nor an enclosing retry
+            # plan it again
+            why = interrupted.reason or "operator"
+            if self._control is not None:
+                self._control.stop()
+            return json.dumps(
+                {
+                    "status": "failure",
+                    "step_id": step_id,
+                    "message": f"aborted ({interrupted.action} by {why})",
+                }
+            )
+        finally:
+            activity.end()
+            if self._control is not None:
+                self._control.clear_request()
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._session, name)
@@ -172,7 +219,9 @@ class PlanExecutor:
             self.session.defer_recording = True
         t0 = self.clock()
         run = run_plan(
-            _AttemptSession(self.session, self._pending.clear),
+            _AttemptSession(
+                self.session, self._pending.clear, self.on_event, self.control
+            ),
             on_skip=self.on_skip,
             before_step=self._before,
             after_step=self._after,
