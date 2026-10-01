@@ -61,6 +61,7 @@ from long_tamp.tasks.task_planning import (  # noqa: E402
 from long_tamp.tasks.task_planning.events import (  # noqa: E402
     JsonlEventWriter,
     make_event,
+    plan_event,
 )
 from long_tamp.tasks.task_planning.skills import SkillCommand  # noqa: E402
 from long_tamp.sim.skills import SCREW  # noqa: E402
@@ -968,6 +969,7 @@ def run_mission(
     plan_ahead: bool = False,
     max_drift: float | None = None,
     concurrent: bool = False,
+    control=None,
 ) -> dict[str, Any]:
     """Run the mission's TaskPlan from ``q_start`` (default: the scene start).
 
@@ -981,7 +983,8 @@ def run_mission(
     is given, every block is logged to it. ``on_event`` receives the
     mission's event stream (``long_tamp.tasks.task_planning.events``).
     ``document`` is the TaskPlan to run (default: the hand-written
-    ``build_plan_document``; see ``plan_from_goal``).
+    ``build_plan_document``; see ``plan_from_goal``). ``control`` (an
+    ``ExecutionControl``) pauses, resumes or stops it between steps.
     """
     if recorded is None:
         recorded = RecordedFacts(None, predicates=RECORDED_PREDICATES)
@@ -1003,6 +1006,7 @@ def run_mission(
         session,
         backend=backend,
         policy=ExecutionPolicy(max_start_drift=max_drift),
+        control=control,
         on_skip=lambda label, why: print(f"\n=== {label} === skipped ({why})"),
         on_event=on_event,
         on_drift=ctx.get("on_drift"),
@@ -1012,6 +1016,8 @@ def run_mission(
         validate_config=lambda q: planner.config_gen.is_config_valid(list(q))[0],
     )
     ctx["executor"] = executor
+    if on_event is not None:
+        on_event(plan_event(session.plan))  # the viewer draws this plan
     t_mission = time.time()
     run = executor.run()
     if not run.success:
@@ -1190,6 +1196,13 @@ def main() -> int:
         "--no-viewer",
         action="store_true",
         help="run without the live Viser viewer or path playback",
+    )
+    ap.add_argument(
+        "--web-port",
+        type=int,
+        help="serve the web mission viewer (plan, timeline, events; pause, resume "
+        "and stop) on this port while the mission runs, e.g. 8090; it embeds the "
+        "Viser scene unless --no-viewer (python -m long_tamp.viewer replays a run)",
     )
     ap.add_argument(
         "--backend",
@@ -1412,6 +1425,28 @@ def main() -> int:
             closures=closures,
         )
         atexit.register(live_viewer.close)
+    control = None
+    if args.web_port is not None:
+        from long_tamp.execution import ExecutionControl
+        from long_tamp.viewer import ViewerConfig, ViewerServer
+
+        control = ExecutionControl()
+        web = ViewerServer(
+            run_dir / "events.jsonl",
+            ViewerConfig(
+                title=f"Screw assembly, seed {args.seed}",
+                scene_url=(
+                    None
+                    if live_viewer is None
+                    else f"http://localhost:{args.viewer_port}"
+                ),
+            ),
+            port=args.web_port,
+            control=control,
+            separate_process=True,  # planning holds the GIL for seconds
+        )
+        print(f"web viewer: {web.start()}", flush=True)
+        atexit.register(web.close)
     try:
         inject = [parse_injection(spec) for spec in args.inject_failure]
         mission = dict(
@@ -1436,6 +1471,7 @@ def main() -> int:
             max_drift=args.max_drift,
             on_event=events,
             inject=inject,
+            control=control,
         )
         goal, constraints = None, []
         client = None
