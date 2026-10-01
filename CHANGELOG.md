@@ -20,6 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The M6 exit test (#91), `script/screw_assembly/autonomy_batch.py`. Over N seeds, one
+  instruction runs to the end with no human input, under the supervisor, with a part's
+  clamping failure injected.
+  - Each run is classified as completed, escalated cleanly (a report in its folder), or
+    unclean.
+  - Each run is audited: every decision is an allowed action, and every relaxed goal is a
+    strict subset of the original.
+  - It totals model calls and tokens per run. The gate passes with no unclean run and no
+    unchecked decision.
+  - Result: 10/10 missions completed with no human input, each after one goal relaxation that
+    dropped only the failed part; 48 model calls, about 42k tokens. The first batch also
+    showed a clean escalation.
+
 - The operator chat (#89, ADR-0006), `long_tamp.ai.chat`. A model talks with the operator and
   acts only through gated tools.
   - Each answer is one JSON object (`say`, `actions`, `done`). Tools run in order, and their
@@ -93,6 +106,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     [--ai-env FILE]` plans the written goal with the task planner (implies
     `--planner up`). `screw_domain.goal_vocabulary` describes the domain, and
     `pddl_problem(goal=...)` takes a goal other than the full mission's.
+
+### Fixed
+
+- Missions started together no longer crash writing the same cached URDF
+  (`backends._urdf_paths`): each writer uses its own temporary file and an atomic rename.
 
 ## [0.6.0] - 2026-10-01
 

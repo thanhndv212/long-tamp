@@ -20,6 +20,7 @@ is written to a cache folder and its path returned.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import tempfile
 from pathlib import Path, PurePosixPath
@@ -82,8 +83,12 @@ def resolve_mesh_paths(urdf_path: str) -> str:
     _CACHE.mkdir(parents=True, exist_ok=True)
     out = _CACHE / f"{source.stem}.{digest}.urdf"
     if not out.exists():
-        tmp = out.with_suffix(f".{digest}.tmp")
-        tmp.write_text(resolved)
-        tmp.replace(out)
+        # A temporary file of this process's own, then an atomic rename:
+        # missions started together (batches) may write the same file at
+        # once, and the content is the same, so the last rename wins.
+        fd, tmp = tempfile.mkstemp(dir=_CACHE, prefix=f"{source.stem}.", suffix=".tmp")
+        with os.fdopen(fd, "w") as handle:
+            handle.write(resolved)
+        os.replace(tmp, out)
     logger.debug(f"{source.name}: mesh paths resolved -> {out}")
     return str(out)

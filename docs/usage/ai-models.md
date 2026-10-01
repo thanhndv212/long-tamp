@@ -156,3 +156,15 @@ A rejected call comes back to the model with the reason. The model knows the dom
 `events.jsonl` (`role: tool`). Other front ends (e.g. the web viewer, #90) can use the same
 `ChatSession` and tools.
 
+## Running without a human
+
+```bash
+python3 task_screw_assembly.py --backend mujoco --ai-env FILE --goal-model API:MODEL \
+  --instruction "assemble both parts and rack the driver" --supervise
+```
+
+The roles turn the instruction into a goal and constraints. Each repair loop handles what
+the motion planner can explain. When repair gives up, the supervisor decides at goal level
+within its limits; when it can't decide, it stops with a report. `autonomy_batch.py` runs
+this over many seeds with an injected failure and audits every decision (the M6 exit test).
+
