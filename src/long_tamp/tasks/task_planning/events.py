@@ -41,6 +41,14 @@ MOTION_ROLE = "motion"
 #: Python executor only: before a step's motion, the robot was too far from
 #: where the plan starts (``FAILURE``, with ``start_drift``); it is replanned.
 DRIFT_ROLE = "drift"
+#: Opt-in (``plan_event``): the plan about to run, its IR document in the
+#: event's ``plan`` field, so a viewer can draw it; emitted again when a new
+#: plan replaces it (a replan, a chat edit).
+PLAN_ROLE = "plan"
+#: Python executor only: execution paused at a step boundary (``RUNNING``),
+#: then resumed (``SUCCESS``) or stopped (``FAILURE``); ``metrics.when`` is
+#: ``"before"`` or ``"after"`` the step.
+PAUSE_ROLE = "pause"
 
 STATUSES = ("RUNNING", "SUCCESS", "FAILURE", "SKIPPED")
 
@@ -63,6 +71,7 @@ def make_event(
     t: float | None = None,
     message: str | None = None,
     metrics: dict[str, Any] | None = None,
+    plan: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """An event dict in the stream's schema (optional fields left out)."""
     event: dict[str, Any] = {
@@ -79,7 +88,37 @@ def make_event(
         event["message"] = message
     if metrics:
         event["metrics"] = metrics
+    if plan is not None:
+        event["plan"] = plan
     return event
+
+
+def plan_event(
+    plan: Any, message: str = "", *, source: str = "python"
+) -> dict[str, Any]:
+    """A ``plan`` event carrying ``plan`` (a ``TaskPlan`` or an IR document).
+
+    Not part of ``run_plan``'s stream: emit it before running a plan when a
+    viewer should draw the plan (``long_tamp.viewer``). Without one, a viewer
+    infers the tree from the transitions.
+    """
+    document = plan.document if hasattr(plan, "document") else plan
+    root = document["root"]
+    metrics = {}
+    if getattr(plan, "plan_fingerprint", None):
+        metrics["fingerprint"] = plan.plan_fingerprint
+    if getattr(plan, "effective_attempts", None):
+        metrics["attempts"] = dict(plan.effective_attempts)
+    return make_event(
+        root["id"],
+        PLAN_ROLE,
+        str(document.get("mission_id", root["id"])),
+        "SUCCESS",
+        source=source,
+        message=message,
+        metrics=metrics or None,
+        plan=document,
+    )
 
 
 class JsonlEventWriter:
@@ -116,6 +155,8 @@ def read_events(path: str | Path) -> list[dict[str, Any]]:
 
 __all__ = [
     "MOTION_ROLE",
+    "PAUSE_ROLE",
+    "PLAN_ROLE",
     "SCHEMA",
     "STATUSES",
     "TRANSACTION_ROLES",
@@ -123,5 +164,6 @@ __all__ = [
     "JsonlEventWriter",
     "element_name",
     "make_event",
+    "plan_event",
     "read_events",
 ]

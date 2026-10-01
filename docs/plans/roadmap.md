@@ -148,7 +148,7 @@ within its limits with an escalation report.
   viewer, best done with #24 (moved out of M6)
 - [#98](https://github.com/thanhndv212/long-tamp/issues/98) One live Claude call through the
   gateway (needs API credit; follow-up of #86)
-- [#24](https://github.com/thanhndv212/long-tamp/issues/24) HTML mission viewer (replay/live) on the event stream
+- [#24](https://github.com/thanhndv212/long-tamp/issues/24) HTML mission viewer (replay/live) on the event stream: done, `long_tamp.viewer`
 - [#25](https://github.com/thanhndv212/long-tamp/issues/25) BehaviorTree.CPP node plugin library for ROS 2 / Nav2 users
 - [#26](https://github.com/thanhndv212/long-tamp/issues/26) Re-enable the spline path optimizer once hpp-core caps the QP solve
   ([bug 6](../bugs/hpp-core-unbounded-planning-loops.md))

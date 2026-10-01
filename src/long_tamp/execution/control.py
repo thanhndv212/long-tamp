@@ -13,6 +13,7 @@ come from another thread (a UI, a ROS service) than the executor's.
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 
 _WHEN = ("before", "after")
 
@@ -25,6 +26,10 @@ class ExecutionControl:
         #: The boundary a paused executor is waiting at, or None.
         self.waiting_at: tuple[str, str] | None = None
         self._breakpoints: set[tuple[str, str]] = set()
+        #: Called as ``on_wait(step_id, when, waiting)``: ``waiting=True``
+        #: when a checkpoint starts blocking, then ``False`` when it returns
+        #: (resumed or stopped). The executor uses it for ``pause`` events.
+        self.on_wait: Callable[[str, str, bool], None] | None = None
 
     def pause(self) -> None:
         with self._cond:
@@ -55,8 +60,13 @@ class ExecutionControl:
         with self._cond:
             if (step_id, when) in self._breakpoints:
                 self.paused = True
+            waited = self.paused and not self.stopped
+            if waited and self.on_wait is not None:
+                self.on_wait(step_id, when, True)
             while self.paused and not self.stopped:
                 self.waiting_at = (step_id, when)
                 self._cond.wait()
             self.waiting_at = None
+            if waited and self.on_wait is not None:
+                self.on_wait(step_id, when, False)
             return not self.stopped

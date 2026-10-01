@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Web mission viewer, `long_tamp.viewer` (#24). It shows the plan tree with each node's state
+  (attempt k/N, skipped because its effect held, drift, paused), a Gantt timeline you can play
+  and scrub, the event list and per-node details.
+  - `python -m long_tamp.viewer replay <run>` writes one self-contained HTML file per run,
+    with no network needed. `serve` follows a running mission.
+  - `ViewerServer` serves it live and can pause, resume and stop through an
+    `ExecutionControl`. The screw assembly's `--web-port` serves it next to the Viser scene.
+  - Customizable: `ViewerConfig` (panels, colors, theme, metric labels, scene URL, JSON
+    file) and `window.LongTamp` in your own scripts (panels, badges, metric formats, event
+    hooks). See `docs/usage/viewer.md`.
+- Events: `plan` (opt-in, `plan_event(plan)`, carrying the IR document) and `pause` (from the
+  executor, when an `ExecutionControl` holds it at a step boundary).
+
 ## [0.7.0] - 2026-10-01
 
 Milestone M6: AI model integration (ADR-0006). Any model behind an Anthropic- or

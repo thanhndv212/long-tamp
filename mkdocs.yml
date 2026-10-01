@@ -74,6 +74,7 @@ nav:
       - Simulation (MuJoCo): usage/simulation-mujoco.md
       - Skills: usage/skills.md
       - Mission events: usage/events.md
+      - Mission viewer: usage/viewer.md
   - Features:
       - Overview: features/README.md
       - Phase-target lookahead: features/phase-target-lookahead.md

@@ -39,6 +39,7 @@ from typing import Any
 from long_tamp.tasks.task_planning.events import (
     DRIFT_ROLE,
     MOTION_ROLE,
+    PAUSE_ROLE,
     EventSink,
     make_event,
 )
@@ -124,6 +125,8 @@ class PlanExecutor:
         self.on_skip = on_skip
         self._lock = threading.Lock()
         self.on_event = self._locked(on_event) if on_event is not None else None
+        if self.on_event is not None and self.control.on_wait is None:
+            self.control.on_wait = self._emit_pause
         self.clock, self.sleep = clock, sleep
         self.on_drift = on_drift
         self.plan_ahead = plan_ahead
@@ -312,6 +315,27 @@ class PlanExecutor:
                 for c in replanned
             ]
         return "", list(replanned)
+
+    def _emit_pause(self, step_id: str, when: str, waiting: bool) -> None:
+        if self.on_event is None:
+            return
+        if waiting:
+            status, previous, message = "RUNNING", "IDLE", f"paused {when} the step"
+        elif self.control.stopped:
+            status, previous, message = "FAILURE", "RUNNING", "stopped"
+        else:
+            status, previous, message = "SUCCESS", "RUNNING", "resumed"
+        self.on_event(
+            make_event(
+                step_id,
+                PAUSE_ROLE,
+                step_id,
+                status,
+                previous,
+                message=message,
+                metrics={"when": when},
+            )
+        )
 
     def _emit_drift(self, node: dict[str, Any], drift: float, tolerance: float) -> None:
         if self.on_event is None:
