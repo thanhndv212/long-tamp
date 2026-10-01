@@ -78,6 +78,7 @@ def test_a_message_from_the_page_runs_a_turn_and_shows_its_transcript(server):
     _say(server, bridge, "add two")
     assert log == [2]
     body = _get(server.url + "api/chat?since=0")
+<<<<<<< HEAD
     # each step as it came: the model's message, then the tool it called
     assert [(e["who"], e["text"][:6]) for e in body["entries"]] == [
         ("operator", "add tw"),
@@ -85,11 +86,15 @@ def test_a_message_from_the_page_runs_a_turn_and_shows_its_transcript(server):
         ("tool", 'add({"'),
         ("model", "2 adde"),
     ]
+=======
+    assert [e["who"] for e in body["entries"]] == ["operator", "tool", "model"]
+>>>>>>> origin/dev
     assert body["entries"][0] == {
         **body["entries"][0],
         "text": "add two",
         "source": "web",
     }
+<<<<<<< HEAD
     assert body["entries"][2]["ok"] and body["entries"][2]["tool"] == "add"
     assert not body["busy"] and not body["ended"]
     assert _get(server.url + "api/chat?since=3")["entries"][0]["text"] == "2 added"
@@ -129,6 +134,12 @@ def test_the_page_sees_a_turn_while_it_runs(server):
         "tool",
         "model",
     ]
+=======
+    assert body["entries"][1]["ok"] and body["entries"][1]["tool"] == "add"
+    assert body["entries"][2]["text"] == "2 added"
+    assert not body["busy"] and not body["ended"]
+    assert _get(server.url + "api/chat?since=2")["entries"][0]["who"] == "model"
+>>>>>>> origin/dev
 
 
 def test_one_turn_at_a_time_whoever_sends_it(server):
@@ -275,6 +286,7 @@ def _walk(node):
         [node["child"]] if "child" in node else []
     ):
         yield from _walk(child)
+<<<<<<< HEAD
 
 
 def test_an_action_runs_without_the_model_and_a_plan_shows_as_a_card(server):
@@ -360,3 +372,5 @@ def test_reset_clears_a_stop_for_the_next_run():
     assert control.checkpoint("s", "before") is False
     control.reset()
     assert control.checkpoint("s", "before") is True and not control.paused
+=======
+>>>>>>> origin/dev

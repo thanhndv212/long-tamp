@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the session with the terminal. Tool calls land in the event list, and a plan made in the
   chat replaces the plan tree. In the screw assembly, `--chat --web-port` puts the chat in
   the page, next to the Viser scene.
+<<<<<<< HEAD
 - Mission UI (#104). `script/screw_assembly/mission_ui.py` starts one page with the scene,
   the chat and the live plan monitor.
   - A plan built in the chat shows as a card with a **Start mission** button. Start runs the
@@ -39,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AI defaults: `configure()` falls back to `~/.config/long-tamp/ai.env`, and
   `$LONG_TAMP_GOAL_MODEL` names the default model (`default_model()`), so neither
   `--ai-env` nor `--goal-model` is needed on every command.
+=======
+>>>>>>> origin/dev
 - Events: `plan` (opt-in, `plan_event(plan)`, carrying the IR document) and `pause` (from the
   executor, when an `ExecutionControl` holds it at a step boundary).
 

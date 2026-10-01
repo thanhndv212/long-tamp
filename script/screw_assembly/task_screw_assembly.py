@@ -780,7 +780,11 @@ def run_chat(
     (#90); after stdin closes, it goes on there until "quit" or Ctrl-C."""
     from chat_tools import INTRO, MissionChat
 
+<<<<<<< HEAD
     from long_tamp.ai.chat import ChatSession, ChatTurn
+=======
+    from long_tamp.ai.chat import ChatSession
+>>>>>>> origin/dev
     from long_tamp.viewer import ChatBridge
 
     work = MissionChat(
@@ -812,6 +816,7 @@ def run_chat(
         client, work.tools(), INTRO + "\n\n" + work.domain(), on_tool=on_tool
     )
     bridge = ChatBridge(session)
+<<<<<<< HEAD
 
     def start():
         """The page's Start button (#104): run the plan, no model involved;
@@ -825,6 +830,8 @@ def run_chat(
     bridge.add_action(
         "start", "Start mission", start, enabled=lambda: work.document is not None
     )
+=======
+>>>>>>> origin/dev
     if web is not None:
         bridge.attach(web)
         print(f"chat: also in the web viewer, {web.url}", flush=True)
