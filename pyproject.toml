@@ -81,13 +81,17 @@ planning = [
     "up-pyperplan>=1.1",
 ]
 
-# Goals from natural language (long_tamp.tasks.task_planning.language):
-# ClaudeGoalWriter calls Claude through the Anthropic API.
-language = [
+# AI models (long_tamp.ai, ADR-0006): any model behind an Anthropic- or
+# OpenAI-compatible API. ai-anthropic for the Anthropic Messages API, ai-openai
+# for OpenAI-compatible endpoints (OpenAI, Azure, vLLM, Ollama, gateways), ai for both.
+ai-anthropic = [
     "anthropic>=1.0",
 ]
-# ...or with any model behind an OpenAI-compatible endpoint (OpenAIGoalWriter).
-language-openai = [
+ai-openai = [
+    "openai>=1.0",
+]
+ai = [
+    "anthropic>=1.0",
     "openai>=1.0",
 ]
 
