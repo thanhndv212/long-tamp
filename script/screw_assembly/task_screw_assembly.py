@@ -79,6 +79,7 @@ from screw_domain import (  # noqa: E402
     block_for,
     clamp_seats,
     descriptors,
+    goal_vocabulary,
     pddl_problem,
     planned_document,
     refinement_step,
@@ -583,6 +584,7 @@ def run_with_repair(
     recorded: RecordedFacts,
     rounds: int,
     mission: dict[str, Any],
+    goal: list[str] | None = None,
 ) -> dict[str, Any]:
     """Plan, run, and replan around failures (``--replan``, issue #15).
 
@@ -597,7 +599,11 @@ def run_with_repair(
 
     def plan(blocked):
         return plan_from_goal(
-            n_parts, world_atoms(planner, recorded), blocked=blocked, clamps=clamps
+            n_parts,
+            world_atoms(planner, recorded),
+            blocked=blocked,
+            clamps=clamps,
+            goal=goal,
         )
 
     def execute(document):
@@ -642,12 +648,64 @@ def world_atoms(planner: GraspSequencePlanner, recorded: RecordedFacts) -> list[
     return sorted(str(atom) for atom in state)
 
 
+def goal_from_text(
+    instruction: str,
+    n_parts: int,
+    state: list[str],
+    clamps: list[tuple[str, str]] | None = None,
+    model: str | None = None,
+    api: str = "anthropic",
+) -> list[str]:
+    """The goal for an operator's ``instruction`` (``--instruction``, #22).
+
+    A model writes it from the domain's vocabulary and the current ``state``:
+    Claude (``api="anthropic"``), or ``model`` behind an OpenAI-compatible
+    endpoint (``api="openai"``; ``OPENAI_BASE_URL``, ``OPENAI_API_KEY``).
+    It is checked (syntax, predicates, objects), then the task planner must
+    reach it from ``state``; what fails goes back to the model, up to three
+    times. The model never writes the plan.
+    """
+    from long_tamp.tasks.task_planning.language import (
+        ClaudeGoalWriter,
+        OpenAIGoalWriter,
+        goal_from_instruction,
+    )
+    from long_tamp.tasks.task_planning.skeleton import default_planner
+
+    task_planner = default_planner("auto")
+
+    def reachable(goal: list[str]) -> str | None:
+        try:
+            task_planner.solve(pddl_problem(n_parts, state, None, clamps, goal))
+        except Exception as error:  # noqa: BLE001 - the planner's verdict
+            return str(error).splitlines()[0][:300] or type(error).__name__
+        return None
+
+    if api == "openai":
+        if not model:
+            raise SystemExit("--goal-api openai needs --goal-model")
+        writer = OpenAIGoalWriter(model=model)
+    else:
+        writer = ClaudeGoalWriter(model=model) if model else ClaudeGoalWriter()
+    t0 = time.time()
+    goal = goal_from_instruction(
+        instruction, writer, goal_vocabulary(n_parts, state, clamps), reachable
+    )
+    print(
+        f"goal for {instruction!r} ({writer.model}, {time.time() - t0:.1f}s):\n  "
+        + "\n  ".join(goal),
+        flush=True,
+    )
+    return goal
+
+
 def plan_from_goal(
     n_parts: int,
     state: list[str],
     engine: str = "auto",
     blocked: list[tuple[str, dict[str, str]]] | None = None,
     clamps: list[tuple[str, str]] | None = None,
+    goal: list[str] | None = None,
 ) -> dict[str, Any]:
     """Plan the mission from ``state`` with a task planner (``--planner up``):
     the goal (``screw_domain.mission_goal``) as PDDL, a skeleton from Unified
@@ -657,7 +715,7 @@ def plan_from_goal(
     t0 = time.time()
     task_planner = default_planner(engine)
     name = planner_name(task_planner)
-    steps = task_planner.solve(pddl_problem(n_parts, state, blocked, clamps))
+    steps = task_planner.solve(pddl_problem(n_parts, state, blocked, clamps, goal))
     print(
         f"task planner ({name}): {len(steps)} steps in {time.time() - t0:.2f}s",
         flush=True,
@@ -978,6 +1036,27 @@ def main() -> int:
         "state; needs the 'planning' extra)",
     )
     ap.add_argument(
+        "--instruction",
+        metavar="TEXT",
+        help="what to do, in words (e.g. 'assemble part 2'): Claude writes the "
+        "goal, the task planner plans it (implies --planner up; needs the "
+        "'language' extra and Anthropic API credentials)",
+    )
+    ap.add_argument(
+        "--goal-model",
+        metavar="MODEL",
+        help="with --instruction: the model that writes the goal (default for "
+        "--goal-api anthropic: claude-opus-5-5; required for openai)",
+    )
+    ap.add_argument(
+        "--goal-api",
+        choices=("anthropic", "openai"),
+        default="anthropic",
+        help="with --instruction: the API the goal model is reached through: "
+        "anthropic (the default) or an OpenAI-compatible endpoint "
+        "(OPENAI_BASE_URL, OPENAI_API_KEY)",
+    )
+    ap.add_argument(
         "--replan",
         type=int,
         default=0,
@@ -1019,6 +1098,8 @@ def main() -> int:
         help="load the scene, validate the start configuration, then exit",
     )
     args = ap.parse_args()
+    if args.instruction:
+        args.planner = "up"  # the instruction is a goal: a task planner plans it
     if args.resume and args.run_dir is None:
         ap.error("--resume needs --run-dir")
     if args.replan and args.planner != "up":
@@ -1109,9 +1190,19 @@ def main() -> int:
             on_event=events,
             inject=inject,
         )
+        goal = None
+        if args.instruction:
+            goal = goal_from_text(
+                args.instruction,
+                n_parts,
+                world_atoms(planner, recorded),
+                clamps=clamp_seats(task.task_config.VALID_PAIRS),
+                model=args.goal_model,
+                api=args.goal_api,
+            )
         if args.replan:
             result = run_with_repair(
-                task, planner, n_parts, q_start, recorded, args.replan, mission
+                task, planner, n_parts, q_start, recorded, args.replan, mission, goal
             )
         else:
             result = run_mission(
@@ -1124,6 +1215,7 @@ def main() -> int:
                         n_parts,
                         world_atoms(planner, recorded),
                         clamps=clamp_seats(task.task_config.VALID_PAIRS),
+                        goal=goal,
                     )
                     if args.planner == "up"
                     else None
