@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The spline path optimizer is back on in the screw assembly, with its QP solve capped (#26).
+  - `PyHPPBackend.configure_transition_planner(qp_max_iterations=N)` sets hpp-core's
+    `SplineGradientBased/QPMaxIterations`, which bounds the optimizer by
+    `path_optimizer_timeout` plus one capped solve. The mission uses 1000.
+  - The parameter comes from a local hpp-core patch (`fix/qp-max-iterations`, see
+    `docs/bugs/hpp-core-unbounded-planning-loops.md`, bug 6). With an hpp-core that lacks
+    it, which includes the PyPI wheels, the backend drops the spline optimizer as before.
+
 ### Added
 
 - The BehaviorTree.CPP session path on the screw-assembly cell (#58).

@@ -210,6 +210,8 @@ class PyHPPBackend(BackendBase):
         # SplineGradientBased: whether to enforce zero velocity at state junctions.
         # Setting False allows the spline optimizer to carry momentum through waypoints.
         self._spline_zero_derivatives_at_state: bool = False
+        # Iteration cap of SplineGradientBased's inner QP solve (0: none).
+        self._qp_max_iterations: int = 0
 
         # Distance-based auto-tuning
         self._enable_distance_tuning = True
@@ -1642,6 +1644,7 @@ class PyHPPBackend(BackendBase):
         spline_zero_derivatives_at_state: Optional[bool] = None,
         path_optimizer_timeout: Optional[float] = None,
         spline_optimizer: Optional[bool] = None,
+        qp_max_iterations: Optional[int] = None,
     ) -> None:
         """Configure defaults for TransitionPlanner edge-scoped planning.
 
@@ -1667,6 +1670,12 @@ class PyHPPBackend(BackendBase):
                 timeout is only checked between iterations, and a single
                 inner QP solve (proxsuite) can run unbounded: a mission was
                 observed stuck 11+ minutes in one solve. Omitted: unchanged.
+            qp_max_iterations: caps that QP solve's iterations (proxsuite's
+                ``max_iter``), which bounds the spline optimizer by
+                ``path_optimizer_timeout`` plus one bounded solve. Needs an
+                hpp-core with the ``SplineGradientBased/QPMaxIterations``
+                parameter; with one that lacks it, the spline optimizer is
+                dropped instead, as with ``spline_optimizer=False``.
         """
         if inner_planner_type is not None:
             self._transition_inner_planner_type = inner_planner_type
@@ -1690,6 +1699,14 @@ class PyHPPBackend(BackendBase):
             )
         if path_optimizer_timeout is not None:
             self._path_optimizer_timeout = float(path_optimizer_timeout)
+        if qp_max_iterations is not None:
+            self._qp_max_iterations = int(qp_max_iterations)
+            if self._qp_max_iterations > 0 and not self.has_qp_iteration_cap():
+                logger.warning(
+                    "this hpp-core has no SplineGradientBased/QPMaxIterations: "
+                    "dropping the spline optimizer (its QP solve can't be bounded)"
+                )
+                spline_optimizer = False
         if spline_optimizer is False:
             for attr in (
                 "_transit_edge_optimizers",
@@ -1710,6 +1727,16 @@ class PyHPPBackend(BackendBase):
         tp = self._transition_planner
         if tp is not None:
             self._apply_transition_planner_defaults(tp)
+
+    def has_qp_iteration_cap(self) -> bool:
+        """Whether hpp-core declares ``SplineGradientBased/QPMaxIterations``."""
+        if self.problem is None:
+            return False
+        try:
+            self.problem.getParameter("SplineGradientBased/QPMaxIterations")
+        except Exception:
+            return False
+        return True
 
     def configure_time_parameterization(
         self,
@@ -1964,6 +1991,15 @@ class PyHPPBackend(BackendBase):
             )
         except Exception:
             pass
+        if self._qp_max_iterations > 0 and self.has_qp_iteration_cap():
+            # On both problems, like PathOptimizer/timeOut above.
+            for problem in (self.problem, tp.innerProblem()):
+                try:
+                    problem.setParameter(
+                        "SplineGradientBased/QPMaxIterations", self._qp_max_iterations
+                    )
+                except Exception as e:
+                    logger.warning("SplineGradientBased/QPMaxIterations failed: %s", e)
 
         # Configure path projector specifically for TransitionPlanner.
         # If not set, fall back to whatever the Problem currently uses.

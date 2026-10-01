@@ -123,6 +123,11 @@ class ScrewAssemblyTask(ManipulationTask):
         return self._loader.build_initial_config(objects=self.task_config.OBJECTS)
 
 
+#: SplineGradientBased's QP iteration cap (proxsuite's default is 10000 and
+#: doesn't bound a hard problem).
+QP_MAX_ITERATIONS = 1000
+
+
 def seed_everything(seed: int) -> None:
     """HPP's configuration shooter draws from libc rand() and pinocchio's
     RNG, which nothing seeds: unseeded, every process replays the same
@@ -148,10 +153,12 @@ def setup(
     )
     # Paths here are short arm moves; optimization rarely pays off, and at
     # the 30 s default each part release spent ~60 s in two optimizer passes.
-    # No spline optimizer: its inner QP solve ignores the timeout, and a
-    # mission hung 11+ minutes in a single solve. Shortcuts suffice here.
+    # The spline optimizer's inner QP solve ignores that timeout (a mission
+    # hung 11+ minutes in one solve): its iterations are capped, which needs
+    # an hpp-core with SplineGradientBased/QPMaxIterations. Without one, the
+    # backend drops the spline optimizer, as before (#26).
     task.planner.configure_transition_planner(
-        path_optimizer_timeout=5.0, spline_optimizer=False
+        path_optimizer_timeout=5.0, qp_max_iterations=QP_MAX_ITERATIONS
     )
     planner = GraspSequencePlanner(
         graph_builder=task.graph_builder,

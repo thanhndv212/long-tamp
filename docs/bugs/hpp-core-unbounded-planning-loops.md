@@ -292,7 +292,8 @@ except Exception as e:
 
 ## Bug 6 (open): A Single QP Solve Inside `SplineGradientBased` Is Unbounded
 
-**Status**: open — worked around, not fixed (2026-09-26). To be dealt with later.
+**Status**: fixed in a local hpp-core patch (2026-10-01, #26), not yet upstream. Without
+the patch, the workaround below still applies (the backend falls back to it by itself).
 
 ### Problem
 
@@ -338,7 +339,20 @@ the same between-iteration points as the timeout.
 (which honor the timeout). `script/screw_assembly/` uses it. The cost is path smoothness
 wherever the spline pass would have helped. With it, 10/10 missions completed with no hang.
 
-### Proposed Fix (not done)
+### Fix (local hpp-core patch, 2026-10-01)
+
+hpp-core branch `fix/qp-max-iterations` (commit `fd9a2054`, not pushed upstream yet) adds the
+`SplineGradientBased/QPMaxIterations` parameter. Its default, 0, keeps proxsuite's own
+default, so behavior is unchanged unless the parameter is set. `QuadraticProgram::solve()`
+passes it to proxsuite as `max_iter` and `max_iter_in`. `QuadraticProgram` and
+`SplineGradientBased` gain a member each, so hpp-manipulation and hpp-python must be rebuilt
+against it.
+
+On the long_tamp side, `configure_transition_planner(qp_max_iterations=N)` sets the parameter
+when hpp-core declares it. When it doesn't, the backend drops the spline optimizer, as
+`spline_optimizer=False` does. `script/screw_assembly/` uses 1000.
+
+### Proposed Fix (as first written)
 
 1. **hpp-core**: add a problem parameter (e.g. `SplineGradientBased/QPMaxIterations`) read
    by `SplineGradientBased` and passed into `QuadraticProgram::solve()` as
