@@ -759,6 +759,7 @@ def run_supervised(
         skipped=total["skipped"],
     )
     result["supervisor"] = {
+        "original_goal": goal,
         "final_goal": outcome.goal,
         "decisions": outcome.decisions,
         "stopped": outcome.stopped,
