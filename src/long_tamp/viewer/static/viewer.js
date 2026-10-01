@@ -20,7 +20,7 @@
                     "operation", "transaction"];
   var PLAN_ROLES = MAIN_ROLES.concat(["complete", "ready", "precondition",
                     "attempts", "execute", "motion", "drift", "pause", "plan",
-                    "progress"]);
+                    "progress", "watchdog"]);
   var KIND_ICONS = { sequence: "→", fallback: "?", retry: "↻",
                      parallel: "⇉", condition: "◇", operation: "▸",
                      transaction: "■" };
@@ -131,7 +131,7 @@
         status: "IDLE", skipped: false, skipReason: null, attempt: 0,
         maxAttempts: null, failures: [], drifts: 0, paused: false,
         moving: false, motions: 0, motionSeconds: 0, planSeconds: 0,
-        activity: null, progress: [],
+        activity: null, progress: [], watchdog: [],
         started: null, ended: null, events: [],
       };
     }
@@ -237,6 +237,9 @@
         if (n.progress.length > 200) n.progress.shift();
         view.planning = n.id;
         break;
+      case "watchdog":
+        n.watchdog.push({ message: event.message || "", metrics: event.metrics || {} });
+        break;
       case "pause":
         n.paused = event.status === "RUNNING";
         view.paused = n.paused ? { id: n.id, when: (event.metrics || {}).when } : null;
@@ -328,6 +331,10 @@
         text: msg + (a.metrics.elapsed !== undefined ? " · " + fmtSeconds(a.metrics.elapsed) : "") }));
     }
     if (n.drifts) out.push(h("span", { cls: "badge warn", text: "drift ×" + n.drifts }));
+    if (n.watchdog.length) {
+      var w = n.watchdog[n.watchdog.length - 1];
+      out.push(h("span", { cls: "badge warn", title: w.message, text: "watchdog: " + (w.metrics.action || "?") }));
+    }
     if (n.paused) out.push(h("span", { cls: "badge warn", text: "⏸ paused" }));
     LT._badges.forEach(function (fn) {
       var b = fn(n, view);
@@ -536,6 +543,12 @@
       if (n.activity && n.status === "RUNNING") {
         el.appendChild(h("p", null, h("b", { text: "Now: " }), n.activity.message));
         el.appendChild(stepButtons(n));
+      }
+      if (n.watchdog.length) {
+        el.appendChild(h("p", { text: "Watchdog:" }));
+        el.appendChild(h("ul", null, n.watchdog.map(function (w) {
+          return h("li", { text: "+" + fmtSeconds(w.metrics.elapsed) + " " + w.message + " (" + (w.metrics.by || "") + ")" });
+        })));
       }
       if (n.failures.length) {
         el.appendChild(h("p", { text: "Failures:" }));

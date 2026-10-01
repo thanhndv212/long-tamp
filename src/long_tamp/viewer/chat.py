@@ -90,6 +90,10 @@ class ChatBridge:
         self.actions[name] = Action(name, label, run, enabled or (lambda: True))
         return self
 
+    def note(self, text: str) -> None:
+        """Add a note to the transcript (e.g. a watchdog's decision)."""
+        self._add("system", text)
+
     def act(self, name: str, source: str = "web") -> None:
         """Start action ``name`` in the background; ``ValueError`` if it is
         unknown, not available now, or a turn is running."""
