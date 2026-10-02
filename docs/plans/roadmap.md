@@ -159,7 +159,7 @@ within its limits with an escalation report.
   (`long-tamp[pddlstream]`), also an independent cross-check (moved out of M6)
 - [#98](https://github.com/thanhndv212/long-tamp/issues/98) One live Claude call through the
   gateway (needs API credit; follow-up of #86)
-- [#25](https://github.com/thanhndv212/long-tamp/issues/25) BehaviorTree.CPP node plugin library for ROS 2 / Nav2 users
+- [#25](https://github.com/thanhndv212/long-tamp/issues/25) BehaviorTree.CPP node plugin library for ROS 2 / Nav2 users: done, `long_tamp_bt_nodes_plugin`
 - [#26](https://github.com/thanhndv212/long-tamp/issues/26) Re-enable the spline path optimizer once hpp-core caps the QP solve
   ([bug 6](../bugs/hpp-core-unbounded-planning-loops.md))
 - Cross-step backtracking in the refiner, when an example needs it

@@ -1,6 +1,6 @@
-#include "event_logger.hpp"
-#include "python_session.hpp"
-#include "task_nodes.hpp"
+#include "long_tamp_bt/event_logger.hpp"
+#include "long_tamp_bt/python_task_session.hpp"
+#include "long_tamp_bt/task_nodes.hpp"
 
 #include <behaviortree_cpp/bt_factory.h>
 #include <behaviortree_cpp/loggers/bt_observer.h>
@@ -41,20 +41,23 @@ int main(int argc, char** argv)
     {
       throw std::runtime_error("session factory is not allowlisted: " + factory_name);
     }
-    auto session = std::make_shared<PythonSession>(factory_name, options);
+    auto session = std::make_shared<long_tamp_bt::PythonTaskSession>(factory_name, options);
     BT::BehaviorTreeFactory factory;
-    RegisterTaskPlanningNodes(factory, session);
-    auto tree = factory.createTreeFromText(session->call("get_behavior_tree_xml"));
+    long_tamp_bt::RegisterNodes(factory);
+    auto blackboard = BT::Blackboard::create();
+    blackboard->set(long_tamp_bt::kSessionKey,
+                    std::static_pointer_cast<long_tamp_bt::TaskSession>(session));
+    auto tree = factory.createTreeFromText(session->behaviorTreeXml(), blackboard);
     BT::printTreeRecursively(tree.rootNode());
     BT::TreeObserver observer(tree);
-    std::unique_ptr<JsonlEventLogger> events;
+    std::unique_ptr<long_tamp_bt::JsonlEventLogger> events;
     if(!events_path.empty())
     {
-      events = std::make_unique<JsonlEventLogger>(tree.rootNode(), events_path);
+      events = std::make_unique<long_tamp_bt::JsonlEventLogger>(tree.rootNode(), events_path);
     }
     const auto status = tree.tickWhileRunning();
     std::cout << "Task plan status: " << BT::toStr(status) << '\n';
-    std::cout << "Session report: " << session->call("get_report") << '\n';
+    std::cout << "Session report: " << session->report() << '\n';
     return status == BT::NodeStatus::SUCCESS ? 0 : 1;
   }
   catch(const std::exception& error)

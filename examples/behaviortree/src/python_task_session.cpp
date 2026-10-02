@@ -1,7 +1,9 @@
-#include "python_session.hpp"
+#include "long_tamp_bt/python_task_session.hpp"
 
 #include <stdexcept>
 
+namespace long_tamp_bt
+{
 namespace
 {
 std::once_flag python_init_flag;
@@ -13,7 +15,7 @@ void initializePython()
 }
 }  // namespace
 
-PythonSession::PythonSession(const std::string& factory, const std::string& options)
+PythonTaskSession::PythonTaskSession(const std::string& factory, const std::string& options)
 {
   std::call_once(python_init_flag, initializePython);
   const PyGILState_STATE gil = PyGILState_Ensure();
@@ -43,7 +45,7 @@ PythonSession::PythonSession(const std::string& factory, const std::string& opti
   PyGILState_Release(gil);
 }
 
-PythonSession::~PythonSession()
+PythonTaskSession::~PythonTaskSession()
 {
   if(session_)
   {
@@ -53,17 +55,17 @@ PythonSession::~PythonSession()
   }
 }
 
-std::string PythonSession::call(const std::string& method)
+std::string PythonTaskSession::call(const std::string& method)
 {
   return callImpl(method, nullptr);
 }
 
-std::string PythonSession::call(const std::string& method, const std::string& argument)
+std::string PythonTaskSession::call(const std::string& method, const std::string& argument)
 {
   return callImpl(method, &argument);
 }
 
-std::string PythonSession::callImpl(const std::string& method,
+std::string PythonTaskSession::callImpl(const std::string& method,
                                     const std::string* argument)
 {
   std::lock_guard<std::mutex> lock(mutex_);
@@ -99,7 +101,7 @@ std::string PythonSession::callImpl(const std::string& method,
   return output;
 }
 
-std::string PythonSession::pythonError()
+std::string PythonTaskSession::pythonError()
 {
   std::string output = "Python call failed";
   PyObject* error_type = nullptr;
@@ -124,3 +126,4 @@ std::string PythonSession::pythonError()
   Py_XDECREF(error_traceback);
   return output;
 }
+}  // namespace long_tamp_bt
