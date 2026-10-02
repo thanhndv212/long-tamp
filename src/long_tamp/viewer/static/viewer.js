@@ -120,7 +120,70 @@
       paused: null, planning: null, side: [], roles: {},
       model: { calls: 0, tokens: 0, failures: 0 },
       tools: { calls: 0, failures: 0 },
+      // the monitor's behavior-tree elements (#105): "<ir id>/<role>", plus
+      // the live phases and motions under each step's execute
+      elements: {}, dyn: {}, visits: 0,
     };
+  }
+
+  // -- behavior-tree elements: every element a step compiles to, each with
+  //    its state, how long it has had it, its visit order and its history
+
+  var BT_ROLES = ["sequence", "fallback", "retry", "parallel", "condition", "operation",
+                  "transaction", "complete", "ready", "precondition", "attempts", "execute"];
+
+  function element(view, key, t) {
+    var e = view.elements[key];
+    if (!e) e = view.elements[key] = { status: "IDLE", since: t, history: [], order: null, attempt: 0 };
+    return e;
+  }
+
+  function setElement(view, key, status, t, message) {
+    var e = element(view, key, t);
+    if (e.order === null && status !== "IDLE") e.order = ++view.visits;
+    if (e.status !== status || status !== "RUNNING") {
+      e.history.unshift({ t: t, from: e.status, to: status, message: message || "" });
+      if (e.history.length > 30) e.history.pop();
+    }
+    e.status = status; e.since = t;
+    if (message) e.message = message;
+    return e;
+  }
+
+  function dynChild(view, stepId, key, label, kind) {
+    var list = view.dyn[stepId] || (view.dyn[stepId] = []);
+    if (!list.some(function (c) { return c.key === key; })) list.push({ key: key, label: label, kind: kind });
+  }
+
+  function trackElements(view, n, event) {
+    var role = event.role, t = event.t, id = n.id;
+    if (BT_ROLES.indexOf(role) >= 0) {
+      var e = setElement(view, id + "/" + role, event.status, t, event.message);
+      if (role === "execute") {
+        e.attempt = (event.metrics && event.metrics.attempt) || e.attempt + 1;
+        // the attempt's phases and motions end with it
+        (view.dyn[id] || []).forEach(function (c) {
+          var ce = view.elements[c.key];
+          if (ce && ce.status === "RUNNING") setElement(view, c.key, event.status === "FAILURE" ? "FAILURE" : "SUCCESS", t);
+        });
+      }
+      return;
+    }
+    var attempt = (view.elements[id + "/execute"] || { attempt: 0 }).attempt + 1;
+    if (role === "progress" && event.metrics && event.metrics.phase) {
+      var key = id + "/a" + attempt + "/phase" + event.metrics.phase;
+      (view.dyn[id] || []).forEach(function (c) {  // the previous phase is done
+        var ce = view.elements[c.key];
+        if (c.kind === "phase" && c.key !== key && ce && ce.status === "RUNNING") setElement(view, c.key, "SUCCESS", t);
+      });
+      dynChild(view, id, key, (attempt > 1 ? "attempt " + attempt + ", " : "") + event.message, "phase");
+      if (element(view, key, t).status !== "RUNNING") setElement(view, key, "RUNNING", t, event.message);
+    } else if (role === "motion") {
+      if (event.status === "RUNNING") n.motionSeq = (n.motionSeq || 0) + 1;
+      var mkey = id + "/motion" + (n.motionSeq || 1);
+      dynChild(view, id, mkey, "motion " + (n.motionSeq || 1), "motion");
+      setElement(view, mkey, event.status, t, event.message);
+    }
   }
 
   function node(view, id) {
@@ -207,6 +270,7 @@
       }
       if (event.status === "FAILURE" && event.message) n.failures.push(event.message);
     }
+    trackElements(view, n, event);
     switch (event.role) {
       case "complete":
         if (event.status === "SUCCESS") { n.skipped = true; n.skipReason = event.message || "effect holds"; }
@@ -356,166 +420,466 @@
     return def.capability + "(" + args + ")";
   }
 
-  // monitor (#105): the plan as a live tree graph, like a BT monitor. Left
-  // to right (depth along x), so a long sequence grows downward; boxes are
-  // coloured by state; wheel pans, Ctrl/⌘-wheel or the buttons zoom, drag
-  // pans; "follow" keeps the running node in view.
+  // monitor (#105): the plan as a live behavior tree, like a BT monitor.
+  // Three levels of detail (plan steps / behavior tree / + phases & motions),
+  // three layouts (top down, left to right, radial); links to running nodes
+  // flow, finished ones take their result's colour, the active node pulses,
+  // the tree glides when it changes; visit order, follow, fit, full screen
+  // with a side pane (status counts, details, status changes).
   var NS = "http://www.w3.org/2000/svg";
-  var MON = { W: 178, H: 38, GX: 30, GY: 8 };
-  var mon = { svg: null, root: null, sig: "", boxes: {}, vb: null, follow: true, drag: null,
-              fitted: false, size: [0, 0], lastRunning: null };
+  var GLYPH = { sequence: "→", fallback: "?", retry: "↻", parallel: "⇉", condition: "◇",
+                action: "▶", phase: "∙", motion: "≈", root: "◎" };
+  var KIND_NAME = { sequence: "Sequence", fallback: "Fallback", retry: "Retry", parallel: "Parallel",
+                    condition: "Condition", action: "Action", phase: "Planning phase", motion: "Motion" };
+  var STATES = ["running", "success", "failure", "false", "skipped", "paused", "idle"];
+  var STATE_NAME = { running: "Running", success: "Success", failure: "Failure", "false": "Not met",
+                     skipped: "Skipped", paused: "Paused", idle: "Idle" };
+  var mon = { level: "full", orient: "LR", order: true, follow: true, full: false,
+              collapsed: {}, selected: null, tf: { k: 1, x: 40, y: 40 }, els: {}, links: {},
+              pos: {}, tree: null, byKey: {}, sig: "", active: null, fitted: false, anim: null };
+  LT._monitor = mon;  // for extensions and debugging
+  (function restore() {
+    try {
+      var saved = JSON.parse(window.localStorage.getItem("lt-monitor") || "{}");
+      ["level", "orient", "order", "follow"].forEach(function (k) { if (k in saved) mon[k] = saved[k]; });
+    } catch (e) { /* no storage: defaults */ }
+  })();
+  function remember() {
+    try {
+      window.localStorage.setItem("lt-monitor", JSON.stringify(
+        { level: mon.level, orient: mon.orient, order: mon.order, follow: mon.follow }));
+    } catch (e) { /* fine */ }
+  }
 
   function sv(tag, attrs) {
     var el = document.createElementNS(NS, tag);
     Object.keys(attrs || {}).forEach(function (k) { el.setAttribute(k, attrs[k]); });
     return el;
   }
+  function clip(text, n) { text = String(text || ""); return text.length > n ? text.slice(0, n - 1) + "…" : text; }
 
-  function clip(text, n) { return text.length > n ? text.slice(0, n - 1) + "…" : text; }
-
-  function monSub(n) {
-    var state = nodeState(n);
-    if (n.activity && n.status === "RUNNING") return n.activity.message;
-    if (state === "skipped") return "skipped: " + (n.skipReason || "");
-    if (n.attempt) return "attempt " + n.attempt + (n.maxAttempts ? "/" + n.maxAttempts : "") +
-      (n.motionSeconds ? " · motion " + fmtSeconds(n.motionSeconds) : "");
-    if (n.type === "condition" && state === "unmet") return "not yet";
-    return n.type || "";
-  }
-
-  function monLayout(view) {
-    var slot = 0, pos = {}, edges = [], maxDepth = 0;
-    function place(id, depth) {
+  // -- the tree at the chosen level of detail ----------------------------------
+  function monBuildTree(view) {
+    var byKey = {};
+    function mk(key, label, kind, children, ir) {
+      var t = { key: key, label: label, kind: kind, children: children, ir: ir, parent: null };
+      children.forEach(function (c) { c.parent = t; });
+      byKey[key] = t;
+      return t;
+    }
+    function dyn(id) {
+      if (mon.level !== "full") return [];
+      return (view.dyn[id] || []).map(function (c) { return mk(c.key, c.label, c.kind, [], view.nodes[id]); });
+    }
+    function build(id) {
       var n = view.nodes[id];
       if (!n) return null;
-      maxDepth = Math.max(maxDepth, depth);
-      var kids = LT._collapsed[id] ? [] : n.children.filter(function (k) { return view.nodes[k]; });
-      var y;
-      if (!kids.length) y = slot++;
-      else {
-        var ys = kids.map(function (k, i) {
-          var cy = place(k, depth + 1);
-          edges.push({ from: id, to: k, alt: n.type === "fallback" && i > 0 });
-          return cy;
-        });
-        y = ys[0]; // level with its first child: a long sequence reads top down
+      var type = n.type || "operation";
+      if (type === "transaction") {
+        if (mon.level === "steps") return mk(id + "/transaction", n.label, "action", [], n);
+        var exec = mk(id + "/execute", n.label, "action", dyn(id), n);
+        var retry = mk(id + "/attempts", "retry ×" + (n.maxAttempts || 1), "retry", [exec], n);
+        var pre = mk(id + "/precondition", "preconditions hold?", "condition", [], n);
+        var ready = mk(id + "/ready", "ready", "sequence", [pre, retry], n);
+        var done = mk(id + "/complete", "effect holds?", "condition", [], n);
+        return mk(id + "/transaction", n.label, "fallback", [done, ready], n);
       }
-      pos[id] = { x: depth * (MON.W + MON.GX), y: y * (MON.H + MON.GY), hidden: n.children.length && LT._collapsed[id] };
-      return y;
+      if (type === "operation") return mk(id + "/operation", n.label, "action", dyn(id), n);
+      var kind = type === "retry" || type === "fallback" || type === "parallel" || type === "condition" ? type : "sequence";
+      return mk(id + "/" + type, n.label, kind, n.children.map(build).filter(Boolean), n);
     }
-    view.roots.forEach(function (r) { place(r, 0); slot += 0.5; });
-    return { pos: pos, edges: edges, width: (maxDepth + 1) * (MON.W + MON.GX), height: Math.max(slot, 1) * (MON.H + MON.GY) };
+    var roots = view.roots.map(build).filter(Boolean);
+    var top = roots.length === 1 ? roots[0] : mk("__root", "mission", "root", roots, null);
+    top.isRoot = true;
+    mon.byKey = byKey;
+    return top;
   }
 
-  function monBuild(view) {
-    var g = mon.root;
-    while (g.firstChild) g.removeChild(g.firstChild);
-    mon.boxes = {};
-    var lay = monLayout(view);
-    mon.size = [lay.width, lay.height];
-    lay.edges.forEach(function (e) {
-      var a = lay.pos[e.from], b = lay.pos[e.to];
-      if (!a || !b) return;
-      var x1 = a.x + MON.W, y1 = a.y + MON.H / 2, x2 = b.x, y2 = b.y + MON.H / 2, xm = (x1 + x2) / 2;
-      g.appendChild(sv("path", { d: "M" + x1 + " " + y1 + " C" + xm + " " + y1 + " " + xm + " " + y2 + " " + x2 + " " + y2,
-        "class": "medge" + (e.alt ? " alt" : "") }));
+  function monState(view, t) {
+    var e = view.elements[t.key];
+    var n = t.ir;
+    // a leaf reports only its result: while its retry runs, it is what runs
+    if (n && t.key === n.id + "/execute") {
+      var attempts = view.elements[n.id + "/attempts"];
+      if (attempts && attempts.status === "RUNNING") return n.paused ? "paused" : "running";
+    }
+    if (n && n.paused && (t.kind === "fallback" || t.key === n.id + "/operation")) return "paused";
+    if (e && e.status !== "IDLE") {
+      if (e.status === "RUNNING") return "running";
+      if (e.status === "SUCCESS" || e.status === "SKIPPED") return "success";
+      return t.kind === "condition" ? "false" : "failure";
+    }
+    if (t.isRoot && t.children.length) {  // a synthetic root: from its children
+      var kids = t.children.map(function (c) { return monState(view, c); });
+      if (kids.indexOf("running") >= 0) return "running";
+      if (kids.indexOf("failure") >= 0) return "failure";
+      return kids.every(function (k) { return k === "success" || k === "skipped"; }) ? "success" : "idle";
+    }
+    // never visited, though its parent finished: skipped
+    var p = t.parent;
+    if (p) {
+      var ps = monState(view, p);
+      if (ps === "success" || ps === "failure" || ps === "skipped" || ps === "false") return "skipped";
+    }
+    return "idle";
+  }
+
+  // -- layout ---------------------------------------------------------------------
+  var SIZE = { TD: [118, 104], LR: [64, 220], RAD: [0, 120] };
+  function monLayout(top) {
+    var leaves = 0, pos = {};
+    (function place(t, depth) {
+      var kids = mon.collapsed[t.key] ? [] : t.children;
+      var slot;
+      if (!kids.length) slot = leaves++;
+      else {
+        var slots = kids.map(function (c) { return place(c, depth + 1); });
+        slot = (slots[0] + slots[slots.length - 1]) / 2;
+      }
+      pos[t.key] = { slot: slot, depth: depth };
+      return slot;
+    })(top, 0);
+    Object.keys(pos).forEach(function (k) {
+      var p = pos[k];
+      if (mon.orient === "TD") { p.x = p.slot * SIZE.TD[0]; p.y = p.depth * SIZE.TD[1]; }
+      else if (mon.orient === "LR") { p.x = p.depth * SIZE.LR[1]; p.y = p.slot * SIZE.LR[0]; }
+      else {
+        var a = 2 * Math.PI * (p.slot + 0.5) / Math.max(leaves, 1) - Math.PI / 2, r = p.depth * SIZE.RAD[1];
+        p.x = r * Math.cos(a); p.y = r * Math.sin(a);
+      }
     });
-    Object.keys(lay.pos).forEach(function (id) {
-      var p = lay.pos[id], n = view.nodes[id];
-      var box = sv("g", { "class": "mnode", transform: "translate(" + p.x + "," + p.y + ")", "data-id": id });
-      var title = sv("title"); title.textContent = n.label + (call(n.def) ? "\n" + call(n.def) : "");
-      var rect = sv("rect", { width: MON.W, height: MON.H, rx: 6 });
-      var label = sv("text", { x: 8, y: 15, "class": "ml" });
-      label.textContent = (KIND_ICONS[n.type] || "·") + " " + clip(n.label, 24) + (p.hidden ? " …" : "");
-      var sub = sv("text", { x: 8, y: 30, "class": "ms" });
-      box.appendChild(title); box.appendChild(rect); box.appendChild(label); box.appendChild(sub);
-      box.addEventListener("click", function (ev) { ev.stopPropagation(); LT.select(id); });
-      box.addEventListener("dblclick", function (ev) {
-        ev.stopPropagation(); LT._collapsed[id] = !LT._collapsed[id]; mon.sig = ""; render();
+    return pos;
+  }
+
+  function linkPath(a, b) {
+    if (mon.orient === "TD") {
+      var my = (a.y + b.y) / 2;
+      return "M" + a.x + " " + a.y + " C" + a.x + " " + my + " " + b.x + " " + my + " " + b.x + " " + b.y;
+    }
+    if (mon.orient === "LR") {
+      var mx = (a.x + b.x) / 2;
+      return "M" + a.x + " " + a.y + " C" + mx + " " + a.y + " " + mx + " " + b.y + " " + b.x + " " + b.y;
+    }
+    return "M" + a.x + " " + a.y + " Q" + (a.x + b.x) * 0.55 + " " + (a.y + b.y) * 0.55 + " " + b.x + " " + b.y;
+  }
+
+  function radius(t) { return t.kind === "phase" || t.kind === "motion" ? 9 : t.children.length || t.kind === "fallback" ? 18 : 14; }
+
+  function visible(top) {
+    var out = [];
+    (function walk(t) { out.push(t); if (!mon.collapsed[t.key]) t.children.forEach(walk); })(top);
+    return out;
+  }
+  function countBelow(t) { var c = -1; (function w(x) { c++; x.children.forEach(w); })(t); return c; }
+
+  // -- drawing ----------------------------------------------------------------------
+  function monDraw(view) {
+    var top = mon.tree, nodes = visible(top), next = monLayout(top), old = mon.pos;
+    var keep = {};
+    nodes.forEach(function (t) { keep[t.key] = true; });
+    Object.keys(mon.els).forEach(function (k) {
+      if (!keep[k]) { mon.els[k].g.remove(); delete mon.els[k]; }
+    });
+    Object.keys(mon.links).forEach(function (k) {
+      if (!keep[k]) { mon.links[k].remove(); delete mon.links[k]; }
+    });
+    function from(t) {  // where a new node grows from: its nearest drawn ancestor
+      for (var a = t.parent; a; a = a.parent) if (old[a.key]) return old[a.key];
+      return next[t.key];
+    }
+    nodes.forEach(function (t) {
+      if (t.parent && !mon.links[t.key]) {
+        mon.links[t.key] = sv("path", { "class": "mlink" });
+        mon.gLinks.appendChild(mon.links[t.key]);
+      }
+      if (mon.els[t.key]) return;
+      var g = sv("g", { "class": "mnode", tabindex: 0, role: "button" });
+      var r = radius(t);
+      var e = { g: g, t: t,
+        pulse: sv("circle", { "class": "pulse", r: r }), halo: sv("circle", { "class": "halo", r: r + 6 }),
+        body: sv("circle", { "class": "body", r: r }), glyph: sv("text", { "class": "glyph", "text-anchor": "middle", dy: "0.36em" }),
+        name: sv("text", { "class": "name", "text-anchor": "middle", y: r + 15 }),
+        type: sv("text", { "class": "type", "text-anchor": "middle", y: r + 28 }),
+        order: sv("g", { "class": "order", transform: "translate(" + r * 0.8 + "," + -r * 0.8 + ")" }),
+        title: sv("title") };
+      e.orderText = sv("text", { "text-anchor": "middle", dy: "0.35em" });
+      e.order.appendChild(sv("circle", { r: 8.5 })); e.order.appendChild(e.orderText);
+      [e.title, e.pulse, e.halo, e.body, e.glyph, e.name, e.type, e.order].forEach(function (c) { g.appendChild(c); });
+      g.addEventListener("click", function (ev) { ev.stopPropagation(); monSelect(e.t.key); });
+      g.addEventListener("dblclick", function (ev) { ev.stopPropagation(); monToggle(e.t.key); });
+      g.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); monSelect(e.t.key); }
+        if (ev.key === "c") monToggle(e.t.key);
       });
-      g.appendChild(box);
-      mon.boxes[id] = { box: box, sub: sub, x: p.x, y: p.y };
+      var o = from(t) || { x: 0, y: 0 };
+      e.x = o.x; e.y = o.y;
+      g.setAttribute("transform", "translate(" + o.x + "," + o.y + ")");
+      mon.gNodes.appendChild(g);
+      mon.els[t.key] = e;
     });
+    nodes.forEach(function (t) {  // texts may change with the level (labels, counts)
+      var e = mon.els[t.key];
+      e.t = t;
+      var collapsed = mon.collapsed[t.key] && t.children.length;
+      var gl = collapsed ? "+" + countBelow(t) : t.isRoot ? GLYPH.root : GLYPH[t.kind] || "";
+      e.glyph.textContent = gl;
+      e.glyph.setAttribute("class", "glyph" + (gl.length > 2 ? " small" : ""));
+      e.name.textContent = clip(t.label, mon.orient === "LR" ? 30 : 18);
+      var call_ = t.ir && (t.kind === "action" || t.kind === "fallback") ? call(t.ir.def) : null;
+      e.type.textContent = clip(KIND_NAME[t.kind] || (t.isRoot ? "mission" : t.kind), 24);
+      e.title.textContent = t.label + "\n" + (KIND_NAME[t.kind] || t.kind) + (call_ ? "\n" + call_ : "") +
+        (t.children.length ? "\nDouble-click to fold or unfold" : "");
+      e.g.setAttribute("aria-label", t.label + ", " + (KIND_NAME[t.kind] || t.kind));
+    });
+    // glide from where things were to where they go
+    var start = performance.now(), dur = reduceMotion() ? 0 : 420;
+    var froms = {};
+    nodes.forEach(function (t) { var e = mon.els[t.key]; froms[t.key] = { x: e.x, y: e.y }; });
+    if (mon.anim) cancelAnimationFrame(mon.anim);
+    (function step() {
+      var s = progress(start, dur), k = s * (2 - s);
+      nodes.forEach(function (t) {
+        var e = mon.els[t.key], a = froms[t.key], b = next[t.key];
+        e.x = a.x + (b.x - a.x) * k; e.y = a.y + (b.y - a.y) * k;
+        e.g.setAttribute("transform", "translate(" + e.x + "," + e.y + ")");
+      });
+      nodes.forEach(function (t) {
+        if (!t.parent) return;
+        var pe = mon.els[t.parent.key], ce = mon.els[t.key];
+        if (pe && ce) mon.links[t.key].setAttribute("d", linkPath(pe, ce));
+      });
+      mon.anim = s < 1 ? requestAnimationFrame(step) : null;
+    })(start);
+    mon.pos = next;
   }
 
-  function monView() {
-    var v = mon.vb;
-    mon.svg.setAttribute("viewBox", v.x + " " + v.y + " " + v.w + " " + v.h);
+  // how far an animation started at ``start`` has got, in [0, 1]: read from
+  // the clock, not from requestAnimationFrame's timestamp, which can be a frame
+  // earlier than ``start`` (and an easing then extrapolates)
+  function progress(start, dur) {
+    return dur ? Math.max(0, Math.min(1, (performance.now() - start) / dur)) : 1;
   }
 
+  function reduceMotion() {
+    return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function monPaint(view) {
+    var nodes = visible(mon.tree), active = null, deepest = -1;
+    nodes.forEach(function (t) {
+      var e = mon.els[t.key], state = monState(view, t), el = view.elements[t.key];
+      var folded = mon.collapsed[t.key] && t.children.length;
+      var runningBelow = folded && t.children.some(function hasRun(c) {
+        return monState(view, c) === "running" || c.children.some(hasRun);
+      });
+      var leafActive = state === "running" && (!t.children.length || folded ||
+        !t.children.some(function (c) { return monState(view, c) === "running"; }));
+      if (leafActive || runningBelow) {
+        var d = (mon.pos[t.key] || { depth: 0 }).depth;
+        if (d > deepest) { deepest = d; active = t.key; }
+      }
+      e.g.setAttribute("class", "mnode s-" + state + (leafActive || runningBelow ? " active" : "") +
+        (mon.selected === t.key ? " selected" : ""));
+      var show = mon.order && el && el.order;
+      e.order.style.display = show ? "" : "none";
+      if (show) e.orderText.textContent = el.order;
+      if (t.parent) mon.links[t.key].setAttribute("class", "mlink s-" + state);
+      var extra = "";
+      if (t.kind === "action" && el && el.attempt) extra = "attempt " + el.attempt + (t.ir && t.ir.maxAttempts ? "/" + t.ir.maxAttempts : "");
+      if (t.ir && t.ir.activity && t.ir.status === "RUNNING" && (t.key === t.ir.id + "/execute" || t.key === t.ir.id + "/operation" ||
+          (mon.level === "steps" && t.key === t.ir.id + "/transaction"))) extra = t.ir.activity.message;
+      e.type.textContent = clip(extra || KIND_NAME[t.kind] || (t.isRoot ? "mission" : t.kind), 30);
+    });
+    if (mon.follow && active && active !== mon.active) monCenter(active);
+    mon.active = active;
+    monSide(view);
+  }
+
+  // -- view transform: zoom, pan, fit, center --------------------------------------
+  function monApply() {
+    var f = mon.tf;
+    mon.gRoot.setAttribute("transform", "translate(" + f.x + "," + f.y + ") scale(" + f.k + ")");
+  }
+  function monAnimate(to) {
+    var from = { k: mon.tf.k, x: mon.tf.x, y: mon.tf.y }, start = performance.now(), dur = reduceMotion() ? 0 : 480;
+    (function step() {
+      var s = progress(start, dur), k = s * (2 - s);
+      mon.tf = { k: from.k + (to.k - from.k) * k, x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k };
+      monApply();
+      if (s < 1) requestAnimationFrame(step);
+    })(start);
+  }
   function monFit() {
     var rect = mon.svg.getBoundingClientRect();
-    var aspect = rect.height > 0 && rect.width > 0 ? rect.height / rect.width : 0.75;
-    // the whole width, never larger than life; then as tall as fits
-    var w = Math.max(mon.size[0] + 20, rect.width || 0, 200);
-    mon.vb = { x: -10, y: -10, w: w, h: w * aspect };
-    monView();
+    if (!rect.width || !rect.height) return;
+    var x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    Object.keys(mon.pos).forEach(function (k) {
+      var p = mon.pos[k];
+      x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+    });
+    if (x0 === Infinity) return;
+    x0 -= 80; x1 += mon.orient === "LR" ? 160 : 80; y0 -= 40; y1 += 50;
+    var k = Math.min(1.4, 0.94 * Math.min(rect.width / (x1 - x0), rect.height / (y1 - y0)));
+    monAnimate({ k: k, x: rect.width / 2 - k * (x0 + x1) / 2, y: rect.height / 2 - k * (y0 + y1) / 2 });
+  }
+  function monCenter(key) {
+    var p = mon.pos[key];
+    for (var t = mon.byKey[key]; !p && t; t = t.parent) p = mon.pos[t.key];  // folded: its visible ancestor
+    if (!p) return;
+    var rect = mon.svg.getBoundingClientRect(), k = Math.max(mon.tf.k, 0.85);
+    // the node toward the leading side, so its ancestors stay in view
+    var fx = mon.orient === "LR" ? 0.7 : 0.5, fy = mon.orient === "TD" ? 0.62 : 0.5;
+    monAnimate({ k: k, x: rect.width * fx - k * p.x, y: rect.height * fy - k * p.y });
   }
 
-  function monZoom(factor, cx, cy) {
-    var v = mon.vb;
-    cx = cx === undefined ? v.x + v.w / 2 : cx;
-    cy = cy === undefined ? v.y + v.h / 2 : cy;
-    v.x = cx - (cx - v.x) * factor; v.y = cy - (cy - v.y) * factor;
-    v.w *= factor; v.h *= factor;
-    monView();
+  function monSelect(key) {
+    mon.selected = key;
+    var t = mon.byKey[key];
+    if (t && t.ir) LT.selected = t.ir.id;  // the Details panel follows
+    render();
+  }
+  function monToggle(key) {
+    var t = mon.byKey[key];
+    if (!t || !t.children.length) return;
+    mon.collapsed[key] = !mon.collapsed[key];
+    mon.sig = "";
+    render();
   }
 
-  function monPoint(ev) {
-    var rect = mon.svg.getBoundingClientRect(), v = mon.vb;
-    return [v.x + (ev.clientX - rect.left) / rect.width * v.w, v.y + (ev.clientY - rect.top) / rect.height * v.h];
+  // -- the side pane: status counts, the selected node, status changes -------------
+  function dot(state) { return h("i", { cls: "mdot ms-" + state }); }
+  function fmtClock(t) {
+    var d = new Date(t * 1000);
+    return d.toLocaleTimeString([], { hour12: false }) + "." + String(d.getMilliseconds()).padStart(3, "0");
   }
-
-  function monReveal(id) {
-    var b = mon.boxes[id], v = mon.vb;
-    if (!b || !v) return;
-    var inside = b.x >= v.x && b.x + MON.W <= v.x + v.w && b.y >= v.y && b.y + MON.H <= v.y + v.h;
-    if (inside) return;
-    v.y = b.y - v.h / 3;
-    if (b.x < v.x || b.x + MON.W > v.x + v.w) v.x = Math.max(-10, b.x - v.w / 4);
-    monView();
+  function monSide(view) {
+    if (!mon.side) return;
+    var counts = {};
+    STATES.forEach(function (s) { counts[s] = 0; });
+    visible(mon.tree).forEach(function (t) { counts[monState(view, t)]++; });
+    var legend = h("div", { cls: "mlegend" },
+      h("div", { cls: "mline" }, STATES.filter(function (s) { return counts[s] || s === "idle"; }).map(function (s) {
+        return h("span", null, dot(s), " " + STATE_NAME[s] + " ", h("b", { text: String(counts[s]) }));
+      })),
+      h("div", { cls: "mline muted" }, ["sequence", "fallback", "retry", "condition", "action", "phase", "motion"].map(function (k) {
+        return h("span", null, h("strong", { text: GLYPH[k] }), " " + KIND_NAME[k]);
+      })));
+    var details = h("div", { cls: "mdetails" });
+    var t = mon.selected && mon.byKey[mon.selected];
+    if (!t) details.appendChild(h("p", { cls: "muted", text: "Click a node for its details. Double-click to fold a branch." }));
+    else {
+      var el = view.elements[t.key], state = monState(view, t), path = [];
+      for (var a = t.parent; a; a = a.parent) path.unshift(a);
+      details.appendChild(h("div", { cls: "crumbs" }, path.map(function (p, i) {
+        return [i ? " › " : "", h("a", { text: p.label, onclick: function () { monSelect(p.key); monCenter(p.key); } })];
+      }).reduce(function (x, y) { return x.concat(y); }, [])));
+      details.appendChild(h("h3", { text: t.label }));
+      details.appendChild(h("div", { cls: "muted", text: (KIND_NAME[t.kind] || t.kind) + " · " + t.key +
+        (el && el.order ? " · visited as step " + el.order : "") }));
+      mon.since = el ? el.since : null;
+      details.appendChild(h("p", null, h("span", { cls: "pill " + stateClass(state === "false" ? "idle" : state), text: STATE_NAME[state] }),
+        h("span", { cls: "muted mfor", text: el ? " for " + fmtSeconds((LT.live ? Date.now() / 1000 : view.t) - el.since) : "" })));
+      details.appendChild(h("div", { cls: "mbtns" },
+        h("button", { text: "Center in view", onclick: function () { monCenter(t.key); } }),
+        t.children.length ? h("button", { text: mon.collapsed[t.key] ? "Unfold" : "Fold", onclick: function () { monToggle(t.key); } }) : null));
+      var rows = [];
+      if (t.ir && t.ir.def && t.ir.def.capability) rows.push(["call", call(t.ir.def)]);
+      if (el && el.attempt) rows.push(["attempt", el.attempt + (t.ir && t.ir.maxAttempts ? " of " + t.ir.maxAttempts : "")]);
+      if (el && el.message) rows.push(["message", el.message]);
+      if (rows.length) details.appendChild(h("table", { cls: "mtable" }, rows.map(function (r) {
+        return h("tr", null, h("td", { text: r[0] }), h("td", { text: r[1] }));
+      })));
+      if (t.children.length) {
+        details.appendChild(h("h4", { text: "Children (" + t.children.length + ")" }));
+        details.appendChild(h("table", { cls: "mtable" }, t.children.map(function (c) {
+          var cs = monState(view, c);
+          return h("tr", null, h("td", null, dot(cs)), h("td", null,
+            h("a", { text: c.label, onclick: function () { monSelect(c.key); monCenter(c.key); } }), " ",
+            h("span", { cls: "muted", text: STATE_NAME[cs] })));
+        })));
+      }
+      details.appendChild(h("h4", { text: "Recent changes" }));
+      var hist = el ? el.history.slice(0, 8) : [];
+      details.appendChild(hist.length ? h("table", { cls: "mtable" }, hist.map(function (x) {
+        return h("tr", null, h("td", { text: fmtClock(x.t) }), h("td", { text: x.from.toLowerCase() + " → " + x.to.toLowerCase() + (x.message ? ": " + x.message : "") }));
+      })) : h("p", { cls: "muted", text: "No changes yet." }));
+    }
+    var changes = [];
+    Object.keys(view.elements).forEach(function (k) {
+      if (!mon.byKey[k]) return;
+      view.elements[k].history.forEach(function (x) { changes.push({ t: x.t, key: k, to: x.to }); });
+    });
+    changes.sort(function (a, b) { return b.t - a.t; });
+    var log = h("div", { cls: "mlog" }, h("h4", { text: "Status changes" }), changes.slice(0, 120).map(function (c) {
+      var tt = mon.byKey[c.key], st = c.to === "FAILURE" && tt.kind === "condition" ? "false" : c.to.toLowerCase();
+      return h("div", { cls: "mrow", onclick: function () { monSelect(c.key); monCenter(c.key); } },
+        h("time", { text: fmtClock(c.t) }), dot(st), h("span", { cls: "nm", text: tt.label }), h("span", { cls: "muted", text: STATE_NAME[st] || c.to }));
+    }));
+    mon.side.textContent = "";
+    mon.side.appendChild(legend); mon.side.appendChild(details); mon.side.appendChild(log);
   }
+  setInterval(function () {  // the selected node's "for …" ticks
+    var el = mon.side && mon.side.querySelector(".mfor");
+    if (el && mon.since && LT.live) el.textContent = " for " + fmtSeconds(Date.now() / 1000 - mon.since);
+  }, 500);
 
+  // -- the panel ------------------------------------------------------------------
   function monCreate(el) {
-    var follow = h("input", { type: "checkbox", checked: mon.follow,
-      onchange: function (e) { mon.follow = e.target.checked; } });
+    function select(options, value, onchange, label) {
+      return h("label", null, label + " ", h("select", { onchange: function (e) { onchange(e.target.value); } },
+        options.map(function (o) { return h("option", { value: o[0], selected: o[0] === value, text: o[1] }); })));
+    }
+    function check(value, label, onchange) {
+      return h("label", null, h("input", { type: "checkbox", checked: value, onchange: function (e) { onchange(e.target.checked); } }), " " + label);
+    }
     var bar = h("div", { cls: "mbar" },
-      h("button", { text: "Fit", title: "fit the width", onclick: monFit }),
-      h("button", { text: "+", title: "zoom in", onclick: function () { monZoom(0.8); } }),
-      h("button", { text: "−", title: "zoom out", onclick: function () { monZoom(1.25); } }),
-      h("label", null, follow, " follow the running step"),
-      h("span", { cls: "muted", text: "wheel: scroll · Ctrl/⌘+wheel: zoom · drag: pan · double-click: fold" }));
-    mon.svg = sv("svg", { "class": "msvg", preserveAspectRatio: "xMinYMin meet", role: "img", "aria-label": "plan monitor" });
-    mon.root = sv("g");
-    mon.svg.appendChild(mon.root);
+      h("button", { text: "Fit", onclick: monFit }),
+      select([["steps", "Plan steps"], ["bt", "Behavior tree"], ["full", "+ phases & motions"]], mon.level,
+        function (v) { mon.level = v; mon.sig = ""; mon.fitted = false; remember(); render(); }, "Detail"),
+      select([["TD", "Top down"], ["LR", "Left to right"], ["RAD", "Radial"]], mon.orient,
+        function (v) { mon.orient = v; mon.sig = ""; mon.fitted = false; remember(); render(); }, "Layout"),
+      check(mon.order, "Visit order", function (v) { mon.order = v; remember(); render(); }),
+      check(mon.follow, "Follow active", function (v) { mon.follow = v; remember(); }),
+      h("button", { text: "⤢ Full screen", title: "Esc to leave", onclick: function () { monFull(!mon.full); } }));
+    mon.svg = sv("svg", { "class": "msvg", role: "img", "aria-label": "plan monitor" });
+    mon.gRoot = sv("g"); mon.gLinks = sv("g"); mon.gNodes = sv("g");
+    mon.gRoot.appendChild(mon.gLinks); mon.gRoot.appendChild(mon.gNodes); mon.svg.appendChild(mon.gRoot);
+    mon.els = {}; mon.links = {}; mon.pos = {}; mon.sig = ""; mon.fitted = false;
     mon.svg.addEventListener("wheel", function (ev) {
       ev.preventDefault();
-      if (!mon.vb) return;
-      if (ev.ctrlKey || ev.metaKey) {
-        var pt = monPoint(ev);
-        monZoom(ev.deltaY > 0 ? 1.1 : 0.9, pt[0], pt[1]);
-      } else {
-        var k = mon.vb.h / Math.max(mon.svg.getBoundingClientRect().height, 1);
-        mon.vb.x += ev.deltaX * k; mon.vb.y += ev.deltaY * k;
-        monView();
-      }
+      var rect = mon.svg.getBoundingClientRect(), cx = ev.clientX - rect.left, cy = ev.clientY - rect.top;
+      var f = mon.tf, k = Math.min(3, Math.max(0.08, f.k * Math.exp(-ev.deltaY * 0.0015)));
+      mon.tf = { k: k, x: cx - (cx - f.x) * k / f.k, y: cy - (cy - f.y) * k / f.k };
+      monApply();
     }, { passive: false });
+    var drag = null;
     mon.svg.addEventListener("pointerdown", function (ev) {
       if (ev.target.closest && ev.target.closest(".mnode")) return;
-      mon.drag = { x: ev.clientX, y: ev.clientY, vx: mon.vb.x, vy: mon.vb.y };
-      mon.svg.setPointerCapture(ev.pointerId);
+      drag = { x: ev.clientX, y: ev.clientY, tx: mon.tf.x, ty: mon.tf.y };
+      mon.svg.setPointerCapture(ev.pointerId); mon.svg.classList.add("grabbing");
     });
     mon.svg.addEventListener("pointermove", function (ev) {
-      if (!mon.drag) return;
-      var rect = mon.svg.getBoundingClientRect();
-      mon.vb.x = mon.drag.vx - (ev.clientX - mon.drag.x) / rect.width * mon.vb.w;
-      mon.vb.y = mon.drag.vy - (ev.clientY - mon.drag.y) / rect.height * mon.vb.h;
-      monView();
+      if (!drag) return;
+      mon.tf.x = drag.tx + ev.clientX - drag.x; mon.tf.y = drag.ty + ev.clientY - drag.y; monApply();
     });
-    mon.svg.addEventListener("pointerup", function () { mon.drag = null; });
-    el.appendChild(h("div", { cls: "monitor" }, bar, mon.svg));
-    mon.sig = ""; mon.fitted = false;
+    mon.svg.addEventListener("pointerup", function () { drag = null; mon.svg.classList.remove("grabbing"); });
+    mon.side = h("aside", { cls: "mside" });
+    if (mon.full) document.body.classList.add("mon-full");
+    mon.box = h("div", { cls: "monitor" + (mon.full ? " full" : "") }, bar,
+      h("div", { cls: "mmain" }, h("div", { cls: "mstage" }, mon.svg,
+        h("p", { cls: "mhint", text: "Click: details · double-click: fold · drag: pan · scroll: zoom" })), mon.side));
+    el.appendChild(mon.box);
   }
+
+  function monFull(on) {
+    mon.full = on;
+    if (mon.box) mon.box.classList.toggle("full", on);
+    document.body.classList.toggle("mon-full", on);
+    requestAnimationFrame(monFit);
+  }
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape" && mon.full) monFull(false); });
+  // a link can open it full screen: <page>#monitor-full
+  if (/monitor-full/.test(window.location.hash)) mon.full = true;
 
   builtins.monitor = {
     title: "Monitor",
@@ -523,22 +887,22 @@
     render: function (view, el) {
       if (!mon.svg || !el.contains(mon.svg)) { el.textContent = ""; monCreate(el); }
       if (!view.roots.length) return;
-      var sig = view.planVersion + ":" + Object.keys(view.nodes).length + ":" +
-        Object.keys(LT._collapsed).filter(function (k) { return LT._collapsed[k]; }).join(",");
+      var dynCount = Object.keys(view.dyn).reduce(function (n, k) { return n + view.dyn[k].length; }, 0);
+      var sig = [view.planVersion, Object.keys(view.nodes).length, mon.level === "full" ? dynCount : 0, mon.orient,
+        Object.keys(mon.collapsed).filter(function (k) { return mon.collapsed[k]; }).join(",")].join(":");
       if (sig !== mon.sig) {
-        monBuild(view);
+        mon.tree = monBuildTree(view);
+        monDraw(view);
         mon.sig = sig;
-        if (!mon.fitted || !mon.vb) { requestAnimationFrame(monFit); mon.fitted = true; }
+        if (!mon.fitted) {  // the whole tree first, then the running step
+          mon.fitted = true;
+          setTimeout(function () {
+            monFit();
+            if (mon.follow && mon.active) setTimeout(function () { monCenter(mon.active); }, 900);
+          }, 450);
+        }
       }
-      var running = null;
-      Object.keys(mon.boxes).forEach(function (id) {
-        var n = view.nodes[id], b = mon.boxes[id], state = nodeState(n);
-        b.box.setAttribute("class", "mnode " + stateClass(state) + (LT.selected === id ? " selected" : "") +
-          (n.activity && n.status === "RUNNING" ? " active" : ""));
-        b.sub.textContent = clip(monSub(n), 30);
-        if (state === "running" && (n.type === "transaction" || n.type === "operation")) running = id;
-      });
-      if (mon.follow && running && mon.vb) monReveal(running);
+      monPaint(view);
     },
   };
 
@@ -942,7 +1306,7 @@
 
   function activate(key, id) {
     LT._tabs[key] = id; showTab(key); render();
-    if (id === "monitor" && mon.svg) requestAnimationFrame(monFit); // sized now
+    if (id === "monitor" && mon.svg) setTimeout(monFit, 30); // sized now
   }
 
   function screenLayout(main) {
@@ -1027,8 +1391,11 @@
       slot.textContent = "";
       var pn = view.planning && view.nodes[view.planning];
       if (pn && pn.status === "RUNNING" && pn.activity) {
-        slot.appendChild(h("span", { cls: "muted", text: pn.label + ": " }));
-        slot.appendChild(stepButtons(pn));
+        var buttons = stepButtons(pn);
+        if (buttons.childNodes.length) {
+          slot.appendChild(h("span", { cls: "muted", text: pn.label + ": " }));
+          slot.appendChild(buttons);
+        }
       }
     }
     document.getElementById("title").textContent = config.title;

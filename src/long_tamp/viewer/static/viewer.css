@@ -243,24 +243,84 @@ body.screen .scene iframe { height: 100%; min-height: 240px; }
   body.screen .scene iframe { height: 420px; }
 }
 
-/* monitor (#105): the plan as a live tree graph */
+/* monitor (#105): the plan as a live behavior tree */
 .monitor { display: flex; flex-direction: column; min-height: 0; flex: 1; }
-.mbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; font-size: 12px; }
-.msvg { width: 100%; height: 420px; flex: 1; min-height: 200px; border: 1px solid var(--border);
-  border-radius: 6px; background: var(--bg); touch-action: none; cursor: grab; user-select: none; }
+.mbar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin-bottom: 6px; font-size: 12px; }
+.mbar label { display: inline-flex; gap: 4px; align-items: center; }
+.mbar select, .mbar button { font-size: 12px; padding: 2px 7px; }
+.mmain { display: flex; flex: 1; min-height: 0; gap: 8px; }
+.mstage { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; }
+.msvg { width: 100%; height: 440px; flex: 1; min-height: 220px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); touch-action: none; cursor: grab; user-select: none; display: block; }
+.msvg.grabbing { cursor: grabbing; }
 body.screen .msvg { height: auto; }
-.medge { fill: none; stroke: var(--border); stroke-width: 1.5; }
-.medge.alt { stroke-dasharray: 5 4; }
+.mhint { position: absolute; left: 8px; bottom: 4px; margin: 0; font-size: 11px; color: var(--muted); pointer-events: none; }
+.mside { display: none; width: 330px; flex: none; overflow: auto; font-size: 12.5px; border-left: 1px solid var(--border); padding-left: 10px; }
+/* links */
+.mlink { fill: none; stroke: var(--border); stroke-width: 1.6; transition: stroke .25s, stroke-width .25s; }
+.mlink.s-running { stroke: var(--st-running); stroke-width: 3.5; stroke-dasharray: 10 7; animation: mflow .6s linear infinite; }
+.mlink.s-success { stroke: var(--st-success); stroke-width: 2.4; }
+.mlink.s-failure { stroke: var(--st-failure); stroke-width: 2.4; }
+.mlink.s-false { stroke: var(--muted); stroke-width: 1.6; stroke-dasharray: 2 4; }
+.mlink.s-skipped { stroke: var(--st-skipped); stroke-dasharray: 4 5; opacity: .6; }
+.mlink.s-paused { stroke: var(--st-paused); stroke-width: 3; }
+@keyframes mflow { to { stroke-dashoffset: -17; } }
+/* nodes */
 .mnode { cursor: pointer; }
-.mnode rect { fill: var(--panel); stroke: var(--st-idle); stroke-width: 1.5; }
-.mnode .ml { font-size: 12px; fill: var(--fg); }
-.mnode .ms { font-size: 10.5px; fill: var(--muted); }
-.mnode.st-success rect { fill: color-mix(in srgb, var(--st-success) 16%, var(--panel)); stroke: var(--st-success); }
-.mnode.st-failure rect { fill: color-mix(in srgb, var(--st-failure) 18%, var(--panel)); stroke: var(--st-failure); }
-.mnode.st-skipped rect { fill: color-mix(in srgb, var(--st-skipped) 14%, var(--panel)); stroke: var(--st-skipped); stroke-dasharray: 4 3; }
-.mnode.st-paused rect { fill: color-mix(in srgb, var(--st-paused) 20%, var(--panel)); stroke: var(--st-paused); stroke-width: 2.5; }
-.mnode.st-running rect { fill: color-mix(in srgb, var(--st-running) 18%, var(--panel)); stroke: var(--st-running); stroke-width: 2.5; }
-.mnode.st-running.active rect { animation: mpulse 1.4s ease-in-out infinite; }
-.mnode.selected rect { stroke: var(--accent); stroke-width: 3; }
-@keyframes mpulse { 50% { stroke-width: 4.5; } }
-@media (prefers-reduced-motion: reduce) { .mnode.st-running.active rect { animation: none; } }
+.mnode:focus { outline: none; }
+.mnode:focus-visible .halo { display: inline; stroke-dasharray: 3 3; }
+.mnode .body { fill: var(--panel); stroke: var(--st-idle); stroke-width: 2.2; transition: fill .25s, stroke .25s; }
+.mnode.s-running .body { fill: var(--st-running); stroke: var(--st-running); }
+.mnode.s-success .body { fill: var(--st-success); stroke: var(--st-success); }
+.mnode.s-failure .body { fill: var(--st-failure); stroke: var(--st-failure); }
+.mnode.s-paused .body { fill: var(--st-paused); stroke: var(--st-paused); }
+.mnode.s-false .body { fill: var(--panel); stroke: var(--muted); stroke-dasharray: 2 3; }
+.mnode.s-skipped .body { fill: var(--panel); stroke: var(--st-skipped); stroke-dasharray: 4 3; opacity: .75; }
+.mnode .pulse { fill: none; stroke: var(--st-running); stroke-width: 2; opacity: 0; transform-box: fill-box; transform-origin: center; }
+.mnode.active .pulse { animation: mring 1.2s ease-out infinite; }
+@keyframes mring { 0% { opacity: .9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.8); } }
+.mnode .halo { display: none; fill: none; stroke: var(--accent); stroke-width: 3; }
+.mnode.selected .halo { display: inline; }
+.mnode .glyph { font-size: 16px; font-weight: 700; fill: var(--muted); pointer-events: none; }
+.mnode .glyph.small { font-size: 11px; }
+.mnode.s-running .glyph, .mnode.s-success .glyph, .mnode.s-failure .glyph, .mnode.s-paused .glyph { fill: #fff; }
+.mnode .name { font-size: 12.5px; font-weight: 700; fill: var(--fg); }
+.mnode .type { font-size: 10.5px; fill: var(--muted); }
+.mnode .name, .mnode .type { paint-order: stroke; stroke: var(--bg); stroke-width: 3.5px; stroke-linejoin: round; }
+.mnode .order circle { fill: var(--fg); }
+.mnode .order text { font-size: 9.5px; font-weight: 700; fill: var(--panel); }
+@media (prefers-reduced-motion: reduce) {
+  .mlink.s-running { animation: none; }
+  .mnode.active .pulse { animation: none; opacity: .8; transform: scale(1.3); }
+  .mlink, .mnode .body { transition: none; }
+}
+/* side pane */
+.mdot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: -1px; }
+.ms-running { background: var(--st-running); } .ms-success { background: var(--st-success); }
+.ms-failure { background: var(--st-failure); } .ms-paused { background: var(--st-paused); }
+.ms-skipped { border: 2px solid var(--st-skipped); } .ms-idle { border: 2px solid var(--st-idle); }
+.ms-false { border: 2px dashed var(--muted); }
+.mlegend { display: grid; gap: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.mline { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.mline strong { color: var(--fg); }
+.mdetails { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.mdetails h3 { margin: 2px 0; font-size: 15px; word-break: break-word; }
+.mdetails h4, .mlog h4 { margin: 10px 0 4px; font-size: 12px; color: var(--muted); }
+.crumbs { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+.crumbs a, .mdetails a { color: var(--accent); cursor: pointer; }
+.mbtns { display: flex; gap: 6px; flex-wrap: wrap; }
+.mbtns button { font-size: 12px; padding: 2px 8px; }
+.mtable { border-collapse: collapse; width: 100%; }
+.mtable td { padding: 3px 0; border-bottom: 1px solid var(--border); vertical-align: top; word-break: break-word; }
+.mtable td:first-child { color: var(--muted); padding-right: 8px; white-space: nowrap; width: 1%; }
+.mrow { display: flex; gap: 6px; padding: 2px 3px; align-items: center; border-radius: 4px; cursor: pointer; }
+.mrow:hover { background: var(--bg); }
+.mrow time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.mrow .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* full screen: the monitor over the page, with its side pane */
+.monitor.full { position: fixed; inset: 0; z-index: 50; background: var(--panel); padding: 10px 14px; }
+.monitor.full .mside { display: block; }
+.monitor.full .msvg { height: auto; }
+body.mon-full { overflow: hidden; }
+@media (min-width: 1500px) { body:not(.screen) .monitor .mside { display: block; } }
+@media (max-width: 860px) { .monitor.full .mmain { flex-direction: column; } .monitor.full .mside { width: auto; border: 0; max-height: 40vh; } }
