@@ -1,4 +1,4 @@
-#include "event_logger.hpp"
+#include "long_tamp_bt/event_logger.hpp"
 
 #include <behaviortree_cpp/contrib/json.hpp>
 #include <behaviortree_cpp/tree_node.h>
@@ -6,6 +6,8 @@
 #include <chrono>
 #include <stdexcept>
 
+namespace long_tamp_bt
+{
 JsonlEventLogger::JsonlEventLogger(BT::TreeNode* root_node, const std::string& path)
   : file_(path, std::ios::app)
 {
@@ -54,3 +56,4 @@ void JsonlEventLogger::flush()
   std::lock_guard<std::mutex> lock(mutex_);
   file_.flush();
 }
+}  // namespace long_tamp_bt

@@ -32,11 +32,10 @@ Hand-authored (or future model-proposed) TaskPlan IR
 Deterministic IR-to-BT compiler (compiler.py) ──► BehaviorTree.CPP XML + source map
     │
     ▼
-C++ standalone executable (examples/behaviortree/)
-    │  BT::BehaviorTreeFactory + generic task-planning nodes
+Any BehaviorTree.CPP 4 tree: the example host (examples/behaviortree/), your own, ROS 2 / Nav2
+    │  task-planning nodes (long_tamp_bt_nodes, or the plugin) + a TaskSession on the blackboard
     ▼
-Embedded CPython bridge (PythonSession)
-    │  in-process call, no RPC
+A TaskSession: embedded CPython (PythonTaskSession, in-process, no RPC), or your own
     ▼
 Python TaskPlanningSession / HostSession (session.py, host.py)
     │
@@ -72,7 +71,7 @@ running it.
 | `src/long_tamp/tasks/task_planning/compiler.py` | `compile_behavior_tree()` — deterministic, allowlisted-element IR→XML compiler; output carries its own `artifact_fingerprint` |
 | `src/long_tamp/tasks/task_planning/session.py` | `TaskPlanningSession` — dispatches transactions/conditions through the frozen registry; freezes the registry on construction |
 | `src/long_tamp/tasks/task_planning/host.py` | Allowlisted session factories the C++ host is permitted to call: `create_fake_session`, plus one per mission you add (§9) |
-| `examples/behaviortree/` | C++ host: `main.cpp` (CLI + allowlist), `python_session.{hpp,cpp}` (CPython bridge), `task_nodes.{hpp,cpp}` (generic BT node types) |
+| `examples/behaviortree/` | The C++ side (§5): `include/long_tamp_bt/task_session.hpp` (the session interface), `task_nodes` (the nodes, `long_tamp_bt_nodes`), `plugin.cpp` (`long_tamp_bt_nodes_plugin`), `python_task_session` (the CPython bridge), `event_logger`, `main.cpp` (the example host: CLI + allowlist), `test/plugin_loads.cpp` (a stock factory loads the plugin) |
 | `src/long_tamp/planning/path_recorder.py`, `path_io.py` | `PathRecorder` capture and `replay`/validation helpers a mission-specific session can reuse for checkpointing |
 | `src/long_tamp/tasks/grasp_sequence.py` — `GraspSequencePlanner.grasp()`/`.release()` | Standalone, precondition-checked, `dict -> dict` capability primitives (never raise) — the natural implementation for a mission's `grasp`/`release` capabilities; see the module docstring for why they exist and how they differ from `plan_sequence()`'s internal per-phase calls |
 | `src/long_tamp/tasks/sequence_orchestrator.py` — `run_sequence()` | Reference orchestrator built purely on `grasp()`/`release()`, reproducing `plan_sequence()`'s auto-release sequencing policy as external, swappable code — a worked example of what a BT tree or a symbolic planner needs to reproduce, not something the BT path itself calls |
@@ -208,19 +207,67 @@ flowchart TD
     release_then_regrasp --> grasp_handle1_again
 ```
 
-## 5. C++ host and the CPython bridge
+## 5. C++ host, the node library and the plugin
 
-`examples/behaviortree/src/main.cpp` takes `--factory <name>` (checked against a hardcoded
-allowlist — `create_fake_session`, `create_twin_session`, and `create_twin_regrasp_session`
-today; add your own mission factory per §9; an unlisted name is a non-retryable exit code
-`2`, never dispatched to Python) and
-`--options <json>`, constructs a
-`PythonSession`, registers the five generic node types
-(`RegisterTaskPlanningNodes`, `task_nodes.cpp`), builds the tree from
-`session->call("get_behavior_tree_xml")`, and ticks it to completion with a `BT::TreeObserver`
-attached.
+The BT nodes the compiler emits are a library with a small session interface (#25). They
+can be loaded into any BehaviorTree.CPP 4 factory, including ROS 2 and Nav2 trees, and
+backed by a session that is Python, ROS 2 services, or plain C++.
 
-**Threading**: every `PythonSession::call()` must run on the BT/interpreter thread. An
+| Target | What it is |
+|---|---|
+| `long_tamp_bt_nodes` | The six nodes (`SetupTaskPlan`, `TaskStepComplete`, `TaskStepReady`, `TaskCapabilityCondition`, `ExecuteTaskStep`, `FinalizeTaskPlan`) and the JSONL event logger. Link it and call `long_tamp_bt::RegisterNodes(factory)`. |
+| `long_tamp_bt_nodes_plugin` | The same nodes as a BehaviorTree.CPP plugin (`BT_REGISTER_NODES`): `factory.registerFromPlugin("liblong_tamp_bt_nodes_plugin.so")`, or list it in Nav2's `plugin_lib_names`. |
+| `long_tamp_bt_python` | `PythonTaskSession`: the session in embedded CPython, built by an allowlisted `long_tamp.tasks.task_planning.host` factory. |
+| `agimus_taskplan_bt` | The example host: a Python session, the nodes, a tree from the session's compiled XML, and an optional event log. |
+
+**The session interface** (`long_tamp_bt/task_session.hpp`, header-only): it has one method
+per call the nodes make. Each takes and returns JSON text, the same protocol as the Python
+`TaskPlanningSession`:
+
+| Method | Called by | Returns |
+|---|---|---|
+| `setup(options_json)` | `SetupTaskPlan` | `{"status": "success" \| "failure"}` |
+| `isStepComplete(step_id)` | `TaskStepComplete` | `{"complete": bool}` |
+| `checkPrecondition(step_id)` | `TaskStepReady` | `{"ready": bool}` |
+| `evaluateCondition(step_id)` | `TaskCapabilityCondition` | `{"value": bool}` |
+| `executeStep(step_id)` | `ExecuteTaskStep` | `{"status": "success" \| "skipped" \| "retry" \| "failure", "message": ...}` |
+| `finalize()` | `FinalizeTaskPlan` | `{"status": ...}` |
+| `behaviorTreeXml()`, `report()` | the host | the compiled XML; a free-form summary |
+
+**Where the nodes find it:** on the root blackboard, under `long_tamp_bt::kSessionKey`
+(`"long_tamp_session"`), the way Nav2's nodes find `"node"`. Subtrees see it too:
+
+```cpp
+#include <long_tamp_bt/task_session.hpp>
+#include <behaviortree_cpp/bt_factory.h>
+
+BT::BehaviorTreeFactory factory;                       // a stock factory
+factory.registerFromPlugin("liblong_tamp_bt_nodes_plugin.so");
+auto blackboard = BT::Blackboard::create();
+blackboard->set(long_tamp_bt::kSessionKey,
+                std::shared_ptr<long_tamp_bt::TaskSession>(std::make_shared<MySession>()));
+auto tree = factory.createTreeFromText(compiled_xml, blackboard);
+tree.tickWhileRunning();
+```
+
+**In Nav2:** `bt_navigator` creates the blackboard, so a navigator plugin (or any node that
+owns the blackboard) sets the entry before the tree runs. A ROS 2 session can forward each
+call to a service, so the planner can run in another process.
+
+`taskplan_bt_plugin_loads` (CTest) is the acceptance test. It loads the plugin into a stock
+factory, links only BehaviorTree.CPP, and runs a tree against a session written in C++: a
+skipped step, a retried step, a subtree, a capability condition, and a clear error when no
+session is set.
+
+The example host `examples/behaviortree/src/main.cpp` takes `--factory <name>`, checked
+against a hard-coded allowlist (`create_fake_session`, `create_twin_session`,
+`create_twin_regrasp_session` and `create_screw_session` today; add your own mission factory
+per §9). An unlisted name exits with the non-retryable code `2` and is never dispatched to
+Python. It also takes `--options <json>`. It builds a `PythonTaskSession`, registers the
+nodes (`RegisterNodes`), puts the session on the blackboard, builds the tree from
+`session->behaviorTreeXml()` and ticks it to completion with a `BT::TreeObserver` attached.
+
+**Threading**: every `PythonTaskSession` call must run on the BT/interpreter thread. An
 earlier version dispatched PyHPP calls from a `std::async` worker and crashed on the
 cross-thread GIL/HPP-state violation; there is no thread pool in the current design.
 
@@ -242,7 +289,7 @@ git submodule update --init cmake   # jrl-cmakemodules -- see below
 cmake -S . -B build-bt \
   -DBUILD_BEHAVIORTREE_EXAMPLES=ON \
   -DBUILD_TESTING=ON
-cmake --build build-bt --parallel --target agimus_taskplan_bt
+cmake --build build-bt --parallel --target agimus_taskplan_bt long_tamp_bt_nodes_plugin
 ```
 
 The top-level `CMakeLists.txt` requires `jrl-cmakemodules` to configure *any* C++ build of
@@ -284,7 +331,7 @@ default `-DBUILD_TESTING=ON` configure:
 ```bash
 cmake -S . -B build-bt -DBUILD_BEHAVIORTREE_EXAMPLES=ON -DBUILD_TESTING=ON \
   -DBUILD_BEHAVIORTREE_REAL_MISSION_TESTS=ON
-cmake --build build-bt --parallel --target agimus_taskplan_bt
+cmake --build build-bt --parallel --target agimus_taskplan_bt long_tamp_bt_nodes_plugin
 ctest --test-dir build-bt --output-on-failure -R 'taskplan_bt_twin_lift_ball'  # flat two-grasp, create_twin_session
 ctest --test-dir build-bt --output-on-failure -R 'taskplan_bt_twin_regrasp'    # forced release+regrasp, create_twin_regrasp_session (§11 item 1)
 ```

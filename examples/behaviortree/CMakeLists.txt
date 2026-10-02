@@ -25,21 +25,43 @@ endif()
 
 set(BUILD_TESTING "${_agimus_build_testing}")
 
-add_executable(
-  agimus_taskplan_bt
-  src/event_logger.cpp
-  src/main.cpp
-  src/python_session.cpp
-  src/task_nodes.cpp)
-target_include_directories(agimus_taskplan_bt PRIVATE include)
-target_link_libraries(
-  agimus_taskplan_bt
-  PRIVATE
-    BT::behaviortree_cpp
-    Python3::Python)
-target_compile_features(agimus_taskplan_bt PRIVATE cxx_std_17)
+# The task-planning BT nodes (#25): a library to link (RegisterNodes), the
+# same nodes as a BehaviorTree.CPP plugin (factory.registerFromPlugin, Nav2's
+# plugin_lib_names), and the embedded-Python session. The nodes read their
+# session (long_tamp_bt::TaskSession) from the root blackboard, so a session can
+# be Python, ROS 2 services, or C++.
+add_library(long_tamp_bt_nodes STATIC src/task_nodes.cpp src/event_logger.cpp)
+target_include_directories(
+  long_tamp_bt_nodes PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                            $<INSTALL_INTERFACE:include>)
+target_link_libraries(long_tamp_bt_nodes PUBLIC BT::behaviortree_cpp)
+target_compile_features(long_tamp_bt_nodes PUBLIC cxx_std_17)
+set_target_properties(long_tamp_bt_nodes PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+add_library(long_tamp_bt_nodes_plugin SHARED src/plugin.cpp)
+target_link_libraries(long_tamp_bt_nodes_plugin PRIVATE long_tamp_bt_nodes)
+target_compile_definitions(long_tamp_bt_nodes_plugin PRIVATE BT_PLUGIN_EXPORT)
+
+add_library(long_tamp_bt_python STATIC src/python_task_session.cpp)
+target_include_directories(
+  long_tamp_bt_python PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                             $<INSTALL_INTERFACE:include>)
+target_link_libraries(long_tamp_bt_python PUBLIC Python3::Python)
+target_compile_features(long_tamp_bt_python PUBLIC cxx_std_17)
+
+add_executable(agimus_taskplan_bt src/main.cpp)
+target_link_libraries(agimus_taskplan_bt PRIVATE long_tamp_bt_nodes long_tamp_bt_python)
 
 if(BUILD_TESTING)
+  # #25: a stock factory loads the plugin and runs a tree against a C++ session;
+  # the test links only BehaviorTree.CPP (the session interface is header-only).
+  add_executable(long_tamp_bt_plugin_test test/plugin_loads.cpp)
+  target_include_directories(long_tamp_bt_plugin_test PRIVATE include)
+  target_link_libraries(long_tamp_bt_plugin_test PRIVATE BT::behaviortree_cpp)
+  target_compile_features(long_tamp_bt_plugin_test PRIVATE cxx_std_17)
+  add_test(NAME taskplan_bt_plugin_loads
+           COMMAND long_tamp_bt_plugin_test $<TARGET_FILE:long_tamp_bt_nodes_plugin>)
+
   add_test(NAME taskplan_bt_fake COMMAND agimus_taskplan_bt --factory create_fake_session)
 
   # Failure-path coverage: each case exercises a distinct error boundary in
@@ -137,3 +159,5 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS agimus_taskplan_bt RUNTIME DESTINATION bin)
+install(TARGETS long_tamp_bt_nodes_plugin LIBRARY DESTINATION lib)
+install(DIRECTORY include/long_tamp_bt DESTINATION include)

@@ -10,6 +10,8 @@
 // "long-tamp.events/1"), one JSON object per line, for every status change of a
 // node the compiler stamped with _ir_id / _ir_role. The Python executor writes
 // the same schema, so a mission reads the same whichever runs it.
+namespace long_tamp_bt
+{
 class JsonlEventLogger : public BT::StatusChangeLogger
 {
 public:
@@ -24,3 +26,4 @@ private:
   std::ofstream file_;
   std::mutex mutex_;
 };
+}  // namespace long_tamp_bt

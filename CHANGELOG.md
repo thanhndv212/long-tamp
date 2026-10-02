@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The task-planning BT nodes as a library and a BehaviorTree.CPP plugin (#25).
+  - Libraries: `long_tamp_bt_nodes` (call `RegisterNodes`), and `long_tamp_bt_nodes_plugin`
+    (`BT_REGISTER_NODES`, so `factory.registerFromPlugin` and Nav2's `plugin_lib_names`
+    work).
+  - The nodes talk to a header-only `long_tamp_bt::TaskSession`, found on the root
+    blackboard (`"long_tamp_session"`). A session can be embedded Python
+    (`PythonTaskSession`, in `long_tamp_bt_python`), ROS 2 services, or C++.
+  - The `taskplan_bt_plugin_loads` CTest loads the plugin into a stock factory and runs a
+    tree against a C++ session.
+
+### Changed
+
+- `examples/behaviortree`: the headers are now under `include/long_tamp_bt/`, in the
+  `long_tamp_bt` namespace. `PythonSession` is now `PythonTaskSession` (a `TaskSession`),
+  and the host reads the session from the blackboard instead of binding it to the nodes.
+
 ## [0.8.0] - 2026-10-02
 
 The mission UI. One page, started with one command (`mission_ui.py`), shows the 3D scene, an
