@@ -28,7 +28,7 @@ python task_screw_assembly.py --backend mujoco --web-port 8090
 By default everything fits on one screen:
 
 - **Top:** the summary.
-- **Left:** the plan tree, with Details and Events as tabs below it.
+- **Left:** the Monitor and the plan tree (tabs), with Details and Events as tabs below them.
 - **Center:** the scene, with the timeline under it.
 - **Right:** the chat.
 
@@ -38,6 +38,7 @@ Each panel scrolls inside itself, and you can rearrange the areas with `screen` 
 |---|---|
 | **Summary** | Elapsed time; steps done, skipped and failed out of the total; retries; time spent planning and in motion; drift replans; pauses. When a model took part, it adds model calls and tokens, tool calls, and the number of plans. |
 | **Timeline** | Play, pause and seek controls with a speed setting (1×–600×, or one event at a time), and *follow live* on a live page. Below them, a Gantt bar per step, coloured by its state, with a cursor at the current position. Parallel lanes show up as overlapping bars. |
+| **Monitor** | The plan as a live behavior tree, like a BT monitor. **Detail:** *Plan steps*; *Behavior tree*, where each step is expanded into the elements it compiles to (effect-holds check, preconditions, retry, execute); or *+ phases & motions*, where each planning phase and motion command appears under its step as it happens. **Layout:** top down, left to right or radial. **Live:** links to the running node flow, finished links take their result's color, the active node pulses and the tree glides when it grows. Visit-order badges show the order nodes were reached, and *Follow active* keeps the running node in view. **⤢ Full screen** (Esc to leave, or open the page at `#monitor-full`) adds a side pane: status counts, the selected node (path from the root, state and for how long, call, attempt, children, recent changes) and a clickable log of status changes. Click a node for its details, double-click to fold it, drag to pan, scroll to zoom. **Start mission** switches to it. |
 | **Plan** | The plan tree: sequences (→), fallbacks (?), retries (↻), parallel groups (⇉), conditions (◇) and steps, each with its `capability(parameters)` and state. Badges show the attempt (k/N), *skipped: completed_this_run* when the step's effect already held, the motion time, *moving*, the number of drift replans, and ⏸ while paused there. Branches fold, and the running node scrolls into view. |
 | **Details** | The selected node: its call, state, attempts, why it was skipped, planning and motion time, start time and duration, failure messages, and all of its events. |
 | **Events** | The raw stream up to the cursor. You can filter it by text, show only failures, or toggle each role; `ready` and `precondition` are hidden by default. Click an event to move the cursor there. |
@@ -93,7 +94,7 @@ The settings are plain data. You can set them in Python or keep them in a JSON f
 | `extra_css`, `extra_js` | Files inlined into the page after the built-in style and script. A replay stays a single file. Relative paths are resolved against the JSON file's folder. |
 | `poll_ms` | How often a live page asks the server for new events. |
 | `layout` | `"screen"` (default) fits everything on one screen and each panel scrolls inside. Below 1000 px wide, the panels stack. `"page"` stacks the panels in a scrolling page. |
-| `screen` | Where each panel goes on one screen, by area: `top`, `left`, `center`, `right`. An inner list is a group of tabs. The default is `{"top": ["summary"], "left": ["plan", ["details", "events"]], "center": ["scene", "timeline"], "right": ["chat"]}`. Panels you don't place join the left tabs. Without a scene, the tabs move to the center. |
+| `screen` | Where each panel goes on one screen, by area: `top`, `left`, `center`, `right`. An inner list is a group of tabs. The default is `{"top": ["summary"], "left": [["monitor", "plan"], ["details", "events"]], "center": ["scene", "timeline"], "right": ["chat"]}`. Panels you don't place join the left tabs. Without a scene, the tabs move to the center. |
 
 ### Your own panels, badges and formats: `window.LongTamp`
 
