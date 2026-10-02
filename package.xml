@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>long_tamp</name>
-  <version>0.7.0</version>
+  <version>0.8.0</version>
   <description>
     Long-TAMP - A generalized manipulation planning framework
     using the PyHPP backend for HPP-based manipulation tasks.

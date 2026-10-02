@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-02
+
+The mission UI. One page, started with one command (`mission_ui.py`), shows the 3D scene, an
+operator chat and a live behavior-tree monitor of the plan.
+
+- **Plan and run from the page:** type an instruction, see the plan the task planner builds,
+  press **Start mission**, and watch it run. Every step shows what it is doing while it
+  plans. The operator can skip a slow search or abort a step from the page, and a watchdog
+  (the model, or a rule) acts on steps that plan too long.
+- **A scene that stays live:** the 3D scene runs in its own process, so it no longer freezes
+  while HPP plans, and with the MuJoCo backend it shows the simulated motion.
+- **Replays:** any run, live or recorded, replays as a single self-contained HTML file.
+- **AI defaults:** the model endpoint and default model come from a default env file, so no
+  flags are needed.
+
 ### Added
 
 - **Reset mission** in the mission UI (#114) starts over from the page: a fresh mission with
