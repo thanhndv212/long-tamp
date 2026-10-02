@@ -8,7 +8,16 @@ from pathlib import Path
 from typing import Any
 
 #: The built-in panels, in their default order.
-PANELS = ("summary", "timeline", "monitor", "plan", "details", "events", "chat", "scene")
+PANELS = (
+    "summary",
+    "timeline",
+    "monitor",
+    "plan",
+    "details",
+    "events",
+    "chat",
+    "scene",
+)
 
 
 @dataclass
