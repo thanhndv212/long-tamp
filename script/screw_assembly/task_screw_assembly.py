@@ -1134,7 +1134,7 @@ def make_backend(
     if name == "mock":
         return MockBackend(rtf=1000.0)
     if name == "playback":
-        display = (lambda q: task.planner.viewer(q)) if live_viewer else None
+        display = live_viewer.display if live_viewer else None
         return PathPlaybackBackend(display=display)
     if name == "mujoco":
         from long_tamp.sim import MuJoCoBackend, QposMap, ScrewDriving, export_mjcf
@@ -1145,6 +1145,11 @@ def make_backend(
         # stepping it from a thread would share the planner's interpreter
         # lock (see long_tamp.execution.process).
         contact = contact_grasps(export) if grasp == "contact" else {}
+        # A scene in its own process takes the simulated states straight
+        # from the simulation's process (#106): what the robot does, not
+        # what was planned.
+        scene = getattr(live_viewer, "scene", None)
+        display = scene.client if scene is not None else None
         backend = ProcessBackend(  # closed at exit (see main)
             MuJoCoBackend,
             export,
@@ -1154,8 +1159,10 @@ def make_backend(
             from_qpos=to_qpos.inverse,
             grasp=grasp,
             record=(run_dir or HERE / "runs") / "sim" if record else None,
+            display=display,
             **contact,
         )
+        backend.display = display  # the planned paths need not be played
         return DriftInjector(backend, drift) if drift else backend
     return None
 
@@ -1291,6 +1298,12 @@ def main() -> int:
         "--no-viewer",
         action="store_true",
         help="run without the live Viser viewer or path playback",
+    )
+    ap.add_argument(
+        "--viewer-in-process",
+        action="store_true",
+        help="serve the Viser scene from the mission's process (before #106): it "
+        "then freezes while HPP plans; by default it has its own process",
     )
     ap.add_argument(
         "--watchdog",
@@ -1528,6 +1541,8 @@ def main() -> int:
             q_start or task.q_init,
             camera=((2.15, -2.30, 1.55), (0.75, 0.0, 0.58)),
             closures=closures,
+            # its own process, so it stays live while HPP plans (#106)
+            separate_process=not args.viewer_in_process,
         )
         atexit.register(live_viewer.close)
     control, web = None, None
