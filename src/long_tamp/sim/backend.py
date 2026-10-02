@@ -134,6 +134,8 @@ class MuJoCoBackend:
         clock: Callable[[], float] = time.monotonic,
         record: str | Path | None = None,
         record_fps: float = 30.0,
+        display: Any = None,
+        display_fps: float = 30.0,
     ) -> None:
         import mujoco
 
@@ -159,6 +161,13 @@ class MuJoCoBackend:
         #: frames per simulated second, one ``.npz`` chunk per command), for
         #: replay in MuJoCo's viewer; ``None``: not recorded.
         self.record = Path(record) if record is not None else None
+        #: Where the simulated states go as they happen, as planner
+        #: configurations (needs ``from_qpos``): an object with
+        #: ``frame(t, q)``, e.g. a ``SceneClient`` (#106), stamped with the
+        #: simulated time so a scene plays them back in real time.
+        self.display = display if from_qpos is not None else None
+        self._display_dt = 1.0 / display_fps
+        self._next_display = 0.0
         self._frame_dt = 1.0 / record_fps
         self._clock_sim = 0.0  # simulated seconds since the first command
         self._next_frame = 0.0
@@ -1008,6 +1017,13 @@ class MuJoCoBackend:
         if self.record is not None and self._clock_sim >= self._next_frame:
             self._recorded.append((self._clock_sim, data.qpos.copy()))
             self._next_frame += self._frame_dt
+        if self.display is not None and self._clock_sim >= self._next_display:
+            self._next_display = self._clock_sim + self._display_dt
+            try:
+                q = self.from_qpos(data.qpos.copy(), self._planner_q)
+                self.display.frame(self._clock_sim, q)
+            except Exception:  # noqa: BLE001 - showing must never stop the robot
+                self.display = None
         if not np.isfinite(data.qpos).all():
             return f"simulation diverged at t={self._t:.3f}"
         for name, (_, closure, grip_pos) in self._gripped.items():

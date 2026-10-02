@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Full screen adds a side pane with status counts, node details and history, and a log of
     status changes.
   - It sits in a tab next to the plan tree, and **Start mission** switches to it.
+- The 3D scene in its own process (#106). `SceneProcess` serves the Viser scene from a child
+  process built from the robot's pickled pinocchio models, so it stays live while HPP plans:
+  the page answers in milliseconds instead of 15–30 s.
+  - `MissionViewer(separate_process=True)`, the screw assembly's default, sends paths as
+    frames and doesn't wait for them to play.
+  - The MuJoCo backend streams its simulated states to the scene (`display=`), so the scene
+    shows what the simulated robot does.
 - Progress from a step's planning, and intervention mid-step (#108).
   - `long_tamp.execution.activity` turns what a step is doing into `progress` events: each
     lookahead round and candidate, each phase, each replan.
