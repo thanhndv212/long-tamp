@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (`PythonTaskSession`, in `long_tamp_bt_python`), ROS 2 services, or C++.
   - The `taskplan_bt_plugin_loads` CTest loads the plugin into a stock factory and runs a
     tree against a C++ session.
+  - Example: `screw_assembly_plugin` runs the screw-assembly mission (`--plan short` or
+    `full`) in a stock factory that loads the plugin. Its event stream starts with the plan,
+    for the viewer. `HostSession.get_plan_document()` gives a C++ host the plan, and
+    `create_screw_session` takes `"plan": "full"`.
 
 ### Changed
 

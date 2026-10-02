@@ -7,7 +7,10 @@ arm picks the driver, goes home while the left arm grasps part 1 (a
 the driver. It plans only; nothing executes.
 
 ``build_screw_session(options_json)`` is what the host's allowlisted
-``create_screw_session`` factory calls. Options: ``seed`` (default 1).
+``create_screw_session`` factory calls. Options: ``seed`` (default 1) and
+``plan``: ``"short"`` (default, the plan above) or ``"full"``, the whole
+mission (every part clamped and screwed, the driver racked, the parts
+released), as the Python mission plans it.
 """
 
 from __future__ import annotations
@@ -78,8 +81,12 @@ def build_screw_session(options_json: str = "{}"):
         "inject": [],
         "concurrent": True,
     }
+    if options.get("plan", "short") == "full":
+        document = T.build_plan_document(n_parts)
+    else:
+        document = plan_document(n_parts)
     session = T.mission_session(
-        task, planner, ctx, recorded, verbose=False, document=plan_document(n_parts)
+        task, planner, ctx, recorded, verbose=False, document=document
     )
     host = HostSession(session.plan, session.registry, session.world_state, recorded)
     host.ctx = ctx  # what the steps planned (records), for checks

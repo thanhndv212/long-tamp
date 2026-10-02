@@ -52,6 +52,15 @@ target_compile_features(long_tamp_bt_python PUBLIC cxx_std_17)
 add_executable(agimus_taskplan_bt src/main.cpp)
 target_link_libraries(agimus_taskplan_bt PRIVATE long_tamp_bt_nodes long_tamp_bt_python)
 
+# Example (#25): the screw-assembly mission in a stock factory that loads the
+# nodes from the plugin (it links the event logger, not the nodes).
+add_executable(screw_assembly_plugin src/screw_assembly_plugin.cpp)
+target_link_libraries(screw_assembly_plugin PRIVATE long_tamp_bt_nodes long_tamp_bt_python)
+target_compile_definitions(
+  screw_assembly_plugin
+  PRIVATE LONG_TAMP_BT_PLUGIN="$<TARGET_FILE:long_tamp_bt_nodes_plugin>")
+add_dependencies(screw_assembly_plugin long_tamp_bt_nodes_plugin)
+
 if(BUILD_TESTING)
   # #25: a stock factory loads the plugin and runs a tree against a C++ session;
   # the test links only BehaviorTree.CPP (the session interface is header-only).
@@ -158,6 +167,6 @@ if(BUILD_TESTING)
   endif()
 endif()
 
-install(TARGETS agimus_taskplan_bt RUNTIME DESTINATION bin)
+install(TARGETS agimus_taskplan_bt screw_assembly_plugin RUNTIME DESTINATION bin)
 install(TARGETS long_tamp_bt_nodes_plugin LIBRARY DESTINATION lib)
 install(DIRECTORY include/long_tamp_bt DESTINATION include)

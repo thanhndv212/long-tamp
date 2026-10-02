@@ -254,6 +254,23 @@ tree.tickWhileRunning();
 owns the blackboard) sets the entry before the tree runs. A ROS 2 session can forward each
 call to a service, so the planner can run in another process.
 
+**Example: the screw assembly through the plugin.** `screw_assembly_plugin`
+(`src/screw_assembly_plugin.cpp`) is written as your own application would be. A stock
+factory loads the nodes from the plugin, a session plans the screw-assembly cell on the real
+HPP scene, the session goes on the blackboard, and the compiled plan's tree is ticked to the
+end. The event stream starts with a `plan` event, so the viewer draws the real tree:
+
+```bash
+cmake --build build-bt --target screw_assembly_plugin
+PYTHONPATH=$PWD/src ./build-bt/examples/behaviortree/screw_assembly_plugin \
+    --plan full --events /tmp/screw/events.jsonl      # --plan short: a 4-step plan
+python -m long_tamp.viewer serve /tmp/screw/events.jsonl   # watch it live; or replay
+```
+
+`--plan full` is the whole mission: every part clamped and screwed, the driver racked,
+the parts released. It plans only, with nothing executed. A host gets the plan's IR document
+from the Python session with `get_plan_document()`.
+
 `taskplan_bt_plugin_loads` (CTest) is the acceptance test. It loads the plugin into a stock
 factory, links only BehaviorTree.CPP, and runs a tree against a session written in C++: a
 skipped step, a retried step, a subtree, a capability condition, and a clear error when no
