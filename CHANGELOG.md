@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A plan monitor in the viewer (#105). It shows the plan as a live tree graph, like a
+  behavior-tree monitor: boxes colored by state, the running step pulsing, the attempt or
+  current activity under each label, zoom and pan, and follow-the-running-step. It sits in a
+  tab next to the plan tree, and **Start mission** switches to it.
+
 - Progress from a step's planning, and intervention mid-step (#108).
   - `long_tamp.execution.activity` turns what a step is doing into `progress` events: each
     lookahead round and candidate, each phase, each replan.

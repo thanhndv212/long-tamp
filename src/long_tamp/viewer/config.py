@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 #: The built-in panels, in their default order.
-PANELS = ("summary", "timeline", "plan", "details", "events", "chat", "scene")
+PANELS = ("summary", "timeline", "monitor", "plan", "details", "events", "chat", "scene")
 
 
 @dataclass
@@ -41,7 +41,7 @@ class ViewerConfig:
       Below 1000 px wide, ``screen`` stacks them too.
     - ``screen``: where each panel goes on one screen, by area (``top``,
       ``left``, ``center``, ``right``); an inner list is a group of tabs.
-      Default: ``{"top": ["summary"], "left": ["plan", ["details", "events"]],
+      Default: ``{"top": ["summary"], "left": [["monitor", "plan"], ["details", "events"]],
       "center": ["scene", "timeline"], "right": ["chat"]}``. Panels not placed
       join the left tabs; without a scene, the tabs take the centre.
     """

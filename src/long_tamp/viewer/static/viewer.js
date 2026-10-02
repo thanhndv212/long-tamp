@@ -356,6 +356,192 @@
     return def.capability + "(" + args + ")";
   }
 
+  // monitor (#105): the plan as a live tree graph, like a BT monitor. Left
+  // to right (depth along x), so a long sequence grows downward; boxes are
+  // coloured by state; wheel pans, Ctrl/⌘-wheel or the buttons zoom, drag
+  // pans; "follow" keeps the running node in view.
+  var NS = "http://www.w3.org/2000/svg";
+  var MON = { W: 178, H: 38, GX: 30, GY: 8 };
+  var mon = { svg: null, root: null, sig: "", boxes: {}, vb: null, follow: true, drag: null,
+              fitted: false, size: [0, 0], lastRunning: null };
+
+  function sv(tag, attrs) {
+    var el = document.createElementNS(NS, tag);
+    Object.keys(attrs || {}).forEach(function (k) { el.setAttribute(k, attrs[k]); });
+    return el;
+  }
+
+  function clip(text, n) { return text.length > n ? text.slice(0, n - 1) + "…" : text; }
+
+  function monSub(n) {
+    var state = nodeState(n);
+    if (n.activity && n.status === "RUNNING") return n.activity.message;
+    if (state === "skipped") return "skipped: " + (n.skipReason || "");
+    if (n.attempt) return "attempt " + n.attempt + (n.maxAttempts ? "/" + n.maxAttempts : "") +
+      (n.motionSeconds ? " · motion " + fmtSeconds(n.motionSeconds) : "");
+    if (n.type === "condition" && state === "unmet") return "not yet";
+    return n.type || "";
+  }
+
+  function monLayout(view) {
+    var slot = 0, pos = {}, edges = [], maxDepth = 0;
+    function place(id, depth) {
+      var n = view.nodes[id];
+      if (!n) return null;
+      maxDepth = Math.max(maxDepth, depth);
+      var kids = LT._collapsed[id] ? [] : n.children.filter(function (k) { return view.nodes[k]; });
+      var y;
+      if (!kids.length) y = slot++;
+      else {
+        var ys = kids.map(function (k, i) {
+          var cy = place(k, depth + 1);
+          edges.push({ from: id, to: k, alt: n.type === "fallback" && i > 0 });
+          return cy;
+        });
+        y = ys[0]; // level with its first child: a long sequence reads top down
+      }
+      pos[id] = { x: depth * (MON.W + MON.GX), y: y * (MON.H + MON.GY), hidden: n.children.length && LT._collapsed[id] };
+      return y;
+    }
+    view.roots.forEach(function (r) { place(r, 0); slot += 0.5; });
+    return { pos: pos, edges: edges, width: (maxDepth + 1) * (MON.W + MON.GX), height: Math.max(slot, 1) * (MON.H + MON.GY) };
+  }
+
+  function monBuild(view) {
+    var g = mon.root;
+    while (g.firstChild) g.removeChild(g.firstChild);
+    mon.boxes = {};
+    var lay = monLayout(view);
+    mon.size = [lay.width, lay.height];
+    lay.edges.forEach(function (e) {
+      var a = lay.pos[e.from], b = lay.pos[e.to];
+      if (!a || !b) return;
+      var x1 = a.x + MON.W, y1 = a.y + MON.H / 2, x2 = b.x, y2 = b.y + MON.H / 2, xm = (x1 + x2) / 2;
+      g.appendChild(sv("path", { d: "M" + x1 + " " + y1 + " C" + xm + " " + y1 + " " + xm + " " + y2 + " " + x2 + " " + y2,
+        "class": "medge" + (e.alt ? " alt" : "") }));
+    });
+    Object.keys(lay.pos).forEach(function (id) {
+      var p = lay.pos[id], n = view.nodes[id];
+      var box = sv("g", { "class": "mnode", transform: "translate(" + p.x + "," + p.y + ")", "data-id": id });
+      var title = sv("title"); title.textContent = n.label + (call(n.def) ? "\n" + call(n.def) : "");
+      var rect = sv("rect", { width: MON.W, height: MON.H, rx: 6 });
+      var label = sv("text", { x: 8, y: 15, "class": "ml" });
+      label.textContent = (KIND_ICONS[n.type] || "·") + " " + clip(n.label, 24) + (p.hidden ? " …" : "");
+      var sub = sv("text", { x: 8, y: 30, "class": "ms" });
+      box.appendChild(title); box.appendChild(rect); box.appendChild(label); box.appendChild(sub);
+      box.addEventListener("click", function (ev) { ev.stopPropagation(); LT.select(id); });
+      box.addEventListener("dblclick", function (ev) {
+        ev.stopPropagation(); LT._collapsed[id] = !LT._collapsed[id]; mon.sig = ""; render();
+      });
+      g.appendChild(box);
+      mon.boxes[id] = { box: box, sub: sub, x: p.x, y: p.y };
+    });
+  }
+
+  function monView() {
+    var v = mon.vb;
+    mon.svg.setAttribute("viewBox", v.x + " " + v.y + " " + v.w + " " + v.h);
+  }
+
+  function monFit() {
+    var rect = mon.svg.getBoundingClientRect();
+    var aspect = rect.height > 0 && rect.width > 0 ? rect.height / rect.width : 0.75;
+    // the whole width, never larger than life; then as tall as fits
+    var w = Math.max(mon.size[0] + 20, rect.width || 0, 200);
+    mon.vb = { x: -10, y: -10, w: w, h: w * aspect };
+    monView();
+  }
+
+  function monZoom(factor, cx, cy) {
+    var v = mon.vb;
+    cx = cx === undefined ? v.x + v.w / 2 : cx;
+    cy = cy === undefined ? v.y + v.h / 2 : cy;
+    v.x = cx - (cx - v.x) * factor; v.y = cy - (cy - v.y) * factor;
+    v.w *= factor; v.h *= factor;
+    monView();
+  }
+
+  function monPoint(ev) {
+    var rect = mon.svg.getBoundingClientRect(), v = mon.vb;
+    return [v.x + (ev.clientX - rect.left) / rect.width * v.w, v.y + (ev.clientY - rect.top) / rect.height * v.h];
+  }
+
+  function monReveal(id) {
+    var b = mon.boxes[id], v = mon.vb;
+    if (!b || !v) return;
+    var inside = b.x >= v.x && b.x + MON.W <= v.x + v.w && b.y >= v.y && b.y + MON.H <= v.y + v.h;
+    if (inside) return;
+    v.y = b.y - v.h / 3;
+    if (b.x < v.x || b.x + MON.W > v.x + v.w) v.x = Math.max(-10, b.x - v.w / 4);
+    monView();
+  }
+
+  function monCreate(el) {
+    var follow = h("input", { type: "checkbox", checked: mon.follow,
+      onchange: function (e) { mon.follow = e.target.checked; } });
+    var bar = h("div", { cls: "mbar" },
+      h("button", { text: "Fit", title: "fit the width", onclick: monFit }),
+      h("button", { text: "+", title: "zoom in", onclick: function () { monZoom(0.8); } }),
+      h("button", { text: "−", title: "zoom out", onclick: function () { monZoom(1.25); } }),
+      h("label", null, follow, " follow the running step"),
+      h("span", { cls: "muted", text: "wheel: scroll · Ctrl/⌘+wheel: zoom · drag: pan · double-click: fold" }));
+    mon.svg = sv("svg", { "class": "msvg", preserveAspectRatio: "xMinYMin meet", role: "img", "aria-label": "plan monitor" });
+    mon.root = sv("g");
+    mon.svg.appendChild(mon.root);
+    mon.svg.addEventListener("wheel", function (ev) {
+      ev.preventDefault();
+      if (!mon.vb) return;
+      if (ev.ctrlKey || ev.metaKey) {
+        var pt = monPoint(ev);
+        monZoom(ev.deltaY > 0 ? 1.1 : 0.9, pt[0], pt[1]);
+      } else {
+        var k = mon.vb.h / Math.max(mon.svg.getBoundingClientRect().height, 1);
+        mon.vb.x += ev.deltaX * k; mon.vb.y += ev.deltaY * k;
+        monView();
+      }
+    }, { passive: false });
+    mon.svg.addEventListener("pointerdown", function (ev) {
+      if (ev.target.closest && ev.target.closest(".mnode")) return;
+      mon.drag = { x: ev.clientX, y: ev.clientY, vx: mon.vb.x, vy: mon.vb.y };
+      mon.svg.setPointerCapture(ev.pointerId);
+    });
+    mon.svg.addEventListener("pointermove", function (ev) {
+      if (!mon.drag) return;
+      var rect = mon.svg.getBoundingClientRect();
+      mon.vb.x = mon.drag.vx - (ev.clientX - mon.drag.x) / rect.width * mon.vb.w;
+      mon.vb.y = mon.drag.vy - (ev.clientY - mon.drag.y) / rect.height * mon.vb.h;
+      monView();
+    });
+    mon.svg.addEventListener("pointerup", function () { mon.drag = null; });
+    el.appendChild(h("div", { cls: "monitor" }, bar, mon.svg));
+    mon.sig = ""; mon.fitted = false;
+  }
+
+  builtins.monitor = {
+    title: "Monitor",
+    keep: true,
+    render: function (view, el) {
+      if (!mon.svg || !el.contains(mon.svg)) { el.textContent = ""; monCreate(el); }
+      if (!view.roots.length) return;
+      var sig = view.planVersion + ":" + Object.keys(view.nodes).length + ":" +
+        Object.keys(LT._collapsed).filter(function (k) { return LT._collapsed[k]; }).join(",");
+      if (sig !== mon.sig) {
+        monBuild(view);
+        mon.sig = sig;
+        if (!mon.fitted || !mon.vb) { requestAnimationFrame(monFit); mon.fitted = true; }
+      }
+      var running = null;
+      Object.keys(mon.boxes).forEach(function (id) {
+        var n = view.nodes[id], b = mon.boxes[id], state = nodeState(n);
+        b.box.setAttribute("class", "mnode " + stateClass(state) + (LT.selected === id ? " selected" : "") +
+          (n.activity && n.status === "RUNNING" ? " active" : ""));
+        b.sub.textContent = clip(monSub(n), 30);
+        if (state === "running" && (n.type === "transaction" || n.type === "operation")) running = id;
+      });
+      if (mon.follow && running && mon.vb) monReveal(running);
+    },
+  };
+
   builtins.plan = {
     title: "Plan",
     render: function (view, el) {
@@ -592,6 +778,8 @@
   function openMonitor() {
     LT.follow = true;
     seek(LT.events.length);
+    var m = sections.monitor;
+    if (m && m.group) { activate(m.group, "monitor"); }
     var target = document.querySelector('[data-panel="monitor"]') || document.querySelector('[data-panel="plan"]');
     if (target) {
       target.classList.add("flash");
@@ -692,7 +880,7 @@
 
   // Where each panel goes on one screen (ViewerConfig.layout "screen"): a
   // list per area; an inner list is a group of tabs.
-  var SCREEN = config.screen || { top: ["summary"], left: ["plan", ["details", "events"]],
+  var SCREEN = config.screen || { top: ["summary"], left: [["monitor", "plan"], ["details", "events"]],
                  center: ["scene", "timeline"], right: ["chat"] };
   var FIT = ["summary", "timeline"]; // their natural height, the rest share
   LT._tabs = {};
@@ -752,7 +940,10 @@
     });
   }
 
-  function activate(key, id) { LT._tabs[key] = id; showTab(key); render(); }
+  function activate(key, id) {
+    LT._tabs[key] = id; showTab(key); render();
+    if (id === "monitor" && mon.svg) requestAnimationFrame(monFit); // sized now
+  }
 
   function screenLayout(main) {
     var on = enabled();
@@ -790,12 +981,12 @@
         var g = tabGroup(ids, area + i);
         if (!g) return;
         if (ids.length === 1 && FIT.indexOf(ids[0]) >= 0) g.classList.add("fit");
-        if (ids.length === 1 && ids[0] === "plan") g.classList.add("tall");
+        if (ids.indexOf("plan") >= 0 || ids.indexOf("monitor") >= 0) g.classList.add("tall");
         col.appendChild(g);
       });
       if (!col.childNodes.length) return;
       grid.appendChild(col);
-      widths.push(area === "center" ? "minmax(0, 1fr)" : "minmax(280px, 26%)");
+      widths.push(area === "center" ? "minmax(0, 1fr)" : area === "left" ? "minmax(300px, 30%)" : "minmax(280px, 26%)");
     });
     grid.style.gridTemplateColumns = widths.join(" ");
     main.appendChild(grid);
