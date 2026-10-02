@@ -140,15 +140,25 @@ interactive and autonomous operation. A model writes the problem, never the plan
 no human input, through an injected failure that needs a goal-level decision, or it stops
 within its limits with an escalation report.
 
+## 0.8.0: the mission UI (from the backlog)
+
+**Released as 0.8.0 on 2026-10-02.** Picked from the backlog after M6:
+
+- [x] [#24](https://github.com/thanhndv212/long-tamp/issues/24) Web mission viewer on the event stream (`long_tamp.viewer`)
+- [x] [#90](https://github.com/thanhndv212/long-tamp/issues/90) Chat panel in the viewer (`ChatBridge`)
+- [x] [#104](https://github.com/thanhndv212/long-tamp/issues/104) Mission UI: launcher, plan card, Start button, one-screen layout
+- [x] [#105](https://github.com/thanhndv212/long-tamp/issues/105) Plan monitor: the plan as a live behavior tree
+- [x] [#106](https://github.com/thanhndv212/long-tamp/issues/106) The 3D scene in its own process
+- [x] [#108](https://github.com/thanhndv212/long-tamp/issues/108) Progress from a step's planning; skip/abort mid-step
+- [x] [#109](https://github.com/thanhndv212/long-tamp/issues/109) Step watchdog (model or rule)
+- [x] [#114](https://github.com/thanhndv212/long-tamp/issues/114) Reset mission button
+
 ## Backlog (not scheduled)
 
 - [#23](https://github.com/thanhndv212/long-tamp/issues/23) Optional PDDLStream adapter
   (`long-tamp[pddlstream]`), also an independent cross-check (moved out of M6)
-- [#90](https://github.com/thanhndv212/long-tamp/issues/90) Chat panel in the web mission
-  viewer: done, `long_tamp.viewer.ChatBridge`
 - [#98](https://github.com/thanhndv212/long-tamp/issues/98) One live Claude call through the
   gateway (needs API credit; follow-up of #86)
-- [#24](https://github.com/thanhndv212/long-tamp/issues/24) HTML mission viewer (replay/live) on the event stream: done, `long_tamp.viewer`
 - [#25](https://github.com/thanhndv212/long-tamp/issues/25) BehaviorTree.CPP node plugin library for ROS 2 / Nav2 users
 - [#26](https://github.com/thanhndv212/long-tamp/issues/26) Re-enable the spline path optimizer once hpp-core caps the QP solve
   ([bug 6](../bugs/hpp-core-unbounded-planning-loops.md))
