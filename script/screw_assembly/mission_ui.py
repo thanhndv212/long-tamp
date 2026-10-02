@@ -9,7 +9,8 @@ Type an instruction in the chat ("assemble parts 1 and 2, part 2 first"); the
 model sets the goal and the task planner builds the plan, shown as a card
 with a Start mission button. Start runs it: the plan tree and the timeline
 follow it live, the scene plays the motion, and pause/resume/stop act at
-step boundaries. Ctrl-C here ends everything.
+step boundaries. Reset mission starts over (a fresh mission, robot and parts
+back at the start). Ctrl-C here ends everything.
 
 The model and its endpoint come from the AI env file
 (``$LONG_TAMP_AI_ENV``, else ``~/.config/long-tamp/ai.env``) and
@@ -28,6 +29,8 @@ import webbrowser
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+#: The mission's exit code for "start a fresh one" (the page's Reset, #114).
+RESTART = 75
 
 
 def in_container() -> bool:
@@ -67,7 +70,21 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = ap.parse_args(argv)
 
-    run_dir = args.run_dir or HERE / "runs" / time.strftime("ui_%Y%m%d_%H%M%S")
+    opened = False
+    run_dir = args.run_dir
+    while True:
+        run_dir = run_dir or HERE / "runs" / time.strftime("ui_%Y%m%d_%H%M%S")
+        code, opened = _run(args, extra, run_dir, opened)
+        if code != RESTART:
+            return code
+        # Reset from the page (#114): a fresh mission on the same ports; the
+        # page reloads itself when the new one answers.
+        print("mission UI: reset, starting a fresh mission", flush=True)
+        run_dir = None
+        time.sleep(2.0)  # let the old servers release their ports
+
+
+def _run(args, extra, run_dir: Path, opened: bool) -> tuple[int, bool]:
     run_dir.mkdir(parents=True, exist_ok=True)
     command = [
         sys.executable,
@@ -105,8 +122,9 @@ def main(argv: list[str] | None = None) -> int:
                 if line.startswith("web viewer: "):
                     url = line.split(": ", 1)[1].strip()
                     print(f"\n  Open the mission UI: {url}\n", flush=True)
-                    if not (args.no_open or in_container()):
+                    if not (opened or args.no_open or in_container()):
                         webbrowser.open(url)
+                    opened = True
                 elif (
                     line.startswith(("chat:", "Traceback", "ERROR")) or "Error" in line
                 ):
@@ -118,9 +136,13 @@ def main(argv: list[str] | None = None) -> int:
                 child.wait(10)
             except subprocess.TimeoutExpired:
                 child.kill()
+            child.wait()
+            print(f"mission UI: ended; run folder: {run_dir}", flush=True)
+            return 130, opened
         code = child.wait()
-    print(f"mission UI: ended ({code}); run folder: {run_dir}", flush=True)
-    return code
+    if code != RESTART:
+        print(f"mission UI: ended ({code}); run folder: {run_dir}", flush=True)
+    return code, opened
 
 
 if __name__ == "__main__":

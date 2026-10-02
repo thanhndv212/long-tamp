@@ -1403,7 +1403,8 @@
     var state = view.paused ? "paused" : root ? nodeState(root) : "idle";
     var pill = document.getElementById("state");
     pill.className = "pill " + stateClass(state);
-    pill.textContent = (LT.live ? "live · " : "replay · ") + state;
+    pill.textContent = LT._offline ? "reconnecting…" :
+      (LT.live ? "live · " : "replay · ") + state;
     document.getElementById("clock").textContent =
       view.t0 === null ? "" : "t = " + fmtSeconds(view.t - view.t0);
   }
@@ -1480,12 +1481,16 @@
   function features() {
     fetch("api/features").then(function (r) { return r.json(); })
       .then(function (f) {
+        // a new server on this port (the mission was reset, #114): start over
+        if (f.session && LT._session && f.session !== LT._session) { window.location.reload(); return; }
+        if (f.session) LT._session = f.session;
+        if (LT._offline) { LT._offline = false; renderSoon(); }
         var changed = !!f.control !== !!boot.control || !!f.chat !== !!boot.chat;
         boot.control = !!f.control; boot.chat = !!f.chat;
         if (changed) { layout(); controls(); render(); LT._featureHooks.forEach(function (fn) { fn(f); }); }
       })
-      .catch(function () {})
-      .then(function () { setTimeout(features, 5000); });
+      .catch(function () { if (LT.live && !LT._offline) { LT._offline = true; renderSoon(); } })
+      .then(function () { setTimeout(features, LT._offline ? 1500 : 5000); });
   }
   LT._featureHooks = [];
 

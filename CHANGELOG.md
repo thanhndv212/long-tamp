@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Reset mission** in the mission UI (#114) starts over from the page: a fresh mission with
+  an empty chat and a new run folder. The mission exits with code 75, `mission_ui.py`
+  restarts it on the same ports, and the page reloads when `/api/features` reports a new
+  `session`.
+
 - A plan monitor in the viewer (#105). It shows the plan as a live behavior tree, like a BT
   monitor.
   - Levels of detail: plan steps, the compiled behavior tree, or both plus the planning phases

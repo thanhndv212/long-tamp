@@ -580,6 +580,10 @@ def _injected(ctx: dict[str, Any], capability: str, binding: dict[str, Any]) -> 
     return False
 
 
+#: Exit code asking the launcher (mission_ui.py) for a fresh mission (#114).
+RESTART = 75
+
+
 def parse_watchdog(text: str) -> tuple[float, float]:
     """``SOFT[,HARD]`` seconds -> (soft, hard); hard defaults to 3 x soft."""
     parts = [float(v) for v in text.split(",")]
@@ -861,6 +865,16 @@ def run_chat(
     bridge.add_action(
         "start", "Start mission", start, enabled=lambda: work.document is not None
     )
+    reset = []
+
+    def start_over():
+        """The page's Reset button (#114): end this mission; the launcher
+        (mission_ui.py) starts a fresh one."""
+        reset.append(True)
+        bridge.ended.set()
+        return "resetting: a fresh mission starts in a few seconds"
+
+    bridge.add_action("reset", "Reset mission", start_over)
     if web is not None:
         bridge.attach(web)
         print(f"chat: also in the web viewer, {web.url}", flush=True)
@@ -908,6 +922,8 @@ def run_chat(
         "goal": work.goal,
         "constraints": work.constraints,
     }
+    if reset:
+        result["reset"] = True
     return result
 
 
@@ -1729,6 +1745,10 @@ def main() -> int:
     if args.summary:
         summary = {k: v for k, v in result.items() if k != "final_config"}
         args.summary.write_text(json.dumps(summary, indent=2))
+    if result.get("reset"):
+        if live_viewer is not None:
+            live_viewer.close()
+        return RESTART  # mission_ui.py starts a fresh mission
     if live_viewer is not None:
         try:
             live_viewer.finish()
