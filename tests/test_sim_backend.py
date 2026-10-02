@@ -245,7 +245,9 @@ def test_the_simulation_can_be_recorded_for_replay(tmp_path):
     target = REST.copy()
     target[0] = 0.8
     for a, b in ((REST, target), (target, REST)):  # a chunk per command
-        assert run(backend, Line(a, b, 1.0, carry=True)).status is ExecutionStatus.SUCCESS
+        assert (
+            run(backend, Line(a, b, 1.0, carry=True)).status is ExecutionStatus.SUCCESS
+        )
     chunks = sorted((tmp_path / "sim").glob("chunk_*.npz"))
     assert len(chunks) == 2
     with np.load(chunks[1]) as data:
@@ -253,3 +255,31 @@ def test_the_simulation_can_be_recorded_for_replay(tmp_path):
         # 30 frames per simulated second, one clock across commands
         assert np.all(np.diff(data["time"]) == pytest.approx(1 / 30, abs=0.003))
         assert data["time"][0] > 1.0
+
+
+def test_simulated_states_stream_to_a_display(tmp_path):
+    """#106: the scene shows what the simulation does, in simulated time."""
+    (tmp_path / "arm.urdf").write_text(ARM)
+    (tmp_path / "box.urdf").write_text(BOX)
+    (tmp_path / "tiny.yaml").write_text(CONFIG)
+    export = export_mjcf(tmp_path / "tiny.yaml", tmp_path / "mjcf")
+    frames = []
+    display = type("Display", (), {"frame": lambda self, t, q: frames.append((t, q))})()
+    backend = MuJoCoBackend(
+        export,
+        lambda q: np.asarray(q, float),
+        speed=math.inf,
+        from_qpos=lambda qpos, like: np.asarray(qpos, float),
+        display=display,
+    )
+    target = REST.copy()
+    target[0] = 0.8
+    assert run(backend, Line(REST, target, 1.0)).status is ExecutionStatus.SUCCESS
+    times = np.array([t for t, _ in frames])
+    assert len(frames) >= 25  # ~30 per simulated second
+    assert np.all(np.diff(times) == pytest.approx(1 / 30, abs=0.003))
+    assert frames[-1][1][0] == pytest.approx(0.8, abs=0.01)  # where the arm got to
+
+
+def test_without_from_qpos_nothing_is_displayed(backend):
+    assert backend.display is None
