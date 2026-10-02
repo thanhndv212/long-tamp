@@ -164,6 +164,11 @@ It prints the page's URL (and opens a browser, outside a container). Then:
    not the chat: you can change the plan and start again. The model sees the run in the
    chat history, so you can ask *why did that step fail?*
 
+**Reset mission**, under the chat, starts over: a fresh mission with the robot and parts back
+at the start, an empty chat and a new run folder. `mission_ui.py` restarts the mission, and
+the page reloads itself when the new one answers, in about 10 s. It is available when nothing
+is running; stop a run first.
+
 The model and its endpoint come from the AI env file (see [AI models](ai-models.md)).
 `--model API:MODEL` overrides it, and arguments after `--` go to `task_screw_assembly.py`.
 

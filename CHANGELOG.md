@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Reset mission** in the mission UI (#114) starts over from the page: a fresh mission with
+  an empty chat and a new run folder. The mission exits with code 75, `mission_ui.py`
+  restarts it on the same ports, and the page reloads when `/api/features` reports a new
+  `session`.
+
 - Progress from a step's planning, and intervention mid-step (#108).
   - `long_tamp.execution.activity` turns what a step is doing into `progress` events: each
     lookahead round and candidate, each phase, each replan.

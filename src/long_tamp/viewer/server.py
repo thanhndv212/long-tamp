@@ -30,6 +30,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -107,6 +108,9 @@ class ViewerServer:
         self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._front: subprocess.Popen | None = None
+        #: Changes with every server: a page that sees it change reloads
+        #: (a mission restarted on the same port, #114).
+        self.session = f"{os.getpid()}-{time.time():.0f}"
 
     def route(self, method: str, path: str, handler: Handler) -> None:
         """Serve ``handler`` at ``method path`` (an ``/api/...`` path)."""
@@ -200,6 +204,7 @@ class ViewerServer:
         return {
             "control": self.control is not None,
             "chat": ("POST", "/api/chat") in self._routes,
+            "session": self.session,
         }
 
     def _control(self, body: Any, _query: dict[str, list[str]]) -> Any:

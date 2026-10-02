@@ -252,7 +252,8 @@ def test_a_separate_process_serves_the_page_while_this_one_is_busy(run_dir):
         events = json.loads(_get(url + "api/events?since=0")[1])["events"]
         assert events[0]["role"] == PLAN_ROLE
         features = json.loads(_get(url + "api/features")[1])  # proxied
-        assert features == {"control": True, "chat": False}
+        assert features["control"] is True and features["chat"] is False
+        assert features["session"] == server.session
         assert _post(url + "api/control", b'{"action": "pause"}')[0] == 200
         assert control.paused
         assert _post(url + "api/control", b'{"action": "jump"}')[0] == 400
@@ -272,3 +273,37 @@ def test_the_command_line_writes_a_replay(run_dir, tmp_path, capsys):
     assert main(["replay", str(run_dir), "-o", str(out), "--title", "Run 7"]) == 0
     assert "Run 7" in out.read_text()
     assert str(out) in capsys.readouterr().out
+
+
+def test_features_carry_a_session_that_changes_with_the_server(run_dir):
+    """#114: a page reloads when a new server answers on its port."""
+    sessions = []
+    for _ in range(2):
+        with ViewerServer(run_dir / "events.jsonl", port=0) as server:
+            sessions.append(json.loads(_get(server.url + "api/features")[1])["session"])
+        time.sleep(1.1)  # sessions are per second and process
+    assert all(sessions) and sessions[0] != sessions[1]
+
+
+def test_the_launcher_restarts_a_reset_mission(monkeypatch, tmp_path):
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "script/screw_assembly/mission_ui.py"
+    spec = importlib.util.spec_from_file_location("mission_ui", path)
+    ui = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ui)
+    runs, codes = [], [ui.RESTART, 0]
+
+    def fake_run(args, extra, run_dir, opened):
+        runs.append((run_dir, opened))
+        return codes.pop(0), True
+
+    monkeypatch.setattr(ui, "_run", fake_run)
+    monkeypatch.setattr(ui.time, "sleep", lambda s: None)
+    assert ui.main(["--run-dir", str(tmp_path / "first"), "--no-open"]) == 0
+    assert len(runs) == 2
+    assert runs[0] == (tmp_path / "first", False)
+    assert (
+        runs[1][0] != tmp_path / "first" and runs[1][1] is True
+    )  # new folder, no new tab
