@@ -34,13 +34,17 @@ Each SDK reads its own variables:
 | `anthropic` | `ANTHROPIC_API_KEY` (or an `ant auth login` profile) | `ANTHROPIC_BASE_URL` |
 | `openai` | `OPENAI_API_KEY` | `OPENAI_BASE_URL` |
 
-Keep them in an env file, and point long-tamp at it with `--ai-env FILE` or
-`LONG_TAMP_AI_ENV`:
+Keep them in an env file. long-tamp loads `--ai-env FILE`, else `$LONG_TAMP_AI_ENV`, else
+`~/.config/long-tamp/ai.env` (`$XDG_CONFIG_HOME/long-tamp/ai.env`) if it exists. Put the
+file there, or link it there, and no command needs the flag. The file can also name the
+default model as `LONG_TAMP_GOAL_MODEL`, used when no `--goal-model` is given. Name it
+`<api>:<model>`. A bare gateway id also works when only one API's endpoint is set.
 
 ```bash
 # ~/devel/hpp/.anthropic/env (folder mode 700, so the file stays private)
 export OPENAI_API_KEY="..."                   # comments and quotes are fine
 export OPENAI_BASE_URL="http://localhost:20128/v1"
+export LONG_TAMP_GOAL_MODEL="openai:my-model"  # the default model
 ```
 
 The file is read the way a shell reads it (`export`, quotes, trailing comments). Variables

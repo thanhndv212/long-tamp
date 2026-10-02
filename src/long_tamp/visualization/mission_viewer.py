@@ -17,6 +17,7 @@ class MissionViewer:
 
     closures = None
     fps = 30.0
+    scene = None  # a SceneProcess, with separate_process
 
     def __init__(
         self,
@@ -27,16 +28,21 @@ class MissionViewer:
         closures=None,
         fps=30.0,
         open_browser=False,
+        separate_process=False,
     ):
         """Serve the scene on ``port`` and show ``initial``.
 
         Never waits for a browser: with ``open_browser=True`` pyhpp_viser
         also opens one and blocks until a client connects, which never
         happens on a headless machine (#29), so it is opt-in.
-        """
-        from pyhpp_viser import Viewer
 
+        ``separate_process``: serve it from its own process
+        (``SceneProcess``, #106), so it stays live while HPP plans (planning
+        holds the interpreter lock for seconds); paths are then sent as
+        frames and play without the mission waiting for them.
+        """
         self.backend = task.planner
+        self.scene = None
         self.path_ids = []
         self.closures = closures
         self.fps = fps
@@ -45,6 +51,15 @@ class MissionViewer:
         # overlay during it plus the gripper actions before/after it.
         self._fingers = {}
         self._segments = []
+        if separate_process:
+            from .scene import SceneProcess
+
+            self.scene = SceneProcess(self.backend.device, port, camera=camera)
+            self.scene.show(initial)
+            print(f"Viser: {self.scene.url} (own process)", flush=True)
+            return
+        from pyhpp_viser import Viewer
+
         self.backend.viewer = Viewer(self.backend.device, self.backend.problem)
         self.backend.viewer.start(host="0.0.0.0", port=port, open=open_browser)
 
@@ -56,6 +71,13 @@ class MissionViewer:
 
         self.backend.visualize(initial)
         print(f"Viser: http://localhost:{port}", flush=True)
+
+    def display(self, q):
+        """Show ``q`` now (an execution backend's display callback)."""
+        if self.scene is not None:
+            self.scene.show(q)
+        elif self.backend.viewer is not None:
+            self.backend.viewer(q)
 
     # -- gripper actions ----------------------------------------------------
 
@@ -84,13 +106,19 @@ class MissionViewer:
 
     def _animate(self, q, fingers, gripper, target, steps=12):
         start = fingers.get(gripper) or self.closures.open_values(gripper)
+        frames = []
         for i in range(1, steps + 1):
             s = i / steps
             fingers[gripper] = {
                 j: start[j] + (v - start[j]) * s for j, v in target.items()
             }
+            if self.scene is not None:
+                frames.append(self._overlay(q, fingers))
+                continue
             self.backend.viewer(self._overlay(q, fingers))
             time.sleep(0.02)
+        if frames:
+            self.scene.play(frames, 0.02)
 
     @staticmethod
     def _t0(path):
@@ -104,13 +132,26 @@ class MissionViewer:
         t0 = self._t0(path)
         n = max(2, int(length * self.fps) + 1)
         q = None
+        frames = []
         for i in range(n):
             qi, ok = path.eval(t0 + length * i / (n - 1))
             if ok:
                 q = qi
+                if self.scene is not None:
+                    frames.append(self._overlay(q, fingers))
+                    continue
                 self.backend.viewer(self._overlay(q, fingers))
                 time.sleep(length / (n - 1) if n > 1 else 0.0)
+        if frames:  # the scene plays them; the mission goes on
+            self.scene.play(frames, length / (n - 1))
         return q
+
+    def _play_path(self, pid):
+        """Play a stored path as it is (no finger overlay)."""
+        if self.scene is not None:
+            self._play_sampled(self.backend.get_path(pid), {})
+        else:
+            self.backend.play_path(pid)
 
     def _play_segment(self, segment, fingers):
         pid, open_before, close_after = segment
@@ -138,6 +179,8 @@ class MissionViewer:
         Playback runs in real time; with nobody watching it only costs time
         and memory (#35). Without a viser server to ask, assume watched.
         """
+        if self.scene is not None:
+            return True  # playing costs the mission nothing: it doesn't wait
         server = getattr(getattr(self.backend, "viewer", None), "viewer", None)
         if server is None or not hasattr(server, "get_clients"):
             return True
@@ -162,7 +205,7 @@ class MissionViewer:
                 self.path_ids.append(pid)
                 if self.closures is None:
                     if watched:
-                        self.backend.play_path(pid)
+                        self._play_path(pid)
                     continue
                 segment = (
                     pid,
@@ -177,7 +220,7 @@ class MissionViewer:
 
     def _play_all(self, full):
         if self.closures is None:
-            self.backend.play_path(full)
+            self._play_path(full)
             return
         fingers = {}
         for segment in self._segments:
@@ -185,7 +228,7 @@ class MissionViewer:
 
     def _play_one(self, index):
         if self.closures is None:
-            self.backend.play_path(self.path_ids[index])
+            self._play_path(self.path_ids[index])
             return
         # Fingers as they were when this path started.
         fingers = {}
@@ -227,6 +270,9 @@ class MissionViewer:
                 print(f"Choose a path from 1 to {len(self.path_ids)}, Enter, or q.")
 
     def close(self):
+        if self.scene is not None:
+            self.scene.close()
+            self.scene = None
         if self.backend.viewer is not None:
             self.backend.viewer.viewer.stop()
             self.backend.viewer = None

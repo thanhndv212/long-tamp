@@ -66,6 +66,66 @@ A pause takes effect at the next step boundary; the running command finishes fir
 `stop()` releases a paused executor (its checkpoint returns `False`) and cancels a running
 command.
 
+### Inside a step that is planning: progress, skip, abort
+
+Planning one step can take minutes, for example a lookahead search drawing candidate
+targets, then phase after phase. The executor marks the step being planned, and planning
+code reports what it is doing and offers safe points to stop
+(`long_tamp.execution.activity`):
+
+```python
+from long_tamp.execution import activity
+
+with activity.searching("a clamp pose that leaves both holes reachable"):
+    for i in range(max_candidates):
+        activity.checkpoint("search")        # a skip ends the search here
+        activity.progress(f"{i} rejected so far", rejected=i)
+        ...
+activity.checkpoint("step")                  # an abort ends the step here
+```
+
+- **Progress:** each `progress(...)` call is a `progress` event on the step (see
+  [Mission events](events.md)). The viewer shows the latest one on the running step.
+- **Requests:** `control.request("skip")` or `control.request("abort_step")` come from a UI
+  or a watchdog, and act at the step's next checkpoint.
+  - **skip** abandons the current search. `GraspSequencePlanner`'s lookahead then plans the
+    block without a hint.
+  - **abort_step** fails the step and stops the run. The block's grasps are rolled back.
+  - A request made while no step is planning is dropped.
+- **Interruptions:** they derive from `BaseException`, like `KeyboardInterrupt`, so they get
+  through the planner's `except Exception` retries. The executor catches them at the step
+  boundary.
+- **Where the planner reports and checks:** each lookahead round and candidate, each
+  phase, and each replan.
+
+### A watchdog for steps that plan too long
+
+`StepWatchdog` (`long_tamp.execution.watchdog`) follows the event stream. When the step being
+planned passes `soft` seconds, it picks from a fixed menu:
+
+- `wait` for longer, but never past `hard`;
+- `skip` the search the step is in;
+- `abort_step`.
+
+A model decides when a client is given. This is a checked role (ADR-0006): a decision that
+fails its check, or a model that can't be reached, falls back to the rule. Without a
+client, the rule decides: skip while in a search, otherwise wait. At `hard`, the step is
+aborted, whatever was decided before.
+
+```python
+from long_tamp.execution.watchdog import StepWatchdog, model_decider
+
+watchdog = StepWatchdog(control, soft=300, hard=900,
+                        decide=model_decider(client),   # or None: the rule
+                        sink=events).start()
+executor = PlanExecutor(session, backend, control=control,
+                        on_event=lambda e: (events(e), watchdog.observe(e)))
+```
+
+Every decision is a `watchdog` event, and the viewer and the chat show it. An operator's
+pending request always comes first, and so does a pause. In the screw assembly, use
+`--watchdog 300,900`. `mission_ui.py` turns it on by default.
+
 `MockBackend` (scriptable: busy starts, failures, stalls, slow real-time factor) is there
 for tests and demos.
 

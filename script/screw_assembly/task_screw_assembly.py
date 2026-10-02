@@ -61,6 +61,7 @@ from long_tamp.tasks.task_planning import (  # noqa: E402
 from long_tamp.tasks.task_planning.events import (  # noqa: E402
     JsonlEventWriter,
     make_event,
+    plan_event,
 )
 from long_tamp.tasks.task_planning.skills import SkillCommand  # noqa: E402
 from long_tamp.sim.skills import SCREW  # noqa: E402
@@ -579,6 +580,20 @@ def _injected(ctx: dict[str, Any], capability: str, binding: dict[str, Any]) -> 
     return False
 
 
+#: Exit code asking the launcher (mission_ui.py) for a fresh mission (#114).
+RESTART = 75
+
+
+def parse_watchdog(text: str) -> tuple[float, float]:
+    """``SOFT[,HARD]`` seconds -> (soft, hard); hard defaults to 3 x soft."""
+    parts = [float(v) for v in text.split(",")]
+    soft = parts[0]
+    hard = parts[1] if len(parts) > 1 else 3 * soft
+    if not 0 < soft <= hard:
+        raise ValueError(f"--watchdog {text!r}: need 0 < SOFT <= HARD")
+    return soft, hard
+
+
 def parse_injection(text: str) -> dict[str, Any]:
     """``capability:key=value,key=value`` -> an injection spec."""
     capability, _, rest = text.partition(":")
@@ -769,13 +784,27 @@ def run_supervised(
     return result
 
 
-def run_chat(task, planner, n_parts, q_start, recorded, mission, client, events):
+def run_chat(
+    task,
+    planner,
+    n_parts,
+    q_start,
+    recorded,
+    mission,
+    client,
+    events,
+    web=None,
+    watchdog=None,
+):
     """An operator's chat with a model acting through gated mission tools
     (``--chat``, #89): reads operator messages from stdin until EOF or
-    "quit", and writes every tool call to the event stream."""
+    "quit", and writes every tool call to the event stream. With ``web`` (the
+    ``--web-port`` viewer), the same chat is also in the viewer's chat panel
+    (#90); after stdin closes, it goes on there until "quit" or Ctrl-C."""
     from chat_tools import INTRO, MissionChat
 
-    from long_tamp.ai.chat import ChatSession
+    from long_tamp.ai.chat import ChatSession, ChatTurn
+    from long_tamp.viewer import ChatBridge
 
     work = MissionChat(
         sys.modules[__name__],
@@ -799,16 +828,73 @@ def run_chat(task, planner, n_parts, q_start, recorded, mission, client, events)
                 metrics={"arguments": call.arguments},
             )
         )
+        if call.tool == "plan" and call.ok and work.document is not None:
+            events(plan_event(work.document, "planned in the chat"))
 
     session = ChatSession(
         client, work.tools(), INTRO + "\n\n" + work.domain(), on_tool=on_tool
     )
+    bridge = ChatBridge(session)
+    if watchdog is not None:  # its decisions show in the chat too (#109)
+        printed = watchdog.on_decision
+
+        def on_decision(watch, decision):
+            if printed is not None:
+                printed(watch, decision)
+            bridge.note(
+                f"watchdog ({decision.by}) on {watch.label}: {decision.action}"
+                + (
+                    f" {decision.wait_s / 60:.1f} min more"
+                    if decision.action == "wait" and decision.wait_s
+                    else ""
+                )
+                + f": {decision.reason}"
+            )
+
+        watchdog.on_decision = on_decision
+
+    def start():
+        """The page's Start button (#104): run the plan, no model involved;
+        the model sees it in the history, like a run it called."""
+        call = session.call("run", {})
+        session.turns.append(
+            ChatTurn(user="(the operator pressed Start mission)", say="", calls=[call])
+        )
+        return call
+
+    bridge.add_action(
+        "start", "Start mission", start, enabled=lambda: work.document is not None
+    )
+    reset = []
+
+    def start_over():
+        """The page's Reset button (#114): end this mission; the launcher
+        (mission_ui.py) starts a fresh one."""
+        reset.append(True)
+        bridge.ended.set()
+        return "resetting: a fresh mission starts in a few seconds"
+
+    bridge.add_action("reset", "Reset mission", start_over)
+    if web is not None:
+        bridge.attach(web)
+        print(f"chat: also in the web viewer, {web.url}", flush=True)
     echo = not sys.stdin.isatty()  # piped messages: show them in the log
     print("chat: type an instruction, 'quit' or Ctrl-D to end", flush=True)
     while True:
         try:
             line = input("operator> ")
         except EOFError:
+            if web is not None and not bridge.ended.is_set():
+                print(
+                    "chat: stdin closed; the chat goes on in the web viewer "
+                    "('quit' there or Ctrl-C ends it)",
+                    flush=True,
+                )
+                try:
+                    bridge.ended.wait()
+                except KeyboardInterrupt:
+                    pass
+                bridge.wait()
             break
         if echo:
             print(line, flush=True)
@@ -816,7 +902,10 @@ def run_chat(task, planner, n_parts, q_start, recorded, mission, client, events)
             break
         if not line.strip():
             continue
-        turn = session.turn(line.strip())
+        turn = bridge.turn(line.strip())
+        if turn is None:  # the error is in the transcript
+            print(f"  [error] {bridge.transcript()[-1]['text']}", flush=True)
+            continue
         for call in turn.calls:
             print(f"  [tool] {call.as_text()[:400]}", flush=True)
         if turn.error:
@@ -833,6 +922,8 @@ def run_chat(task, planner, n_parts, q_start, recorded, mission, client, events)
         "goal": work.goal,
         "constraints": work.constraints,
     }
+    if reset:
+        result["reset"] = True
     return result
 
 
@@ -968,6 +1059,7 @@ def run_mission(
     plan_ahead: bool = False,
     max_drift: float | None = None,
     concurrent: bool = False,
+    control=None,
 ) -> dict[str, Any]:
     """Run the mission's TaskPlan from ``q_start`` (default: the scene start).
 
@@ -981,7 +1073,8 @@ def run_mission(
     is given, every block is logged to it. ``on_event`` receives the
     mission's event stream (``long_tamp.tasks.task_planning.events``).
     ``document`` is the TaskPlan to run (default: the hand-written
-    ``build_plan_document``; see ``plan_from_goal``).
+    ``build_plan_document``; see ``plan_from_goal``). ``control`` (an
+    ``ExecutionControl``) pauses, resumes or stops it between steps.
     """
     if recorded is None:
         recorded = RecordedFacts(None, predicates=RECORDED_PREDICATES)
@@ -1003,6 +1096,7 @@ def run_mission(
         session,
         backend=backend,
         policy=ExecutionPolicy(max_start_drift=max_drift),
+        control=control,
         on_skip=lambda label, why: print(f"\n=== {label} === skipped ({why})"),
         on_event=on_event,
         on_drift=ctx.get("on_drift"),
@@ -1012,6 +1106,8 @@ def run_mission(
         validate_config=lambda q: planner.config_gen.is_config_valid(list(q))[0],
     )
     ctx["executor"] = executor
+    if on_event is not None:
+        on_event(plan_event(session.plan))  # the viewer draws this plan
     t_mission = time.time()
     run = executor.run()
     if not run.success:
@@ -1027,7 +1123,11 @@ def run_mission(
         "timing": run.timing or None,
         "final_config": ctx["q"],
         "failure": (
-            None if run.success else ctx.get("failure") or execution_failure(run)
+            None
+            if run.success
+            else ctx.get("failure")
+            or execution_failure(run)
+            or stopped_failure(run, session)
         ),
     }
 
@@ -1050,7 +1150,7 @@ def make_backend(
     if name == "mock":
         return MockBackend(rtf=1000.0)
     if name == "playback":
-        display = (lambda q: task.planner.viewer(q)) if live_viewer else None
+        display = live_viewer.display if live_viewer else None
         return PathPlaybackBackend(display=display)
     if name == "mujoco":
         from long_tamp.sim import MuJoCoBackend, QposMap, ScrewDriving, export_mjcf
@@ -1061,6 +1161,11 @@ def make_backend(
         # stepping it from a thread would share the planner's interpreter
         # lock (see long_tamp.execution.process).
         contact = contact_grasps(export) if grasp == "contact" else {}
+        # A scene in its own process takes the simulated states straight
+        # from the simulation's process (#106): what the robot does, not
+        # what was planned.
+        scene = getattr(live_viewer, "scene", None)
+        display = scene.client if scene is not None else None
         backend = ProcessBackend(  # closed at exit (see main)
             MuJoCoBackend,
             export,
@@ -1070,8 +1175,10 @@ def make_backend(
             from_qpos=to_qpos.inverse,
             grasp=grasp,
             record=(run_dir or HERE / "runs") / "sim" if record else None,
+            display=display,
             **contact,
         )
+        backend.display = display  # the planned paths need not be played
         return DriftInjector(backend, drift) if drift else backend
     return None
 
@@ -1141,6 +1248,23 @@ def parse_drift(spec: str) -> tuple[str, str, float]:
     return label, joint, float(delta)
 
 
+def stopped_failure(run, session) -> dict[str, Any] | None:
+    """Where a run ended that neither planning nor execution reported as a
+    failure: a step aborted or stopped (#108). ``step`` is its label."""
+    if run.failed_step is None:
+        return None
+    labels, stack = {}, [session.plan.document["root"]]
+    while stack:
+        node = stack.pop()
+        labels[node["id"]] = node.get("label", node["id"])
+        stack += node.get("children", []) + ([node["child"]] if "child" in node else [])
+    return {
+        "step": labels.get(run.failed_step, run.failed_step),
+        "facts": [],
+        "message": run.message,
+    }
+
+
 def execution_failure(run) -> dict[str, Any] | None:
     """The failure facts of a step whose execution failed (a skill reporting
     ``screw_misaligned``, say), in the shape planning failures have."""
@@ -1190,6 +1314,26 @@ def main() -> int:
         "--no-viewer",
         action="store_true",
         help="run without the live Viser viewer or path playback",
+    )
+    ap.add_argument(
+        "--viewer-in-process",
+        action="store_true",
+        help="serve the Viser scene from the mission's process (before #106): it "
+        "then freezes while HPP plans; by default it has its own process",
+    )
+    ap.add_argument(
+        "--watchdog",
+        metavar="SOFT[,HARD]",
+        help="seconds a step may plan before the watchdog decides: wait, skip its "
+        "search or abort it (the chat's model decides when there is one, else a rule); "
+        "at HARD (default 3 x SOFT) it aborts. E.g. 300,900 (#109)",
+    )
+    ap.add_argument(
+        "--web-port",
+        type=int,
+        help="serve the web mission viewer (plan, timeline, events; pause, resume "
+        "and stop) on this port while the mission runs, e.g. 8090; it embeds the "
+        "Viser scene unless --no-viewer (python -m long_tamp.viewer replays a run)",
     )
     ap.add_argument(
         "--backend",
@@ -1276,14 +1420,16 @@ def main() -> int:
         metavar="API:MODEL",
         help="with --instruction: the model that writes the goal, as <api>:<model> "
         "with <api> anthropic or openai (any OpenAI-compatible endpoint); "
-        "default anthropic:claude-opus-5-5. See docs/usage/ai-models.md",
+        "default $LONG_TAMP_GOAL_MODEL (it may be set in the AI env file), else "
+        "anthropic:claude-opus-5-5. See docs/usage/ai-models.md",
     )
     ap.add_argument(
         "--chat",
         action="store_true",
         help="talk to a model that plans and runs missions through checked tools "
         "(set the goal, add constraints, plan, run, explain a failure); reads "
-        "operator messages from stdin (#89)",
+        "operator messages from stdin (#89), and from the web viewer's chat panel "
+        "with --web-port (#90)",
     )
     ap.add_argument(
         "--supervise",
@@ -1297,7 +1443,8 @@ def main() -> int:
         metavar="FILE",
         type=Path,
         help="env file with the model endpoints and keys (default: "
-        "$LONG_TAMP_AI_ENV); read like a shell reads it",
+        "$LONG_TAMP_AI_ENV, else ~/.config/long-tamp/ai.env if it exists); read "
+        "like a shell reads it",
     )
     ap.add_argument(
         "--replan",
@@ -1410,8 +1557,32 @@ def main() -> int:
             q_start or task.q_init,
             camera=((2.15, -2.30, 1.55), (0.75, 0.0, 0.58)),
             closures=closures,
+            # its own process, so it stays live while HPP plans (#106)
+            separate_process=not args.viewer_in_process,
         )
         atexit.register(live_viewer.close)
+    control, web = None, None
+    if args.web_port is not None:
+        from long_tamp.execution import ExecutionControl
+        from long_tamp.viewer import ViewerConfig, ViewerServer
+
+        control = ExecutionControl()
+        web = ViewerServer(
+            run_dir / "events.jsonl",
+            ViewerConfig(
+                title=f"Screw assembly, seed {args.seed}",
+                scene_url=(
+                    None
+                    if live_viewer is None
+                    else f"http://localhost:{args.viewer_port}"
+                ),
+            ),
+            port=args.web_port,
+            control=control,
+            separate_process=True,  # planning holds the GIL for seconds
+        )
+        print(f"web viewer: {web.start()}", flush=True)
+        atexit.register(web.close)
     try:
         inject = [parse_injection(spec) for spec in args.inject_failure]
         mission = dict(
@@ -1436,6 +1607,7 @@ def main() -> int:
             max_drift=args.max_drift,
             on_event=events,
             inject=inject,
+            control=control,
         )
         goal, constraints = None, []
         client = None
@@ -1459,9 +1631,45 @@ def main() -> int:
             from long_tamp.ai import make_client
 
             client = make_client(args.goal_model, on_call=on_call)
+        watchdog = None
+        if args.watchdog:
+            from long_tamp.execution import ExecutionControl
+            from long_tamp.execution.watchdog import StepWatchdog, model_decider
+
+            if control is None:
+                control = mission["control"] = ExecutionControl()
+            soft, hard = parse_watchdog(args.watchdog)
+            watchdog = StepWatchdog(
+                control,
+                soft,
+                hard,
+                decide=model_decider(client) if client is not None else None,
+                sink=events,
+                on_decision=lambda watch, decision: print(
+                    f"watchdog: {watch.label}: {decision.action} ({decision.by}): "
+                    f"{decision.reason}",
+                    flush=True,
+                ),
+            ).start()
+            atexit.register(watchdog.close)
+
+            def watched(event, _write=events):
+                _write(event)
+                watchdog.observe(event)
+
+            mission["on_event"] = watched
         if args.chat:
             result = run_chat(
-                task, planner, n_parts, q_start, recorded, mission, client, events
+                task,
+                planner,
+                n_parts,
+                q_start,
+                recorded,
+                mission,
+                client,
+                events,
+                web,
+                watchdog,
             )
         elif args.instruction:
             goal, constraints = understand_instruction(
@@ -1537,6 +1745,10 @@ def main() -> int:
     if args.summary:
         summary = {k: v for k, v in result.items() if k != "final_config"}
         args.summary.write_text(json.dumps(summary, indent=2))
+    if result.get("reset"):
+        if live_viewer is not None:
+            live_viewer.close()
+        return RESTART  # mission_ui.py starts a fresh mission
     if live_viewer is not None:
         try:
             live_viewer.finish()

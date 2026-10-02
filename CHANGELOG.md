@@ -8,6 +8,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-02
+
+The mission UI. One page, started with one command (`mission_ui.py`), shows the 3D scene, an
+operator chat and a live behavior-tree monitor of the plan.
+
+- **Plan and run from the page:** type an instruction, see the plan the task planner builds,
+  press **Start mission**, and watch it run. Every step shows what it is doing while it
+  plans. The operator can skip a slow search or abort a step from the page, and a watchdog
+  (the model, or a rule) acts on steps that plan too long.
+- **A scene that stays live:** the 3D scene runs in its own process, so it no longer freezes
+  while HPP plans, and with the MuJoCo backend it shows the simulated motion.
+- **Replays:** any run, live or recorded, replays as a single self-contained HTML file.
+- **AI defaults:** the model endpoint and default model come from a default env file, so no
+  flags are needed.
+
+### Added
+
+- **Reset mission** in the mission UI (#114) starts over from the page: a fresh mission with
+  an empty chat and a new run folder. The mission exits with code 75, `mission_ui.py`
+  restarts it on the same ports, and the page reloads when `/api/features` reports a new
+  `session`.
+
+- A plan monitor in the viewer (#105). It shows the plan as a live behavior tree, like a BT
+  monitor.
+  - Levels of detail: plan steps, the compiled behavior tree, or both plus the planning phases
+    and motions as they happen.
+  - Layouts: top down, left to right or radial.
+  - Live effects: links to the running node flow, the active node pulses, the tree glides as
+    it grows, and visit-order badges show the order nodes were reached. *Follow active*
+    keeps the running node in view.
+  - Full screen adds a side pane with status counts, node details and history, and a log of
+    status changes.
+  - It sits in a tab next to the plan tree, and **Start mission** switches to it.
+- The 3D scene in its own process (#106). `SceneProcess` serves the Viser scene from a child
+  process built from the robot's pickled pinocchio models, so it stays live while HPP plans:
+  the page answers in milliseconds instead of 15–30 s.
+  - `MissionViewer(separate_process=True)`, the screw assembly's default, sends paths as
+    frames and doesn't wait for them to play.
+  - The MuJoCo backend streams its simulated states to the scene (`display=`), so the scene
+    shows what the simulated robot does.
+- Progress from a step's planning, and intervention mid-step (#108).
+  - `long_tamp.execution.activity` turns what a step is doing into `progress` events: each
+    lookahead round and candidate, each phase, each replan.
+  - The viewer shows the latest one on the running step.
+  - `ExecutionControl.request("skip")` abandons the lookahead search, and the block plans
+    without a hint. `request("abort_step")` fails the step and stops the run, with the
+    block's grasps rolled back.
+  - Both are buttons in the viewer and `POST /api/control` actions.
+- Step watchdog, `long_tamp.execution.watchdog` (#109). When a step plans past a soft limit,
+  a model or a rule decides to wait, skip its search or abort it.
+  - The model's decision is a checked role, and the rule decides when it can't.
+  - The step is aborted at the hard limit.
+  - Decisions are `watchdog` events, shown in the viewer and the chat. An operator's request
+    wins.
+  - The screw assembly takes `--watchdog SOFT[,HARD]`. `mission_ui.py` uses 300,900 s by
+    default.
+- Web mission viewer, `long_tamp.viewer` (#24). It shows the plan tree with each node's state
+  (attempt k/N, skipped because its effect held, drift, paused), a Gantt timeline you can play
+  and scrub, the event list and per-node details.
+  - `python -m long_tamp.viewer replay <run>` writes one self-contained HTML file per run,
+    with no network needed. `serve` follows a running mission.
+  - `ViewerServer` serves it live and can pause, resume and stop through an
+    `ExecutionControl`. The screw assembly's `--web-port` serves it next to the Viser scene.
+  - Customizable: `ViewerConfig` (panels, colors, theme, metric labels, scene URL, JSON
+    file) and `window.LongTamp` in your own scripts (panels, badges, metric formats, event
+    hooks). See `docs/usage/viewer.md`.
+- Chat panel in the web mission viewer (#90). `ChatBridge` drives the operator chat's
+  `ChatSession` from the page (`POST`/`GET /api/chat`). It runs one turn at a time and shares
+  the session with the terminal. Tool calls land in the event list, and a plan made in the
+  chat replaces the plan tree. In the screw assembly, `--chat --web-port` puts the chat in
+  the page, next to the Viser scene.
+- Mission UI (#104). `script/screw_assembly/mission_ui.py` starts one page with the scene,
+  the chat and the live plan monitor.
+  - A plan built in the chat shows as a card with a **Start mission** button. Start runs the
+    plan without the model and brings the monitor into view.
+  - `ChatBridge.add_action` adds buttons that act without the model, and
+    `ExecutionControl.reset()` lets a stopped chat run be started again.
+- The chat shows a turn as it unfolds: each of the model's messages, then the tool calls it
+  makes, as they come (`ChatSession(on_message=...)`).
+- The viewer fits on one screen by default (`ViewerConfig.layout = "screen"`, areas set with
+  `screen`). Each panel scrolls inside, Details and Events share a tab group, and narrow
+  screens stack the panels.
+- AI defaults: `configure()` falls back to `~/.config/long-tamp/ai.env`, and
+  `$LONG_TAMP_GOAL_MODEL` names the default model (`default_model()`), so neither
+  `--ai-env` nor `--goal-model` is needed on every command.
+- Events: `plan` (opt-in, `plan_event(plan)`, carrying the IR document) and `pause` (from the
+  executor, when an `ExecutionControl` holds it at a step boundary).
+
 ## [0.7.0] - 2026-10-01
 
 Milestone M6: AI model integration (ADR-0006). Any model behind an Anthropic- or

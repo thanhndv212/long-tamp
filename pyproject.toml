@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "long-tamp"
-version = "0.7.0"
+version = "0.8.0"
 description = "Long-TAMP - Manipulation Planning Framework"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -133,7 +133,7 @@ Issues = "https://github.com/thanhndv212/long-tamp/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-long_tamp = ["py.typed"]
+long_tamp = ["py.typed", "viewer/static/*"]
 
 [tool.ruff]
 extend-exclude = ["cmake"]

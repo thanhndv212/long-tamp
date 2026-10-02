@@ -235,6 +235,9 @@ class MissionChat:
     def run(self) -> dict[str, Any]:
         if self.document is None:
             raise ToolRejected("there is no plan to run (plan first)")
+        control = self.mission.get("control")
+        if control is not None:
+            control.reset()  # a stop ends one run, not the chat
         result = self.T.run_mission(
             self.task,
             self.planner,

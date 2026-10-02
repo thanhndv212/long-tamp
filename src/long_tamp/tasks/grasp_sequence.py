@@ -2931,8 +2931,17 @@ class GraspSequencePlanner:
             The final ``q_current`` after every phase in ``phases``
             completes.
         """
+        from long_tamp.execution import activity
+
         for idx_in_call, (gripper, handle) in enumerate(phases):
             phase_idx = starting_phase_idx + idx_in_call
+            activity.checkpoint("step")
+            activity.progress(
+                f"phase {phase_idx + 1}/{total_phase_count_for_display}: "
+                + (f"{gripper} grasps {handle}" if handle else f"{gripper} releases"),
+                phase=phase_idx + 1,
+                phases=total_phase_count_for_display,
+            )
 
             if verbose:
                 print("\n" + "-" * 70)
@@ -3342,48 +3351,64 @@ class GraspSequencePlanner:
                 chain.append(list(q_next))
             return chain
 
-        for candidate_idx in range(max_candidates):
-            probe_tracker = self.grasp_tracker.copy()
-            _build_and_sync(probe_tracker, phase_n, frozen_arms_n, q_current)
+        # Progress and operator interventions (#108): a skip abandons the
+        # search (SearchSkipped, caught by the caller), an abort the step.
+        from long_tamp.execution import activity
 
-            chain = _probe_chained(probe_tracker, gripper_n, handle_n, q_current)
-            if not chain:
-                continue
-            if verify_paths and not _paths_exist(
-                probe_tracker, gripper_n, handle_n, q_current, chain
-            ):
-                continue
-            q_candidate = chain[-1]
+        with activity.searching(f"a {handle_n} target leaving {phase_n1[1]} reachable"):
+            for candidate_idx in range(max_candidates):
+                activity.checkpoint("search")
+                activity.progress(
+                    f"searching a {handle_n} target that leaves {phase_n1[1]} "
+                    f"reachable: {candidate_idx} rejected so far",
+                    rejected=candidate_idx,
+                    max_candidates=max_candidates,
+                )
+                probe_tracker = self.grasp_tracker.copy()
+                _build_and_sync(probe_tracker, phase_n, frozen_arms_n, q_current)
 
-            probe_tracker.update_grasp(gripper_n, handle_n)
-            reachable = True
-            for (gripper_k, handle_k), frozen_k in (
-                (phase_n1, frozen_arms_n1),
-                *also_reachable,
-            ):
-                # Each probe gets its own tracker copy with only phase N
-                # committed, matching the held set when that phase runs.
-                tracker_k = probe_tracker.copy()
-                _build_and_sync(tracker_k, (gripper_k, handle_k), frozen_k, q_candidate)
-                chain_k = _probe_chained(tracker_k, gripper_k, handle_k, q_candidate)
-                if chain_k is None or (
-                    verify_paths
-                    and not _paths_exist(
-                        tracker_k, gripper_k, handle_k, q_candidate, chain_k
-                    )
+                chain = _probe_chained(probe_tracker, gripper_n, handle_n, q_current)
+                if not chain:
+                    continue
+                if verify_paths and not _paths_exist(
+                    probe_tracker, gripper_n, handle_n, q_current, chain
                 ):
-                    reachable = False
-                    break
-            if reachable:
-                if verbose:
-                    logger.info(
-                        "find_feasible_phase_target: found a %s candidate "
-                        "after %d rejected draw(s) that leaves %s reachable",
-                        phase_n,
-                        candidate_idx,
-                        [phase_n1, *(p for p, _ in also_reachable)],
+                    continue
+                q_candidate = chain[-1]
+
+                probe_tracker.update_grasp(gripper_n, handle_n)
+                reachable = True
+                for (gripper_k, handle_k), frozen_k in (
+                    (phase_n1, frozen_arms_n1),
+                    *also_reachable,
+                ):
+                    # Each probe gets its own tracker copy with only phase N
+                    # committed, matching the held set when that phase runs.
+                    tracker_k = probe_tracker.copy()
+                    _build_and_sync(
+                        tracker_k, (gripper_k, handle_k), frozen_k, q_candidate
                     )
-                return chain
+                    chain_k = _probe_chained(
+                        tracker_k, gripper_k, handle_k, q_candidate
+                    )
+                    if chain_k is None or (
+                        verify_paths
+                        and not _paths_exist(
+                            tracker_k, gripper_k, handle_k, q_candidate, chain_k
+                        )
+                    ):
+                        reachable = False
+                        break
+                if reachable:
+                    if verbose:
+                        logger.info(
+                            "find_feasible_phase_target: found a %s candidate "
+                            "after %d rejected draw(s) that leaves %s reachable",
+                            phase_n,
+                            candidate_idx,
+                            [phase_n1, *(p for p, _ in also_reachable)],
+                        )
+                    return chain
 
         if verbose:
             logger.warning(

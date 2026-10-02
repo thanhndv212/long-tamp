@@ -30,15 +30,18 @@ its motion has executed.
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from . import activity
 from long_tamp.tasks.task_planning.events import (
     DRIFT_ROLE,
     MOTION_ROLE,
+    PAUSE_ROLE,
     EventSink,
     make_event,
 )
@@ -67,15 +70,60 @@ class StepExecution:
 
 
 class _AttemptSession:
-    """The session, with a hook at the start of every execution attempt."""
+    """The session, with a hook at the start of every execution attempt, and
+    the step's planning marked for progress reports and interventions
+    (``activity``, #108): an aborted step fails and stops the run."""
 
-    def __init__(self, session: Any, on_attempt: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        session: Any,
+        on_attempt: Callable[[], None],
+        sink: EventSink | None = None,
+        control: ExecutionControl | None = None,
+    ) -> None:
         self._session = session
         self._on_attempt = on_attempt
+        self._sink, self._control = sink, control
+        self._labels: dict[str, str] | None = None
+
+    def _label(self, step_id: str) -> str:
+        if self._labels is None:
+            self._labels = {}
+            plan = getattr(self._session, "plan", None)
+            stack = [plan.document["root"]] if plan is not None else []
+            while stack:
+                node = stack.pop()
+                self._labels[node["id"]] = node.get("label", node["id"])
+                stack += node.get("children", []) + (
+                    [node["child"]] if "child" in node else []
+                )
+        return self._labels.get(step_id, step_id)
 
     def execute_step(self, step_id: str) -> str:
         self._on_attempt()
-        return self._session.execute_step(step_id)
+        if self._control is not None:
+            self._control.clear_request()  # one made between steps is stale
+        activity.begin(step_id, self._label(step_id), self._sink, self._control)
+        try:
+            return self._session.execute_step(step_id)
+        except activity.StepInterrupted as interrupted:
+            # abort_step (or a skip no search caught): the step fails and the
+            # run stops here, so neither its attempts nor an enclosing retry
+            # plan it again
+            why = interrupted.reason or "operator"
+            if self._control is not None:
+                self._control.stop()
+            return json.dumps(
+                {
+                    "status": "failure",
+                    "step_id": step_id,
+                    "message": f"aborted ({interrupted.action} by {why})",
+                }
+            )
+        finally:
+            activity.end()
+            if self._control is not None:
+                self._control.clear_request()
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._session, name)
@@ -124,6 +172,8 @@ class PlanExecutor:
         self.on_skip = on_skip
         self._lock = threading.Lock()
         self.on_event = self._locked(on_event) if on_event is not None else None
+        if self.on_event is not None and self.control.on_wait is None:
+            self.control.on_wait = self._emit_pause
         self.clock, self.sleep = clock, sleep
         self.on_drift = on_drift
         self.plan_ahead = plan_ahead
@@ -169,7 +219,9 @@ class PlanExecutor:
             self.session.defer_recording = True
         t0 = self.clock()
         run = run_plan(
-            _AttemptSession(self.session, self._pending.clear),
+            _AttemptSession(
+                self.session, self._pending.clear, self.on_event, self.control
+            ),
             on_skip=self.on_skip,
             before_step=self._before,
             after_step=self._after,
@@ -312,6 +364,27 @@ class PlanExecutor:
                 for c in replanned
             ]
         return "", list(replanned)
+
+    def _emit_pause(self, step_id: str, when: str, waiting: bool) -> None:
+        if self.on_event is None:
+            return
+        if waiting:
+            status, previous, message = "RUNNING", "IDLE", f"paused {when} the step"
+        elif self.control.stopped:
+            status, previous, message = "FAILURE", "RUNNING", "stopped"
+        else:
+            status, previous, message = "SUCCESS", "RUNNING", "resumed"
+        self.on_event(
+            make_event(
+                step_id,
+                PAUSE_ROLE,
+                step_id,
+                status,
+                previous,
+                message=message,
+                metrics={"when": when},
+            )
+        )
 
     def _emit_drift(self, node: dict[str, Any], drift: float, tolerance: float) -> None:
         if self.on_event is None:
