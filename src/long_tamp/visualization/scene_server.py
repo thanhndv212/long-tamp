@@ -18,10 +18,10 @@ import threading
 import time
 from typing import Any
 
-#: Queued frames beyond this many seconds of playback are thinned, so the
-#: scene never lags far behind (e.g. a simulation running much faster than
-#: real time); a block's planned paths queue well under it.
-MAX_LAG = 60.0
+#: Queued frames beyond this many seconds of playback are thinned (played
+#: faster), so the scene stays near the mission: a simulation runs several
+#: times faster than real time (live: ~1300 states in 11 s for 44 s of motion).
+MAX_LAG = 20.0
 
 
 class _Robot:

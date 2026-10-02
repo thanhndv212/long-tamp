@@ -42,7 +42,7 @@ Each panel scrolls inside itself, and you can rearrange the areas with `screen` 
 | **Details** | The selected node: its call, state, attempts, why it was skipped, planning and motion time, start time and duration, failure messages, and all of its events. |
 | **Events** | The raw stream up to the cursor. You can filter it by text, show only failures, or toggle each role; `ready` and `precondition` are hidden by default. Click an event to move the cursor there. |
 | **Chat** | On a live page with a chat session: the operator chat with the mission model (see [AI models](ai-models.md)). It shows your messages, each tool call (accepted calls in green, rejected ones in red, with the reason) and the model's answers. Turns typed in the terminal show up here too. |
-| **Scene** | Another page embedded next to the rest, normally the Viser server the mission plays on (`scene_url`). |
+| **Scene** | Another page embedded next to the rest, normally the Viser server the mission plays on (`scene_url`). With the screw assembly, it runs in its own process (below), so it stays live while the mission plans. |
 
 Everything is computed from the events up to the cursor. Scrubbing back shows the mission as
 it was at that moment: which steps were running, which had failed, and where it was paused.
@@ -219,3 +219,30 @@ Its routes are JSON: `GET /api/events?since=N`, `POST /api/control` (`pause`, `r
 handler)`. The server binds to `127.0.0.1` by default because the control and chat routes move a
 robot. Pass `host="0.0.0.0"` only on a network you trust: the server has no
 authentication.
+
+## The 3D scene in its own process
+
+HPP planning holds Python's interpreter lock for seconds at a time. A Viser server in the
+mission's process therefore freezes while a step plans: the page takes 15–30 s to load and
+the robot stops moving. `SceneProcess` (`long_tamp.visualization.scene`) serves the scene from
+a child process instead. The child is built from the robot's pinocchio models, which pickle,
+and takes configurations over a local socket:
+
+```python
+from long_tamp.visualization.scene import SceneProcess
+
+scene = SceneProcess(device, port=8081, camera=((2.15, -2.3, 1.55), (0.75, 0.0, 0.58)))
+scene.show(q)                 # now
+scene.play(frames, dt=1/30)   # queued, played at its pace; returns at once
+scene.client.frame(t, q)      # a stream stamped with (simulated) time
+```
+
+- **`MissionViewer(separate_process=True)`** sends each planned path as frames, with the
+  gripper closing and opening, and doesn't wait for them to play. This is the screw
+  assembly's default; `--viewer-in-process` restores the old way.
+- **The MuJoCo backend** gets the scene's address (`display=scene.client`). The simulation's
+  process then sends its own states, so the scene shows what the simulated robot does, in
+  simulated time, played back in real time. A simulation runs several times faster than
+  real time, so beyond 20 s of backlog the scene plays faster to catch up.
+- **Live check:** the page answered in 4–20 ms while the mission planned, against 15–30 s
+  before.
