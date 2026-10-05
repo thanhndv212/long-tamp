@@ -57,9 +57,10 @@ jobs:
     # host, and the CTests that need no HPP scene (fake session, fault paths, plugin
     # loading, event-stream parity with the Python runner). examples/behaviortree is
     # configured on its own (no HPP C++ packages), against the released
-    # BehaviorTree.CPP from the ROS 2 apt repository (ubuntu-latest is 24.04, so
-    # Jazzy). Building it from source is turned off, so a missing package fails here.
-    runs-on: ubuntu-latest
+    # BehaviorTree.CPP from the ROS 2 apt repository. Building it from source is turned
+    # off, so a missing package fails here. The runner is pinned to 24.04 because ROS 2
+    # Jazzy packages target it (ubuntu-latest moves to Ubuntu 26 on 2026-10-19).
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       ROS_DISTRO: jazzy
