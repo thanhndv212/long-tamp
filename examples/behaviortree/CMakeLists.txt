@@ -63,6 +63,18 @@ else()
   set(BUILD_TESTING "${_agimus_build_testing}")
 endif()
 
+# The ROS 2 package (ament-exported) names its target
+# behaviortree_cpp::behaviortree_cpp; a source build and upstream's own CMake
+# install name it BT::behaviortree_cpp. Link against the latter either way.
+if(NOT TARGET BT::behaviortree_cpp)
+  if(TARGET behaviortree_cpp::behaviortree_cpp)
+    add_library(BT::behaviortree_cpp ALIAS behaviortree_cpp::behaviortree_cpp)
+  else()
+    message(FATAL_ERROR "BehaviorTree.CPP found, but it exports neither "
+                        "BT::behaviortree_cpp nor behaviortree_cpp::behaviortree_cpp")
+  endif()
+endif()
+
 # The task-planning BT nodes (#25): a library to link (RegisterNodes), the
 # same nodes as a BehaviorTree.CPP plugin (factory.registerFromPlugin, Nav2's
 # plugin_lib_names), and the embedded-Python session. The nodes read their
