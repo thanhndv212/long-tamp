@@ -1,3 +1,16 @@
+# Configured on its own (cmake -S examples/behaviortree), this builds the nodes, the
+# plugin, the host and their tests without the top-level project's HPP C++
+# dependencies: none of these targets link HPP or pinocchio. The embedded Python
+# finds long_tamp through PYTHONPATH (set on the tests below).
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  cmake_minimum_required(VERSION 3.22)
+  project(long_tamp_behaviortree LANGUAGES CXX)
+  include(CTest)
+  get_filename_component(LONG_TAMP_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+else()
+  set(LONG_TAMP_SOURCE_DIR "${PROJECT_SOURCE_DIR}")
+endif()
+
 include(FetchContent)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
@@ -114,7 +127,7 @@ if(BUILD_TESTING)
     taskplan_bt_fault_missing_method
     taskplan_bt_unknown_factory
     taskplan_bt_events
-    PROPERTIES ENVIRONMENT "PYTHONPATH=${PROJECT_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
+    PROPERTIES ENVIRONMENT "PYTHONPATH=${LONG_TAMP_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
 
   # Opt-in only: unlike the fake-session cases above, this drives a real
   # PyHPP scene (TWIN's bimanual lift-ball, script/twin/twin_bt_session.py)
@@ -134,7 +147,7 @@ if(BUILD_TESTING)
       taskplan_bt_twin_lift_ball PROPERTIES
       PASS_REGULAR_EXPRESSION "Task plan status: SUCCESS"
       TIMEOUT 300
-      ENVIRONMENT "PYTHONPATH=${PROJECT_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
+      ENVIRONMENT "PYTHONPATH=${LONG_TAMP_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
 
     # §11 item 1: exercises a real release() forced by a fallback/condition
     # guard before a second real grasp() -- create_twin_session's flat
@@ -152,7 +165,7 @@ if(BUILD_TESTING)
       # each draw independently taking anywhere up to ~115s observed, plus
       # up to 8 retries' worth of budget on the regrasp specifically.
       TIMEOUT 900
-      ENVIRONMENT "PYTHONPATH=${PROJECT_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
+      ENVIRONMENT "PYTHONPATH=${LONG_TAMP_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
 
     # #58: the screw-assembly cell, seeded (script/screw_assembly/
     # screw_bt_session.py): pick the driver, home it while the left arm
@@ -163,7 +176,7 @@ if(BUILD_TESTING)
       taskplan_bt_screw_cell PROPERTIES
       PASS_REGULAR_EXPRESSION "Task plan status: SUCCESS"
       TIMEOUT 600
-      ENVIRONMENT "PYTHONPATH=${PROJECT_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
+      ENVIRONMENT "PYTHONPATH=${LONG_TAMP_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
   endif()
 endif()
 
