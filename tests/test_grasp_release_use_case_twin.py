@@ -49,11 +49,10 @@ per-phase helpers ``plan_sequence()`` drives internally, so behavioral
 equivalence to ``plan_sequence()`` is structural, not something this test
 needs to re-derive.
 
-Requires the real PyHPP backend AND ``hpp_practicals``'s ``package://``
-resources (same requirement as ``tests/test_twin_examples.py`` -- see that
-file's module docstring for the ``AMENT_PREFIX_PATH`` setup this needs).
-Skips cleanly otherwise; run inside the hpp-arm64 container / a properly
-configured dev environment before trusting this as a merge gate.
+Requires the real PyHPP backend (all scene assets are vendored under
+``script/twin/assets/``). Skips cleanly otherwise; run inside the hpp-arm64
+container / a properly configured dev environment before trusting this as a
+merge gate.
 """
 
 import sys
@@ -78,8 +77,7 @@ def _build_twin_lift_ball_planner():
     stay headless).
 
     Returns ``(seq_planner, q_init, GRASP_SEQUENCE)`` or raises/skips if the
-    scene can't be loaded in this environment (missing ``hpp_practicals``
-    ``package://`` resources).
+    scene can't be loaded in this environment.
     """
     if str(_TWIN_SCRIPT_DIR) not in sys.path:
         sys.path.insert(0, str(_TWIN_SCRIPT_DIR))

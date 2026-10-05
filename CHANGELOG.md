@@ -30,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The TWIN examples and tests no longer need the external `hpp_practicals` package.
+  `tests/test_twin_examples.py` loads two of the repo's vendored UR10s instead of
+  `package://hpp_practicals` UR5s, so it now runs (rather than skips) wherever PyHPP is
+  available. The lift-ball config drops its stale `package://hpp_practicals` paths, and
+  `script/twin/README.md` documents the vendored assets.
 - The architecture page moved from `ARCHITECTURE.md` to `docs/architecture.md` and was
   rewritten for 0.2.0–0.8.0. It now follows one mission through the code (four questions,
   two stacks meeting at the refiner, the recovery ladder, model roles, processes) and ends
