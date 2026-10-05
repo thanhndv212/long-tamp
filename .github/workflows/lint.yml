@@ -84,6 +84,11 @@ jobs:
       # The embedded Python imports long_tamp (base install: no HPP needed).
       - run: python -m pip install -e .
       - name: Configure
+        # behaviortree_cpp's CMake config pulls in ament_cmake, which imports
+        # ament_package from Python3_EXECUTABLE: give setup-python's 3.12 (same minor
+        # as Jazzy's) the ROS site-packages.
+        env:
+          PYTHONPATH: /opt/ros/${{ env.ROS_DISTRO }}/lib/python3.12/site-packages
         run: >-
           cmake -S examples/behaviortree -B build-bt -DBUILD_TESTING=ON
           -DLONG_TAMP_FETCH_BEHAVIORTREE_CPP=OFF
