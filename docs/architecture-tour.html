@@ -1,0 +1,1058 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>long_tamp Architecture Tour</title>
+<style>
+/* Layout: a header with chapter tabs, one chapter at a time, prev/next at the bottom.
+   Colors are the mission viewer's own tokens (src/long_tamp/viewer/static/viewer.css):
+   the behavior-tree status colors double as the tour's color code. */
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --fg: #1d2330;
+  --muted: #667085;
+  --border: #d9dee7;
+  --accent: #2f6fed;
+  --st-running: #2f6fed;
+  --st-success: #1f9d55;
+  --st-failure: #d64545;
+  --st-skipped: #7a8699;
+  --st-paused: #d68a00;
+  --st-idle: #c3cad6;
+  --wash: #eef2fb;
+  --code-bg: #f0f2f6;
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151b; --panel: #1a1f27; --fg: #e6e9ef; --muted: #98a2b3; --border: #2c3440;
+    --accent: #6c9bff; --st-running: #6c9bff; --st-success: #3ec27a; --st-failure: #f06a6a;
+    --st-skipped: #8b96a8; --st-paused: #f0b03c; --st-idle: #3a4352;
+    --wash: #1d2535; --code-bg: #151a22;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151b; --panel: #1a1f27; --fg: #e6e9ef; --muted: #98a2b3; --border: #2c3440;
+  --accent: #6c9bff; --st-running: #6c9bff; --st-success: #3ec27a; --st-failure: #f06a6a;
+  --st-skipped: #8b96a8; --st-paused: #f0b03c; --st-idle: #3a4352;
+  --wash: #1d2535; --code-bg: #151a22;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 15px/1.55 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+a { color: var(--accent); }
+h1, h2, h3 { text-wrap: balance; line-height: 1.2; margin: 0; }
+p { margin: 0; max-width: 68ch; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* header */
+.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--panel); border-bottom: 1px solid var(--border);
+}
+.top-inner { max-width: 1160px; margin: 0 auto; padding: 10px 16px 0; display: flex; flex-direction: column; gap: 8px; }
+.brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.brand h1 { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+.brand .ver { color: var(--muted); font-size: 12.5px; }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  border: 0; background: none; padding: 8px 11px 9px; white-space: nowrap;
+  color: var(--muted); font-size: 13.5px; border-bottom: 2px solid transparent;
+  display: flex; gap: 7px; align-items: center;
+}
+.tab .n { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }
+.tab:hover { color: var(--fg); }
+
+/* chapters */
+main { max-width: 1160px; margin: 0 auto; padding: 28px 16px 40px; }
+.chapter { display: flex; flex-direction: column; gap: 22px; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.chapter > header { display: flex; flex-direction: column; gap: 8px; }
+.chapter h2 { font-size: clamp(22px, 3vw, 30px); font-weight: 700; letter-spacing: -0.015em; }
+.lede { font-size: 16.5px; color: var(--fg); }
+.lede + .lede { color: var(--muted); font-size: 15px; }
+.split { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 860px) { .split { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+.pad { padding: 16px 18px; }
+.figure { overflow-x: auto; }
+.figure svg { display: block; width: 100%; min-width: 640px; height: auto; }
+.note { font-size: 13px; color: var(--muted); }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.btn {
+  border: 1px solid var(--border); background: var(--panel); border-radius: 7px;
+  padding: 6px 12px; font-size: 13.5px;
+}
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn[disabled] { opacity: .45; cursor: default; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+  padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted);
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st-idle); flex: none; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+
+/* SVG node styling, driven by data-state */
+.node rect { fill: var(--panel); stroke: var(--border); stroke-width: 1.4; transition: fill .3s, stroke .3s; }
+.node text { fill: var(--fg); font: 600 14px var(--font-ui); }
+.node text.sub { fill: var(--muted); font: 400 11.5px var(--font-mono); }
+.node[data-state="running"] rect { stroke: var(--st-running); stroke-width: 2.4; fill: var(--wash); }
+.node[data-state="success"] rect { stroke: var(--st-success); stroke-width: 2; }
+.node[data-state="failure"] rect { stroke: var(--st-failure); stroke-width: 2.4; }
+.node[data-state="dim"] { opacity: .5; }
+.node.clickable { cursor: pointer; }
+.node.clickable:hover rect { stroke: var(--accent); }
+.edge { stroke: var(--muted); stroke-width: 1.4; fill: none; opacity: .55; transition: stroke .3s, opacity .3s; }
+.edge.on { stroke: var(--st-running); opacity: 1; stroke-width: 2.2; }
+.edge.fail { stroke: var(--st-failure); stroke-dasharray: 5 4; opacity: .9; }
+.edge.watch { stroke-dasharray: 2 4; }
+.edge-label { fill: var(--muted); font: 11.5px var(--font-ui); }
+.seam { stroke: var(--border); stroke-width: 1.5; stroke-dasharray: 6 6; }
+.zone { fill: var(--muted); font: 600 11px var(--font-ui); letter-spacing: .08em; }
+.pulse { fill: var(--st-running); }
+@media (prefers-reduced-motion: reduce) { .pulse { display: none; } }
+
+/* overview stage cards */
+.stages { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 760px) { .stages { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stage {
+  text-align: left; background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0;
+}
+.stage .q { font-weight: 650; font-size: 15px; }
+.stage .who { font-size: 12.5px; color: var(--muted); }
+.stage[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.detail h3 { font-size: 17px; margin-bottom: 6px; }
+.detail dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 12px 0 0; font-size: 14px; }
+.detail dt { color: var(--muted); }
+.detail dd { margin: 0; min-width: 0; }
+
+/* mission walkthrough */
+.step-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.step-head h3 { font-size: 17px; }
+.step-count { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.step-body { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; font-size: 14.5px; }
+.progress { display: flex; gap: 4px; }
+.progress i { flex: 1; height: 4px; border-radius: 2px; background: var(--st-idle); }
+.progress i.done { background: var(--st-success); }
+.progress i.cur { background: var(--st-running); }
+.log {
+  font-family: var(--font-mono); font-size: 12px; background: var(--code-bg); border-radius: 8px;
+  padding: 10px 12px; height: 168px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px;
+}
+.log div { display: flex; gap: 8px; min-width: 0; }
+.log .k { flex: none; width: 76px; color: var(--muted); }
+.log .v { min-width: 0; overflow-wrap: anywhere; }
+.log .ok { color: var(--st-success); }
+.log .bad { color: var(--st-failure); }
+.log .run { color: var(--st-running); }
+.tree { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.tree li { display: flex; gap: 8px; align-items: center; font-family: var(--font-mono); font-size: 12px; min-width: 0; }
+.tree li span:last-child { overflow-wrap: anywhere; min-width: 0; }
+.tree li.par { padding-left: 14px; }
+.tree .dot[data-s="running"] { background: var(--st-running); box-shadow: 0 0 0 3px color-mix(in srgb, var(--st-running) 25%, transparent); }
+.tree .dot[data-s="success"] { background: var(--st-success); }
+.tree .dot[data-s="skipped"] { background: var(--st-skipped); }
+.side { display: flex; flex-direction: column; gap: 12px; }
+.side h4 { margin: 0; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+
+/* complexity */
+.cmp { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 760px) { .cmp { grid-template-columns: minmax(0, 1fr); } }
+.slider { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.slider input { width: 220px; max-width: 100%; accent-color: var(--accent); }
+.bars { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+.bar-row { display: flex; flex-direction: column; gap: 5px; }
+.bar-row .lbl { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; }
+.bar-row .lbl b { font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 13px; }
+.bar { height: 14px; border-radius: 4px; background: var(--code-bg); overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: 4px; transition: width .35s ease; }
+.bar.fact i { background: var(--st-failure); }
+.bar.lin i { background: var(--st-success); }
+.loop { display: flex; flex-direction: column; gap: 6px; counter-reset: s; }
+.loop li { list-style: none; display: flex; gap: 10px; padding: 8px 10px; border-radius: 8px; border: 1px solid transparent; font-size: 14px; }
+.loop li b { font-family: var(--font-mono); font-size: 12px; color: var(--muted); width: 16px; flex: none; padding-top: 2px; }
+.loop li.on { border-color: var(--st-running); background: var(--wash); }
+.loop { padding: 0; margin: 0; }
+.phase-meta { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); }
+
+/* ladder */
+.scen { display: flex; flex-direction: column; gap: 6px; }
+.scen button {
+  text-align: left; border: 1px solid var(--border); background: var(--panel); border-radius: 8px;
+  padding: 9px 12px; font-size: 14px;
+}
+.scen button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.ladder { display: flex; flex-direction: column; gap: 6px; padding: 0; margin: 0; }
+.rung {
+  list-style: none; display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel);
+  transition: border-color .25s, background .25s, opacity .25s;
+}
+.rung .lv { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.rung .t { font-weight: 600; font-size: 14px; }
+.rung .w { font-size: 12.5px; color: var(--muted); }
+.rung .res { font-size: 12px; font-weight: 600; }
+.rung[data-s="running"] { border-color: var(--st-running); background: var(--wash); }
+.rung[data-s="failure"] { border-color: var(--st-failure); }
+.rung[data-s="failure"] .res { color: var(--st-failure); }
+.rung[data-s="success"] { border-color: var(--st-success); }
+.rung[data-s="success"] .res { color: var(--st-success); }
+.rung[data-s="unused"] { opacity: .45; }
+.rung.side-rung { border-style: dashed; }
+.outcome { font-size: 14px; min-height: 44px; }
+
+/* models */
+.roles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 10px; }
+.role { border: 1px solid var(--border); border-radius: 10px; background: var(--panel); padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.role h4 { margin: 0; font-size: 14.5px; }
+.role p { font-size: 13px; color: var(--muted); }
+.role .chk { font-size: 12.5px; }
+.rounds { display: flex; flex-direction: column; gap: 10px; }
+.round { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--panel); display: flex; flex-direction: column; gap: 8px; }
+.round .who { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.round pre { margin: 0; font-family: var(--font-mono); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--code-bg); padding: 8px 10px; border-radius: 6px; }
+.checks { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.checks .ok::before { content: "✓ "; color: var(--st-success); font-weight: 700; }
+.checks .bad::before { content: "✗ "; color: var(--st-failure); font-weight: 700; }
+.checks .bad { color: var(--st-failure); }
+
+/* processes */
+.procs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+.proc { border: 1px solid var(--border); border-radius: 10px; background: var(--panel); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.proc.merged { border-style: dashed; }
+.proc h4 { margin: 0; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; }
+.proc .st { font-size: 12px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.proc canvas { width: 100%; height: 120px; border-radius: 8px; background: var(--code-bg); display: block; }
+.gil { height: 10px; border-radius: 3px; background: var(--code-bg); overflow: hidden; position: relative; }
+.gil i { position: absolute; inset: 0 auto 0 0; background: var(--st-paused); transition: width .1s linear; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel); padding: 6px 12px; font-size: 13.5px; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+
+/* package map */
+.pkgmap { display: flex; flex-direction: column; gap: 10px; }
+.zone-box { border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--panel); }
+.zone-box h4 { margin: 0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.pkgs { display: flex; flex-wrap: wrap; gap: 8px; }
+.pkg {
+  border: 1px solid var(--border); background: var(--bg); border-radius: 8px; padding: 7px 11px;
+  font-family: var(--font-mono); font-size: 13px; transition: border-color .2s, background .2s, opacity .2s;
+}
+.pkg[aria-pressed="true"] { border-color: var(--accent); background: var(--wash); font-weight: 700; }
+.pkg.dep { border-color: var(--st-running); }
+.pkg.user { border-color: var(--st-paused); }
+.pkg.faded { opacity: .4; }
+.seam-box { text-align: center; border: 2px solid var(--accent); border-radius: 10px; padding: 10px; background: var(--wash); font-size: 14px; }
+.seam-box b { font-family: var(--font-mono); }
+
+/* extend */
+.ext { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 12px; }
+.ext .panel { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ext h4 { margin: 0; font-size: 15px; }
+.ext pre { margin: 0; overflow-x: auto; background: var(--code-bg); padding: 10px 12px; border-radius: 8px; font: 12px/1.5 var(--font-mono); }
+
+/* footer nav */
+.pager { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.kbd { font-size: 12px; color: var(--muted); }
+kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--panel); }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <h1>long_tamp architecture tour</h1>
+      <span class="ver">reviewed against <code>c23a995</code>, after 0.8.0 · companion to <a href="architecture/">the Architecture page</a></span>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Chapters" id="tabs"></nav>
+  </div>
+</div>
+
+<main id="main">
+
+<!-- 1 -->
+<section class="chapter" id="overview" data-title="Four questions">
+  <header>
+    <div class="eyebrow">Big picture</div>
+    <h2>A mission answers four questions, each in a different place</h2>
+    <p class="lede">Every part of long_tamp exists to answer one of these questions and hand a checked result to the next part. Click a question to see who answers it and what comes out.</p>
+  </header>
+  <div class="stages" id="stages"></div>
+  <div class="split">
+    <div class="panel figure" id="ov-fig"></div>
+    <div class="panel pad detail" id="ov-detail" aria-live="polite"></div>
+  </div>
+  <div class="legend">
+    <span><i class="dot" style="background:var(--st-running)"></i>selected</span>
+    <span><i class="dot" style="background:var(--st-failure)"></i>failure loops back</span>
+    <span>dotted: observes the event stream</span>
+  </div>
+</section>
+
+<!-- 2 -->
+<section class="chapter" id="stacks" data-title="Two stacks" hidden>
+  <header>
+    <div class="eyebrow">Structure</div>
+    <h2>Symbols above the seam, geometry below it</h2>
+    <p class="lede">The mission stack reasons about which gripper holds what and which screws are in. The motion stack reasons about constraint graphs and paths. They meet at one interface, the refiner.</p>
+    <p class="lede">Click a package to see its job, what it imports (blue) and what imports it (amber). These are the real import edges at the review commit.</p>
+  </header>
+  <div class="split">
+    <div class="pkgmap" id="pkgmap"></div>
+    <div class="panel pad detail" id="pkg-detail" aria-live="polite"></div>
+  </div>
+</section>
+
+<!-- 3 -->
+<section class="chapter" id="mission" data-title="One mission" hidden>
+  <header>
+    <div class="eyebrow">Walkthrough · screw assembly</div>
+    <h2>Follow one mission from instruction to motion</h2>
+    <p class="lede">Two UR10 arms fasten plates to a jig, two screws per plate. Step through what runs, in order. The plan and the event log on the right fill in as you go.</p>
+  </header>
+  <div class="controls">
+    <button class="btn" id="m-prev">Back</button>
+    <button class="btn primary" id="m-next">Next step</button>
+    <button class="btn" id="m-play">Play</button>
+    <button class="btn" id="m-reset">Restart</button>
+  </div>
+  <div class="progress" id="m-progress" aria-hidden="true"></div>
+  <div class="split">
+    <div class="side">
+      <div class="panel figure" id="m-fig"></div>
+      <div class="panel pad">
+        <div class="step-head"><h3 id="m-title"></h3><span class="step-count" id="m-count"></span></div>
+        <div class="step-body" id="m-body" aria-live="polite"></div>
+      </div>
+    </div>
+    <div class="side">
+      <div class="panel pad side">
+        <h4>TaskPlan (simplified)</h4>
+        <ul class="tree" id="m-tree"></ul>
+      </div>
+      <div class="panel pad side">
+        <h4>What the event stream records</h4>
+        <div class="log" id="m-log"></div>
+        <p class="note">Paraphrased, with illustrative values. The real stream is JSONL, one record per status change (<a href="usage/events/">schema</a>).</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 -->
+<section class="chapter" id="graph" data-title="Why O(N)" hidden>
+  <header>
+    <div class="eyebrow">Inside a step</div>
+    <h2>One small graph per phase instead of one huge graph</h2>
+    <p class="lede">HPP plans manipulation on a constraint graph: a state per grasp combination, an edge per transition. One graph that covers every way a long sequence could go grows factorially. <code>GraspSequencePlanner</code> builds a minimal graph for each phase instead, so the work grows linearly.</p>
+  </header>
+  <div class="cmp">
+    <div class="panel pad">
+      <div class="slider">
+        <label for="n-grasps"><b>Grasp phases in the sequence:</b> <span id="n-val" class="mono"></span></label>
+        <input type="range" id="n-grasps" min="2" max="12" value="6">
+      </div>
+      <div class="bars" id="bars"></div>
+      <p class="note" style="margin-top:12px">Log scale. The screw assembly with 4 parts is dozens of phases.</p>
+    </div>
+    <div class="panel pad side">
+      <div class="step-head"><h3 style="font-size:16px">The per-phase loop</h3><span class="phase-meta" id="phase-meta"></span></div>
+      <ol class="loop" id="loop"></ol>
+      <div class="controls"><button class="btn" id="loop-step">Next</button><button class="btn" id="loop-play">Play</button></div>
+      <p class="note">The lookahead in step 3 tries targets on a copy of the grasp tracker and keeps one from which the next phase stays reachable. Without it, the IKEA table prototype failed about 1850 of 1850 solver calls on one phase.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 5 -->
+<section class="chapter" id="failures" data-title="Failures" hidden>
+  <header>
+    <div class="eyebrow">Recovery</div>
+    <h2>Each failure is handled at the lowest level that can fix it</h2>
+    <p class="lede">Pick a failure and watch it climb. Levels 1 to 4 are deterministic. A model only gets a say at level 5, and only about the goal.</p>
+  </header>
+  <div class="split">
+    <ol class="ladder" id="ladder"></ol>
+    <div class="side">
+      <div class="scen" id="scen" role="group" aria-label="Failure scenarios"></div>
+      <div class="panel pad outcome" id="outcome" aria-live="polite"></div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 -->
+<section class="chapter" id="models" data-title="Models" hidden>
+  <header>
+    <div class="eyebrow">Trust boundary</div>
+    <h2>Models propose, long_tamp checks</h2>
+    <p class="lede">Language models are optional and never write steps or motion. Each use is a typed role: the model proposes, a deterministic checker accepts or explains why not, and the reasons go back for a bounded number of rounds. After that, a fallback that needs no model.</p>
+  </header>
+  <div class="split">
+    <div class="side">
+      <div class="controls"><button class="btn primary" id="r-next">Next round</button><button class="btn" id="r-reset">Restart</button><span class="note">Goal writer, instruction: “assemble part 1 and put the driver away”</span></div>
+      <div class="rounds" id="rounds" aria-live="polite"></div>
+    </div>
+    <div class="roles" id="roles"></div>
+  </div>
+</section>
+
+<!-- 7 -->
+<section class="chapter" id="processes" data-title="Processes" hidden>
+  <header>
+    <div class="eyebrow">Runtime</div>
+    <h2>What must stay responsive runs in its own process</h2>
+    <p class="lede">HPP planning holds Python's interpreter lock for seconds at a time. Anything sharing the mission's process stops while a step plans. Switch between the two layouts and watch the scene and the simulator.</p>
+  </header>
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Process layout">
+      <button id="p-one" aria-pressed="false">One process</button>
+      <button id="p-split" aria-pressed="true">Separate processes</button>
+    </div>
+    <button class="btn" id="p-play">Pause</button>
+  </div>
+  <div class="procs" id="procs"></div>
+  <p class="note">They talk through the event stream (a JSONL file), pipes to the simulator, a local socket for scene frames, and HTTP for the viewer's controls, which act at step boundaries. Measured: MuJoCo in a thread ran 3.6× slower than real time while planning ran next to it.</p>
+</section>
+
+<!-- 8 -->
+<section class="chapter" id="extend" data-title="Extend it" hidden>
+  <header>
+    <div class="eyebrow">Extension points</div>
+    <h2>Where your code plugs in</h2>
+    <p class="lede">Each extension point is a small interface. Whatever you plug in passes through the same checks as the built-in parts.</p>
+  </header>
+  <div class="ext" id="ext"></div>
+</section>
+
+<div class="pager">
+  <button class="btn" id="prev">← Previous</button>
+  <span class="kbd">Use <kbd>←</kbd> <kbd>→</kbd> to change chapter</span>
+  <button class="btn primary" id="next">Next →</button>
+</div>
+</main>
+
+<script>
+(function () {
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const el = (tag, attrs = {}, html = "") => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (html) e.innerHTML = html;
+  return e;
+};
+const SVGNS = "http://www.w3.org/2000/svg";
+const sv = (tag, attrs = {}) => {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  return e;
+};
+const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- SVG graph helper ---------- */
+function drawGraph(container, cfg) {
+  const svg = sv("svg", { viewBox: `0 0 ${cfg.w} ${cfg.h}`, role: "img", "aria-label": cfg.label });
+  const defs = sv("defs");
+  for (const [id, col] of [["ar", "var(--muted)"], ["ar-on", "var(--st-running)"], ["ar-fail", "var(--st-failure)"]]) {
+    const m = sv("marker", { id: cfg.id + id, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" });
+    const p = sv("path", { d: "M0,0 L10,5 L0,10 z" }); p.style.fill = col; m.appendChild(p); defs.appendChild(m);
+  }
+  svg.appendChild(defs);
+  (cfg.decor || []).forEach(d => svg.appendChild(d));
+  const nodes = {};
+  cfg.nodes.forEach(n => { nodes[n.id] = n; n.h = n.h || 60; n.w = n.w || 170; });
+  const clip = (a, b) => {
+    const cx = a.x + a.w / 2, cy = a.y + a.h / 2, dx = b.x + b.w / 2 - cx, dy = b.y + b.h / 2 - cy;
+    const t = Math.min(dx ? (a.w / 2 + 3) / Math.abs(dx) : Infinity, dy ? (a.h / 2 + 3) / Math.abs(dy) : Infinity);
+    return [cx + dx * t, cy + dy * t];
+  };
+  const edges = {};
+  cfg.edges.forEach(e => {
+    const a = nodes[e.from], b = nodes[e.to];
+    const [x1, y1] = clip(a, b), [x2, y2] = clip(b, a);
+    let d;
+    if (e.bend) {
+      const mx = (x1 + x2) / 2 + e.bend[0], my = (y1 + y2) / 2 + e.bend[1];
+      d = `M${x1},${y1} Q${mx},${my} ${x2},${y2}`;
+    } else d = `M${x1},${y1} L${x2},${y2}`;
+    const path = sv("path", { d, class: "edge" + (e.cls ? " " + e.cls : "") });
+    path.dataset.base = e.cls || "";
+    path.setAttribute("marker-end", `url(#${cfg.id}${e.cls === "fail" ? "ar-fail" : "ar"})`);
+    svg.appendChild(path);
+    if (e.label) {
+      const lx = (x1 + x2) / 2 + (e.bend ? e.bend[0] / 2 : 0) + (e.lx || 0);
+      const ly = (y1 + y2) / 2 + (e.bend ? e.bend[1] / 2 : 0) + (e.ly || -6);
+      const t = sv("text", { x: lx, y: ly, class: "edge-label", "text-anchor": "middle" }); t.textContent = e.label; svg.appendChild(t);
+    }
+    edges[e.from + ">" + e.to] = path;
+  });
+  const g = {};
+  cfg.nodes.forEach(n => {
+    const grp = sv("g", { class: "node" + (cfg.onClick ? " clickable" : ""), "data-id": n.id, tabindex: cfg.onClick ? "0" : "-1" });
+    grp.appendChild(sv("rect", { x: n.x, y: n.y, width: n.w, height: n.h, rx: 9 }));
+    const t = sv("text", { x: n.x + 12, y: n.y + (n.sub ? 25 : n.h / 2 + 5) }); t.textContent = n.label; grp.appendChild(t);
+    if (n.sub) { const s = sv("text", { x: n.x + 12, y: n.y + 45, class: "sub" }); s.textContent = n.sub; grp.appendChild(s); }
+    if (cfg.onClick) {
+      grp.addEventListener("click", () => cfg.onClick(n.id));
+      grp.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); cfg.onClick(n.id); } });
+    }
+    svg.appendChild(grp); g[n.id] = grp;
+  });
+  container.appendChild(svg);
+  return {
+    svg, nodes: g, edges,
+    state(map) { for (const id in g) g[id].dataset.state = map[id] || (map._default || ""); },
+    light(keys) {
+      for (const k in edges) {
+        const p = edges[k], on = keys.includes(k);
+        p.setAttribute("class", "edge" + (p.dataset.base ? " " + p.dataset.base : "") + (on ? " on" : ""));
+        p.setAttribute("marker-end", `url(#${cfg.id}${on ? "ar-on" : p.dataset.base === "fail" ? "ar-fail" : "ar"})`);
+      }
+    },
+    pulse(keys) {
+      svg.querySelectorAll(".pulse").forEach(c => c.remove());
+      if (reduced) return;
+      keys.forEach(k => {
+        const p = edges[k]; if (!p) return;
+        const c = sv("circle", { r: 5, class: "pulse" });
+        const a = sv("animateMotion", { dur: "1.4s", repeatCount: "indefinite", path: p.getAttribute("d") });
+        c.appendChild(a); svg.appendChild(c);
+      });
+    }
+  };
+}
+
+/* ---------- 1. Overview ---------- */
+const STAGES = [
+  { id: "goal", q: "What should be true at the end?", who: "a person, or the goal writer",
+    out: "a goal: ground literals", ex: "screwed(part1, part1/h_hole1)", where: "task_planning/language.py", nodes: ["goal"], edges: ["goal>plan"],
+    text: "The goal says what the world should look like, never how to get there. A model may write it from an instruction, but it is checked for syntax, known predicates and objects, and whether a plan reaches it." },
+  { id: "plan", q: "Which steps get there?", who: "a task planner",
+    out: "a TaskPlan: a validated tree of capability calls", ex: "grasp → clamp_and_screw → release → rack", where: "task_planning/pddl.py, skeleton.py, model.py", nodes: ["plan"], edges: ["plan>refine"],
+    text: "Fast Downward or Unified Planning plans over the capabilities' preconditions and effects; a hand-written plan works too. Every plan passes the same gate: capability contracts, then a simulation from the initial state." },
+  { id: "refine", q: "How exactly, in geometry?", who: "the refiner: GraspSequencePlanner on HPP",
+    out: "grasps, configurations, collision-free paths, or failure facts", ex: "ik_unreachable(ur10_left/gripper, part1/h_grasp)", where: "tasks/refiner.py, grasp_sequence.py, planning/", nodes: ["refine"], edges: ["refine>exec", "refine>plan"],
+    text: "The refiner is the seam between symbols and geometry. When it can't find motion, it says why as facts the task planner can plan around." },
+  { id: "exec", q: "Do it, and watch it", who: "an executor and an execution backend",
+    out: "motion on a robot or simulator, and the event stream", ex: "events.jsonl → viewer, watchdog, logs", where: "execution/, sim/, viewer/", nodes: ["exec", "watch"], edges: ["exec>watch"],
+    text: "The Python executor (or a compiled BehaviorTree.CPP tree) runs each step, sends motion to the backend under deadlines and heartbeats, and records every status change." }
+];
+(function overview() {
+  const fig = $("#ov-fig"), detail = $("#ov-detail"), stages = $("#stages");
+  const G = drawGraph(fig, {
+    id: "ov", w: 1000, h: 330, label: "Goal, plan, refine, execute, with failure and supervisor loops",
+    nodes: [
+      { id: "goal", label: "Goal", sub: "what should be true", x: 20, y: 120 },
+      { id: "plan", label: "TaskPlan", sub: "which steps", x: 270, y: 120 },
+      { id: "refine", label: "Refiner", sub: "how, in geometry", x: 520, y: 120 },
+      { id: "exec", label: "Executor + backend", sub: "do it", x: 770, y: 120, w: 200 },
+      { id: "watch", label: "viewer · watchdog · logs", sub: "read events.jsonl", x: 770, y: 250, w: 200 },
+      { id: "sup", label: "Supervisor", sub: "retry · relax · abort", x: 145, y: 10, w: 190 }
+    ],
+    edges: [
+      { from: "goal", to: "plan" }, { from: "plan", to: "refine" }, { from: "refine", to: "exec" },
+      { from: "refine", to: "plan", cls: "fail", bend: [0, 110], label: "failure facts", ly: 20 },
+      { from: "exec", to: "watch", cls: "watch", label: "events", lx: 30 },
+      { from: "plan", to: "sup", cls: "fail", label: "no plan left", lx: 60 },
+      { from: "sup", to: "goal" }
+    ]
+  });
+  function show(i) {
+    const s = STAGES[i];
+    stages.querySelectorAll(".stage").forEach((b, j) => b.setAttribute("aria-pressed", String(i === j)));
+    const map = { _default: "dim" }; s.nodes.forEach(n => map[n] = "running");
+    G.state(map); G.light(s.edges); G.pulse(s.edges);
+    detail.innerHTML = `<h3>${s.q}</h3><p>${s.text}</p>
+      <dl><dt>Answered by</dt><dd>${s.who}</dd><dt>Produces</dt><dd>${s.out}</dd>
+      <dt>Example</dt><dd><code>${s.ex}</code></dd><dt>Code</dt><dd><code>${s.where}</code></dd></dl>`;
+  }
+  STAGES.forEach((s, i) => {
+    const b = el("button", { class: "stage", "aria-pressed": "false" }, `<span class="eyebrow">${i + 1} of 4</span><span class="q">${s.q}</span><span class="who">${s.who}</span>`);
+    b.addEventListener("click", () => show(i)); stages.appendChild(b);
+  });
+  show(0);
+})();
+
+/* ---------- 2. Package map ---------- */
+const PKG = {
+  "task_planning": { zone: "mission", job: "The plan format and everything around it: capabilities, validation, PDDL export and task planners, repair, the BT.CPP compiler, the event stream, and the goal writer, reviewer and supervisor roles.", types: "TaskPlan, CapabilityRegistry, TaskPlanningSession, run_plan, to_pddl, FastDownwardPlanner, plan_execute_repair, compile_behavior_tree", deps: ["ai", "grasping"], doc: "usage/task-planning-pddl/" },
+  "execution": { zone: "mission", job: "Runs a plan: plans each step, then sends its motion to a backend under BUSY retries, heartbeats and a duration-scaled deadline. Drift check, plan-ahead, concurrent arms, pause/stop, the step watchdog.", types: "PlanExecutor, ExecutionBackend, run_command, ExecutionControl, ProcessBackend, StepWatchdog", deps: ["task_planning", "ai"], doc: "usage/execution/" },
+  "sim": { zone: "mission", job: "Exports the planning scene to MuJoCo and runs planned paths there with a tracking controller, welded or contact grasps, and skill controllers.", types: "export_mjcf, MuJoCoBackend", deps: ["execution", "task_planning", "backends", "config"], doc: "usage/simulation-mujoco/" },
+  "ai": { zone: "mission", job: "One gateway to Anthropic- or OpenAI-compatible models, typed roles (propose, check, feed back, fall back), and the operator chat with gated tools.", types: "make_client, refine, ModelRole, ChatSession", deps: [], doc: "usage/ai-models/" },
+  "viewer": { zone: "mission", job: "The web mission viewer: replay any run as one HTML file, or serve it live with the plan monitor, controls and chat.", types: "ViewerServer, write_replay, ChatBridge, ViewerConfig", deps: ["task_planning"], doc: "usage/viewer/" },
+  "tasks": { zone: "motion", job: "Plans chains of grasp, release and hand-over phases as one path. Lookahead, block recovery, checkpoints, and the Refiner that the mission stack calls.", types: "GraspSequencePlanner, run_block_with_recovery, Refiner, GraspSequenceRefiner, MissionCheckpoint", deps: ["planning", "logging", "utils", "visualization", "cli", "execution"], doc: "usage/refiner/" },
+  "planning": { zone: "motion", job: "Backend-agnostic primitives: load a scene, build constraints and per-phase graphs, generate configurations, record and replay paths.", types: "SceneBuilder, ConstraintBuilder, GraphBuilder, SequentialConstraintGraphFactory, GraspStateTracker, ConfigGenerator, PathRecorder", deps: ["backends", "config", "logging", "utils"], doc: "usage/standalone-usage/" },
+  "backends": { zone: "motion", job: "The only place pyhpp is imported. Fails only when used, so everything pure-Python installs without HPP.", types: "BackendBase, PyHPPBackend, HAS_PYHPP", deps: ["logging", "utils", "planning", "visualization"], doc: "INSTALL/" },
+  "grasping": { zone: "support", job: "Where a parallel gripper can hold an object and how far its fingers close. A separate step from motion planning.", types: "GraspPlanner, ParallelGripperModel, FingerClosureTable", deps: ["backends", "config", "logging"] },
+  "config": { zone: "support", job: "Reads a task's robots, objects, grasp pairs and bounds from one YAML file.", types: "YamlTaskLoader, BaseTaskConfig", deps: ["utils"] },
+  "visualization": { zone: "support", job: "Constraint-graph diagrams, frames, video, and the 3D scene in its own process.", types: "SceneProcess, MissionViewer, VideoRecorder", deps: ["logging", "planning", "utils"] },
+  "logging": { zone: "support", job: "RunLogger for script-style tasks, and the standard logging setup.", types: "RunLogger, load_run_log, get_logger", deps: [] },
+  "utils": { zone: "support", job: "Transforms (SE3, xyzquat, xyzrpy) and terminal menus.", types: "BoundsManager, ConfigBuilder", deps: [] },
+  "cli": { zone: "support", job: "Shared argparse fragments and interactive pickers for task scripts.", types: "add_common_arguments", deps: ["utils"] }
+};
+const LAZY = { "backends": ["planning", "visualization"], "tasks": ["execution"] };
+(function pkgmap() {
+  const root = $("#pkgmap"), detail = $("#pkg-detail");
+  const zones = { mission: "Mission stack · symbols", motion: "Motion stack · geometry", support: "Support" };
+  const btns = {};
+  for (const z of ["mission", "seam", "motion", "support"]) {
+    if (z === "seam") {
+      root.appendChild(el("div", { class: "seam-box" }, `<b>Refiner</b>: a plan step in, a path or failure facts out. Missions wire it up in their own adapter.`));
+      continue;
+    }
+    const box = el("div", { class: "zone-box" }, `<h4>${zones[z]}</h4>`);
+    const row = el("div", { class: "pkgs" });
+    Object.keys(PKG).filter(k => PKG[k].zone === z).forEach(k => {
+      const b = el("button", { class: "pkg", "aria-pressed": "false" }, k === "task_planning" ? "tasks/task_planning" : k + "/");
+      b.addEventListener("click", () => show(k)); row.appendChild(b); btns[k] = b;
+    });
+    box.appendChild(row); root.appendChild(box);
+  }
+  function show(k) {
+    const p = PKG[k], users = Object.keys(PKG).filter(o => PKG[o].deps.includes(k));
+    for (const o in btns) {
+      const b = btns[o]; b.setAttribute("aria-pressed", String(o === k));
+      b.classList.toggle("dep", p.deps.includes(o)); b.classList.toggle("user", users.includes(o));
+      b.classList.toggle("faded", o !== k && !p.deps.includes(o) && !users.includes(o));
+    }
+    const lazy = LAZY[k] ? `<p class="note" style="margin-top:8px">Imported only inside functions: ${LAZY[k].map(x => `<code>${x}</code>`).join(", ")}.</p>` : "";
+    detail.innerHTML = `<h3><code>${k === "task_planning" ? "tasks/task_planning" : k + "/"}</code></h3><p>${p.job}</p>
+      <dl><dt>Main types</dt><dd>${p.types.split(", ").map(t => `<code>${t}</code>`).join(" ")}</dd>
+      <dt>Imports</dt><dd>${p.deps.length ? p.deps.join(", ") : "nothing else in the package"}</dd>
+      <dt>Used by</dt><dd>${users.length ? users.join(", ") : "scripts and missions"}</dd>
+      ${p.doc ? `<dt>Docs</dt><dd><a href="${p.doc}">usage page</a></dd>` : ""}</dl>${lazy}`;
+  }
+  show("task_planning");
+})();
+
+/* ---------- 3. Mission walkthrough ---------- */
+const PLAN = [
+  { id: "p1", t: "grasp(ur10_right/gripper, driver/h_grip)" },
+  { id: "p2", t: "grasp(ur10_left/gripper, part1/h_grasp)", par: true },
+  { id: "p3", t: "home(ur10_right)", par: true },
+  { id: "p4", t: "clamp_and_screw(part1, clamp1)" },
+  { id: "p5", t: "release(ur10_left/gripper, part1/h_grasp)" },
+  { id: "p6", t: "rack(driver)" }
+];
+const MSTEPS = [
+  { t: "Load the scene", on: ["hpp"], e: [],
+    b: "<p><code>build_scene.py</code> writes the cell's URDF/SRDF and a task YAML. <code>YamlTaskLoader</code> reads it and <code>SceneBuilder</code> loads the arms, jig, clamps and parts into <code>PyHPPBackend</code>. Nothing robot-specific lives in the library.</p>",
+    log: [["setup", "scene loaded: 2 arms, jig, 3 clamps, 1 part, driver"]] },
+  { t: "Instruction → goal", on: ["instr", "goalw"], e: ["instr>goalw"],
+    b: "<p>“Assemble part 1 and put the driver away.” The goal writer, a model role, proposes goal literals only. They are checked against the vocabulary and the task planner before they are used.</p><p class=\"note\">Optional: a person can write the goal directly.</p>",
+    log: [["model", "goal writer, round 1: rejected (unknown object)"], ["model", "goal writer, round 2: <span class=\"ok\">accepted</span>"]] },
+  { t: "Goal → plan", on: ["pddl", "fd"], e: ["goalw>pddl", "pddl>fd", "world>pddl"],
+    b: "<p><code>to_pddl()</code> exports the capabilities with their preconditions and effects, the current world state and the goal. Fast Downward returns a sequence of capability calls, and <code>parallelize()</code> puts independent arm motions side by side.</p>",
+    log: [["planner", "fast-downward: 6 steps"], ["plan", "parallel group: grasp part1 ‖ home right arm"]] },
+  { t: "Validate", on: ["plan"], e: ["fd>plan"],
+    b: "<p><code>TaskPlan.from_dict</code> checks every call against its capability contract, then simulates the plan from the initial state. A hand-written plan, a PDDL plan and a model-assisted plan all pass this same gate.</p>",
+    log: [["plan", "<span class=\"ok\">valid</span>, fingerprint recorded"]], tree: {} },
+  { t: "Run a step", on: ["exec", "world"], e: ["plan>exec", "exec>world"],
+    b: "<p><code>PlanExecutor</code> walks the plan with the compiled behavior tree's semantics. Before each step it asks the world state whether the step's effects already hold. If they do (a resumed run), the step is skipped.</p>",
+    log: [["status", "grasp(driver) <span class=\"run\">RUNNING</span>"], ["guard", "effect not yet true: run it"]], tree: { p1: "running" } },
+  { t: "Refine it", on: ["refiner", "hpp"], e: ["exec>refiner", "refiner>hpp"],
+    b: "<p>The capability asks <code>GraspSequencePlanner</code> for motion. Per phase: a minimal constraint graph, the edge from the grasp tracker, a target with lookahead, a solve. On failure it returns facts such as <code>ik_unreachable</code> instead of just an error.</p>",
+    log: [["progress", "phase 1/2: lookahead candidate 1"], ["progress", "phase 2/2: solved in 8.2 s"]], tree: { p1: "running" } },
+  { t: "Execute it", on: ["backend"], e: ["exec>backend"],
+    b: "<p>The path goes to the execution backend (MuJoCo here) under <code>run_command</code>: retries while busy, heartbeats, a deadline scaled to the path's duration. A drift check first compares the robot with the path's start. With plan-ahead, the next step is already planning.</p>",
+    log: [["motion", "<span class=\"run\">RUNNING</span> 6.4 s path"], ["motion", "<span class=\"ok\">SUCCESS</span>, start drift 0.3 mm"]], tree: { p1: "running" } },
+  { t: "Record it", on: ["events", "viewer", "world"], e: ["exec>events", "events>viewer", "exec>world"],
+    b: "<p>Effects no sensor can see later (a screw driven) are recorded only after the motion ran. Every status change is appended to <code>events.jsonl</code>, which the viewer, the watchdog and the logs read. A killed run restarts from this state.</p>",
+    log: [["status", "grasp(driver) <span class=\"ok\">SUCCESS</span>"]], tree: { p1: "success" } },
+  { t: "…and the rest of the plan", on: ["exec", "refiner", "backend", "events"], e: ["exec>refiner", "exec>backend", "exec>events"],
+    b: "<p>The same loop for every step. The two lanes of the parallel group are planned one after the other, then their motions run together as one merged path, checked for collisions first.</p><p class=\"note\">The same plan can instead be compiled to BehaviorTree.CPP XML and run from a C++ host. It calls the same Python session and writes the same events.</p>",
+    log: [["status", "parallel group <span class=\"ok\">SUCCESS</span> (merged motion)"], ["status", "clamp_and_screw(part1) <span class=\"ok\">SUCCESS</span>"], ["status", "mission <span class=\"ok\">SUCCESS</span>"]],
+    tree: { p1: "success", p2: "success", p3: "success", p4: "success", p5: "success", p6: "success" } }
+];
+(function mission() {
+  const fig = $("#m-fig");
+  const decor = [];
+  const seam = sv("line", { x1: 10, y1: 318, x2: 990, y2: 318, class: "seam" }); decor.push(seam);
+  const z1 = sv("text", { x: 14, y: 306, class: "zone" }); z1.textContent = "MISSION STACK · SYMBOLS"; decor.push(z1);
+  const z2 = sv("text", { x: 14, y: 338, class: "zone" }); z2.textContent = "MOTION STACK · GEOMETRY"; decor.push(z2);
+  const G = drawGraph(fig, {
+    id: "ms", w: 1000, h: 450, label: "Components that run during one mission", decor,
+    nodes: [
+      { id: "instr", label: "Instruction", sub: "operator", x: 20, y: 20 },
+      { id: "goalw", label: "Goal writer", sub: "ai role", x: 215, y: 20 },
+      { id: "pddl", label: "PDDL export", sub: "to_pddl", x: 410, y: 20 },
+      { id: "fd", label: "Fast Downward", sub: "task planner", x: 605, y: 20 },
+      { id: "plan", label: "TaskPlan", sub: "validated", x: 800, y: 20, w: 180 },
+      { id: "viewer", label: "Viewer", sub: "plan monitor", x: 20, y: 175 },
+      { id: "events", label: "events.jsonl", sub: "event stream", x: 215, y: 175 },
+      { id: "world", label: "World state", sub: "observed + recorded", x: 410, y: 175 },
+      { id: "exec", label: "PlanExecutor", sub: "run_plan", x: 800, y: 175, w: 180 },
+      { id: "refiner", label: "Refiner", sub: "GraspSequencePlanner", x: 560, y: 288, w: 190 },
+      { id: "hpp", label: "HPP", sub: "PyHPPBackend", x: 330, y: 375 },
+      { id: "backend", label: "MuJoCo backend", sub: "own process", x: 800, y: 375, w: 180 }
+    ],
+    edges: [
+      { from: "instr", to: "goalw" }, { from: "goalw", to: "pddl" }, { from: "pddl", to: "fd" }, { from: "fd", to: "plan" },
+      { from: "world", to: "pddl" }, { from: "plan", to: "exec" }, { from: "exec", to: "world" },
+      { from: "exec", to: "refiner" }, { from: "refiner", to: "hpp" }, { from: "exec", to: "backend" },
+      { from: "exec", to: "events", bend: [0, 70] }, { from: "events", to: "viewer" },
+      { from: "refiner", to: "pddl", cls: "fail", bend: [-60, 10], label: "failure facts", lx: -50 }
+    ]
+  });
+  const prog = $("#m-progress"); MSTEPS.forEach(() => prog.appendChild(el("i")));
+  let i = 0, timer = null;
+  function render() {
+    const s = MSTEPS[i], seen = new Set();
+    for (let k = 0; k < i; k++) MSTEPS[k].on.forEach(n => seen.add(n));
+    const map = { _default: "dim" }; seen.forEach(n => map[n] = "success"); s.on.forEach(n => map[n] = "running");
+    G.state(map); G.light(s.e); G.pulse(s.e);
+    $("#m-title").textContent = s.t; $("#m-count").textContent = `step ${i + 1} / ${MSTEPS.length}`;
+    $("#m-body").innerHTML = s.b;
+    prog.querySelectorAll("i").forEach((b, k) => b.className = k < i ? "done" : k === i ? "cur" : "");
+    let tree = {}; for (let k = 0; k <= i; k++) if (MSTEPS[k].tree) tree = MSTEPS[k].tree;
+    const T = $("#m-tree"); T.innerHTML = "";
+    T.appendChild(el("li", {}, `<i class="dot" data-s="${i >= 3 ? (i === MSTEPS.length - 1 ? "success" : "running") : ""}"></i><span>sequence</span>`));
+    PLAN.forEach(p => {
+      if (p.id === "p2") T.appendChild(el("li", { class: "par" }, `<i class="dot" data-s="${tree.p2 || ""}"></i><span>parallel</span>`));
+      T.appendChild(el("li", { class: p.par ? "par" : "", style: p.par ? "padding-left:28px" : "padding-left:14px" }, `<i class="dot" data-s="${tree[p.id] || ""}"></i><span>${p.t}</span>`));
+    });
+    const L = $("#m-log"); L.innerHTML = "";
+    for (let k = 0; k <= i; k++) MSTEPS[k].log.forEach(([a, b]) => L.appendChild(el("div", {}, `<span class="k">${a}</span><span class="v">${b}</span>`)));
+    L.scrollTop = L.scrollHeight;
+    $("#m-prev").disabled = i === 0; $("#m-next").disabled = i === MSTEPS.length - 1;
+  }
+  const stop = () => { clearInterval(timer); timer = null; $("#m-play").textContent = "Play"; };
+  $("#m-next").onclick = () => { stop(); if (i < MSTEPS.length - 1) { i++; render(); } };
+  $("#m-prev").onclick = () => { stop(); if (i > 0) { i--; render(); } };
+  $("#m-reset").onclick = () => { stop(); i = 0; render(); };
+  $("#m-play").onclick = () => {
+    if (timer) return stop();
+    if (i === MSTEPS.length - 1) { i = 0; render(); }
+    $("#m-play").textContent = "Pause";
+    timer = setInterval(() => { if (i < MSTEPS.length - 1) { i++; render(); } else stop(); }, 2600);
+  };
+  render();
+})();
+
+/* ---------- 4. O(N) ---------- */
+(function graph() {
+  const input = $("#n-grasps"), bars = $("#bars");
+  const fact = n => { let f = 1; for (let k = 2; k <= n; k++) f *= k; return f; };
+  const fmt = x => x.toLocaleString("en-US");
+  function render() {
+    const n = +input.value, f = fact(n), max = Math.log10(fact(12));
+    $("#n-val").textContent = n;
+    const w = v => Math.max(1.5, Math.log10(v) / max * 100) + "%";
+    bars.innerHTML = `
+      <div class="bar-row"><div class="lbl"><span>Orderings a single all-combinations graph has to cover (N!)</span><b>${fmt(f)}</b></div><div class="bar fact"><i style="width:${w(f)}"></i></div></div>
+      <div class="bar-row"><div class="lbl"><span>Small phase graphs long_tamp builds (N)</span><b>${n}</b></div><div class="bar lin"><i style="width:${w(n)}"></i></div></div>`;
+  }
+  input.addEventListener("input", render); render();
+
+  const LOOP = [
+    ["Build the phase graph", "<code>build_phase_graph</code> with <code>SequentialConstraintGraphFactory</code>: only this transition's states and edges."],
+    ["Pick the edge", "<code>GraspStateTracker</code> knows what is held and names the edge to take."],
+    ["Draw a target", "<code>ConfigGenerator.generate_via_edge</code>, guided by lookahead hints when given."],
+    ["Solve", "<code>backend.solve</code>, then optimize and time-parameterize the path."],
+    ["Record", "Save the path, log the phase, report progress. Next phase."]
+  ];
+  const ol = $("#loop"); LOOP.forEach(([a, b], k) => ol.appendChild(el("li", {}, `<b>${k + 1}</b><span><strong>${a}.</strong> ${b}</span>`)));
+  let k = 0, phase = 1, t = null;
+  const show = () => {
+    ol.querySelectorAll("li").forEach((li, j) => li.classList.toggle("on", j === k));
+    $("#phase-meta").textContent = `phase ${phase} · ${["free", "right holds driver", "left holds part1", "both hold", "part1 clamped"][(phase - 1) % 5]}`;
+  };
+  const adv = () => { k = (k + 1) % LOOP.length; if (k === 0) phase++; show(); };
+  $("#loop-step").onclick = () => { if (t) { clearInterval(t); t = null; $("#loop-play").textContent = "Play"; } adv(); };
+  $("#loop-play").onclick = () => {
+    if (t) { clearInterval(t); t = null; $("#loop-play").textContent = "Play"; return; }
+    $("#loop-play").textContent = "Pause"; t = setInterval(adv, 1100);
+  };
+  show();
+})();
+
+/* ---------- 5. Recovery ladder ---------- */
+const RUNGS = [
+  { t: "Redraw the target", w: "inside plan_sequence(): another target for the same edge" },
+  { t: "Resume the block", w: "resume_sequence(): replan the failing phase, keep earlier ones" },
+  { t: "Replan the block", w: "block_recovery: undo the block's grasps, fresh lookahead" },
+  { t: "Replan the mission", w: "repair: block the failing binding, plan around it" },
+  { t: "Decide at goal level", w: "supervisor role: retry · relax goal · abort · escalate" },
+  { t: "Hand over to a person", w: "escalation report in the run folder" }
+];
+const SCEN = [
+  { t: "A drawn target collides with the jig", handled: 0, out: "Handled at level 1: another target is drawn for the same edge. Nobody above notices; the step just took a little longer." },
+  { t: "Phase 3 can't be reached from the grasp chosen in phase 2", handled: 2, out: "Levels 1 and 2 can only redraw phase 3. Only level 3 can undo phase 2's grasp, so the block is replanned from its entry configuration with new lookahead hints." },
+  { t: "Clamp 2 can't take part 1", handled: 3, out: "The refiner reports cannot_reach for that clamp. Repair blocks the binding (clamp2, part1) and the task planner puts part 1 in a spare clamp instead. Completed steps are not redone." },
+  { t: "No clamp can take part 2", handled: 4, out: "No plan avoids the blocked bindings, so deterministic repair gives up. The supervisor proposes dropping part 2 from the goal; the checker accepts because the relaxed goal is a strict subset of the original and still reachable. The rest of the mission completes." },
+  { t: "The supervisor's limits run out", handled: 5, out: "Decisions, wall-clock or token limits are reached, or the checker rejects every option. The mission stops and writes an escalation report instead of guessing." },
+  { t: "The process is killed mid-step", handled: -1, out: "Not a ladder climb. Completion is checked against the world state, so the restarted mission runs the same plan: finished steps are skipped, the interrupted one is redone (kill_resume.py checks this)." }
+];
+(function ladder() {
+  const L = $("#ladder"), S = $("#scen"), O = $("#outcome");
+  const rungs = RUNGS.map((r, k) => {
+    const li = el("li", { class: "rung" }, `<span class="lv">${k + 1}</span><span><span class="t">${r.t}</span><br><span class="w">${r.w}</span></span><span class="res"></span>`);
+    L.appendChild(li); return li;
+  });
+  const restart = el("li", { class: "rung side-rung" }, `<span class="lv">↺</span><span><span class="t">Restart from world state</span><br><span class="w">same plan; steps whose effects hold are skipped</span></span><span class="res"></span>`);
+  L.appendChild(restart);
+  let timers = [];
+  const clear = () => { timers.forEach(clearTimeout); timers = []; [...rungs, restart].forEach(r => { r.dataset.s = ""; r.querySelector(".res").textContent = ""; }); };
+  function run(si) {
+    clear();
+    S.querySelectorAll("button").forEach((b, j) => b.setAttribute("aria-pressed", String(j === si)));
+    const sc = SCEN[si]; O.textContent = "";
+    const set = (r, s, txt) => { r.dataset.s = s; r.querySelector(".res").textContent = txt; };
+    const dt = reduced ? 0 : 650;
+    if (sc.handled < 0) {
+      rungs.forEach(r => r.dataset.s = "unused");
+      set(restart, "running", "…");
+      timers.push(setTimeout(() => { set(restart, "success", "handled"); O.textContent = sc.out; }, dt));
+      return;
+    }
+    restart.dataset.s = "unused";
+    for (let k = 0; k <= sc.handled; k++) {
+      timers.push(setTimeout(() => set(rungs[k], "running", "trying…"), dt * k * 2));
+      timers.push(setTimeout(() => {
+        if (k < sc.handled) set(rungs[k], "failure", "can't fix it");
+        else { set(rungs[k], "success", "handled"); for (let j = k + 1; j < rungs.length; j++) rungs[j].dataset.s = "unused"; O.textContent = sc.out; }
+      }, dt * (k * 2 + 1)));
+    }
+  }
+  SCEN.forEach((s, k) => { const b = el("button", { "aria-pressed": "false" }, s.t); b.onclick = () => run(k); S.appendChild(b); });
+  O.textContent = "Pick a failure above.";
+})();
+
+/* ---------- 6. Models ---------- */
+const ROLES = [
+  ["Grounder", "Which scene objects an instruction means.", "known objects"],
+  ["Goal writer", "Goal literals for the task planner.", "syntax, vocabulary, a plan reaches it"],
+  ["Plan reviewer", "Constraints and blocked bindings, never steps.", "the planner validates them"],
+  ["Execution supervisor", "Retry, relax the goal, abort or escalate.", "allowed actions; relaxed goal ⊂ original"],
+  ["Step watchdog", "Wait, skip the search, or abort a slow step.", "a hard limit it can't extend"],
+  ["Operator chat", "Tool calls: plan, run, pause, block, explain.", "each tool's own argument checks"]
+];
+const ROUNDS = [
+  { who: "Model proposes · round 1", body: "screwed(part1, h_hole1)\nscrewed(part1, part1/h_hole2)\nholds(fixtures/rack_hold, driver/h_rack)",
+    checks: [["ok", "syntax"], ["bad", "unknown object h_hole1"]] },
+  { who: "Checker sends the reasons back", body: "unknown object 'h_hole1'. Known holes: part1/h_hole1, part1/h_hole2", checks: [] },
+  { who: "Model proposes · round 2", body: "screwed(part1, part1/h_hole1)\nscrewed(part1, part1/h_hole2)\nholds(fixtures/rack_hold, driver/h_rack)",
+    checks: [["ok", "syntax"], ["ok", "known predicates, arities and objects"], ["ok", "reachable: the task planner finds a plan"]] },
+  { who: "Accepted", body: "The goal goes to the task planner like any hand-written goal. Every call (prompt, answer, tokens, latency) is in the event stream.", checks: [] }
+];
+(function models() {
+  const R = $("#roles");
+  ROLES.forEach(([a, b, c]) => R.appendChild(el("div", { class: "role" }, `<h4>${a}</h4><p>${b}</p><span class="chk"><span class="note">Checked by:</span> ${c}</span>`)));
+  const box = $("#rounds"); let n = 0;
+  function render() {
+    box.innerHTML = "";
+    ROUNDS.slice(0, n + 1).forEach(r => {
+      const d = el("div", { class: "round" }, `<span class="who">${r.who}</span><pre>${r.body}</pre>`);
+      if (r.checks.length) d.appendChild(el("div", { class: "checks" }, r.checks.map(([c, t]) => `<span class="${c}">${t}</span>`).join("")));
+      box.appendChild(d);
+    });
+    if (n === ROUNDS.length - 1) box.appendChild(el("p", { class: "note" }, "If every round is rejected, or the model can't be reached, the fallback applies: here, the mission asks for a goal. It never guesses."));
+    $("#r-next").disabled = n >= ROUNDS.length - 1;
+  }
+  $("#r-next").onclick = () => { if (n < ROUNDS.length - 1) { n++; render(); } };
+  $("#r-reset").onclick = () => { n = 0; render(); };
+  render();
+})();
+
+/* ---------- 7. Processes ---------- */
+(function processes() {
+  const P = $("#procs");
+  const DEFS = [
+    { id: "mission", t: "Mission", d: "executor, refiner, HPP" },
+    { id: "scene", t: "3D scene", d: "SceneProcess (Viser)", canvas: "arm" },
+    { id: "sim", t: "Simulator", d: "ProcessBackend → MuJoCo", canvas: "sim" },
+    { id: "view", t: "Viewer front", d: "page + events, separate_process=True" }
+  ];
+  const cards = {};
+  DEFS.forEach(d => {
+    const c = el("div", { class: "proc" }, `<h4><span>${d.t}</span><span class="st" id="st-${d.id}"></span></h4><span class="note">${d.d}</span>`);
+    if (d.id === "mission") c.appendChild(el("div", {}, `<div class="note" style="margin-bottom:4px">interpreter lock held by planning</div><div class="gil"><i id="gil"></i></div>`));
+    if (d.canvas) { const cv = el("canvas", { width: "480", height: "240", "aria-label": d.t + " animation" }); c.appendChild(cv); d.cv = cv; }
+    if (d.id === "view") c.appendChild(el("div", { class: "note", id: "view-rt" }));
+    P.appendChild(c); cards[d.id] = c;
+  });
+  let split = true, playing = !reduced, t0 = performance.now(), last = t0;
+  let armT = 0, simT = 0, frames = 0, fps = 0, fpsT = t0;
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  function drawArm(cv, a) {
+    const g = cv.getContext("2d"), W = cv.width, H = cv.height; g.clearRect(0, 0, W, H);
+    g.strokeStyle = css("--border"); g.lineWidth = 2; g.beginPath(); g.moveTo(40, H - 30); g.lineTo(W - 40, H - 30); g.stroke();
+    const bx = W / 2, by = H - 30, l1 = 85, l2 = 70, q1 = -Math.PI / 2 + 0.7 * Math.sin(a), q2 = 0.9 * Math.sin(a * 1.7 + 1);
+    const x1 = bx + l1 * Math.cos(q1), y1 = by + l1 * Math.sin(q1), x2 = x1 + l2 * Math.cos(q1 + q2), y2 = y1 + l2 * Math.sin(q1 + q2);
+    g.strokeStyle = css("--accent"); g.lineWidth = 12; g.lineCap = "round";
+    g.beginPath(); g.moveTo(bx, by); g.lineTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+    g.fillStyle = css("--fg"); [[bx, by], [x1, y1]].forEach(([x, y]) => { g.beginPath(); g.arc(x, y, 7, 0, 7); g.fill(); });
+  }
+  function drawSim(cv, s) {
+    const g = cv.getContext("2d"), W = cv.width, H = cv.height; g.clearRect(0, 0, W, H);
+    g.strokeStyle = css("--border"); g.lineWidth = 2; g.beginPath(); g.moveTo(30, H - 40); g.lineTo(W - 30, H - 40); g.stroke();
+    const x = 60 + ((s * 90) % (W - 120));
+    g.fillStyle = css("--st-success"); g.fillRect(x - 22, H - 84, 44, 44);
+    g.fillStyle = css("--muted"); g.font = "22px " + css("--font-mono");
+    g.fillText(`sim t = ${s.toFixed(1)} s`, 30, 40);
+  }
+  function tick(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    if (playing) {
+      const cyc = ((now - t0) / 1000) % 4, planning = cyc < 2.6, frozen = !split && planning;
+      $("#gil").style.width = planning ? "100%" : "0%";
+      $("#st-mission").textContent = planning ? "planning a step" : "between steps";
+      if (!frozen) { armT += dt * 1.6; simT += dt; frames++; }
+      if (now - fpsT > 500) { fps = Math.round(frames / ((now - fpsT) / 1000)); frames = 0; fpsT = now; }
+      $("#st-scene").textContent = frozen ? "frozen" : `${Math.min(fps, 60)} fps`;
+      $("#st-sim").textContent = frozen ? "stalled" : "real time";
+      $("#st-view").textContent = frozen ? "waiting" : "responsive";
+      $("#view-rt").textContent = frozen ? "Page request answered when the step finishes: seconds." : "Page request answered in milliseconds.";
+      ["scene", "sim", "view"].forEach(id => cards[id].classList.toggle("merged", !split));
+      drawArm(DEFS[1].cv, armT); drawSim(DEFS[2].cv, simT);
+    }
+    requestAnimationFrame(tick);
+  }
+  const setSplit = v => { split = v; $("#p-split").setAttribute("aria-pressed", String(v)); $("#p-one").setAttribute("aria-pressed", String(!v)); };
+  $("#p-split").onclick = () => setSplit(true);
+  $("#p-one").onclick = () => setSplit(false);
+  $("#p-play").textContent = playing ? "Pause" : "Play";
+  $("#p-play").onclick = () => { playing = !playing; $("#p-play").textContent = playing ? "Pause" : "Play"; };
+  drawArm(DEFS[1].cv, 0); drawSim(DEFS[2].cv, 0);
+  $("#st-mission").textContent = "planning a step"; $("#st-scene").textContent = "60 fps"; $("#st-sim").textContent = "real time"; $("#st-view").textContent = "responsive";
+  requestAnimationFrame(tick);
+})();
+
+/* ---------- 8. Extend ---------- */
+const EXT = [
+  ["A mission", "A YAML scene, a capability registry and a session adapter whose capabilities call the motion stack. Register a factory in <code>host.py</code> to run it from C++.",
+`# an illustrative capability, not the screw assembly's own
+registry = CapabilityRegistry()
+registry.register(
+    CapabilityDescriptor(
+        "rack", "1.0", {"arm": str, "tool": str},
+        preconditions=("holds(?arm, ?tool)",),
+        effects=("holds(fixtures/rack_hold, ?tool)",),
+    ),
+    rack_tool,  # your callable: plans the motion
+)`],
+  ["An execution backend", "Three polled methods. No threads needed, so a ROS action client, a simulator loop or a stub all fit. Wrap it in <code>ProcessBackend</code> to give it its own process.",
+`class MyBackend:  # execution.contract.ExecutionBackend
+    def start(self, command) -> ExecutionStatus: ...
+    def poll(self) -> tuple[ExecutionStatus, Feedback | None]: ...
+    def cancel(self) -> None: ...`],
+  ["A refiner", "Bind a plan step to geometry, or say why not, as facts.",
+`class MyRefiner:  # tasks.refiner.Refiner
+    def refine(self, step: RefinementStep,
+               q_init: Sequence[float]) -> Refinement: ...`],
+  ["A task planner", "Anything that returns a TaskPlan document. It passes the same validation as every other plan.",
+`class MyPlanner:  # task_planning.skeleton.TaskPlanner
+    def solve(self, export: PddlExport) -> list[Step]:
+        ...  # a skeleton reaching the goal, or raise NoPlanFound`],
+  ["A model role", "An input, a JSON output schema with a parser, a deterministic checker and a fallback, run through <code>ai.roles.refine</code>.", null],
+  ["A skill", "A <code>SkillSpec</code> on the capability: planned motion to its start pose, then a controller in the backend runs it and reports facts.", null]
+];
+(function extend() {
+  const E = $("#ext");
+  EXT.forEach(([a, b, c]) => {
+    const d = el("div", { class: "panel pad" }, `<h4>${a}</h4><p style="font-size:14px">${b}</p>`);
+    if (c) { const pre = el("pre"); pre.textContent = c; d.appendChild(pre); }
+    E.appendChild(d);
+  });
+})();
+
+/* ---------- embedding ---------- */
+// A same-origin page that embeds the tour in an iframe (the project website) can theme it
+// and point its links elsewhere: it answers the tour's "ready" message with
+// {target: "long-tamp-tour", css, theme, links: {href: {href, target}}}. The tour reports
+// its height, and asks the parent to scroll it into view when the chapter changes.
+const embedded = window.parent !== window;
+const toParent = (m) => {
+  if (!embedded) return;
+  try { window.parent.postMessage(Object.assign({ source: "long-tamp-tour" }, m), location.origin); } catch (e) {}
+};
+let linkMap = null;
+const safeHref = (h) => {
+  try { const u = new URL(h, location.href); return u.protocol === "http:" || u.protocol === "https:"; } catch (e) { return false; }
+};
+const applyLinks = () => {
+  if (!linkMap) return;
+  document.querySelectorAll("a[href]").forEach(a => {
+    const r = linkMap[a.getAttribute("href")];
+    if (!r || !safeHref(r.href)) return;
+    a.setAttribute("href", r.href);
+    a.setAttribute("target", r.target === "_blank" ? "_blank" : "_top");
+    if (r.target === "_blank") a.setAttribute("rel", "noopener");
+  });
+};
+if (embedded) {
+  const report = () => toParent({ type: "height", height: Math.ceil(document.body.getBoundingClientRect().height) });
+  new ResizeObserver(report).observe(document.body);
+  new MutationObserver(applyLinks).observe(document.body, { childList: true, subtree: true });
+  window.addEventListener("message", (e) => {
+    if (e.source !== window.parent || e.origin !== location.origin) return;
+    const d = e.data || {};
+    if (d.target !== "long-tamp-tour") return;
+    if (typeof d.css === "string") {
+      const st = document.getElementById("embed-css") || document.head.appendChild(el("style", { id: "embed-css" }));
+      st.textContent = d.css;
+    }
+    if (d.theme === "light" || d.theme === "dark") document.documentElement.setAttribute("data-theme", d.theme);
+    if (d.links && typeof d.links === "object") { linkMap = d.links; applyLinks(); }
+    report();
+  });
+  toParent({ type: "ready" });
+}
+
+/* ---------- chapters ---------- */
+const chapters = [...document.querySelectorAll(".chapter")];
+const tabs = $("#tabs");
+chapters.forEach((c, k) => {
+  const b = el("button", { class: "tab", role: "tab", "aria-selected": "false", "aria-controls": c.id }, `<span class="n">${k + 1}</span>${c.dataset.title}`);
+  b.onclick = () => go(k); tabs.appendChild(b);
+});
+let cur = 0;
+function go(k, push = true) {
+  cur = Math.max(0, Math.min(chapters.length - 1, k));
+  chapters.forEach((c, j) => c.hidden = j !== cur);
+  tabs.querySelectorAll(".tab").forEach((t, j) => t.setAttribute("aria-selected", String(j === cur)));
+  const tb = tabs.children[cur];
+  if (tb.offsetLeft < tabs.scrollLeft || tb.offsetLeft + tb.offsetWidth > tabs.scrollLeft + tabs.clientWidth) tabs.scrollLeft = tb.offsetLeft - 16;
+  $("#prev").disabled = cur === 0;
+  $("#next").disabled = cur === chapters.length - 1;
+  if (push) {
+    try { history.replaceState(null, "", "#" + chapters[cur].id); } catch (e) {}
+    window.scrollTo({ top: 0 });
+    toParent({ type: "chapter" });
+  }
+}
+$("#prev").onclick = () => go(cur - 1);
+$("#next").onclick = () => go(cur + 1);
+document.addEventListener("keydown", e => {
+  if (e.target.closest("input, textarea")) return;
+  if (e.key === "ArrowRight") go(cur + 1);
+  if (e.key === "ArrowLeft") go(cur - 1);
+});
+const start = chapters.findIndex(c => "#" + c.id === location.hash);
+go(start < 0 ? 0 : start, false);
+window.scrollTo(0, 0);
+})();
+</script>
+</body>
+</html>

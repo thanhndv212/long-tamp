@@ -24,8 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     for the viewer. `HostSession.get_plan_document()` gives a C++ host the plan, and
     `create_screw_session` takes `"plan": "full"`.
 
+- `docs/architecture-tour.html`: an interactive architecture tour (self-contained, works
+  offline) with a step-through mission walkthrough, the package import map, the recovery
+  ladder and the process layout.
+
 ### Changed
 
+- The architecture page moved from `ARCHITECTURE.md` to `docs/architecture.md` and was
+  rewritten for 0.2.0–0.8.0. It now follows one mission through the code (four questions,
+  two stacks meeting at the refiner, the recovery ladder, model roles, processes) and ends
+  with a module map, instead of listing modules. The README's copied diagrams follow it.
 - `examples/behaviortree`: the headers are now under `include/long_tamp_bt/`, in the
   `long_tamp_bt` namespace. `PythonSession` is now `PythonTaskSession` (a `TaskSession`),
   and the host reads the session from the blackboard instead of binding it to the nodes.

@@ -7,7 +7,7 @@ directly — no ROS 2. For the ROS-free BehaviorTree.CPP integration, see
 This doc describes the **current** API (branch `main`, commit `e1844c9`). The package was
 heavily refactored in 2026-08; if you find older examples elsewhere in the repo that
 contradict this doc, trust this doc and the root [`README.md`](https://github.com/thanhndv212/long-tamp/blob/main/README.md) /
-[`ARCHITECTURE.md`](https://github.com/thanhndv212/long-tamp/blob/main/ARCHITECTURE.md).
+[`architecture.md`](../architecture.md).
 
 > **Stale references to ignore.** `src/long_tamp/__init__.py`'s docstring mentions
 > `TaskOrchestrator`, `TaskBuilder`, `PlanningBridge` — these classes don't exist. Use *this*

@@ -57,68 +57,63 @@ utilities are not interactive task runners.
 
 ## Package structure & architecture
 
-`tasks/` orchestrates `planning/`, which is backend-agnostic and depends only on `backends/`
-(the one place HPP-specific bindings are imported); `config/`, `logging/`, `visualization/`,
-`utils/`, and `cli/` are horizontal support layers used from `tasks/` and `script/`.
+A mission answers four questions — what should be true, which steps get there, how exactly
+in geometry, and do it and watch it — and each is answered by a different part of the code.
+Failures loop back as facts the task planner plans around; everything that happens goes to an
+event stream the viewer reads.
+
+```mermaid
+flowchart LR
+    goal["Goal<br/>what should be true"] --> plan["TaskPlan<br/>which steps"]
+    plan --> refine["Refiner<br/>how, in geometry"]
+    refine --> exec["Executor + backend<br/>do it"]
+    refine -- "failure facts" --> plan
+    exec -. "events.jsonl" .-> watch["viewer · watchdog · logs"]
+    plan -- "no plan left" --> sup["supervisor<br/>retry · relax · abort · escalate"]
+    sup --> goal
+```
+
+The code splits along the line between symbols (the mission stack: `tasks/task_planning/`,
+`execution/`, `sim/`, `ai/`, `viewer/`) and geometry (the motion stack: `tasks/` →
+`planning/` → `backends/`, the one place HPP is imported). They meet at the refiner.
 
 ```mermaid
 flowchart TB
-    script["script/<br/>end-user task scripts<br/>(one per robot/mission)"]
-    tasks["tasks/<br/>ManipulationTask, GraspSequencePlanner,<br/>InteractiveGraspSequenceBuilder"]
-    planning["planning/<br/>SceneBuilder, ConstraintBuilder, GraphBuilder,<br/>ConfigGenerator, GraspStateTracker,<br/>SequentialConstraintGraphFactory,<br/>SequentialGraspFilter, path_io,<br/>path_recorder, path_replay"]
-    backends["backends/<br/>BackendBase (ABC) → PyHPPBackend<br/>only layer importing pyhpp.*"]
+    subgraph mission["Mission stack: symbols"]
+        direction TB
+        tp["task_planning/<br/>goals, plans, checks, events"]
+        execution["execution/<br/>run plans on a backend"]
+        ai["ai/<br/>model gateway, roles"]
+        sim["sim/<br/>MuJoCo backend"]
+        viewer["viewer/<br/>web mission viewer"]
+    end
+    refiner{{"Refiner<br/>plan step → path, or failure facts"}}
+    subgraph motion["Motion stack: geometry"]
+        direction TB
+        tasks["tasks/<br/>GraspSequencePlanner, recovery"]
+        planning["planning/<br/>scenes, constraints, graphs"]
+        backends["backends/<br/>PyHPPBackend"]
+    end
+    execution --> tp
+    tp -.-> ai
+    sim --> execution
+    viewer -. events .-> tp
+    tp --> refiner
+    refiner --> tasks
+    tasks --> planning --> backends
 
-    config["config/<br/>BaseTaskConfig, YamlTaskLoader"]
-    logging_["logging/<br/>RunLogger, JSONL event schema"]
-    viz["visualization/<br/>graph diagrams, frame display, video"]
-    utils["utils/<br/>transforms, interactive menus"]
-    cli["cli/<br/>argparse helpers, interactive pickers"]
-
-    script --> tasks
-    tasks --> planning
-    planning --> backends
-
-    tasks -.uses.-> config
-    tasks -.uses.-> logging_
-    tasks -.uses.-> viz
-    script -.uses.-> cli
-    cli -.uses.-> utils
-    config -.uses.-> utils
-
+    style refiner fill:#2f6fed,stroke:#1d2330,color:#fff
     style backends fill:#4c566a,stroke:#2e3440,color:#fff
     style planning fill:#5e81ac,stroke:#2e3440,color:#fff
     style tasks fill:#81a1c1,stroke:#2e3440,color:#fff
-    style script fill:#88c0d0,stroke:#2e3440,color:#000
 ```
 
-Per-phase planning data flow, the loop every mission ultimately runs through:
-
-```mermaid
-flowchart TD
-    yaml["YAML config"] -->|YamlTaskLoader| loaded["file_paths, joint_bounds_class, task_config"]
-    loaded --> setup["ManipulationTask.setup"]
-
-    setup --> scene["SceneBuilder<br/>load robots, env, objects"]
-    setup --> constraints["ConstraintBuilder /<br/>FactoryConstraintRegistry"]
-    setup --> gbuild["GraphBuilder<br/>factory or manual"]
-
-    scene --> plan["GraspSequencePlanner.plan_sequence"]
-    constraints --> plan
-    gbuild --> plan
-
-    plan --> p1["1. build_phase_graph<br/>GraphBuilder plus SequentialConstraintGraphFactory"]
-    p1 --> p2["2. GraspStateTracker picks the edge name"]
-    p2 --> p3["3. ConfigGenerator.generate_via_edge builds target config"]
-    p3 --> p4["4. backend.solve builds the path, then optimize and time-parameterize"]
-    p4 --> p5["5. RunLogger.log phase_end, optional auto-save of path"]
-    p5 -->|next phase| p1
-    p5 --> result["concatenated multi-phase path, O of N planning cost"]
-```
-
-Both diagrams are copied from **[`ARCHITECTURE.md`](https://github.com/thanhndv212/long-tamp/blob/main/ARCHITECTURE.md)**, which is the
-maintained source — it's dated at the top and covers dependency direction and what each
-class does in more depth than fits here. If the two ever disagree, trust `ARCHITECTURE.md`
-and update this copy to match.
+Both diagrams are copied from **[`docs/architecture.md`](docs/architecture.md)**, which is the
+maintained source — it's dated at the top and follows one mission through the code, covers
+failure recovery, models, processes and dependency rules, and maps every module. An
+[interactive tour](docs/architecture-tour.html) (open it in a browser) tells the same
+story with diagrams you can step through. If the two ever disagree, trust
+`docs/architecture.md` and update this copy to match.
 
 ## Task Planning (BehaviorTree.CPP)
 
@@ -171,7 +166,7 @@ Python `logging` hierarchy — see [`docs/usage/standalone-usage.md`](docs/usage
 ## Documentation
 
 - **Installation**: [`docs/INSTALL.md`](docs/INSTALL.md) — pip (primary), robotpkg/source-build fallback, CMake install path, optional extras, backend detection.
-- **Architecture**: [`ARCHITECTURE.md`](https://github.com/thanhndv212/long-tamp/blob/main/ARCHITECTURE.md) — module layering, dependency direction, data flow. Dated at the top; check it before trusting a claim about what exists.
+- **Architecture**: [`docs/architecture.md`](docs/architecture.md) — module layering, dependency rules, mission and planning data flow. Dated at the top; check it before trusting a claim about what exists.
 - **Usage guide (living reference)**: [`docs/usage/standalone-usage.md`](docs/usage/standalone-usage.md) — writing a task, multi-phase sequences, resume/replay/checkpoints, backends, example scripts.
 - **Development report**: [`docs/legacy/report/development-report.md`](docs/legacy/report/development-report.md) — *why* the framework is built this way: architecture decisions vs. bare HPP, measured before/after numbers, project timeline, and a bugs-found appendix. A point-in-time report, not a living reference.
 - **Design rationale for specific mechanisms**: [`docs/features/`](docs/features/); **upstream HPP defects worked around here**: [`docs/bugs/`](docs/bugs/).
