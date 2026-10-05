@@ -7,8 +7,8 @@ original UR5 + rigid-tool0 setup — simultaneously grasp a ball at two
 handles, then lift it together. The long_tamp port of TWIN/PerAct2's
 "lift ball" bimanual benchmark task (see
 research-vault/long-tamp/long-tamp-next-ideas.md idea 2 and
-research-vault/papers/twin-benchmark.md). See script/twin/README.md for
-the one-time dev-environment setup (hpp_practicals package resolution).
+research-vault/papers/twin-benchmark.md). All assets are vendored under
+script/twin/assets/ — see script/twin/README.md.
 
 Run:
     python script/twin/task_lift_ball.py --backend pyhpp
