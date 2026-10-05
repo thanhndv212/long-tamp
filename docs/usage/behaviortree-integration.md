@@ -303,8 +303,11 @@ cross-thread GIL/HPP-state violation; there is no thread pool in the current des
 
 ### BehaviorTree.CPP
 
-Use a released BehaviorTree.CPP, 4.10 or newer. The prebuilt release is the ROS 2 package,
-built from the official releases by the ROS build farm (4.10.0 on Humble and Jazzy). It
+Use a released BehaviorTree.CPP, 4.7 or newer: the nodes build and pass their tests against
+4.7.0, 4.8.0, 4.9.0 and 4.10.0, and use APIs that 4.6 and older don't have
+(`NodeConfig::other_attributes`, `Blackboard::rootBlackboard()`). The prebuilt release is the
+ROS 2 package, built from the official releases by the ROS build farm (4.10.0 on Humble and
+Jazzy). It
 needs the ROS 2 apt repository, not a ROS installation:
 
 ```bash
@@ -314,13 +317,13 @@ sudo apt install ros-$ROS_DISTRO-behaviortree-cpp   # installs under /opt/ros/$R
 Then point CMake at it (`-DCMAKE_PREFIX_PATH=/opt/ros/$ROS_DISTRO`, or source
 `/opt/ros/$ROS_DISTRO/setup.bash`), and put `/opt/ros/$ROS_DISTRO/lib` on
 `LD_LIBRARY_PATH` when running the host. BehaviorTree.CPP's GitHub releases carry source
-only, and it isn't on conda-forge; RoboStack's `ros-humble-behaviortree-cpp` is 4.9.0,
-below the minimum.
+only, and it isn't on conda-forge. In a conda environment, RoboStack's
+`ros-humble-behaviortree-cpp` (4.9.0) works too.
 
 `examples/behaviortree/CMakeLists.txt` picks BehaviorTree.CPP in this order:
 
 1. `-DBEHAVIORTREE_CPP_SOURCE_DIR=<path>`, if given: builds that checkout;
-2. an installed release ≥ 4.10 (`find_package(behaviortree_cpp)`);
+2. an installed release ≥ 4.7 (`find_package(behaviortree_cpp)`);
 3. otherwise, with `LONG_TAMP_FETCH_BEHAVIORTREE_CPP=ON` (the default), fetches and builds
    it from source at a pinned commit (4.10.0 + 1), with its examples, tools, Groot and SQLite
    logging off. This is for machines with no binary package, such as macOS. Set the option
