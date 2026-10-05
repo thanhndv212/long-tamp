@@ -8,20 +8,21 @@
 
 namespace long_tamp_bt
 {
+// The subscribing constructor exists in every 4.x release. Subscribing doesn't tick
+// the tree, so no callback runs before the file below is open.
 JsonlEventLogger::JsonlEventLogger(BT::TreeNode* root_node, const std::string& path)
-  : file_(path, std::ios::app)
+  : BT::StatusChangeLogger(root_node), file_(path, std::ios::app)
 {
   if(!file_)
   {
     throw std::runtime_error("cannot open event log: " + path);
   }
   setTimestampType(BT::TimestampType::absolute);
-  subscribeToTreeChanges(root_node);
 }
 
 JsonlEventLogger::~JsonlEventLogger()
 {
-  unsubscribeFromTreeChanges();
+  unsubscribe(*this, 0);
   flush();
 }
 

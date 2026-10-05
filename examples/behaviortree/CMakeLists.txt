@@ -15,7 +15,8 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 
 # BehaviorTree.CPP, in order of preference:
 #   1. BEHAVIORTREE_CPP_SOURCE_DIR, if given: build that checkout;
-#   2. an installed release (>= 4.10), e.g. the ROS 2 package
+#   2. an installed release (>= 4.7, the oldest these nodes build and pass their
+#      tests against), e.g. the ROS 2 package
 #      `sudo apt install ros-$ROS_DISTRO-behaviortree-cpp` (Humble and Jazzy ship
 #      4.10.0), found through CMAKE_PREFIX_PATH or a sourced ROS environment;
 #   3. otherwise, with LONG_TAMP_FETCH_BEHAVIORTREE_CPP (default ON), fetch and
@@ -25,7 +26,7 @@ option(LONG_TAMP_FETCH_BEHAVIORTREE_CPP
        "Build BehaviorTree.CPP from source when no installed release is found" ON)
 
 if(NOT DEFINED BEHAVIORTREE_CPP_SOURCE_DIR)
-  find_package(behaviortree_cpp 4.10 CONFIG QUIET)
+  find_package(behaviortree_cpp 4.7 CONFIG QUIET)
 endif()
 
 if(behaviortree_cpp_FOUND)
@@ -33,7 +34,7 @@ if(behaviortree_cpp_FOUND)
 else()
   if(NOT DEFINED BEHAVIORTREE_CPP_SOURCE_DIR AND NOT LONG_TAMP_FETCH_BEHAVIORTREE_CPP)
     message(FATAL_ERROR
-      "No installed BehaviorTree.CPP >= 4.10 found. Install one (e.g. "
+      "No installed BehaviorTree.CPP >= 4.7 found. Install one (e.g. "
       "ros-$ROS_DISTRO-behaviortree-cpp) and add its prefix to CMAKE_PREFIX_PATH, "
       "or set LONG_TAMP_FETCH_BEHAVIORTREE_CPP=ON to build it from source.")
   endif()
