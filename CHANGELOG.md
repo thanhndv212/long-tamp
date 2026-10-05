@@ -36,10 +36,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `examples/behaviortree` uses an installed BehaviorTree.CPP release (>= 4.10, e.g.
+- `examples/behaviortree` uses an installed BehaviorTree.CPP release (>= 4.7, e.g.
   `ros-$ROS_DISTRO-behaviortree-cpp`) when one is found, instead of always building it from
   source. Building from source at the pinned commit remains as a fallback for machines
-  with no binary package (`LONG_TAMP_FETCH_BEHAVIORTREE_CPP`, default `ON`).
+  with no binary package (`LONG_TAMP_FETCH_BEHAVIORTREE_CPP`, default `ON`). The BT nodes build
+  and pass their tests against 4.7.0 to 4.10.0; the event logger no longer needs the
+  subscription API added in 4.10.
 - The architecture page moved from `ARCHITECTURE.md` to `docs/architecture.md` and was
   rewritten for 0.2.0–0.8.0. It now follows one mission through the code (four questions,
   two stacks meeting at the refiner, the recovery ladder, model roles, processes) and ends
