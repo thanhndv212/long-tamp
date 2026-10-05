@@ -28,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   offline) with a step-through mission walkthrough, the package import map, the recovery
   ladder and the process layout.
 
+- `examples/behaviortree` configures on its own (`cmake -S examples/behaviortree`): the BT
+  nodes, plugin and host build with a C++ compiler, CMake and Python, without the top-level
+  project's HPP C++ dependencies. CI builds it this way and runs its HPP-free CTests (fake
+  session, fault paths, plugin loading, event-stream parity), which no CI job ran before.
+
 ### Changed
 
 - The architecture page moved from `ARCHITECTURE.md` to `docs/architecture.md` and was
