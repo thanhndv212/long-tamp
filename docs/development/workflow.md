@@ -88,7 +88,7 @@ In the **same PR** as the code:
 - `docs/usage/` is the living reference. Update it when the public API changes.
 - New pages go into `mkdocs.yml`'s `nav`. CI builds the site with `--strict`, so a
   broken link or a missing nav entry fails the PR.
-- Architecture-level changes update `ARCHITECTURE.md` and, if a decision changed, the
+- Architecture-level changes update `docs/architecture.md` and, if a decision changed, the
   relevant ADR (supersede it; don't rewrite history).
 
 ## 6. Pull request → merge

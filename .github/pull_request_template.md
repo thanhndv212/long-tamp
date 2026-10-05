@@ -26,7 +26,7 @@ Closes #
 ## Docs and changelog
 
 - [ ] `CHANGELOG.md` `[Unreleased]` entry, or `skip-changelog` label (reason: …)
-- [ ] Docs updated (`docs/usage/`, `ARCHITECTURE.md`, `mkdocs.yml` nav) or not needed
+- [ ] Docs updated (`docs/usage/`, `docs/architecture.md`, `mkdocs.yml` nav) or not needed
 - [ ] ADR added/updated, or no design decision changed
 
 ## Found along the way / limits

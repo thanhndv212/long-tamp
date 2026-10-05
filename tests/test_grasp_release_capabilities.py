@@ -2,7 +2,7 @@
 
 These are the standalone, capability-shaped primitives extracted from the
 per-phase logic ``plan_sequence()`` drives internally via ``_run_phase_loop``
--- see ARCHITECTURE.md's task-orchestration section. Unlike a
+-- see docs/architecture.md's "Inside a step" section. Unlike a
 ``plan_sequence()`` phase, neither method makes an orchestration decision
 (no auto-release insertion, no multi-phase bookkeeping): each is precondition-
 checked and fails loudly rather than silently fixing up state, so an external

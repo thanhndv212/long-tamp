@@ -233,7 +233,7 @@ First release: `0.1.0` (2026-09-27, see `docs/plans/release-0.1.0.md`). When cut
 1. **Version**: `pyproject.toml`'s `[project] version` follows semver. `0.x` while the API
    is still moving (per the `Development Status :: 3 - Alpha` classifier already in
    `pyproject.toml`); bump to `1.0.0` once the public API (documented in
-   `docs/usage/standalone-usage.md` and `ARCHITECTURE.md`) is considered stable.
+   `docs/usage/standalone-usage.md` and `docs/architecture.md`) is considered stable.
 2. **What ships**: the Python package; example scripts/assets stay in the checkout.
    `pip install "long-tamp[hpp]"` adds the native HPP wheels on supported Linux systems.
    The base install still imports without HPP. Keep source-built environments separate.
@@ -274,7 +274,7 @@ First release: `0.1.0` (2026-09-27, see `docs/plans/release-0.1.0.md`). When cut
   nav entry updated in the same commit. Enforced: the CI `docs` job runs
   `mkdocs build --strict` with `validation.omitted_files: warn`, so a page missing from
   `nav` or a broken link fails the PR. Links from docs to repo-root files (README,
-  ARCHITECTURE, src/) use absolute GitHub URLs, since mkdocs only sees `docs/`.
+  src/) use absolute GitHub URLs, since mkdocs only sees `docs/`.
 
 ## Common Rationalizations
 
@@ -306,7 +306,7 @@ Before landing a change:
       tied to the real mission, checkpoint/fixture data) — see
       `research-vault/agimus-spacelab/agimus-spacelab-opensource-release.md` for what that
       content looks like if unsure
-- [ ] Docs (`docs/usage/`, `ARCHITECTURE.md`, `README.md`, `mkdocs.yml` nav) updated if the
+- [ ] Docs (`docs/usage/`, `docs/architecture.md`, `README.md`, `mkdocs.yml` nav) updated if the
       change is user-visible
 - [ ] Landed through a PR that met the merge conditions in "Pull requests: open → review
       → merge" (CI green on the current head, no conflict, every review thread answered)
