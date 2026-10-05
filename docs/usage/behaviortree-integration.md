@@ -301,6 +301,49 @@ cross-thread GIL/HPP-state violation; there is no thread pool in the current des
 
 ## 6. Building
 
+### BehaviorTree.CPP
+
+Use a released BehaviorTree.CPP, 4.10 or newer. The prebuilt release is the ROS 2 package,
+built from the official releases by the ROS build farm (4.10.0 on Humble and Jazzy). It
+needs the ROS 2 apt repository, not a ROS installation:
+
+```bash
+sudo apt install ros-$ROS_DISTRO-behaviortree-cpp   # installs under /opt/ros/$ROS_DISTRO
+```
+
+Then point CMake at it (`-DCMAKE_PREFIX_PATH=/opt/ros/$ROS_DISTRO`, or source
+`/opt/ros/$ROS_DISTRO/setup.bash`), and put `/opt/ros/$ROS_DISTRO/lib` on
+`LD_LIBRARY_PATH` when running the host. BehaviorTree.CPP's GitHub releases carry source
+only, and it isn't on conda-forge; RoboStack's `ros-humble-behaviortree-cpp` is 4.9.0,
+below the minimum.
+
+`examples/behaviortree/CMakeLists.txt` picks BehaviorTree.CPP in this order:
+
+1. `-DBEHAVIORTREE_CPP_SOURCE_DIR=<path>`, if given: builds that checkout;
+2. an installed release ≥ 4.10 (`find_package(behaviortree_cpp)`);
+3. otherwise, with `LONG_TAMP_FETCH_BEHAVIORTREE_CPP=ON` (the default), fetches and builds
+   it from source at a pinned commit (4.10.0 + 1), with its examples, tools, Groot and SQLite
+   logging off. This is for machines with no binary package, such as macOS. Set the option
+   `OFF` to require an installed release; CI does.
+
+### The examples
+
+None of the BT targets link HPP or pinocchio, so `examples/behaviortree` configures on its
+own, without the top-level project's HPP C++ dependencies or its submodule. You need a C++17
+compiler, CMake ≥ 3.22, BehaviorTree.CPP as above, and a Python with `long_tamp` installed
+(`pip install -e .`). CI builds it this way (`behaviortree` job in `lint.yml`):
+
+```bash
+cmake -S examples/behaviortree -B build-bt -DBUILD_TESTING=ON \
+  -DCMAKE_PREFIX_PATH=/opt/ros/$ROS_DISTRO \
+  -DPython3_EXECUTABLE="$(which python)"
+cmake --build build-bt --parallel
+ctest --test-dir build-bt -R taskplan_bt --output-on-failure
+```
+
+They also build as part of the top-level project, which `BUILD_BEHAVIORTREE_EXAMPLES`
+(default `OFF`) enables, so it never affects a normal library build:
+
 ```bash
 git submodule update --init cmake   # jrl-cmakemodules -- see below
 cmake -S . -B build-bt \
@@ -309,29 +352,10 @@ cmake -S . -B build-bt \
 cmake --build build-bt --parallel --target agimus_taskplan_bt long_tamp_bt_nodes_plugin
 ```
 
-The top-level `CMakeLists.txt` requires `jrl-cmakemodules` to configure *any* C++ build of
-this repo, including just this standalone example — `cmake/` vendors it as a git submodule
-(pinned to v2.1.0, the same version the sibling `agimus_spacelab` repo vendors). A checkout
-that skips `git submodule update --init` fails at the very first `cmake -S` with
+The top-level `CMakeLists.txt` requires `jrl-cmakemodules` (vendored as the `cmake/`
+submodule, pinned to v2.1.0) and the HPP C++ packages (`pinocchio`, `hpp-pinocchio`). A
+checkout that skips `git submodule update --init` fails at the first `cmake -S` with
 `Could not find a package configuration file provided by "jrl-cmakemodules"`.
-
-None of the BT targets link HPP or pinocchio, so `examples/behaviortree` can also be
-configured on its own, without the top-level project's HPP C++ dependencies or the
-submodule. You need a C++17 compiler, CMake ≥ 3.22, and a Python with `long_tamp` installed
-(`pip install -e .`); CI builds it this way (`behaviortree` job in `lint.yml`):
-
-```bash
-cmake -S examples/behaviortree -B build-bt -DBUILD_TESTING=ON \
-  -DPython3_EXECUTABLE="$(which python)"
-cmake --build build-bt --parallel
-ctest --test-dir build-bt -R taskplan_bt --output-on-failure
-```
-
-`BUILD_BEHAVIORTREE_EXAMPLES` (default `OFF`) gates `add_subdirectory(examples/behaviortree)`
-in the top-level `CMakeLists.txt`, so it never affects a normal library build.
-`examples/behaviortree/CMakeLists.txt` fetches BehaviorTree.CPP via `FetchContent` pinned to a
-known commit unless `BEHAVIORTREE_CPP_SOURCE_DIR` is already defined (vendored/cached
-checkout), and always builds it with its own examples/tools/Groot/SQLite logging disabled.
 
 Inside the dev container (`dockers/hpp-arm64/`), source both `config.sh` (`PATH`,
 `PYTHONPATH`, `LD_LIBRARY_PATH`) and the `hpp` conda env before configuring — the container's
