@@ -56,12 +56,26 @@ jobs:
     # The C++ side of the BehaviorTree.CPP path: the node library, the plugin, the
     # host, and the CTests that need no HPP scene (fake session, fault paths, plugin
     # loading, event-stream parity with the Python runner). examples/behaviortree is
-    # configured on its own, so no HPP C++ packages are needed; BehaviorTree.CPP is
-    # built from source at the commit pinned there.
+    # configured on its own (no HPP C++ packages), against the released
+    # BehaviorTree.CPP from the ROS 2 apt repository (ubuntu-latest is 24.04, so
+    # Jazzy). Building it from source is turned off, so a missing package fails here.
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
+    env:
+      ROS_DISTRO: jazzy
     steps:
       - uses: actions/checkout@v7
+      - name: Install BehaviorTree.CPP (ROS 2 apt package)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh api repos/ros-infrastructure/ros-apt-source/releases/latest -q .tag_name)
+          codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+          curl -fsSL -o /tmp/ros2-apt-source.deb \
+            "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${tag}/ros2-apt-source_${tag}.${codename}_all.deb"
+          sudo dpkg -i /tmp/ros2-apt-source.deb
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends "ros-${ROS_DISTRO}-behaviortree-cpp"
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -71,9 +85,14 @@ jobs:
       - name: Configure
         run: >-
           cmake -S examples/behaviortree -B build-bt -DBUILD_TESTING=ON
+          -DLONG_TAMP_FETCH_BEHAVIORTREE_CPP=OFF
+          -DCMAKE_PREFIX_PATH="/opt/ros/${ROS_DISTRO}"
           -DPython3_EXECUTABLE="$(which python)"
       - run: cmake --build build-bt --parallel
-      - run: ctest --test-dir build-bt -R taskplan_bt --output-on-failure --timeout 300
+      - name: Test
+        run: |
+          export LD_LIBRARY_PATH="/opt/ros/${ROS_DISTRO}/lib:${LD_LIBRARY_PATH}"
+          ctest --test-dir build-bt -R taskplan_bt --output-on-failure --timeout 300
 
   docs:
     runs-on: ubuntu-latest

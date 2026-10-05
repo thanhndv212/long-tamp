@@ -11,32 +11,56 @@ else()
   set(LONG_TAMP_SOURCE_DIR "${PROJECT_SOURCE_DIR}")
 endif()
 
-include(FetchContent)
-
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 
-set(BTCPP_EXAMPLES OFF)
-set(BTCPP_BUILD_TOOLS OFF)
-set(BTCPP_GROOT_INTERFACE OFF)
-set(BTCPP_SQLITE_LOGGING OFF)
-set(_agimus_build_testing "${BUILD_TESTING}")
-set(BUILD_TESTING OFF)
+# BehaviorTree.CPP, in order of preference:
+#   1. BEHAVIORTREE_CPP_SOURCE_DIR, if given: build that checkout;
+#   2. an installed release (>= 4.10), e.g. the ROS 2 package
+#      `sudo apt install ros-$ROS_DISTRO-behaviortree-cpp` (Humble and Jazzy ship
+#      4.10.0), found through CMAKE_PREFIX_PATH or a sourced ROS environment;
+#   3. otherwise, with LONG_TAMP_FETCH_BEHAVIORTREE_CPP (default ON), fetch and
+#      build it from source at a pinned commit (4.10.0 + 1), for machines with no
+#      binary package (macOS). Turn the option off to require an installed one.
+option(LONG_TAMP_FETCH_BEHAVIORTREE_CPP
+       "Build BehaviorTree.CPP from source when no installed release is found" ON)
 
-if(DEFINED BEHAVIORTREE_CPP_SOURCE_DIR)
-  add_subdirectory(
-    "${BEHAVIORTREE_CPP_SOURCE_DIR}"
-    "${CMAKE_CURRENT_BINARY_DIR}/behaviortree_cpp"
-    EXCLUDE_FROM_ALL)
-else()
-  FetchContent_Declare(
-    behaviortree_cpp_source
-    GIT_REPOSITORY https://github.com/BehaviorTree/BehaviorTree.CPP.git
-    GIT_TAG c88a9f429a421b312599a07fa8902524b09bf90a
-    GIT_SHALLOW FALSE)
-  FetchContent_MakeAvailable(behaviortree_cpp_source)
+if(NOT DEFINED BEHAVIORTREE_CPP_SOURCE_DIR)
+  find_package(behaviortree_cpp 4.10 CONFIG QUIET)
 endif()
 
-set(BUILD_TESTING "${_agimus_build_testing}")
+if(behaviortree_cpp_FOUND)
+  message(STATUS "BehaviorTree.CPP ${behaviortree_cpp_VERSION} (installed): ${behaviortree_cpp_DIR}")
+else()
+  if(NOT DEFINED BEHAVIORTREE_CPP_SOURCE_DIR AND NOT LONG_TAMP_FETCH_BEHAVIORTREE_CPP)
+    message(FATAL_ERROR
+      "No installed BehaviorTree.CPP >= 4.10 found. Install one (e.g. "
+      "ros-$ROS_DISTRO-behaviortree-cpp) and add its prefix to CMAKE_PREFIX_PATH, "
+      "or set LONG_TAMP_FETCH_BEHAVIORTREE_CPP=ON to build it from source.")
+  endif()
+  set(BTCPP_EXAMPLES OFF)
+  set(BTCPP_BUILD_TOOLS OFF)
+  set(BTCPP_GROOT_INTERFACE OFF)
+  set(BTCPP_SQLITE_LOGGING OFF)
+  set(_agimus_build_testing "${BUILD_TESTING}")
+  set(BUILD_TESTING OFF)
+  if(DEFINED BEHAVIORTREE_CPP_SOURCE_DIR)
+    message(STATUS "BehaviorTree.CPP: building ${BEHAVIORTREE_CPP_SOURCE_DIR}")
+    add_subdirectory(
+      "${BEHAVIORTREE_CPP_SOURCE_DIR}"
+      "${CMAKE_CURRENT_BINARY_DIR}/behaviortree_cpp"
+      EXCLUDE_FROM_ALL)
+  else()
+    message(STATUS "BehaviorTree.CPP: no installed release found, building from source")
+    include(FetchContent)
+    FetchContent_Declare(
+      behaviortree_cpp_source
+      GIT_REPOSITORY https://github.com/BehaviorTree/BehaviorTree.CPP.git
+      GIT_TAG c88a9f429a421b312599a07fa8902524b09bf90a
+      GIT_SHALLOW FALSE)
+    FetchContent_MakeAvailable(behaviortree_cpp_source)
+  endif()
+  set(BUILD_TESTING "${_agimus_build_testing}")
+endif()
 
 # The task-planning BT nodes (#25): a library to link (RegisterNodes), the
 # same nodes as a BehaviorTree.CPP plugin (factory.registerFromPlugin, Nav2's
