@@ -16,7 +16,7 @@ integration does not exist yet — model output would be untrusted proposal data
 executed as generated code.
 
 For current status, what's been verified against a real mission, and what's still
-open, see [§11](#11-known-gaps-and-roadmap) — this page otherwise only covers how to
+open, see [§11](#11-status-known-gaps-and-roadmap) — this page otherwise only covers how to
 build, run, and extend the pipeline itself. (Earlier revisions of this page linked to
 `../report/behaviortree-screwdriving-report.md` and
 `../plans/behaviortree-screwdriving-taskplan.md`; those were SpaceLab-mission-specific
@@ -301,6 +301,52 @@ cross-thread GIL/HPP-state violation; there is no thread pool in the current des
 
 ## 6. Building
 
+### BehaviorTree.CPP
+
+Use a released BehaviorTree.CPP, 4.7 or newer: the nodes build and pass their tests against
+4.7.0, 4.8.0, 4.9.0 and 4.10.0, and use APIs that 4.6 and older don't have
+(`NodeConfig::other_attributes`, `Blackboard::rootBlackboard()`). The prebuilt release is the
+ROS 2 package, built from the official releases by the ROS build farm (4.10.0 on Humble and
+Jazzy). It
+needs the ROS 2 apt repository, not a ROS installation:
+
+```bash
+sudo apt install ros-$ROS_DISTRO-behaviortree-cpp   # installs under /opt/ros/$ROS_DISTRO
+```
+
+Then point CMake at it (`-DCMAKE_PREFIX_PATH=/opt/ros/$ROS_DISTRO`, or source
+`/opt/ros/$ROS_DISTRO/setup.bash`), and put `/opt/ros/$ROS_DISTRO/lib` on
+`LD_LIBRARY_PATH` when running the host. BehaviorTree.CPP's GitHub releases carry source
+only, and it isn't on conda-forge. In a conda environment, RoboStack's
+`ros-humble-behaviortree-cpp` (4.9.0) works too.
+
+`examples/behaviortree/CMakeLists.txt` picks BehaviorTree.CPP in this order:
+
+1. `-DBEHAVIORTREE_CPP_SOURCE_DIR=<path>`, if given: builds that checkout;
+2. an installed release ≥ 4.7 (`find_package(behaviortree_cpp)`);
+3. otherwise, with `LONG_TAMP_FETCH_BEHAVIORTREE_CPP=ON` (the default), fetches and builds
+   it from source at a pinned commit (4.10.0 + 1), with its examples, tools, Groot and SQLite
+   logging off. This is for machines with no binary package, such as macOS. Set the option
+   `OFF` to require an installed release; CI does.
+
+### The examples
+
+None of the BT targets link HPP or pinocchio, so `examples/behaviortree` configures on its
+own, without the top-level project's HPP C++ dependencies or its submodule. You need a C++17
+compiler, CMake ≥ 3.22, BehaviorTree.CPP as above, and a Python with `long_tamp` installed
+(`pip install -e .`). CI builds it this way (`behaviortree` job in `lint.yml`):
+
+```bash
+cmake -S examples/behaviortree -B build-bt -DBUILD_TESTING=ON \
+  -DCMAKE_PREFIX_PATH=/opt/ros/$ROS_DISTRO \
+  -DPython3_EXECUTABLE="$(which python)"
+cmake --build build-bt --parallel
+ctest --test-dir build-bt -R taskplan_bt --output-on-failure
+```
+
+They also build as part of the top-level project, which `BUILD_BEHAVIORTREE_EXAMPLES`
+(default `OFF`) enables, so it never affects a normal library build:
+
 ```bash
 git submodule update --init cmake   # jrl-cmakemodules -- see below
 cmake -S . -B build-bt \
@@ -309,17 +355,10 @@ cmake -S . -B build-bt \
 cmake --build build-bt --parallel --target agimus_taskplan_bt long_tamp_bt_nodes_plugin
 ```
 
-The top-level `CMakeLists.txt` requires `jrl-cmakemodules` to configure *any* C++ build of
-this repo, including just this standalone example — `cmake/` vendors it as a git submodule
-(pinned to v2.1.0, the same version the sibling `agimus_spacelab` repo vendors). A checkout
-that skips `git submodule update --init` fails at the very first `cmake -S` with
+The top-level `CMakeLists.txt` requires `jrl-cmakemodules` (vendored as the `cmake/`
+submodule, pinned to v2.1.0) and the HPP C++ packages (`pinocchio`, `hpp-pinocchio`). A
+checkout that skips `git submodule update --init` fails at the first `cmake -S` with
 `Could not find a package configuration file provided by "jrl-cmakemodules"`.
-
-`BUILD_BEHAVIORTREE_EXAMPLES` (default `OFF`) gates `add_subdirectory(examples/behaviortree)`
-in the top-level `CMakeLists.txt`, so it never affects a normal library build.
-`examples/behaviortree/CMakeLists.txt` fetches BehaviorTree.CPP via `FetchContent` pinned to a
-known commit unless `BEHAVIORTREE_CPP_SOURCE_DIR` is already defined (vendored/cached
-checkout), and always builds it with its own examples/tools/Groot/SQLite logging disabled.
 
 Inside the dev container (`dockers/hpp-arm64/`), source both `config.sh` (`PATH`,
 `PYTHONPATH`, `LD_LIBRARY_PATH`) and the `hpp` conda env before configuring — the container's
@@ -409,119 +448,76 @@ without touching HPP at all.
 - **Model/LLM extension point**: yes (deferred) — the IR/registry/validator are the
   intended target for a future model-proposed mission.
 
-## 11. Known gaps and roadmap
+## 11. Status, known gaps and roadmap
 
-Status as of the session that fixed this pipeline's two blocking infra bugs (the C++ host's
-stale `agimus_spacelab.tasks.task_planning.host` import and the missing `jrl-cmakemodules`
-submodule — neither of which is `long_tamp`-specific new work, just leftovers from the
-`agimus_spacelab` split that had never been exercised since) and added the first real,
-from-scratch mission (`create_twin_session`, §1). Verified for real: `agimus_taskplan_bt
---factory create_twin_session` reaches `Task plan status: SUCCESS` against TWIN's actual
-bimanual scene, both grasps completed. Nothing below is broken — this is the gap between
-"works" and "production-grade / proven on a harder scene."
+Reviewed 2026-10-05 against `dev`. The BT.CPP path is an export target
+([ADR-0001](../adr/0001-planner-refiner-executor.md)): the Python executor (`PlanExecutor`)
+runs the reference missions, and the same validated `TaskPlan` can instead be compiled and
+run here, calling the same Python session.
 
-**Real coverage gaps — the new machinery is proven on the easiest scene in the repo only:**
+### What runs through BT.CPP today
 
-- ~~**Auto-release is untested at the BT level.**~~ **Done (§11 item 1).** A second
-  factory, `create_twin_regrasp_session` (`twin_bt_session.py`'s
-  `build_twin_regrasp_session`), compiles a `fallback`/`condition`-guarded
-  release-then-regrasp document (`panda_left/gripper` releases and reacquires
-  `ball/handle`) and is verified for real: `agimus_taskplan_bt --factory
-  create_twin_regrasp_session` (opt-in CTest `taskplan_bt_twin_regrasp`) and
-  `tests/test_twin_regrasp_bt_session.py` both reach a real, executed
-  `release()` followed by a real, executed second `grasp()` of the same
-  target — proving the compiler's per-transaction `Fallback` composes
-  correctly with a top-level `fallback`/`condition`, not just the flat-
-  sequence case. `create_twin_session`'s own flat two-grasp document is
-  untouched (still exercises no release) — see the new side findings below
-  for why this needed its own scene rather than extending that one.
-- **No lookahead in the capability-driven path.** `find_feasible_phase_target()` (the fix
-  for "phase N's random commitment silently dooms phase N+1," the part6/CON0 case documented
-  in that method's own docstring) only exists inside `plan_sequence()`'s internals. A BT or
-  symbolic-planner orchestrator built on `grasp()`/`release()` today has no equivalent
-  protection — harmless for TWIN's independent bimanual grasps, but would resurface on any
-  scene with that kind of grasp-to-grasp coupling.
-- **`ikea_table_prototype` was never touched.** Every piece added this session (`grasp()`/
-  `release()`, `run_sequence()`, the BT adapter) was built and proven against TWIN only —
-  the simplest real scene in the repo (two independent grasps, no conflicts, no manual
-  frozen-arms overrides). `ikea_table_prototype`'s harder shape (up to 12 phases,
-  `frozen_arms_mode="manual"` overrides, auto-release actually firing) remains unvalidated
-  through any of this new machinery.
-- **Only `grasp`/`release` were promoted to capabilities.** `GraspSequencePlanner`'s other
-  standalone primitives — `plan_pregrasp()`, `plan_transition()`, `plan_loop()` — have no
-  capability/BT wrapper.
+| Session factory | Scene | What it runs | Checked by |
+|---|---|---|---|
+| `create_fake_session` | none (no HPP) | a small plan, plus `fault` options | CTests `taskplan_bt_fake`, `…_fault_capability_raises`, `…_fault_malformed_json`, `…_fault_missing_method`, `…_unknown_factory`, `taskplan_bt_events` (C++ host and Python runner emit the same events), `taskplan_bt_plugin_loads`; built and run in CI (`behaviortree` job in `lint.yml`) |
+| `create_twin_session` | TWIN, bimanual | two grasps | opt-in CTest `taskplan_bt_twin_lift_ball` |
+| `create_twin_regrasp_session` | TWIN | `fallback`/`condition`-guarded release, then regrasp | opt-in CTest `taskplan_bt_twin_regrasp`; `tests/test_twin_regrasp_bt_session.py` |
+| `create_screw_session` | screw-assembly cell | short plan: pick the driver, home it ‖ grasp part 1 (a `parallel` node), rack it; `"plan": "full"` runs the whole mission | opt-in CTest `taskplan_bt_screw_cell` (passed, 131 s, the first real-scene run of BT.CPP's `Parallel`); `tests/test_screw_bt_session.py` in the nightly |
 
-**Deferred by explicit choice — not started:**
+`screw_assembly_plugin` runs the screw-assembly plan in a stock BT.CPP factory that loads
+`long_tamp_bt_nodes_plugin`, the way your own application or a Nav2 tree would (§5).
 
-- **PDDLStream-style symbolic search.** `task_planning/` only *executes* a hand-authored (or
-  future model-proposed) plan; nothing in this repo *searches* for one. Real TAMP
-  integration needs a predicate/effects layer a symbolic planner reads and writes, plus
-  "stream" functions bridging PDDLStream-style continuous sampling requests to
-  `ConfigGenerator`/`grasp()`. The predicate layer exists since 0.2 (§3: preconditions,
-  effects, plan-time simulation); the symbolic search on top of it is roadmap M3.
+The screw cell's capabilities plan whole blocks through `GraspSequenceRefiner`, so on that
+path a BT-run mission gets the same block recovery and phase-target lookahead as the Python
+mission. (Earlier revisions of this section said the capability-driven path had no
+lookahead and that `ikea_table_prototype` was never driven through it. Both are fixed:
+`grasp()` takes a `q_hint`, `run_sequence()` takes `lookahead_pairs`, and
+`script/ikea_table_prototype/task_assemble_table.py` runs through `run_sequence()` with
+them.)
 
-**Not done by design — the risk/reward didn't justify it yet:**
+### Known gaps
 
-- **`plan_sequence()`/`resume_sequence()`/`_run_phase_loop` are completely untouched.**
-  `run_sequence()` is a parallel, additive alternative, not a replacement — nothing was
-  deduplicated. If the eventual goal is "`plan_sequence()` becomes a thin wrapper over the
-  same primitives `run_sequence()` uses," that refactor never happened; the two currently
-  duplicate the auto-release policy independently.
-- **No checkpoint/resume/process-supervisor wiring for the real BT mission.** §8's
-  `checkpoint_dir`/`PathRecorder` capture exists generically, but `twin_bt_session.py`
-  doesn't use it — a killed/crashed run has no resume path. §7 already documents that a real
-  long-running mission needs a process supervisor (attempt/total timeouts, bounded restart
-  backoff); no such supervisor exists anywhere in `long_tamp` (the SpaceLab one wasn't part
-  of the open-source release).
+- **The real-scene CTests are opt-in.** `BUILD_BEHAVIORTREE_REAL_MISSION_TESTS` is `OFF` by
+  default, and no CI job runs them. Only the Python side of the screw session runs
+  automatically (nightly).
+- **No resume for a BT-run mission.** The Python mission resumes from its world state
+  (completed steps are skipped because their effects hold, see
+  [ADR-0002](../adr/0002-effects-as-runtime-guards.md)). `create_screw_session` builds its
+  session with no checkpoint and a fresh `RecordedFacts`, and the C++ host has no restart
+  supervisor, so a killed BT run starts over.
+- **Planning only.** The BT sessions plan; nothing executes motion on a backend. Execution
+  (`execution/`, the MuJoCo backend, drift checks, plan-ahead) is wired to `PlanExecutor`
+  only.
+- **Two orchestration policies.** `plan_sequence()` and `run_sequence()` still implement
+  the auto-release policy separately (`_plan_auto_release_if_needed` and
+  `sequence_orchestrator`). A refactor that routes `plan_sequence()` through the capability
+  primitives hasn't happened.
+- **Some primitives have no capability wrapper.** `plan_pregrasp()`, `plan_transition()`
+  and `plan_loop()` are called directly by scripts (e.g. `script/twin/task_lift_ball.py`
+  uses `plan_loop()`), not through a capability.
 
-**Known, unfixed side findings from building the TWIN adapter:**
+### Unresolved findings from the TWIN adapter
 
-- TWIN's `panda_left/gripper > ball/handle | f_12` edge intermittently fails with the same
-  collision (`panda_left/panda_leftfinger_2` vs `ball/base_link_0`) across otherwise-clean
-  runs — consistent enough to look like a real, marginal clearance in
-  `script/twin/assets/pokeball_bimanual.urdf` rather than pure solver noise. See
-  `tests/test_grasp_release_use_case_twin.py`'s docstring. Never investigated.
-  Confirmed worse than "intermittent" for a *regrasp* specifically: building item 1's
-  release-then-regrasp scenario against `panda_left/gripper`/`ball/handle`, the exact
-  same `f_12` collision hit 100% of regrasp draws (0% of first-grasp draws) across two
-  independent verification runs before `create_twin_regrasp_session`'s `grasp`
-  capability's `max_attempts` was raised from 3 to 8 to compensate — still not
-  root-caused (possibly the ball settling into a slightly different resting pose after a
-  real `release()` than its pristine initial one, tightening this already-marginal
-  clearance further), still out of scope for a compiler/session-level fix.
-- **First-phase graph construction is markedly harder to solve than a later one on the
-  same `GraspSequencePlanner`.** Discovered while picking item 1's regrasp target: the
-  *same* `panda_right/gripper > ball/handle2` grasp that plans in ~18s as the *second*
-  phase of TWIN's flat two-grasp mission (edge name `0-0_01`) failed 6/6 target-generation
-  draws across two processes when built as the *only* phase of a single-gripper session
-  (edge name `f_01`, no collision, solver residuals scattered 0.01–8.9) — i.e. an edge's
-  real difficulty depends on whether `GraspSequencePlanner` already has another phase's
-  graph structure to extend, not just on which gripper/handle pair it names. Not
-  root-caused; worth knowing before assuming any single grasp's difficulty transfers
-  between a multi-phase mission and a standalone one.
-- The `taskplan_bt_twin_lift_ball` CTest case is opt-in only
-  (`BUILD_BEHAVIORTREE_REAL_MISSION_TESTS=OFF` by default) and not wired into any CI
-  pipeline — nothing runs it automatically. It is also not perfectly reliable itself:
-  observed one real `SIGSEGV` crash (not the `f_12` collision above — a fresh
-  `create_twin_session` run died mid-generation on its very first waypoint draw) in
-  four runs during this same session, alongside three clean `SUCCESS` runs. Not
-  root-caused; flagged here since item 1's own opt-in CTest (`taskplan_bt_twin_regrasp`)
-  shares the same binary and could in principle hit the same crash.
+- **Marginal clearance on TWIN's `f_12` edge.** `panda_left/gripper > ball/handle | f_12`
+  intermittently collides (`panda_left/panda_leftfinger_2` vs `ball/base_link_0`), and did
+  so on every regrasp draw while building `create_twin_regrasp_session` (whose `grasp`
+  capability's `max_attempts` was raised from 3 to 8 to compensate). Possibly the ball
+  resting slightly differently after a real `release()`. Not root-caused; see
+  `tests/test_grasp_release_use_case_twin.py`.
+- **A grasp's difficulty depends on what came before it.** The same
+  `panda_right/gripper > ball/handle2` grasp plans in about 18 s as the second phase of
+  TWIN's two-grasp mission (edge `0-0_01`) but failed 6 of 6 draws as the only phase of a
+  single-gripper session (edge `f_01`). Not root-caused.
+- **A SIGSEGV seen once in four `taskplan_bt_twin_lift_ball` runs**, on the first waypoint
+  draw. That matches the crash fixed in `a9e9427` (the problem's distance weights were left
+  uninitialized when objects or a second robot were loaded after it was built), but it
+  hasn't been re-checked on TWIN since.
 
 ### Suggested order
 
-1. ~~**Exercise auto-release through a BT tree against TWIN or a small synthetic
-   scene**~~ **Done** — see `create_twin_regrasp_session` above and the new side
-   findings (regrasp-specific `f_12` flakiness, first-phase-vs-later-phase graph
-   difficulty) this surfaced.
-2. **Wire `ikea_table_prototype` through `grasp()`/`release()`/`run_sequence()`** — the
-   real stress test: manual frozen-arms overrides, an actual auto-release, and enough
-   phases to surface whether the missing-lookahead gap above matters in practice before
-   investing in fixing it.
-3. **Only then** decide whether the lookahead gap needs a capability-layer equivalent, and
-   whether `plan_sequence()` should be refactored to route through `run_sequence()` instead
-   of duplicating its policy — both are premature to design against a single two-phase
-   scene.
-4. **PDDLStream integration** stays last: it's the biggest, most speculative piece, and
-   items 2–3 will surface exactly which predicates/effects/streams a real domain needs —
-   designing them now would be guessing.
+1. **Resume for BT-run missions:** give the screw session the run folder's recorded facts
+   and a checkpoint, so a restarted host skips finished steps like the Python mission does.
+2. **Run the real-scene CTests on a schedule**, next to the nightly mission jobs.
+3. **Execution from a BT host**, if a consumer needs it: an execution backend called from
+   the session, reusing `execution/`'s contract.
+4. **One orchestration policy:** route `plan_sequence()` through the capability primitives.

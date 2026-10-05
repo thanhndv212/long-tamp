@@ -28,8 +28,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   offline) with a step-through mission walkthrough, the package import map, the recovery
   ladder and the process layout.
 
+- `examples/behaviortree` configures on its own (`cmake -S examples/behaviortree`): the BT
+  nodes, plugin and host build with a C++ compiler, CMake, Python and BehaviorTree.CPP,
+  without the top-level project's HPP C++ dependencies. CI builds it this way and runs its
+  HPP-free CTests (fake session, fault paths, plugin loading, event-stream parity), which no
+  CI job ran before.
+
 ### Changed
 
+- `examples/behaviortree` uses an installed BehaviorTree.CPP release (>= 4.7, e.g.
+  `ros-$ROS_DISTRO-behaviortree-cpp`) when one is found, instead of always building it from
+  source. Building from source at the pinned commit remains as a fallback for machines
+  with no binary package (`LONG_TAMP_FETCH_BEHAVIORTREE_CPP`, default `ON`). The BT nodes build
+  and pass their tests against 4.7.0 to 4.10.0; the event logger no longer needs the
+  subscription API added in 4.10. The ROS package's `behaviortree_cpp::behaviortree_cpp`
+  target name is accepted as well as upstream's `BT::behaviortree_cpp`.
 - The TWIN examples and tests no longer need the external `hpp_practicals` package.
   `tests/test_twin_examples.py` loads two of the repo's vendored UR10s instead of
   `package://hpp_practicals` UR5s, so it now runs (rather than skips) wherever PyHPP is

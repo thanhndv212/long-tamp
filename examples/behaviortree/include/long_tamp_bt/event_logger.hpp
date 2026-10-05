@@ -23,6 +23,22 @@ public:
   void flush() override;
 
 private:
+  // BehaviorTree.CPP >= 4.10 asks a derived logger to unsubscribe in its own
+  // destructor, before its members go, so no callback can still be using them.
+  // Earlier releases have no unsubscribeFromTreeChanges(): their base destructor
+  // removes the subscriptions. Detected at compile time, so one source builds
+  // against either.
+  template <typename Self>
+  static auto unsubscribe(Self& self, int)
+      -> decltype(self.unsubscribeFromTreeChanges(), void())
+  {
+    self.unsubscribeFromTreeChanges();
+  }
+  template <typename Self>
+  static void unsubscribe(Self&, long)
+  {
+  }
+
   std::ofstream file_;
   std::mutex mutex_;
 };

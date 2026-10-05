@@ -1,29 +1,79 @@
-include(FetchContent)
+# Configured on its own (cmake -S examples/behaviortree), this builds the nodes, the
+# plugin, the host and their tests without the top-level project's HPP C++
+# dependencies: none of these targets link HPP or pinocchio. The embedded Python
+# finds long_tamp through PYTHONPATH (set on the tests below).
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  cmake_minimum_required(VERSION 3.22)
+  project(long_tamp_behaviortree LANGUAGES CXX)
+  include(CTest)
+  get_filename_component(LONG_TAMP_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+else()
+  set(LONG_TAMP_SOURCE_DIR "${PROJECT_SOURCE_DIR}")
+endif()
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 
-set(BTCPP_EXAMPLES OFF)
-set(BTCPP_BUILD_TOOLS OFF)
-set(BTCPP_GROOT_INTERFACE OFF)
-set(BTCPP_SQLITE_LOGGING OFF)
-set(_agimus_build_testing "${BUILD_TESTING}")
-set(BUILD_TESTING OFF)
+# BehaviorTree.CPP, in order of preference:
+#   1. BEHAVIORTREE_CPP_SOURCE_DIR, if given: build that checkout;
+#   2. an installed release (>= 4.7, the oldest these nodes build and pass their
+#      tests against), e.g. the ROS 2 package
+#      `sudo apt install ros-$ROS_DISTRO-behaviortree-cpp` (Humble and Jazzy ship
+#      4.10.0), found through CMAKE_PREFIX_PATH or a sourced ROS environment;
+#   3. otherwise, with LONG_TAMP_FETCH_BEHAVIORTREE_CPP (default ON), fetch and
+#      build it from source at a pinned commit (4.10.0 + 1), for machines with no
+#      binary package (macOS). Turn the option off to require an installed one.
+option(LONG_TAMP_FETCH_BEHAVIORTREE_CPP
+       "Build BehaviorTree.CPP from source when no installed release is found" ON)
 
-if(DEFINED BEHAVIORTREE_CPP_SOURCE_DIR)
-  add_subdirectory(
-    "${BEHAVIORTREE_CPP_SOURCE_DIR}"
-    "${CMAKE_CURRENT_BINARY_DIR}/behaviortree_cpp"
-    EXCLUDE_FROM_ALL)
-else()
-  FetchContent_Declare(
-    behaviortree_cpp_source
-    GIT_REPOSITORY https://github.com/BehaviorTree/BehaviorTree.CPP.git
-    GIT_TAG c88a9f429a421b312599a07fa8902524b09bf90a
-    GIT_SHALLOW FALSE)
-  FetchContent_MakeAvailable(behaviortree_cpp_source)
+if(NOT DEFINED BEHAVIORTREE_CPP_SOURCE_DIR)
+  find_package(behaviortree_cpp 4.7 CONFIG QUIET)
 endif()
 
-set(BUILD_TESTING "${_agimus_build_testing}")
+if(behaviortree_cpp_FOUND)
+  message(STATUS "BehaviorTree.CPP ${behaviortree_cpp_VERSION} (installed): ${behaviortree_cpp_DIR}")
+else()
+  if(NOT DEFINED BEHAVIORTREE_CPP_SOURCE_DIR AND NOT LONG_TAMP_FETCH_BEHAVIORTREE_CPP)
+    message(FATAL_ERROR
+      "No installed BehaviorTree.CPP >= 4.7 found. Install one (e.g. "
+      "ros-$ROS_DISTRO-behaviortree-cpp) and add its prefix to CMAKE_PREFIX_PATH, "
+      "or set LONG_TAMP_FETCH_BEHAVIORTREE_CPP=ON to build it from source.")
+  endif()
+  set(BTCPP_EXAMPLES OFF)
+  set(BTCPP_BUILD_TOOLS OFF)
+  set(BTCPP_GROOT_INTERFACE OFF)
+  set(BTCPP_SQLITE_LOGGING OFF)
+  set(_agimus_build_testing "${BUILD_TESTING}")
+  set(BUILD_TESTING OFF)
+  if(DEFINED BEHAVIORTREE_CPP_SOURCE_DIR)
+    message(STATUS "BehaviorTree.CPP: building ${BEHAVIORTREE_CPP_SOURCE_DIR}")
+    add_subdirectory(
+      "${BEHAVIORTREE_CPP_SOURCE_DIR}"
+      "${CMAKE_CURRENT_BINARY_DIR}/behaviortree_cpp"
+      EXCLUDE_FROM_ALL)
+  else()
+    message(STATUS "BehaviorTree.CPP: no installed release found, building from source")
+    include(FetchContent)
+    FetchContent_Declare(
+      behaviortree_cpp_source
+      GIT_REPOSITORY https://github.com/BehaviorTree/BehaviorTree.CPP.git
+      GIT_TAG c88a9f429a421b312599a07fa8902524b09bf90a
+      GIT_SHALLOW FALSE)
+    FetchContent_MakeAvailable(behaviortree_cpp_source)
+  endif()
+  set(BUILD_TESTING "${_agimus_build_testing}")
+endif()
+
+# The ROS 2 package (ament-exported) names its target
+# behaviortree_cpp::behaviortree_cpp; a source build and upstream's own CMake
+# install name it BT::behaviortree_cpp. Link against the latter either way.
+if(NOT TARGET BT::behaviortree_cpp)
+  if(TARGET behaviortree_cpp::behaviortree_cpp)
+    add_library(BT::behaviortree_cpp ALIAS behaviortree_cpp::behaviortree_cpp)
+  else()
+    message(FATAL_ERROR "BehaviorTree.CPP found, but it exports neither "
+                        "BT::behaviortree_cpp nor behaviortree_cpp::behaviortree_cpp")
+  endif()
+endif()
 
 # The task-planning BT nodes (#25): a library to link (RegisterNodes), the
 # same nodes as a BehaviorTree.CPP plugin (factory.registerFromPlugin, Nav2's
@@ -114,7 +164,7 @@ if(BUILD_TESTING)
     taskplan_bt_fault_missing_method
     taskplan_bt_unknown_factory
     taskplan_bt_events
-    PROPERTIES ENVIRONMENT "PYTHONPATH=${PROJECT_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
+    PROPERTIES ENVIRONMENT "PYTHONPATH=${LONG_TAMP_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
 
   # Opt-in only: unlike the fake-session cases above, this drives a real
   # PyHPP scene (TWIN's bimanual lift-ball, script/twin/twin_bt_session.py)
@@ -134,7 +184,7 @@ if(BUILD_TESTING)
       taskplan_bt_twin_lift_ball PROPERTIES
       PASS_REGULAR_EXPRESSION "Task plan status: SUCCESS"
       TIMEOUT 300
-      ENVIRONMENT "PYTHONPATH=${PROJECT_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
+      ENVIRONMENT "PYTHONPATH=${LONG_TAMP_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
 
     # §11 item 1: exercises a real release() forced by a fallback/condition
     # guard before a second real grasp() -- create_twin_session's flat
@@ -152,7 +202,7 @@ if(BUILD_TESTING)
       # each draw independently taking anywhere up to ~115s observed, plus
       # up to 8 retries' worth of budget on the regrasp specifically.
       TIMEOUT 900
-      ENVIRONMENT "PYTHONPATH=${PROJECT_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
+      ENVIRONMENT "PYTHONPATH=${LONG_TAMP_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
 
     # #58: the screw-assembly cell, seeded (script/screw_assembly/
     # screw_bt_session.py): pick the driver, home it while the left arm
@@ -163,7 +213,7 @@ if(BUILD_TESTING)
       taskplan_bt_screw_cell PROPERTIES
       PASS_REGULAR_EXPRESSION "Task plan status: SUCCESS"
       TIMEOUT 600
-      ENVIRONMENT "PYTHONPATH=${PROJECT_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
+      ENVIRONMENT "PYTHONPATH=${LONG_TAMP_SOURCE_DIR}/src:$ENV{PYTHONPATH}")
   endif()
 endif()
 
