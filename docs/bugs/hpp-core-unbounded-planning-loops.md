@@ -318,8 +318,7 @@ pyhpp::manipulation::TransitionPlanner::optimizePath        <- PyHPPBackend "opt
 ```
 
 It is intermittent: one hang in about 20 screw-assembly missions run with the spline
-optimizer on (a few hundred blocks). The same optimizer is in `agimus_spacelab`'s default optimizer lists, so its
-missions are exposed too.
+optimizer on (a few hundred blocks).
 
 ### Root Cause
 
