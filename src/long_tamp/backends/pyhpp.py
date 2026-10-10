@@ -1672,10 +1672,10 @@ class PyHPPBackend(BackendBase):
                 observed stuck 11+ minutes in one solve. Omitted: unchanged.
             qp_max_iterations: caps that QP solve's iterations (proxsuite's
                 ``max_iter``), which bounds the spline optimizer by
-                ``path_optimizer_timeout`` plus one bounded solve. Needs an
-                hpp-core with the ``SplineGradientBased/QPMaxIterations``
-                parameter; with one that lacks it, the spline optimizer is
-                dropped instead, as with ``spline_optimizer=False``.
+                ``path_optimizer_timeout`` plus one bounded solve. Needs
+                hpp-core >= 9.1.0 (``SplineGradientBased/QPMaxIterations``);
+                with an older one, the spline optimizer is dropped instead,
+                as with ``spline_optimizer=False``.
         """
         if inner_planner_type is not None:
             self._transition_inner_planner_type = inner_planner_type
