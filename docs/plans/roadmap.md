@@ -153,6 +153,76 @@ within its limits with an escalation report.
 - [x] [#109](https://github.com/thanhndv212/long-tamp/issues/109) Step watchdog (model or rule)
 - [x] [#114](https://github.com/thanhndv212/long-tamp/issues/114) Reset mission button
 
+## Hardware showcase track (M7–M10)
+
+After 0.8.0, the goal is to show all of long_tamp on a physical robot, a low-cost SO-101
+arm (soarm_tamp, [roadmap](https://github.com/thanhndv212/soarm_tamp/blob/main/docs/roadmap.md),
+[tracker](https://github.com/thanhndv212/soarm_tamp/issues/32)): instruction → goal → plan →
+refinement → execution on the arm, with a camera keeping the world state current, recovery
+from disturbances, and open VLM/VLA models adopted wherever they measurably do better.
+These four milestones are the library side. Each is built and tested in simulation first,
+and none is SO-101-specific; screw assembly stays the reference track (ADR-0003).
+
+## M7 — Hardware execution: remote backends and grippers (0.9.0)
+
+[Milestone 7](https://github.com/thanhndv212/long-tamp/milestone/7)
+
+Run missions on a robot driven from another host (a container and a USB-attached arm, a robot's own controller PC), with grippers beyond symmetric parallel jaws and grasp outcomes checked, not assumed.
+
+- [ ] [#125](https://github.com/thanhndv212/long-tamp/issues/125) Remote execution backend over TCP
+- [ ] [#126](https://github.com/thanhndv212/long-tamp/issues/126) Gripper model interface beyond symmetric parallel jaws
+- [ ] [#127](https://github.com/thanhndv212/long-tamp/issues/127) Gripper actuation and grasp verification facts
+- [ ] [#128](https://github.com/thanhndv212/long-tamp/issues/128) Repair from grasp_missed
+- [ ] [#129](https://github.com/thanhndv212/long-tamp/issues/129) Run long_tamp on your robot
+- [ ] [#130](https://github.com/thanhndv212/long-tamp/issues/130) M7 exit test, a mission through RemoteBackend on a real robot
+
+**Exit test:** a mission runs through `RemoteBackend` on the SO-101 (cube pick-and-place, 10 runs, soarm_tamp S1) and the screw assembly runs through it in MuJoCo.
+
+## M8 — Mission runtime as a library (0.10.0)
+
+[Milestone 8](https://github.com/thanhndv212/long-tamp/milestone/8)
+
+The mission runtime that uses every layer (task planner, refiner, executor, repair, supervisor, chat, UI) is about 3,100 lines of `script/screw_assembly/`. Move it into `long_tamp.mission` behind a domain interface, so any robot and task can use the AI features without copying the example.
+
+- [ ] [#131](https://github.com/thanhndv212/long-tamp/issues/131) MissionDomain interface and long_tamp.mission package
+- [ ] [#132](https://github.com/thanhndv212/long-tamp/issues/132) Generic mission runner
+- [ ] [#133](https://github.com/thanhndv212/long-tamp/issues/133) Generic chat tools and mission UI launcher
+- [ ] [#134](https://github.com/thanhndv212/long-tamp/issues/134) Run on long_tamp.mission
+- [ ] [#135](https://github.com/thanhndv212/long-tamp/issues/135) Template domain and "write your own mission" tutorial
+- [ ] [#136](https://github.com/thanhndv212/long-tamp/issues/136) M8 exit test, two domains on one runtime
+
+**Exit test:** the screw assembly passes the V3 batch gate and the M6 autonomy batch on the library runner; the template domain runs the full loop in the mission UI.
+
+## M9 — Perception-backed world state (0.11.0)
+
+[Milestone 9](https://github.com/thanhndv212/long-tamp/milestone/9)
+
+Object poses from sensors feed the predicates and the planning scene, and an object moved mid-mission is caught before the step that depends on it.
+
+- [ ] [#137](https://github.com/thanhndv212/long-tamp/issues/137) Observed object poses and geometric predicates
+- [ ] [#138](https://github.com/thanhndv212/long-tamp/issues/138) Planning scene from observed poses
+- [ ] [#139](https://github.com/thanhndv212/long-tamp/issues/139) Object drift check and replan
+- [ ] [#140](https://github.com/thanhndv212/long-tamp/issues/140) Reconcile observation with belief
+- [ ] [#141](https://github.com/thanhndv212/long-tamp/issues/141) M9 exit test, object moved mid-mission in MuJoCo
+
+**Exit test:** with a simulated camera in MuJoCo, an object moved mid-mission triggers a replan; 10/10 seeds complete or escalate cleanly.
+
+## M10 — Open VLM/VLA models in the loop (0.12.0)
+
+[Milestone 10](https://github.com/thanhndv212/long-tamp/milestone/10)
+
+Images in the gateway, local open models, VLM roles and learned-policy skills, plus a benchmark that decides where a model replaces a rule (ADR-0006 still holds: a model writes problems and facts, never plans).
+
+- [ ] [#142](https://github.com/thanhndv212/long-tamp/issues/142) Open models in the loop, adopted by measurement
+- [ ] [#143](https://github.com/thanhndv212/long-tamp/issues/143) Image inputs in the model gateway
+- [ ] [#144](https://github.com/thanhndv212/long-tamp/issues/144) Local open-model serving profile
+- [ ] [#145](https://github.com/thanhndv212/long-tamp/issues/145) VLM roles, visual grounder, outcome verifier, failure diagnoser
+- [ ] [#146](https://github.com/thanhndv212/long-tamp/issues/146) Learned-policy (VLA) skills
+- [ ] [#147](https://github.com/thanhndv212/long-tamp/issues/147) Component benchmark harness
+- [ ] [#148](https://github.com/thanhndv212/long-tamp/issues/148) M10 exit test, benchmark report with adoption decisions
+
+**Exit test:** a benchmark report in MuJoCo with an adoption decision per role (keeping the baseline is a valid outcome).
+
 ## Backlog (not scheduled)
 
 - [#23](https://github.com/thanhndv212/long-tamp/issues/23) Optional PDDLStream adapter
