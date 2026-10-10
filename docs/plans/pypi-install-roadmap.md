@@ -160,8 +160,9 @@ Claude Code cloud startup remains to be observed after these files are pushed.
   long_tamp's `PrunedRecursionMixin` carries its own memoized `_recurse`, so long_tamp is
   unaffected; direct users of HPP's `ConstraintGraphFactory` on the wheels are not.
 - **SplineGradientBased QP hang** (Bug 6 in
-  [hpp-core unbounded planning loops](../bugs/hpp-core-unbounded-planning-loops.md)) still
-  needs an hpp-core change; it will reach PyPI users through a new wheel like any other fix.
+  [hpp-core unbounded planning loops](../bugs/hpp-core-unbounded-planning-loops.md)) is fixed
+  in hpp-core 9.1.0 (upstream #459). It reaches PyPI users once 9.1.0 wheels are published;
+  until then the backend drops the spline optimizer on the 9.0.2 wheels.
 
 ## Local validation (2026-09-26)
 

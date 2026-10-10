@@ -36,6 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The spline optimizer's QP cap (`SplineGradientBased/QPMaxIterations`) is now upstream:
+  hpp-core [#459](https://github.com/humanoid-path-planner/hpp-core/pull/459), released in
+  hpp-core 9.1.0. Docs no longer call it a local patch. With hpp-core < 9.1.0 (including the
+  9.0.2 PyPI wheels) the backend still drops the spline optimizer.
+
 - `examples/behaviortree` uses an installed BehaviorTree.CPP release (>= 4.7, e.g.
   `ros-$ROS_DISTRO-behaviortree-cpp`) when one is found, instead of always building it from
   source. Building from source at the pinned commit remains as a fallback for machines
