@@ -163,8 +163,10 @@ from disturbances, and open VLM/VLA models adopted wherever they measurably do b
 These five milestones are the library side. Each is built and tested in simulation first,
 and none is SO-101-specific; screw assembly stays the reference track (ADR-0003).
 
-M8 is the only library gate: M9, M10 (except #147) and M11's #150 can start alongside M7 and
-M8, and M11 gives a sim showcase before the real-arm one.
+M8 is the gate for the missions: M9, M10 (except #147) and M11's #150 can start alongside M7 and
+M8, and M11 gives a sim showcase before the real-arm one. The open benchmark (#156–#163) is the
+exception: its env server needs M7's remote backend (#125), its first runs need M8, and it
+brings one new library feature, articulated objects (#161).
 
 ## M7 — Hardware execution: remote backends and grippers (0.9.0)
 
@@ -238,7 +240,26 @@ The sim half of the showcase, ahead of the real arm: the SO-101 stacking mission
 - [ ] [#153](https://github.com/thanhndv212/long-tamp/issues/153) Open benchmark adapter and baseline runs
 - [ ] [#154](https://github.com/thanhndv212/long-tamp/issues/154) M11 exit test, sim showcase and benchmark results
 
-**Exit test:** 20 SO-101 sim missions from language instructions with the simulated camera and injected disturbances complete or escalate cleanly; benchmark results committed with seeds; a recorded video.
+**Benchmark: RoboCerebra** (NeurIPS 2025 D&B, chosen in #150). It is long-horizon (about 9
+subtasks per task) and scores random disturbances and plan–observation mismatch, which is
+long_tamp's replan and recovery story. It runs on LIBERO, so the same adapter later serves
+LIBERO-Long and LIBERO-Plus. Published numbers to compare against: GT plan + OpenVLA 25.16,
+HPE 16.55; the best reported is SparkVLA's 47.12, under a protocol that may differ. No
+planner-based entry has been published. #153 is split into:
+
+- [ ] [#156](https://github.com/thanhndv212/long-tamp/issues/156) R1 Env server behind the remote backend protocol (needs #125)
+- [ ] [#157](https://github.com/thanhndv212/long-tamp/issues/157) R2 MuJoCo model → URDF/SRDF scene exporter
+- [ ] [#158](https://github.com/thanhndv212/long-tamp/issues/158) R3 Grasp handle library for the benchmark's object classes
+- [ ] [#159](https://github.com/thanhndv212/long-tamp/issues/159) R4 Goal translator, in-hand start state, OSC_POSE tracker; Ideal subset (needs M8)
+- [ ] [#160](https://github.com/thanhndv212/long-tamp/issues/160) R5 Pour action
+- [ ] [#161](https://github.com/thanhndv212/long-tamp/issues/161) R6 Articulated objects: drawers, doors, knobs
+- [ ] [#162](https://github.com/thanhndv212/long-tamp/issues/162) R7 Disturbance, mismatch and mix conditions (needs #151, #145)
+- [ ] [#163](https://github.com/thanhndv212/long-tamp/issues/163) R8 Continuous variant and results tables
+
+The first number to publish is the Ideal condition on pick/in/on subtasks (#156 → #159, about
+68% of subtasks). Articulated objects (#161) are the critical path to the full table.
+
+**Exit test:** 20 SO-101 sim missions from language instructions with the simulated camera and injected disturbances complete or escalate cleanly; RoboCerebra results for all six conditions committed with seeds (privileged state, simulated camera, continuous variant); a recorded video.
 
 ## Backlog (not scheduled)
 
