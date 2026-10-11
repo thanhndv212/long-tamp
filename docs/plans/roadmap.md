@@ -232,15 +232,15 @@ Images in the gateway, local open models, VLM roles and learned-policy skills, p
 
 [Milestone 11](https://github.com/thanhndv212/long-tamp/milestone/11)
 
-The sim half of the showcase, ahead of the real arm: the SO-101 stacking mission end to end in MuJoCo (language goals, simulated camera, disturbances, recovery), runnable by anyone without the hardware, plus an adapter to an open simulated benchmark so long_tamp is measured against published methods. The stacking domain is written once here and reused on the real arm by soarm_tamp S3. Gated on M8; #150 can start now.
+The sim half of the showcase, ahead of the real arm: the SO-101 stacking mission end to end in MuJoCo (language goals, simulated camera, disturbances, recovery), runnable by anyone without the hardware, plus an adapter to an open simulated benchmark so long_tamp is measured against published methods. The stacking domain is written once here and reused on the real arm by soarm_tamp S3. Gated on M8; the benchmark also needs #125.
 
-- [ ] [#150](https://github.com/thanhndv212/long-tamp/issues/150) Choose the open simulated benchmark
+- [x] [#150](https://github.com/thanhndv212/long-tamp/issues/150) Choose the open simulated benchmark
 - [ ] [#151](https://github.com/thanhndv212/long-tamp/issues/151) Simulated camera, rendered views and marker poses
 - [ ] [#152](https://github.com/thanhndv212/long-tamp/issues/152) SO-101 tabletop stacking in MuJoCo
 - [ ] [#153](https://github.com/thanhndv212/long-tamp/issues/153) Open benchmark adapter and baseline runs
 - [ ] [#154](https://github.com/thanhndv212/long-tamp/issues/154) M11 exit test, sim showcase and benchmark results
 
-**Benchmark: RoboCerebra** (NeurIPS 2025 D&B, chosen in #150). It is long-horizon (about 9
+**Benchmark: RoboCerebra** (NeurIPS 2025 D&B, chosen in #150; comparison in [sim-benchmark-selection.md](sim-benchmark-selection.md)). It is long-horizon (about 9
 subtasks per task) and scores random disturbances and plan–observation mismatch, which is
 long_tamp's replan and recovery story. It runs on LIBERO, so the same adapter later serves
 LIBERO-Long and LIBERO-Plus. Published numbers to compare against: GT plan + OpenVLA 25.16,
