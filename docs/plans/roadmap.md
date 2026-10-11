@@ -153,15 +153,18 @@ within its limits with an escalation report.
 - [x] [#109](https://github.com/thanhndv212/long-tamp/issues/109) Step watchdog (model or rule)
 - [x] [#114](https://github.com/thanhndv212/long-tamp/issues/114) Reset mission button
 
-## Hardware showcase track (M7–M10)
+## Hardware showcase track (M7–M11)
 
 After 0.8.0, the goal is to show all of long_tamp on a physical robot, a low-cost SO-101
 arm (soarm_tamp, [roadmap](https://github.com/thanhndv212/soarm_tamp/blob/main/docs/roadmap.md),
 [tracker](https://github.com/thanhndv212/soarm_tamp/issues/32)): instruction → goal → plan →
 refinement → execution on the arm, with a camera keeping the world state current, recovery
 from disturbances, and open VLM/VLA models adopted wherever they measurably do better.
-These four milestones are the library side. Each is built and tested in simulation first,
+These five milestones are the library side. Each is built and tested in simulation first,
 and none is SO-101-specific; screw assembly stays the reference track (ADR-0003).
+
+M8 is the only library gate: M9, M10 (except #147) and M11's #150 can start alongside M7 and
+M8, and M11 gives a sim showcase before the real-arm one.
 
 ## M7 — Hardware execution: remote backends and grippers (0.9.0)
 
@@ -211,7 +214,7 @@ Object poses from sensors feed the predicates and the planning scene, and an obj
 
 [Milestone 10](https://github.com/thanhndv212/long-tamp/milestone/10)
 
-Images in the gateway, local open models, VLM roles and learned-policy skills, plus a benchmark that decides where a model replaces a rule (ADR-0006 still holds: a model writes problems and facts, never plans).
+Images in the gateway, local open models, VLM roles and learned-policy skills, plus a benchmark that decides where a model replaces a rule (ADR-0006 still holds: a model writes problems and facts, never plans). Runs in parallel with M7–M9: #142–#146 have no dependency on them, and #146 is tested in MuJoCo with a scripted policy; #147 waits for M8's template domain (#135).
 
 - [ ] [#142](https://github.com/thanhndv212/long-tamp/issues/142) Open models in the loop, adopted by measurement
 - [ ] [#143](https://github.com/thanhndv212/long-tamp/issues/143) Image inputs in the model gateway
@@ -222,6 +225,20 @@ Images in the gateway, local open models, VLM roles and learned-policy skills, p
 - [ ] [#148](https://github.com/thanhndv212/long-tamp/issues/148) M10 exit test, benchmark report with adoption decisions
 
 **Exit test:** a benchmark report in MuJoCo with an adoption decision per role (keeping the baseline is a valid outcome).
+
+## M11 — Simulation showcase and open benchmark
+
+[Milestone 11](https://github.com/thanhndv212/long-tamp/milestone/11)
+
+The sim half of the showcase, ahead of the real arm: the SO-101 stacking mission end to end in MuJoCo (language goals, simulated camera, disturbances, recovery), runnable by anyone without the hardware, plus an adapter to an open simulated benchmark so long_tamp is measured against published methods. The stacking domain is written once here and reused on the real arm by soarm_tamp S3. Gated on M8; #150 can start now.
+
+- [ ] [#150](https://github.com/thanhndv212/long-tamp/issues/150) Choose the open simulated benchmark
+- [ ] [#151](https://github.com/thanhndv212/long-tamp/issues/151) Simulated camera, rendered views and marker poses
+- [ ] [#152](https://github.com/thanhndv212/long-tamp/issues/152) SO-101 tabletop stacking in MuJoCo
+- [ ] [#153](https://github.com/thanhndv212/long-tamp/issues/153) Open benchmark adapter and baseline runs
+- [ ] [#154](https://github.com/thanhndv212/long-tamp/issues/154) M11 exit test, sim showcase and benchmark results
+
+**Exit test:** 20 SO-101 sim missions from language instructions with the simulated camera and injected disturbances complete or escalate cleanly; benchmark results committed with seeds; a recorded video.
 
 ## Backlog (not scheduled)
 
