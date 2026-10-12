@@ -93,6 +93,7 @@ nav:
           - "0006 AI model integration": adr/0006-ai-model-integration.md
           - "0007 Remote execution": adr/0007-remote-execution.md
           - "0008 Gripper models": adr/0008-gripper-models.md
+          - "0009 Grasp verification": adr/0009-grasp-verification.md
   - Plans:
       - Roadmap: plans/roadmap.md
       - "Simulation benchmark selection": plans/sim-benchmark-selection.md

@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Grasp verification (#127, ADR-0009).
+  - `GripperActuation` protocol for backends with a hand: `open_gripper`,
+    `close_gripper(width|effort)`, `gripper_state` (a `GripperState` with the measured
+    opening and effort). `ProcessBackend` and `RemoteBackend` forward it.
+  - `ExpectedGrasp`, from `FingerClosureTable.expected_grasp`, judges a measured opening
+    against the hand model: `holds(g, o)` or `grasp_missed(g, o)`, reported as
+    `Feedback.facts`. The threshold is two `default_squeeze` past the commanded opening.
+  - MuJoCo backend: with `expect` (`GripTable.expect`), contact grasps close even when the
+    object isn't there, and a miss fails the command with `grasp_missed`; a missed weld
+    grasp reports the fact too. `hands` enables the actuation interface.
+  - A failed step's message lists its facts. `MockBackend(facts=...)` reports facts with
+    its failure.
+  - The screw-assembly example verifies its contact grasps (`--grasp contact`).
+
 - Gripper models beyond symmetric parallel jaws (#126, ADR-0008).
   - `GripperModel` protocol: `GraspPlanner` and `FingerClosureTable` take any model.
   - `RotaryJawGripperModel`: one jaw swinging against a fixed one, with the pads'

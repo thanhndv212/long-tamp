@@ -17,6 +17,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -25,6 +26,9 @@ from long_tamp.logging import get_logger
 from .geometry import Primitive, link_poses, load_srdf_frames, load_urdf_primitives
 from .gripper import GripperModel
 from .planner import GraspCandidate, GraspEvaluation, GraspPlanner, GraspPlannerParams
+
+if TYPE_CHECKING:
+    from long_tamp.execution.gripper import ExpectedGrasp
 
 logger = get_logger("grasping.objects")
 
@@ -153,6 +157,22 @@ class FingerClosureTable:
         ev = self.evaluation(gripper, handle)
         q = ev.q if np.isfinite(ev.q) else b.model.q_open
         return b.model.joint_values(q, b.joint_prefix)
+
+    def expected_grasp(self, gripper: str, handle: str) -> ExpectedGrasp:
+        """What closing ``gripper`` on ``handle`` should measure, for grasp
+        verification (``long_tamp.execution.gripper``)."""
+        from long_tamp.execution.gripper import ExpectedGrasp
+
+        b = self.bindings[gripper]
+        ev = self.evaluation(gripper, handle)
+        return ExpectedGrasp(
+            gripper,
+            handle.split("/", 1)[0],
+            b.model,
+            ev.contact_width,
+            ev.width,
+            b.joint_prefix,
+        )
 
     def open_values(self, gripper: str) -> dict[str, float]:
         b = self.bindings[gripper]

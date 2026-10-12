@@ -6,7 +6,8 @@ robot has its own controller PC. ``serve_backend(backend, port=...)`` serves a
 backend on the robot's side; ``RemoteBackend(host, port)`` is the planner's
 side, an :class:`ExecutionBackend` that forwards ``start``, ``poll``,
 ``cancel`` and the optional methods the served backend has (``start_error``,
-``observed_config``, ``disturb``).
+``observed_config``, ``disturb``, and a hand's ``open_gripper``,
+``close_gripper`` and ``gripper_state``).
 
 The wire is length-prefixed JSON frames, **never pickle**: a socket is not a
 trust boundary pickle can cross. Commands carry their paths as sampled arrays
@@ -47,6 +48,7 @@ from typing import Any
 import numpy as np
 
 from .contract import ExecutionCommand, ExecutionStatus, Feedback
+from .gripper import GripperState
 from .process import OPTIONAL
 from .sampled import SampledPath, sampled
 
@@ -122,6 +124,8 @@ def encode(value: Any) -> Any:
                 "facts": list(value.facts),
             }
         }
+    if isinstance(value, GripperState):
+        return {"$gripper": {"width": value.width, "effort": value.effort}}
     if isinstance(value, tuple):
         return {"$tuple": [encode(v) for v in value]}
     if isinstance(value, list):
@@ -192,6 +196,8 @@ def _decode_tagged(tag: str, body: Any) -> Any:
             metrics=decode(body["metrics"]),
             facts=tuple(body["facts"]),
         )
+    if tag == "$gripper":
+        return GripperState(body["width"], body["effort"])
     if tag == "$tuple":
         return tuple(decode(v) for v in body)
     raise ValueError(f"unknown tag {tag!r}")
