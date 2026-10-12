@@ -93,6 +93,7 @@ nav:
           - "0006 AI model integration": adr/0006-ai-model-integration.md
   - Plans:
       - Roadmap: plans/roadmap.md
+      - "Simulation benchmark selection": plans/sim-benchmark-selection.md
       - "Roadmap: PyPI as the default install": plans/pypi-install-roadmap.md
       - "0.1.0 release draft": plans/release-0.1.0.md
   - Bugs (upstream HPP):
