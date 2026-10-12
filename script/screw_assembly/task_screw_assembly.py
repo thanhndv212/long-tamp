@@ -1169,19 +1169,28 @@ def recover_missed_grasp(
     failure: dict[str, Any],
 ) -> None:
     """After ``grasp_missed`` (#128): open the hand that missed, undo the
-    step's grasps in the grasp tracker, and take the robot and the objects
-    where the backend observes them, so the retry picks the object where it
-    is."""
-    for fact in failure.get("facts", []):
-        atom = parse_atom(fact)
-        if atom.name == "grasp_missed" and hasattr(backend, "open_gripper"):
+    step's grasps and the missed one in the grasp tracker (an earlier step
+    may have made it: the fingers close as the next motion starts), and take
+    the robot and the objects where the backend observes them, so the retry
+    picks the object where it is."""
+    missed = [
+        atom.args
+        for atom in map(parse_atom, failure.get("facts", []))
+        if atom.name == "grasp_missed"
+    ]
+    for gripper, _ in missed:
+        if hasattr(backend, "open_gripper"):
             try:
-                backend.open_gripper(atom.args[0])
+                backend.open_gripper(gripper)
             except KeyError:  # no hand bound (weld grasps): nothing to open
                 pass
-    start = ctx.get("step_start", {}).get(failure["step"])
-    if start is not None:
-        MissionCheckpoint.restore_grasps(planner.grasp_tracker, start)
+    held = dict(ctx.get("step_start", {}).get(failure["step"]) or {})
+    if not held:
+        held = {g: h for g, h in planner.grasp_tracker.current_grasps.items() if h}
+    for gripper, obj in missed:
+        if str(held.get(gripper, "")).startswith(f"{obj}/"):
+            del held[gripper]
+    MissionCheckpoint.restore_grasps(planner.grasp_tracker, held)
     observe = getattr(backend, "observed_config", None)
     observed = observe(ctx["q"]) if observe is not None else None
     if observed is not None:
