@@ -16,7 +16,9 @@ and after that, and they are this module's job:
    find the first contact. Because the TCP is held rigidly at the handle,
    both fingers close symmetrically and stop when the first one touches, so
    the closure is set by the *wider* side, and an off-centre grasp leaves
-   one finger short of the surface (reported as ``offset``). The result
+   one finger short of the surface (reported as ``offset``). A rotary jaw
+   (one moving jaw, :class:`~long_tamp.grasping.gripper.RotaryJawGripperModel`)
+   closes about a moving midpoint instead; the model says where. The result
    carries finger joint values ready for the viewer or a gripper controller.
 
 It is independent of HPP and of the constraint graph: a behaviour tree or
@@ -46,7 +48,7 @@ from .geometry import (
     pose,
     pose_to_xyzquat,
 )
-from .gripper import ParallelGripperModel
+from .gripper import GripperModel
 
 
 @dataclass
@@ -200,11 +202,10 @@ class GraspPlannerParams:
 
 
 class GraspPlanner:
-    """Plans and evaluates parallel-jaw grasps for one gripper model."""
+    """Plans and evaluates two-finger grasps for one gripper model (any
+    :class:`~long_tamp.grasping.gripper.GripperModel`)."""
 
-    def __init__(
-        self, gripper: ParallelGripperModel, params: GraspPlannerParams | None = None
-    ):
+    def __init__(self, gripper: GripperModel, params: GraspPlannerParams | None = None):
         self.gripper = gripper
         self.params = params or GraspPlannerParams()
 
@@ -229,7 +230,10 @@ class GraspPlanner:
         squeeze = g.default_squeeze if squeeze is None else squeeze
         R, t = grasp_pose[:3, :3], grasp_pose[:3, 3]
         ax, ay, az = R[:, 0], R[:, 1], R[:, 2]
-        open_half = g.max_width / 2
+        # The open pads' inner faces along the closing axis (a rotary jaw's
+        # are not symmetric about the TCP).
+        open_mid = g.center_offset_for_width(g.max_width)
+        open_lo, open_hi = open_mid - g.max_width / 2, open_mid + g.max_width / 2
         reasons: list[str] = []
 
         # The pads slide forward along the approach while closing (13 mm over
@@ -244,26 +248,26 @@ class GraspPlanner:
             origins = t + np.outer(X.ravel(), ax) + np.outer(Z.ravel(), az)
             T0, T1 = line_intervals_batch(primitives, origins, ay)
             # Only what lies between the open fingers can be closed on.
-            inside = (T1 > -open_half) & (T0 < open_half)
+            inside = (T1 > open_lo) & (T0 < open_hi)
             T0, T1 = np.where(inside, T0, np.nan), np.where(inside, T1, np.nan)
-            blocked = bool(np.any(inside & ((T0 <= -open_half) | (T1 >= open_half))))
+            blocked = bool(np.any(inside & ((T0 <= open_lo) | (T1 >= open_hi))))
             hit = np.any(inside, axis=0)
             hi_hits = np.nanmax(T1[:, hit], axis=0) if hit.any() else np.empty(0)
             lo_hits = np.nanmin(T0[:, hit], axis=0) if hit.any() else np.empty(0)
             if not len(hi_hits):
                 break
-            pad_x = g.pad_x_for_width(2 * max(hi_hits.max(), -lo_hits.min()))
+            pad_x = g.pad_x_for_width(g.contact_width(lo_hits.min(), hi_hits.max()))
         if not len(hi_hits):
             return GraspEvaluation(False, reasons=["fingers close on nothing"])
         if blocked:
             reasons.append("object wider than the open gripper")
         y_hi, y_lo = float(hi_hits.max()), float(lo_hits.min())
-        half = max(y_hi, -y_lo)
-        contact_width = 2 * half
-        offset = (y_hi + y_lo) / 2
+        contact_width = g.contact_width(y_lo, y_hi)
+        mid = g.center_offset_for_width(contact_width)
+        offset = (y_hi + y_lo) / 2 - mid
         tol = p.contact_tolerance
-        side_hi = int(np.sum(hi_hits >= half - tol))
-        side_lo = int(np.sum(-lo_hits >= half - tol))
+        side_hi = int(np.sum(hi_hits >= mid + contact_width / 2 - tol))
+        side_lo = int(np.sum(lo_hits <= mid - contact_width / 2 + tol))
         contact_ratio = max(side_hi, side_lo) / float(n * n)
         if abs(offset) > p.max_offset:
             reasons.append(f"off-centre by {offset * 1000:.1f} mm")
@@ -418,7 +422,8 @@ class GraspPlanner:
         c /= np.linalg.norm(c)
         R = np.column_stack([a, c, np.cross(a, c)])
         pad_x = self.gripper.pad_x_for_width(width)
-        return pose(R, np.asarray(pad_center) - pad_x * a)
+        mid = self.gripper.center_offset_for_width(width)
+        return pose(R, np.asarray(pad_center) - pad_x * a - mid * c)
 
     def _emit(self, approach, closing, pad_center, width, source):
         yield self._frame(approach, closing, pad_center, width), source

@@ -1,4 +1,4 @@
-"""Parallel-jaw gripper models: finger kinematics and a coarse collision hull.
+"""Gripper models: finger kinematics and a coarse collision hull.
 
 The planners in ``long_tamp.planning`` treat a grasp as a rigid TCP
 constraint (gripper frame == handle frame): they never move the fingers, so
@@ -22,6 +22,12 @@ its HPP ``<gripper>`` frame looks like: +X is the approach direction, +Y
 the closing axis, +Z = X x Y, origin at the TCP. ``frame_rotation`` maps
 that canonical frame to the model's ``<gripper>`` frame, so a planned grasp
 can be written as an SRDF ``<handle>`` the gripper frame lands on.
+
+**Other hands.** The grasp planner and the closure table only use the
+:class:`GripperModel` protocol (ADR-0008). :class:`RotaryJawGripperModel`
+covers a hand with one moving jaw against a fixed one (the SO-101): the
+midpoint between its pads moves along the closing axis as it closes. Presets
+are in :data:`PRESETS`; :func:`register_gripper` adds one.
 """
 
 from __future__ import annotations
@@ -29,8 +35,67 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
 import numpy as np
+
+
+@runtime_checkable
+class GripperModel(Protocol):
+    """What the grasp planner and the closure table need from a hand.
+
+    All geometry is in the canonical grasp frame (see the module doc). The
+    "driving value" ``q`` is the one number a gripper controller commands;
+    ``joint_values`` spreads it over the finger joints.
+    """
+
+    name: str
+    frame_rotation: np.ndarray
+    pad_length: float
+    pad_width: float
+    default_squeeze: float
+
+    @property
+    def q_open(self) -> float: ...
+
+    @property
+    def max_width(self) -> float: ...
+
+    @property
+    def min_width(self) -> float: ...
+
+    def width_at(self, q: float) -> float:
+        """Pad-to-pad gap at driving value ``q``."""
+        ...
+
+    def q_for_width(self, width: float) -> float:
+        """Driving value whose gap is ``width`` (clamped to the stroke)."""
+        ...
+
+    def pad_x_at(self, q: float) -> float:
+        """Pads' centre along the approach axis at ``q``."""
+        ...
+
+    def pad_x_for_width(self, width: float) -> float: ...
+
+    def center_offset_for_width(self, width: float) -> float:
+        """Midpoint between the pads along the closing axis at gap ``width``
+        (0 for a symmetric hand)."""
+        ...
+
+    def contact_width(self, y_lo: float, y_hi: float) -> float:
+        """Gap at which the closing pads first touch an object spanning
+        ``[y_lo, y_hi]`` along the closing axis (TCP at 0); wider than
+        :attr:`max_width` when it doesn't fit."""
+        ...
+
+    def collision_boxes(
+        self, width: float, sweep: float = 0.0
+    ) -> list[tuple[str, np.ndarray, np.ndarray]]: ...
+
+    def joint_values(self, q: float, prefix: str = "") -> dict[str, float]: ...
+
+    def open_joint_values(self, prefix: str = "") -> dict[str, float]: ...
 
 
 @dataclass(frozen=True)
@@ -67,6 +132,10 @@ class ParallelGripperModel:
             ``None``: one box per finger.
         linkage_thickness: Linkage size along the closing axis, outward
             from the pad's inner face.
+        palm_offset: Canonical Y of the palm box's centre.
+        finger_tip: Canonical X of the fingertips when they reach past the
+            pads' front (the finger boxes then extend to it). ``None``: the
+            fingers end at the pads' front.
     """
 
     name: str
@@ -84,6 +153,8 @@ class ParallelGripperModel:
     inner_width: float = 0.0
     linkage_front: float | None = None
     linkage_thickness: float = 0.0
+    palm_offset: float = 0.0
+    finger_tip: float | None = None
 
     def __post_init__(self) -> None:
         table = np.asarray(self.stroke, dtype=float)
@@ -134,6 +205,16 @@ class ParallelGripperModel:
     def pad_x_for_width(self, width: float) -> float:
         return self.pad_x_at(self.q_for_width(width))
 
+    def center_offset_for_width(self, width: float) -> float:
+        """Midpoint between the pads along the closing axis: 0, the pads
+        close symmetrically about the TCP."""
+        return 0.0
+
+    def contact_width(self, y_lo: float, y_hi: float) -> float:
+        """Both pads close together and stop when the first one touches, so
+        the wider side of ``[y_lo, y_hi]`` sets the gap."""
+        return 2 * max(y_hi, -y_lo)
+
     def inner_front_for_width(self, width: float) -> float | None:
         if not self.inner_front:
             return None
@@ -166,13 +247,16 @@ class ParallelGripperModel:
         """
         pad_x = self.pad_x_for_width(width)
         front = pad_x + self.pad_length / 2
+        if self.finger_tip is not None:
+            front = max(front, self.finger_tip)
         back = self.palm_front - sweep
+        mid = self.center_offset_for_width(width)
         boxes = []
 
         def slab(name, sign, x0, x1, thickness, size_z):
-            y0, y1 = width / 2, width / 2 + thickness
-            center = np.array([(x0 + x1) / 2, sign * (y0 + y1) / 2, 0.0])
-            half = np.array([(x1 - x0) / 2, (y1 - y0) / 2, size_z / 2])
+            inner = mid + sign * width / 2
+            center = np.array([(x0 + x1) / 2, inner + sign * thickness / 2, 0.0])
+            half = np.array([(x1 - x0) / 2, thickness / 2, size_z / 2])
             boxes.append((name, center, half))
 
         split = self.linkage_front
@@ -191,15 +275,62 @@ class ParallelGripperModel:
                 slab(side, sign, back, front, self.finger_thickness, self.finger_width)
         depth, sy, sz = self.palm_size
         pf = self.palm_front
-        center = np.array([pf - depth / 2 - sweep / 2, 0.0, 0.0])
+        center = np.array([pf - depth / 2 - sweep / 2, self.palm_offset, 0.0])
         half = np.array([(depth + sweep) / 2, sy / 2, sz / 2])
         boxes.append(("palm", center, half))
         inner = self.inner_front_for_width(width)
         if inner is not None and inner > back:
-            center = np.array([(inner + back) / 2, 0.0, 0.0])
+            center = np.array([(inner + back) / 2, mid, 0.0])
             half = np.array([(inner - back) / 2, width / 2, self.inner_width / 2])
             boxes.append(("knuckles", center, half))
         return boxes
+
+
+@dataclass(frozen=True)
+class RotaryJawGripperModel(ParallelGripperModel):
+    """One jaw swinging against a fixed one (the SO-101's gripper).
+
+    Same description as :class:`ParallelGripperModel`, plus where the pads'
+    midpoint is: only one jaw moves, so the midpoint between the pads slides
+    along the closing axis as the hand closes, and the pads don't close
+    symmetrically about the TCP. The moving jaw's pad is approximated as
+    parallel to the fixed one; the stroke's gap is the narrowest one over
+    the pads' length, so an object that fits the table fits the hand.
+
+    Attributes:
+        center: Per stroke row, canonical Y of the midpoint between the pads'
+            inner faces (the fixed pad's face sits at ``center + gap / 2``
+            when the fixed jaw is on the +Y side, ``center - gap / 2``
+            otherwise).
+    """
+
+    center: tuple[float, ...] = ()
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if len(self.center) != len(self.stroke):
+            raise ValueError("center needs one value per stroke row")
+
+    def center_offset_at(self, q: float) -> float:
+        return float(np.interp(q, self._table[:, 0], self.center))
+
+    def center_offset_for_width(self, width: float) -> float:
+        return self.center_offset_at(self.q_for_width(width))
+
+    def contact_width(self, y_lo: float, y_hi: float) -> float:
+        """The pads close until one touches: the narrowest gap whose pads
+        still enclose ``[y_lo, y_hi]``. An object reaching past the fixed
+        pad never fits: the result is then wider than the stroke."""
+        t = self._table
+        widths = np.linspace(self.min_width, self.max_width, 2001)
+        order = np.argsort(t[:, 1])
+        mid = np.interp(widths, t[order, 1], np.asarray(self.center)[order])
+        lo, hi = mid - widths / 2, mid + widths / 2
+        ok = (lo <= y_lo + 1e-9) & (hi >= y_hi - 1e-9)
+        if ok.any():
+            return float(widths[np.argmax(ok)])
+        short = max(y_hi - hi[-1], lo[-1] - y_lo, 0.0)
+        return self.max_width + 2 * short + 1e-6
 
 
 # ---------------------------------------------------------------------------
@@ -377,10 +508,68 @@ PANDA_HAND = ParallelGripperModel(
     default_squeeze=0.001,
 )
 
-PRESETS: dict[str, ParallelGripperModel] = {
+#: SO-101 jaw (``SO-ARM100/Simulation/SO101/so101_new_calib.urdf``): the
+#: ``gripper`` joint (radians) swings the moving jaw against the fixed
+#: finger of ``gripper_link``. ``<gripper>`` frame on ``gripper_frame_link``,
+#: whose +Z is the approach and +X the opening direction (moving jaw at -X,
+#: fixed finger's inner face at x = +2.0 mm). Gap and pad midpoint measured
+#: from the STL meshes the way soarm_tamp's ``studies/reachability.py`` does
+#: (inner faces in the z in [-35, -10] mm band, so that band is the pad);
+#: they match its ``geometry.JAW_TABLE`` to 0.05 mm. The joint opens to
+#: 100 deg, but past 30 deg (the open command soarm_tamp uses) the jaw's tip
+#: swings back out of the pad band, so the stroke stops there. Hull boxes
+#: from the meshes' extents: the fingertips reach 8 mm past the TCP, the
+#: servo and wrist body start 45 mm behind it.
+_SO101_JAW = (  # angle (deg), gap (mm), pad midpoint along gripper x (mm)
+    (-10.0, 8.23, -2.12),
+    (-5.0, 14.21, -5.10),
+    (0.0, 19.80, -7.90),
+    (5.0, 25.24, -10.62),
+    (10.0, 29.14, -12.57),
+    (15.0, 32.84, -14.42),
+    (20.0, 36.51, -16.26),
+    (25.0, 40.14, -18.07),
+    (30.0, 43.69, -19.84),
+)
+SO101_JAW = RotaryJawGripperModel(
+    name="so101_jaw",
+    joints={"gripper": 1.0},
+    stroke=tuple(
+        (float(np.radians(deg)), gap / 1000, -0.0225) for deg, gap, _ in _SO101_JAW
+    ),
+    center=tuple(mid / 1000 for _, _, mid in _SO101_JAW),
+    pad_length=0.025,
+    pad_width=0.014,
+    finger_thickness=0.015,
+    finger_width=0.016,
+    finger_tip=0.008,
+    palm_front=-0.045,
+    palm_size=(0.055, 0.066, 0.052),
+    palm_offset=-0.0055,
+    # gripper x = canonical y, gripper y = canonical z, gripper z = canonical x
+    frame_rotation=np.array([[0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]),
+    # Position-controlled serial servo: grip force comes from commanding
+    # past contact and stalling (soarm_tamp closes ~5 mm past a 30 mm cube).
+    default_squeeze=0.005,
+)
+
+#: Hand models by name. :func:`register_gripper` adds one.
+PRESETS: dict[str, GripperModel] = {
     ROBOTIQ_2F85.name: ROBOTIQ_2F85,
     PANDA_HAND.name: PANDA_HAND,
+    SO101_JAW.name: SO101_JAW,
 }
+
+
+def register_gripper(model: GripperModel, *, replace: bool = False) -> GripperModel:
+    """Add ``model`` to :data:`PRESETS` under its name; refuses to replace a
+    different model of that name unless ``replace``."""
+    if not isinstance(model, GripperModel):
+        raise TypeError(f"{model!r} does not implement GripperModel")
+    if not replace and PRESETS.get(model.name, model) is not model:
+        raise ValueError(f"a gripper model named {model.name!r} is registered")
+    PRESETS[model.name] = model
+    return model
 
 
 def _slab_front(tris: np.ndarray, half: float, closing: int, approach: int) -> float:

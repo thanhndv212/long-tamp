@@ -23,7 +23,7 @@ import numpy as np
 from long_tamp.logging import get_logger
 
 from .geometry import Primitive, link_poses, load_srdf_frames, load_urdf_primitives
-from .gripper import ParallelGripperModel
+from .gripper import GripperModel
 from .planner import GraspCandidate, GraspEvaluation, GraspPlanner, GraspPlannerParams
 
 logger = get_logger("grasping.objects")
@@ -72,7 +72,7 @@ class GripperBinding:
     """
 
     gripper: str
-    model: ParallelGripperModel
+    model: GripperModel
     prefix: str = ""
 
     @property
@@ -109,7 +109,7 @@ class FingerClosureTable:
     def from_task_yaml(
         cls,
         config_path: str | Path,
-        models: Mapping[str, ParallelGripperModel],
+        models: Mapping[str, GripperModel],
         params: GraspPlannerParams | None = None,
     ) -> FingerClosureTable:
         """Build from a task YAML. ``models`` maps an HPP gripper name
