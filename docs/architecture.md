@@ -176,7 +176,7 @@ what it can't.
 | 1. Redraw the target | inside `plan_sequence()` | another target for the same edge |
 | 2. Resume the block | `block_recovery`, `resume_sequence()` | replan the failing phase, keep earlier phases |
 | 3. Replan the block | `block_recovery` | undo the block's earlier commitments, new lookahead |
-| 4. Replan the mission | `repair.plan_execute_repair()` | block the failing binding (`clamp2 can't take part1`) and plan around it |
+| 4. Replan the mission | `repair.plan_execute_repair()` | block the failing binding (`clamp2 can't take part1`) and plan around it, or retry a missed grasp from the observed world (ADR-0010) |
 | 5. Decide at goal level | `supervisor.py` (a model role) | retry, drop part of the goal, abort, or escalate |
 | 6. A human | escalation report | anything |
 

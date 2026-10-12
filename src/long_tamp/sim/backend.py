@@ -1224,6 +1224,25 @@ class MuJoCoBackend:
         self.data.qvel[:] = 0.0
         self.mujoco.mj_forward(self.model, self.data)
 
+    def displace(self, obj: str, delta) -> None:
+        """Move object ``obj`` (its root body, or the object it names) by
+        ``delta`` [m, world frame] right now, as if someone moved it after it
+        was seen: the next grasp of it misses (#128). A held object stays."""
+        names = [n for n in self._objects if n == obj or n.startswith(f"{obj}/")]
+        if not names:
+            raise KeyError(obj)
+        name = names[0]
+        if name in self._gripped:
+            return
+        body = self._objects[name]
+        adr = self.model.jnt_qposadr[self.model.body_jntadr[body]]
+        self.data.qpos[adr : adr + 3] += np.asarray(delta, float)
+        self.data.qvel[:] = 0.0
+        self.mujoco.mj_forward(self.model, self.data)
+        if self.data.eq_active[self._weld(name)]:
+            self._set_weld(name, 0, *self._relative(self.data, 0, body))
+        self._flush_frames()
+
     def carried_by_robot(self) -> dict[str, int]:
         """Objects a robot link carries in this command: name -> body id."""
         return {

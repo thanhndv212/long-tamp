@@ -76,6 +76,16 @@ class Situation:
     blocked: list[Any]
     vocabulary: Vocabulary
     history: list[dict[str, Any]] = field(default_factory=list)
+    #: Every failure the repair loop saw, oldest first: the fact history
+    #: (``RepairOutcome.failures``), e.g. each ``grasp_missed`` it retried.
+    failures: list[dict[str, Any]] = field(default_factory=list)
+
+
+def _failure_lines(failures: Sequence[dict[str, Any]]) -> list[str]:
+    return [
+        f"- {f.get('step')}: {', '.join(f.get('facts', [])) or f.get('message', '')}"
+        for f in failures
+    ]
 
 
 @dataclass
@@ -178,6 +188,9 @@ def _prompt(situation: Situation, feedback: Sequence[str]) -> str:
         ]
     if situation.blocked:
         lines.append(f"Ruled out so far: {situation.blocked}")
+    if len(situation.failures) > 1:
+        lines += ["", "Every failure so far, oldest first:"]
+        lines += _failure_lines(situation.failures)
     if situation.history:
         lines += ["", "Decisions so far:"]
         lines += [f"- {h['action']}: {h.get('reason', '')}" for h in situation.history]
@@ -322,6 +335,7 @@ def write_report(
         "failure": situation.failure,
         "repair_message": situation.message,
         "blocked": situation.blocked,
+        "failures": situation.failures,
         "state": list(situation.vocabulary.state),
         "decisions": decisions,
     }
@@ -344,6 +358,8 @@ def write_report(
         )
     if situation.blocked:
         lines.append(f"- Ruled out: {situation.blocked}")
+    if situation.failures:
+        lines += ["", "## Fact history", "", *_failure_lines(situation.failures)]
     lines += [
         "",
         "## Goal",

@@ -29,6 +29,7 @@ OPTIONAL = (
     "start_error",
     "observed_config",
     "disturb",
+    "displace",
     "open_gripper",
     "close_gripper",
     "gripper_state",

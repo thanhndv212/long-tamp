@@ -63,9 +63,10 @@ from long_tamp.tasks.task_planning.events import (  # noqa: E402
     make_event,
     plan_event,
 )
+from long_tamp.tasks.task_planning.repair import retry_missed_grasp  # noqa: E402
 from long_tamp.tasks.task_planning.skills import SkillCommand  # noqa: E402
 from long_tamp.sim.skills import SCREW  # noqa: E402
-from long_tamp.tasks.task_planning.predicates import holds  # noqa: E402
+from long_tamp.tasks.task_planning.predicates import holds, parse_atom  # noqa: E402
 from long_tamp.execution import (  # noqa: E402
     ExecutionCommand,
     ExecutionPolicy,
@@ -471,6 +472,8 @@ def mission_session(
         index = ctx.setdefault("block_index", 0)
         ctx["block_index"] = index + 1
         binding = {k: v for k, v in parameters.items() if k != "block"}
+        # What the step was, for a failure its execution reports later.
+        ctx.setdefault("steps", {})[label] = (capability, binding)
         if _injected(ctx, capability, binding):
             # --inject-failure: fail as if its first phase couldn't be
             # reached, without planning (the M3 exit test).
@@ -612,11 +615,14 @@ def run_with_repair(
     mission: dict[str, Any],
     goal: list[str] | None = None,
     constraints: list[tuple[str, dict[str, str]]] | None = None,
+    retries: int = 2,
 ) -> dict[str, Any]:
     """Plan, run, and replan around failures (``--replan``, issue #15).
 
     Every round plans the goal from the current world state with the blocked
-    bindings so far, and runs it from where the last round stopped.
+    bindings so far, and runs it from where the last round stopped. A missed
+    grasp is retried as it was (the object picked where it is now), up to
+    ``retries`` times per step (#128).
     """
     from long_tamp.tasks.task_planning.repair import plan_execute_repair
 
@@ -645,6 +651,14 @@ def run_with_repair(
         return result["failure"]
 
     def on_replan(failure, blocked):
+        if not blocked:
+            print(
+                f"\n=== retrying: {failure['step']} failed "
+                f"({', '.join(failure.get('facts', []))}); replanning it "
+                "from the observed world",
+                flush=True,
+            )
+            return
         print(
             f"\n=== replanning: {failure['step']} failed "
             f"({', '.join(failure.get('facts', [])[1:]) or 'no facts'}); "
@@ -653,7 +667,13 @@ def run_with_repair(
         )
 
     outcome = plan_execute_repair(
-        plan, execute, repair_policy, max_rounds=rounds, on_replan=on_replan
+        plan,
+        execute,
+        repair_policy,
+        max_rounds=rounds,
+        on_replan=on_replan,
+        retry=retry_missed_grasp,
+        max_retries=retries,
     )
     # No first plan at all: nothing ran.
     result = dict(state["result"] or {"failure": None, "final_config": state["q"]})
@@ -664,7 +684,9 @@ def run_with_repair(
         blocks=state["blocks"],
         skipped=state["skipped"],
         task_replans=len(outcome.rounds) - 1,
+        retries=sum(r.retried for r in outcome.rounds),
         blocked=outcome.blocked,
+        failures=outcome.failures,
     )
     if not outcome.success:
         print(f"\n=== repair gave up: {outcome.message}")
@@ -684,6 +706,7 @@ def run_supervised(
     constraints: list[tuple[str, dict[str, str]]],
     client,
     run_dir: Path,
+    retries: int = 2,
 ) -> dict[str, Any]:
     """Repair loops under the execution supervisor (``--supervise``, #88).
 
@@ -712,6 +735,7 @@ def run_supervised(
             mission,
             current_goal,
             constraints,
+            retries,
         )
         where["q"] = result.get("final_config") or where["q"]
         total["seconds"] += result.get("seconds", 0.0)
@@ -730,6 +754,7 @@ def run_supervised(
             message=result.get("repair_message", ""),
             blocked=result.get("blocked", []),
             vocabulary=goal_vocabulary(n_parts, state, clamps),
+            failures=result.get("failures", []),
         )
 
     def reachable(candidate):
@@ -1114,6 +1139,15 @@ def run_mission(
     if not run.success:
         print(f"\n=== {run.failed_step} stopped the mission: {run.message}")
     success, skipped = run.success, run.skipped
+    failure = None
+    if not run.success:
+        failure = (
+            ctx.get("failure")
+            or execution_failure(run, ctx.get("steps"))
+            or stopped_failure(run, session)
+        )
+    if failure and retry_missed_grasp(failure) and backend is not None:
+        recover_missed_grasp(task, planner, ctx, backend, failure)
     return {
         "success": success,
         "seconds": round(time.time() - t_mission, 2),
@@ -1123,14 +1157,43 @@ def run_mission(
         "execution": execution_summary(run.executions),
         "timing": run.timing or None,
         "final_config": ctx["q"],
-        "failure": (
-            None
-            if run.success
-            else ctx.get("failure")
-            or execution_failure(run)
-            or stopped_failure(run, session)
-        ),
+        "failure": failure,
     }
+
+
+def recover_missed_grasp(
+    task: ScrewAssemblyTask,
+    planner: GraspSequencePlanner,
+    ctx: dict[str, Any],
+    backend,
+    failure: dict[str, Any],
+) -> None:
+    """After ``grasp_missed`` (#128): open the hand that missed, undo the
+    step's grasps in the grasp tracker, and take the robot and the objects
+    where the backend observes them, so the retry picks the object where it
+    is."""
+    for fact in failure.get("facts", []):
+        atom = parse_atom(fact)
+        if atom.name == "grasp_missed" and hasattr(backend, "open_gripper"):
+            try:
+                backend.open_gripper(atom.args[0])
+            except KeyError:  # no hand bound (weld grasps): nothing to open
+                pass
+    start = ctx.get("step_start", {}).get(failure["step"])
+    if start is not None:
+        MissionCheckpoint.restore_grasps(planner.grasp_tracker, start)
+    observe = getattr(backend, "observed_config", None)
+    observed = observe(ctx["q"]) if observe is not None else None
+    if observed is not None:
+        # within the planner's bounds, as for a drift (on_drift)
+        model = task.robot.model()
+        observed = np.clip(observed, model.lowerPositionLimit, model.upperPositionLimit)
+        ctx["q"] = [float(v) for v in observed]
+    print(
+        f"\n=== {failure['step']} === {', '.join(failure['facts'])}: hand opened, "
+        f"world {'observed' if observed is not None else 'NOT observed'}",
+        flush=True,
+    )
 
 
 from long_tamp.visualization.mission_viewer import MissionViewer
@@ -1144,6 +1207,7 @@ def make_backend(
     hole_error: tuple[float, float, float] = (0.0, 0.0, 0.0),
     speed: float = math.inf,
     drift: list[tuple[str, str, float]] | None = None,
+    miss: list[tuple[str, str, tuple[float, float, float]]] | None = None,
     grasp: str = "weld",
     record: bool = False,
     remote: bool = False,
@@ -1183,7 +1247,8 @@ def make_backend(
             **contact,
         )
         backend.display = display  # the planned paths need not be played
-        return DriftInjector(backend, drift) if drift else backend
+        backend = DriftInjector(backend, drift) if drift else backend
+        return MissInjector(backend, miss) if miss else backend
     return None
 
 
@@ -1250,6 +1315,38 @@ class DriftInjector:
         return getattr(self._backend, name)
 
 
+class MissInjector:
+    """``--inject-miss``: move an object just before a step's motion starts,
+    as if someone took it after it was seen. The step's grasp then closes on
+    nothing and reports ``grasp_missed`` (#127); the repair opens the hand,
+    observes the world and picks the object where it is now (#128)."""
+
+    def __init__(self, backend, miss: list[tuple[str, str, tuple]]):
+        self._backend = backend
+        self._pending = list(miss)
+
+    def start(self, command):
+        for item in list(self._pending):
+            label, obj, delta = item
+            if command.step_id == label:
+                self._backend.displace(obj, delta)
+                self._pending.remove(item)
+                print(f"\n=== {label} === INJECTED MISS: {obj} moved by {delta} m")
+        return self._backend.start(command)
+
+    def __getattr__(self, name):
+        return getattr(self._backend, name)
+
+
+def parse_miss(spec: str) -> tuple[str, str, tuple[float, float, float]]:
+    """``--inject-miss "LABEL:OBJECT:DX,DY,DZ"``."""
+    label, obj, delta = spec.rsplit(":", 2)
+    values = tuple(float(v) for v in delta.split(","))
+    if len(values) != 3:
+        raise ValueError(f"--inject-miss {spec!r}: DX,DY,DZ in metres")
+    return label, obj, values
+
+
 def parse_drift(spec: str) -> tuple[str, str, float]:
     """``--inject-drift "LABEL:JOINT:RAD"``."""
     label, joint, delta = spec.rsplit(":", 2)
@@ -1273,18 +1370,26 @@ def stopped_failure(run, session) -> dict[str, Any] | None:
     }
 
 
-def execution_failure(run) -> dict[str, Any] | None:
+def execution_failure(
+    run, steps: dict[str, tuple[str, dict[str, Any]]] | None = None
+) -> dict[str, Any] | None:
     """The failure facts of a step whose execution failed (a skill reporting
-    ``screw_misaligned``, say), in the shape planning failures have."""
+    ``screw_misaligned``, a grasp ``grasp_missed``), in the shape planning
+    failures have; ``steps`` (label -> capability, parameters) adds the
+    step's binding."""
     failed = [e for e in run.executions if e.result.status.value != "success"]
     if not failed:
         return None
     last = failed[-1]
-    return {
+    failure = {
         "step": last.command.step_id,
         "facts": list(last.result.facts),
         "message": last.result.message,
     }
+    if steps and last.command.step_id in steps:
+        capability, parameters = steps[last.command.step_id]
+        failure.update(capability=capability, parameters=dict(parameters))
+    return failure
 
 
 def execution_summary(executions) -> dict[str, Any] | None:
@@ -1411,6 +1516,24 @@ def main() -> int:
         metavar="LABEL:JOINT:RAD",
         help="with --backend mujoco: bump JOINT by RAD just before step LABEL's "
         "motion (repeatable), e.g. 'part1 B: release:ur10_left/elbow_joint:0.2'",
+    )
+    ap.add_argument(
+        "--inject-miss",
+        action="append",
+        default=[],
+        metavar="LABEL:OBJECT:DX,DY,DZ",
+        help="with --backend mujoco: move OBJECT by (DX, DY, DZ) m just before "
+        "step LABEL's motion, so its grasp misses (repeatable), e.g. "
+        "'part1 A0: grasp:part1:0,-0.06,0'; with --grasp contact and --replan "
+        "the step is retried where the object is (#128)",
+    )
+    ap.add_argument(
+        "--grasp-retries",
+        type=int,
+        default=2,
+        metavar="N",
+        help="with --replan: retry a step whose grasp missed up to N times "
+        "(open, observe, replan the pick), then give up (default 2; #128)",
     )
     ap.add_argument(
         "--hole-error",
@@ -1623,6 +1746,7 @@ def main() -> int:
                 record=args.sim_record,
                 remote=args.remote,
                 drift=[parse_drift(spec) for spec in args.inject_drift],
+                miss=[parse_miss(spec) for spec in args.inject_miss],
             ),
             plan_ahead=args.plan_ahead,
             concurrent=args.concurrent,
@@ -1717,6 +1841,7 @@ def main() -> int:
                 constraints,
                 client,
                 run_dir,
+                args.grasp_retries,
             )
         elif args.replan:
             result = run_with_repair(
@@ -1729,6 +1854,7 @@ def main() -> int:
                 mission,
                 goal,
                 constraints,
+                args.grasp_retries,
             )
         else:
             result = run_mission(
