@@ -168,6 +168,69 @@ M8, and M11 gives a sim showcase before the real-arm one. The open benchmark (#1
 exception: its env server needs M7's remote backend (#125), its first runs need M8, and it
 brings one new library feature, articulated objects (#161).
 
+```mermaid
+flowchart LR
+  M7[M7 remote backend<br/>#125]
+  M8[M8 mission runtime]
+  M9[M9 perceived world state]
+  M10[M10 open VLM/VLA<br/>incl. #145 goal writer]
+  CAM["#151 sim camera"]
+  SIM["#152 SO-101 stacking in sim"]
+  R1["#156 env server"]
+  R2["#157 scene exporter"]
+  R3["#158 grasps"]
+  R4["#159 Ideal subset"]
+  R5["#160 pour"]
+  R6["#161 articulated objects"]
+  R7["#162 disturbance, mismatch, mix"]
+  R8["#163 continuous variant + tables"]
+  X["#154 M11 exit"]
+  S1[S1 SO-101 backend]
+  S2[S2 vision]
+  S3[S3 stacking domain]
+  S4[S4 AI missions on the arm]
+  S5[S5 open models on the arm]
+  S6[S6 showcase]
+  M7 --> R1
+  R1 --> R2
+  R2 --> R3
+  R3 --> R4
+  M8 --> R4
+  R4 --> R5
+  R4 --> R6
+  R4 --> R7
+  CAM --> R7
+  M10 --> R7
+  R7 --> R8
+  R5 --> X
+  R6 --> X
+  R8 --> X
+  M8 --> SIM
+  SIM --> X
+  M7 --> S1
+  S1 --> S3
+  S2 --> S3
+  M8 --> S3
+  SIM --> S3
+  M9 --> S4
+  S3 --> S4
+  S4 --> S5
+  M10 --> S5
+  S5 --> S6
+  X --> S6
+  classDef hw fill:#ffe0b2,stroke:#e65100,stroke-width:2px,color:#000
+  classDef bench fill:#bbdefb,stroke:#0d47a1,stroke-width:2px,color:#000
+  class S1,S2,S3,S4,S5,S6 hw
+  class R1,R2,R3,R4,R5,R6,R7,R8,X bench
+  linkStyle 16,17,18,22,23,25 stroke:#e65100,stroke-width:3px
+  linkStyle 0,1,2,3,5,6,7,10,11,12,13,26 stroke:#0d47a1,stroke-width:3px
+```
+
+Orange: the real-hardware path on the SO-101 (soarm_tamp S1–S6, see its
+[delivery plan](https://github.com/thanhndv212/soarm_tamp/blob/main/docs/roadmap.md#delivery-plan)).
+Blue: the simulated benchmark path (RoboCerebra, #156–#163, closing M11 with #154).
+Uncoloured nodes are the library milestones and sim pieces both paths build on.
+
 ## M7 — Hardware execution: remote backends and grippers (0.9.0)
 
 [Milestone 7](https://github.com/thanhndv212/long-tamp/milestone/7)
