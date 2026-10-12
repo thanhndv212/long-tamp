@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Remote execution over TCP (#125, ADR-0007).
+  - `serve_backend(backend, port=...)` serves any execution backend next to the
+    hardware, and `RemoteBackend(host, port)` drives it from the planner.
+  - The wire is length-prefixed JSON frames, never pickle; paths cross as samples
+    (`SampledPath.from_samples`).
+  - One client at a time. The server cancels the running command when the client
+    disconnects or goes silent for `timeout` seconds.
+  - `RemoteBackend.spawn(factory, ...)` serves a backend from a local process, and
+    `python -m long_tamp.execution.remote module:factory` serves one on a robot host.
+  - The screw-assembly example takes `--remote` with `--backend mujoco`.
+
 - The task-planning BT nodes as a library and a BehaviorTree.CPP plugin (#25).
   - Libraries: `long_tamp_bt_nodes` (call `RegisterNodes`), and `long_tamp_bt_nodes_plugin`
     (`BT_REGISTER_NODES`, so `factory.registerFromPlugin` and Nav2's `plugin_lib_names`

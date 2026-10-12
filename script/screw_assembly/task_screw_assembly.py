@@ -73,6 +73,7 @@ from long_tamp.execution import (  # noqa: E402
     PathPlaybackBackend,
     PlanExecutor,
     ProcessBackend,
+    RemoteBackend,
 )
 from screw_domain import (  # noqa: E402
     LEFT,
@@ -1145,8 +1146,10 @@ def make_backend(
     drift: list[tuple[str, str, float]] | None = None,
     grasp: str = "weld",
     record: bool = False,
+    remote: bool = False,
 ):
-    """The execution backend for ``--backend``."""
+    """The execution backend for ``--backend``; with ``remote``, the
+    simulation is served over TCP (``--remote``, ADR-0007) instead of a pipe."""
     if name == "mock":
         return MockBackend(rtf=1000.0)
     if name == "playback":
@@ -1166,7 +1169,8 @@ def make_backend(
         # what was planned.
         scene = getattr(live_viewer, "scene", None)
         display = scene.client if scene is not None else None
-        backend = ProcessBackend(  # closed at exit (see main)
+        serve = RemoteBackend.spawn if remote else ProcessBackend
+        backend = serve(  # closed at exit (see main)
             MuJoCoBackend,
             export,
             to_qpos,
@@ -1343,6 +1347,13 @@ def main() -> int:
         "(planning only, the default), mock (instant, for testing the pipeline), "
         "playback (plays the paths in real time, in the viewer if it is on) or "
         "mujoco (simulates them under tracking control; needs the sim extra)",
+    )
+    ap.add_argument(
+        "--remote",
+        action="store_true",
+        help="with --backend mujoco: drive the simulation through the remote "
+        "backend (TCP, as a robot on another host would be; ADR-0007) instead "
+        "of a process pipe",
     )
     ap.add_argument(
         "--grasp",
@@ -1600,6 +1611,7 @@ def main() -> int:
                 speed=args.sim_speed,
                 grasp=args.grasp,
                 record=args.sim_record,
+                remote=args.remote,
                 drift=[parse_drift(spec) for spec in args.inject_drift],
             ),
             plan_ahead=args.plan_ahead,

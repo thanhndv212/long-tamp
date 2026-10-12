@@ -219,6 +219,7 @@ responsive while a step plans therefore runs in its own process:
 |---|---|---|
 | Mission | executor, refiner, HPP | the main process |
 | Simulator (`ProcessBackend`) | MuJoCo backend | in a thread, MuJoCo motion ran 3.6× slower than real time |
+| Robot host (`RemoteBackend`, optional) | any backend, over TCP | the robot's hardware is on another host or in another environment; stops on disconnect (ADR-0007) |
 | Viewer front (`separate_process=True`) | page and event serving | the page answers in milliseconds instead of seconds |
 | 3D scene (`SceneProcess`) | Viser scene | doesn't freeze while a step plans |
 | C++ host (optional) | BehaviorTree.CPP tree | calls Python in-process (embedded CPython), no RPC |
@@ -250,7 +251,7 @@ What the imports look like (checked at the review commit):
 | `planning/` | scenes, constraints, graphs, configs, path recording | `SceneBuilder`, `ConstraintBuilder`, `GraphBuilder`, `SequentialConstraintGraphFactory`, `GraspStateTracker`, `ConfigGenerator`, `PathRecorder` | [Standalone usage](usage/standalone-usage.md) |
 | `tasks/` | multi-phase grasp sequences, recovery, the refiner | `GraspSequencePlanner`, `run_block_with_recovery`, `Refiner`, `GraspSequenceRefiner`, `MissionCheckpoint`, `ManipulationTask` | [Refiner](usage/refiner.md) |
 | `tasks/task_planning/` | plan format, validation, task planners, repair, BT compiler, events, model roles | `TaskPlan`, `CapabilityRegistry`, `TaskPlanningSession`, `run_plan`, `to_pddl`, `FastDownwardPlanner`, `plan_execute_repair`, `compile_behavior_tree`, `SkillSpec` | [Task planning](usage/task-planning-pddl.md), [Events](usage/events.md), [Skills](usage/skills.md) |
-| `execution/` | run plans and motion on a backend | `PlanExecutor`, `ExecutionBackend` contract, `run_command`, `ExecutionControl`, `ProcessBackend`, `StepWatchdog` | [Execution](usage/execution.md) |
+| `execution/` | run plans and motion on a backend | `PlanExecutor`, `ExecutionBackend` contract, `run_command`, `ExecutionControl`, `ProcessBackend`, `RemoteBackend`, `StepWatchdog` | [Execution](usage/execution.md) |
 | `sim/` | MuJoCo scene export and backend | `export_mjcf`, `MuJoCoBackend` | [Simulation](usage/simulation-mujoco.md) |
 | `ai/` | model gateway, roles, operator chat | `make_client`, `refine`, `ModelRole`, `ChatSession` | [AI models](usage/ai-models.md) |
 | `viewer/` | web mission viewer, live or replay | `ViewerServer`, `write_replay`, `ChatBridge`, `ViewerConfig` | [Mission viewer](usage/viewer.md) |
@@ -285,7 +286,8 @@ Validation levels V0–V4 and which change needs which: [Validation](development
 - **A task planner:** anything that returns a `TaskPlan` document (the `TaskPlanner`
   protocol for PDDL-style planners). It passes the same validation.
 - **An execution backend:** `start` / `poll` / `cancel` from `execution.contract`; wrap it
-  in `ProcessBackend` to run it in its own process.
+  in `ProcessBackend` to run it in its own process, or serve it with `serve_backend` and
+  drive it through `RemoteBackend` when it runs on another host (ADR-0007).
 - **A skill:** a `SkillSpec` on the capability, and a controller in a backend that runs it.
 - **A model role:** input, JSON output schema with a parser, a checker and a fallback, run
   through `ai.roles.refine`.

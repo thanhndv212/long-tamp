@@ -41,3 +41,4 @@ What becomes easier, harder, or required. What we give up.
 | [0004](0004-execution-contract.md) | The execution contract: polled backends, heartbeats, duration-scaled deadlines | Accepted |
 | [0005](0005-partial-order-plans.md) | Partial-order plans and concurrent arms | Accepted |
 | [0006](0006-ai-model-integration.md) | AI model integration: one gateway, typed roles, gated tools | Accepted |
+| [0007](0007-remote-execution.md) | Remote execution: backends served over TCP, JSON frames, stop on disconnect | Accepted |
