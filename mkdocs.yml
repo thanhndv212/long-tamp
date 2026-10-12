@@ -91,6 +91,7 @@ nav:
           - "0004 Execution contract": adr/0004-execution-contract.md
           - "0005 Partial-order plans": adr/0005-partial-order-plans.md
           - "0006 AI model integration": adr/0006-ai-model-integration.md
+          - "0007 Remote execution": adr/0007-remote-execution.md
   - Plans:
       - Roadmap: plans/roadmap.md
       - "Roadmap: PyPI as the default install": plans/pypi-install-roadmap.md
