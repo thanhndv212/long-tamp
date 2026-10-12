@@ -1191,13 +1191,22 @@ def recover_missed_grasp(
         if str(held.get(gripper, "")).startswith(f"{obj}/"):
             del held[gripper]
     MissionCheckpoint.restore_grasps(planner.grasp_tracker, held)
+    # Objects where they are; the robot, and what it holds, as planned. An
+    # observed held object sits a little off its grasp (contact grasps slip),
+    # and the planner would keep that offset: a finger in the driver.
     observe = getattr(backend, "observed_config", None)
     observed = observe(ctx["q"]) if observe is not None else None
     if observed is not None:
-        # within the planner's bounds, as for a drift (on_drift)
-        model = task.robot.model()
-        observed = np.clip(observed, model.lowerPositionLimit, model.upperPositionLimit)
-        ctx["q"] = [float(v) for v in observed]
+        held = {
+            h.split("/")[0] for h in planner.grasp_tracker.current_grasps.values() if h
+        }
+        rank = dict(task.robot.rankInConfiguration)
+        q = list(ctx["q"])
+        for obj in task.task_config.OBJECTS:
+            r = rank.get(f"{obj}/root_joint")
+            if r is not None and obj not in held:
+                q[r : r + 7] = [float(v) for v in observed[r : r + 7]]
+        ctx["q"] = q
     print(
         f"\n=== {failure['step']} === {', '.join(failure['facts'])}: hand opened, "
         f"world {'observed' if observed is not None else 'NOT observed'}",
@@ -1236,7 +1245,7 @@ def make_backend(
         # The simulation runs in its own process, like a robot controller:
         # stepping it from a thread would share the planner's interpreter
         # lock (see long_tamp.execution.process).
-        contact = contact_grasps(export) if grasp == "contact" else {}
+        grasps = contact_grasps(export) if grasp == "contact" else weld_grasps(export)
         # A scene in its own process takes the simulated states straight
         # from the simulation's process (#106): what the robot does, not
         # what was planned.
@@ -1253,7 +1262,7 @@ def make_backend(
             grasp=grasp,
             record=(run_dir or HERE / "runs") / "sim" if record else None,
             display=display,
-            **contact,
+            **grasps,
         )
         backend.display = display  # the planned paths need not be played
         backend = DriftInjector(backend, drift) if drift else backend
@@ -1274,13 +1283,12 @@ def robotiq_pads(arm: str) -> dict[str, tuple[tuple, tuple]]:
     }
 
 
-def contact_grasps(export) -> dict[str, Any]:
-    """``--grasp contact``: the MuJoCo backend's fingers, grip table and pads.
+def grip_table(export, closures):
+    """(object root body, arm) -> the finger closure and the expected grasp.
     Each arm has one handle per object, so (object, arm) picks the closure."""
     from long_tamp.sim import GripTable
 
     model = export.load()
-    closures = finger_closures()
     table, expected = {}, {}
     for gripper, handle in closures.pairs():
         arm, obj = gripper.split("/")[0], handle.split("/")[0]
@@ -1290,7 +1298,19 @@ def contact_grasps(export) -> dict[str, Any]:
         root = model.body(int(model.jnt_bodyid[joint])).name
         table[(root, arm)] = closures.closed_values(gripper, handle)
         expected[(root, arm)] = closures.expected_grasp(gripper, handle)
-    grip = GripTable(table, expected)
+    return GripTable(table, expected)
+
+
+def weld_grasps(export) -> dict[str, Any]:
+    """Weld grasps: no fingers, but a missed one names its gripper and object
+    (``grasp_missed``, ADR-0009) so the repair can retry it (#128)."""
+    return {"expect": grip_table(export, finger_closures()).expect}
+
+
+def contact_grasps(export) -> dict[str, Any]:
+    """``--grasp contact``: the MuJoCo backend's fingers, grip table and pads."""
+    closures = finger_closures()
+    grip = grip_table(export, closures)
     return {
         "fingers": tuple(
             f"{arm}/robotiq_85_left_knuckle_joint" for arm in (LEFT, RIGHT)
