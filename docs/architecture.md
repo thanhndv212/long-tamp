@@ -255,7 +255,7 @@ What the imports look like (checked at the review commit):
 | `sim/` | MuJoCo scene export and backend | `export_mjcf`, `MuJoCoBackend` | [Simulation](usage/simulation-mujoco.md) |
 | `ai/` | model gateway, roles, operator chat | `make_client`, `refine`, `ModelRole`, `ChatSession` | [AI models](usage/ai-models.md) |
 | `viewer/` | web mission viewer, live or replay | `ViewerServer`, `write_replay`, `ChatBridge`, `ViewerConfig` | [Mission viewer](usage/viewer.md) |
-| `grasping/` | where to grasp, how far fingers close | `GraspPlanner`, `ParallelGripperModel`, `FingerClosureTable` | |
+| `grasping/` | where to grasp, how far fingers close | `GraspPlanner`, `GripperModel`, `ParallelGripperModel`, `RotaryJawGripperModel`, `FingerClosureTable` | |
 | `config/` | YAML task configs | `YamlTaskLoader`, `BaseTaskConfig` | |
 | `visualization/` | graph diagrams, frames, video, 3D scene process | `SceneProcess`, `MissionViewer`, `VideoRecorder` | |
 | `logging/` | run log for script-style tasks, `logging` setup | `RunLogger`, `load_run_log` | [Logging](features/logging-verbosity.md) |
@@ -288,6 +288,8 @@ Validation levels V0–V4 and which change needs which: [Validation](development
 - **An execution backend:** `start` / `poll` / `cancel` from `execution.contract`; wrap it
   in `ProcessBackend` to run it in its own process, or serve it with `serve_backend` and
   drive it through `RemoteBackend` when it runs on another host (ADR-0007).
+- **A gripper:** a `GripperModel` (a `ParallelGripperModel` or `RotaryJawGripperModel` with
+  its stroke table, or your own class), added with `register_gripper` (ADR-0008).
 - **A skill:** a `SkillSpec` on the capability, and a controller in a backend that runs it.
 - **A model role:** input, JSON output schema with a parser, a checker and a fallback, run
   through `ai.roles.refine`.
