@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Gripper models beyond symmetric parallel jaws (#126, ADR-0008).
+  - `GripperModel` protocol: `GraspPlanner` and `FingerClosureTable` take any model.
+  - `RotaryJawGripperModel`: one jaw swinging against a fixed one, with the pads'
+    midpoint per stroke row; the planner closes about that midpoint.
+  - `SO101_JAW` preset, measured from the SO-101 URDF's meshes (matches soarm_tamp's
+    jaw table to 0.05 mm).
+  - `register_gripper` adds a model to `PRESETS`. The Robotiq 2F-85 and Panda presets
+    are unchanged.
+
 - Remote execution over TCP (#125, ADR-0007).
   - `serve_backend(backend, port=...)` serves any execution backend next to the
     hardware, and `RemoteBackend(host, port)` drives it from the planner.

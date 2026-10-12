@@ -42,3 +42,4 @@ What becomes easier, harder, or required. What we give up.
 | [0005](0005-partial-order-plans.md) | Partial-order plans and concurrent arms | Accepted |
 | [0006](0006-ai-model-integration.md) | AI model integration: one gateway, typed roles, gated tools | Accepted |
 | [0007](0007-remote-execution.md) | Remote execution: backends served over TCP, JSON frames, stop on disconnect | Accepted |
+| [0008](0008-gripper-models.md) | Gripper models: one protocol, a rotary-jaw model, a preset registry | Accepted |

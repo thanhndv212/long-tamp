@@ -14,18 +14,23 @@ import pytest
 
 from long_tamp.grasping import (
     PANDA_HAND,
+    PRESETS,
     ROBOTIQ_2F85,
+    SO101_JAW,
     Box,
     Cylinder,
     FingerClosureTable,
     GraspableObject,
     GraspPlanner,
     GraspPlannerParams,
+    GripperModel,
     ParallelGripperModel,
+    RotaryJawGripperModel,
     Sphere,
     apply_joint_values,
     load_srdf_frames,
     load_urdf_primitives,
+    register_gripper,
 )
 from long_tamp.grasping.geometry import (
     line_intervals,
@@ -150,7 +155,7 @@ class TestGripperModel:
         }
 
     def test_frame_rotations_are_rotations(self):
-        for g in (ROBOTIQ_2F85, PANDA_HAND):
+        for g in (ROBOTIQ_2F85, PANDA_HAND, SO101_JAW):
             R = g.frame_rotation
             np.testing.assert_allclose(R @ R.T, np.eye(3), atol=1e-12)
             assert np.linalg.det(R) == pytest.approx(1.0)
@@ -243,6 +248,125 @@ class TestEvaluate:
         assert high.feasible and high.contact_width == pytest.approx(0.03, abs=1e-6)
         low = self.planner.evaluate(top_down(-0.02 + pad), self.block, obstacles=table)
         assert any("table" in c for c in low.collisions)
+
+
+# -- other hands (#126, ADR-0008) ------------------------------------------------
+
+#: soarm_tamp's ``geometry.JAW_TABLE`` (SO-101, measured from its meshes):
+#: jaw angle (deg) -> (opening, pad midpoint along gripper_frame_link x), mm.
+SOARM_JAW_TABLE = {
+    -10.0: (8.2, -2.1),
+    -5.0: (14.2, -5.1),
+    0.0: (19.8, -7.9),
+    5.0: (25.2, -10.6),
+    10.0: (29.1, -12.6),
+    15.0: (32.8, -14.4),
+    20.0: (36.5, -16.3),
+    30.0: (43.7, -19.8),
+}
+
+
+def cube_between_the_pads(width: float, size: float = 0.03):
+    """A cube centred where the SO-101's pads close at ``width``."""
+    mid = SO101_JAW.center_offset_for_width(width)
+    depth = SO101_JAW.pad_x_for_width(width)
+    # canonical frame = world here: approach +X, closing +Y
+    return [Box(pose=pose(None, (depth, mid, 0.0)), size=(size,) * 3, name="cube")]
+
+
+class TestGripperProtocol:
+    def test_presets_implement_it_and_are_unchanged(self):
+        assert PRESETS["robotiq_2f85"] is ROBOTIQ_2F85
+        assert PRESETS["panda_hand"] is PANDA_HAND
+        assert PRESETS["so101_jaw"] is SO101_JAW
+        for g in PRESETS.values():
+            assert isinstance(g, GripperModel)
+        # a symmetric hand closes about the TCP
+        assert ROBOTIQ_2F85.center_offset_for_width(0.05) == 0.0
+        assert ROBOTIQ_2F85.contact_width(-0.01, 0.02) == pytest.approx(0.04)
+
+    def test_register(self):
+        with pytest.raises(ValueError, match="registered"):
+            register_gripper(
+                ParallelGripperModel(**{**vars_of(PANDA_HAND), "default_squeeze": 0})
+            )
+        register_gripper(PANDA_HAND)  # the same model again: no-op
+        with pytest.raises(TypeError):
+            register_gripper(object())
+        custom = ParallelGripperModel(**{**vars_of(PANDA_HAND), "name": "test_hand"})
+        try:
+            assert register_gripper(custom) is PRESETS["test_hand"]
+        finally:
+            PRESETS.pop("test_hand", None)
+
+
+def vars_of(model) -> dict:
+    from dataclasses import fields
+
+    return {f.name: getattr(model, f.name) for f in fields(model)}
+
+
+class TestRotaryJaw:
+    planner = GraspPlanner(SO101_JAW)
+
+    def test_reproduces_the_soarm_tamp_jaw_table(self):
+        for deg, (opening, mid) in SOARM_JAW_TABLE.items():
+            q = math.radians(deg)
+            assert SO101_JAW.width_at(q) * 1000 == pytest.approx(opening, abs=0.5)
+            assert SO101_JAW.center_offset_for_width(
+                SO101_JAW.width_at(q)
+            ) * 1000 == pytest.approx(mid, abs=0.5)
+            assert SO101_JAW.joint_values(q, "so101") == {"so101/gripper": q}
+
+    def test_the_fixed_pad_does_not_move(self):
+        for w in np.linspace(SO101_JAW.min_width, SO101_JAW.max_width, 7):
+            boxes = {n: (c, h) for n, c, h in SO101_JAW.collision_boxes(w)}
+            c, h = boxes["finger_right"]
+            assert c[1] - h[1] == pytest.approx(0.002, abs=1e-4)
+            c, h = boxes["finger_left"]
+            mid = SO101_JAW.center_offset_for_width(w)
+            assert c[1] + h[1] == pytest.approx(mid - w / 2, abs=1e-9)
+
+    def test_rejects_a_centre_table_of_the_wrong_length(self):
+        with pytest.raises(ValueError, match="center"):
+            RotaryJawGripperModel(**{**vars_of(SO101_JAW), "center": (0.0,)})
+
+    def test_closes_on_a_cube_between_the_pads(self):
+        ev = self.planner.evaluate(np.eye(4), cube_between_the_pads(0.03))
+        assert ev.feasible, ev.reasons
+        assert ev.contact_width == pytest.approx(0.03, abs=1e-4)
+        assert ev.offset == pytest.approx(0.0, abs=1e-4)
+        assert ev.width == pytest.approx(0.03 - SO101_JAW.default_squeeze, abs=1e-4)
+        # 25 mm of commanded gap is soarm_tamp's 5 deg close command
+        assert math.degrees(ev.q) == pytest.approx(5.0, abs=0.5)
+
+    def test_a_cube_centred_on_the_tcp_hits_the_fixed_finger(self):
+        cube = [Box(pose=pose(None, (-0.0225, 0, 0)), size=(0.03,) * 3)]
+        ev = self.planner.evaluate(np.eye(4), cube)
+        assert not ev.feasible
+        assert ev.contact_width > SO101_JAW.max_width
+
+    def test_plans_and_ranks_grasps_on_a_box(self):
+        box = [Box(size=(0.03, 0.03, 0.03), name="cube")]
+        cands = self.planner.plan(box, max_candidates=None)
+        assert cands and all(c.evaluation.feasible for c in cands)
+        assert [c.score for c in cands] == sorted(
+            (c.score for c in cands), reverse=True
+        )
+        for c in cands:
+            # every planned grasp puts the cube between the moving pads
+            ev = self.planner.evaluate(c.pose, box)
+            assert ev.feasible
+            assert ev.contact_width == pytest.approx(0.03, abs=1e-4)
+            assert ev.offset == pytest.approx(0.0, abs=1e-4)
+            np.testing.assert_allclose(
+                c.handle_pose[:3, :3], c.pose[:3, :3] @ SO101_JAW.frame_rotation
+            )
+        # the TCP sits off the cube's centre by the pad midpoint, along closing
+        best = cands[0].pose
+        mid = SO101_JAW.center_offset_for_width(0.03)
+        to_centre = -best[:3, 3]
+        assert to_centre @ best[:3, 1] == pytest.approx(mid, abs=1e-6)
 
 
 # -- planning --------------------------------------------------------------------
