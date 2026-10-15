@@ -56,6 +56,11 @@ class GripperActuation(Protocol):
     ``gripper`` is the HPP gripper name. ``close_gripper`` closes to
     ``width`` (m; default: fully) or until the fingers push with ``effort``,
     whichever comes first, and returns when the fingers have settled.
+
+    ``ProcessBackend`` and ``RemoteBackend`` forward these methods only when
+    the backend they serve has them, through ``__getattr__``. From Python
+    3.12 on, ``isinstance(backend, GripperActuation)`` doesn't see forwarded
+    methods, so check a proxied backend with ``hasattr``.
     """
 
     def open_gripper(self, gripper: str) -> None: ...

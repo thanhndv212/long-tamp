@@ -83,7 +83,12 @@ def test_the_gripper_state_crosses_the_wire():
 def test_a_remote_hand_is_actuated_through_the_client():
     hand = _Hand()
     with served(hand) as port, RemoteBackend(port=port) as client:
-        assert isinstance(client, GripperActuation)
+        # The client forwards the hand's methods through __getattr__, which
+        # isinstance() on a runtime protocol doesn't see from Python 3.12 on.
+        assert all(
+            hasattr(client, name)
+            for name in ("open_gripper", "close_gripper", "gripper_state")
+        )
         client.close_gripper("arm/gripper", 0.03)
         assert client.gripper_state("arm/gripper") == GripperState(0.03, 1.5)
         client.open_gripper("arm/gripper")
