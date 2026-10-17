@@ -16,6 +16,7 @@ from long_tamp.tasks.task_planning.predicates import parse_atom
 from long_tamp.tasks.task_planning.repair import (
     block_failed_step,
     plan_execute_repair,
+    retry_missed_grasp,
 )
 from long_tamp.tasks.task_planning.skeleton import skeleton_document
 
@@ -148,9 +149,58 @@ def test_the_loop_is_bounded():
     def execute(document):
         return {**failing, "parameters": {"slot": f"s{next(n)}"}}
 
-    outcome = plan_execute_repair(lambda b: {}, execute, block_failed_step, max_rounds=3)
+    outcome = plan_execute_repair(
+        lambda b: {}, execute, block_failed_step, max_rounds=3
+    )
     assert not outcome.success and len(outcome.rounds) == 3
     assert "after 3 plans" in outcome.message
+
+
+MISSED = {
+    "step": "part1 A0: grasp",
+    "capability": "grasp",
+    "parameters": {"gripper": "ur10_left/gripper", "handle": "part1/h_grasp"},
+    "facts": ["grasp_missed(ur10_left/gripper, part1)"],
+    "message": "grasp missed: part1 not in ur10_left/gripper",
+}
+
+
+def test_a_missed_grasp_is_retried_as_it_was_and_the_mission_completes():
+    """#128: grasp_missed blocks nothing; the same plan runs again (from the
+    re-observed world) and completes."""
+    failures = iter([MISSED])
+    replans = []
+    outcome = plan_execute_repair(
+        lambda blocked: {"blocked": list(blocked)},
+        lambda document: next(failures, None),
+        block_failed_step,  # would block the grasp, were it consulted
+        on_replan=lambda failure, blocked: replans.append(blocked),
+        retry=retry_missed_grasp,
+    )
+    assert outcome.success and len(outcome.rounds) == 2
+    assert outcome.blocked == [] and replans == [[]]
+    assert outcome.rounds[0].retried
+    assert outcome.failures == [MISSED]
+
+
+def test_a_step_still_missing_after_its_retries_gives_up_with_its_history():
+    outcome = plan_execute_repair(
+        lambda blocked: {},
+        lambda document: dict(MISSED),
+        max_rounds=10,
+        retry=retry_missed_grasp,
+        max_retries=2,
+    )
+    assert not outcome.success and len(outcome.rounds) == 3
+    assert outcome.message.startswith("part1 A0: grasp: still failing after 2 retries")
+    assert "grasp_missed(ur10_left/gripper, part1)" in outcome.message
+    assert [f["facts"] for f in outcome.failures] == [MISSED["facts"]] * 3
+
+
+def test_only_a_missed_grasp_is_retried():
+    assert retry_missed_grasp(MISSED)
+    assert not retry_missed_grasp({"facts": ["cannot_reach(c1, part1/h_seat)"]})
+    assert not retry_missed_grasp({"step": "s"})
 
 
 def test_end_to_end_with_a_real_planner():
@@ -197,7 +247,10 @@ def test_screw_policy_blocks_a_clamp_that_cannot_reach_a_seat():
         "step": "part1 A: clamp + screw",
         "capability": "clamp_and_screw",
         "parameters": CLAMP_STEP,
-        "facts": ["refinement_failed(x)", "cannot_reach(fixtures/clamp1, part1/h_seat)"],
+        "facts": [
+            "refinement_failed(x)",
+            "cannot_reach(fixtures/clamp1, part1/h_seat)",
+        ],
     }
     assert screw_domain.repair_policy(failure) == [
         ("clamp_and_screw", {"clamp": "fixtures/clamp1", "seat": "part1/h_seat"})
@@ -209,7 +262,10 @@ def test_screw_policy_otherwise_blocks_the_failed_binding():
         "step": "part1 A0: grasp",
         "capability": "grasp",
         "parameters": {"gripper": "ur10_left/gripper", "handle": "part1/h_grasp"},
-        "facts": ["refinement_failed(x)", "cannot_reach(ur10_left/gripper, part1/h_grasp)"],
+        "facts": [
+            "refinement_failed(x)",
+            "cannot_reach(ur10_left/gripper, part1/h_grasp)",
+        ],
     }
     assert screw_domain.repair_policy(failure) == [
         ("grasp", {"gripper": "ur10_left/gripper", "handle": "part1/h_grasp"})
@@ -220,8 +276,13 @@ def test_a_blocked_clamp_with_no_alternative_leaves_no_plan():
     """One part, one clamp: blocking it makes the goal unreachable, which the
     repair loop reports instead of replanning forever."""
     pytest.importorskip("unified_planning")
-    from long_tamp.tasks.task_planning.skeleton import NoPlanFound, UnifiedPlanningPlanner
+    from long_tamp.tasks.task_planning.skeleton import (
+        NoPlanFound,
+        UnifiedPlanningPlanner,
+    )
 
-    blocked = [("clamp_and_screw", {"clamp": "fixtures/clamp1", "seat": "part1/h_seat"})]
+    blocked = [
+        ("clamp_and_screw", {"clamp": "fixtures/clamp1", "seat": "part1/h_seat"})
+    ]
     with pytest.raises(NoPlanFound):
         UnifiedPlanningPlanner().solve(screw_domain.pddl_problem(1, blocked=blocked))

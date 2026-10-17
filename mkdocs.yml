@@ -94,6 +94,7 @@ nav:
           - "0007 Remote execution": adr/0007-remote-execution.md
           - "0008 Gripper models": adr/0008-gripper-models.md
           - "0009 Grasp verification": adr/0009-grasp-verification.md
+          - "0010 Missed-grasp repair": adr/0010-missed-grasp-repair.md
   - Plans:
       - Roadmap: plans/roadmap.md
       - "Simulation benchmark selection": plans/sim-benchmark-selection.md

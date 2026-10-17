@@ -311,3 +311,33 @@ def test_opening_a_holding_gripper_lets_the_part_go_where_it_is(scene):
     moved = backend.data.xpos[backend.model.body(PART).id] - here
     assert np.linalg.norm(moved) < 0.005
     assert backend.gripper_state(GRIPPER).width > 0.07
+
+
+# ------------------------------------------- repair from grasp_missed (#128)
+
+
+def test_a_displaced_part_misses_and_is_picked_again_where_it_is(scene):
+    """The injection behind ``--inject-miss``: a part moved after it was seen
+    misses; once the hand is open, a grasp planned where the part now is
+    (here: the part moved back under the hand) holds."""
+    backend = make_backend(scene, verify=True)
+    start = scene.start()
+    backend.reset(start)
+    seen = backend.data.xpos[backend.model.body(PART).id].copy()
+    backend.displace("part1", (0.0, 0.3, 0.0))
+    moved = backend.data.xpos[backend.model.body(PART).id] - seen
+    assert moved == pytest.approx([0.0, 0.3, 0.0], abs=1e-9)
+    result = run(backend, Carry(scene, start, scene.carried(start), 2.0))
+    assert result.status is ExecutionStatus.FAILURE
+    assert result.facts == (MISSED,)
+    # the part stayed where it was moved to
+    there = backend.data.xpos[backend.model.body(PART).id] - seen
+    assert np.linalg.norm(there - moved) < 1e-3
+    backend.open_gripper(GRIPPER)
+    assert backend.gripper_state(GRIPPER).width > 0.08
+    backend.displace("part1/base_link", (0.0, -0.3, 0.0))
+    result = run(backend, Carry(scene, start, scene.carried(start), 2.0))
+    assert result.status is ExecutionStatus.SUCCESS, result.message
+    assert result.facts == (HELD,)
+    with pytest.raises(KeyError):
+        backend.displace("part9", (0.0, 0.0, 0.0))

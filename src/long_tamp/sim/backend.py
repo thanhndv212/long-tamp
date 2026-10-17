@@ -1207,11 +1207,17 @@ class MuJoCoBackend:
             return None
         return self._joint_error(self.to_qpos(q))
 
-    def observed_config(self, like: Any) -> np.ndarray | None:
+    def observed_config(self, like: Any, objects: bool = False) -> np.ndarray | None:
         """The simulation's state as a planner configuration (``like`` fills
-        what MuJoCo doesn't map), or ``None`` without ``from_qpos``."""
+        what MuJoCo doesn't map), or ``None`` without ``from_qpos``. The
+        objects are kept from ``like`` unless ``objects``: a retry looks for
+        an object that moved (#128); a drift replan wants them where the
+        plan's constraints put them. ``objects`` is positional-safe, so a
+        backend in its own process forwards it."""
         if self.from_qpos is None:
             return None
+        if objects:
+            return self.from_qpos(self.data.qpos.copy(), like, True)
         return self.from_qpos(self.data.qpos.copy(), like)
 
     def disturb(self, joint: str, delta: float) -> None:
@@ -1223,6 +1229,25 @@ class MuJoCoBackend:
         self.data.qpos[self.model.jnt_qposadr[j]] += delta
         self.data.qvel[:] = 0.0
         self.mujoco.mj_forward(self.model, self.data)
+
+    def displace(self, obj: str, delta) -> None:
+        """Move object ``obj`` (its root body, or the object it names) by
+        ``delta`` [m, world frame] right now, as if someone moved it after it
+        was seen: the next grasp of it misses (#128). A held object stays."""
+        names = [n for n in self._objects if n == obj or n.startswith(f"{obj}/")]
+        if not names:
+            raise KeyError(obj)
+        name = names[0]
+        if name in self._gripped:
+            return
+        body = self._objects[name]
+        adr = self.model.jnt_qposadr[self.model.body_jntadr[body]]
+        self.data.qpos[adr : adr + 3] += np.asarray(delta, float)
+        self.data.qvel[:] = 0.0
+        self.mujoco.mj_forward(self.model, self.data)
+        if self.data.eq_active[self._weld(name)]:
+            self._set_weld(name, 0, *self._relative(self.data, 0, body))
+        self._flush_frames()
 
     def carried_by_robot(self) -> dict[str, int]:
         """Objects a robot link carries in this command: name -> body id."""

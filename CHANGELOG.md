@@ -10,6 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Missed-grasp repair (#128, ADR-0010).
+  - `plan_execute_repair(retry=, max_retries=)` retries a failure instead of blocking it,
+    at most `max_retries` times per step; `retry_missed_grasp` retries `grasp_missed`.
+    `RepairOutcome.failures` is the fact history, oldest first.
+  - The supervisor's `Situation.failures` carries that history into its prompt and the
+    escalation report ("Fact history").
+  - `MuJoCoBackend.displace(obj, delta)` moves a free object (forwarded by
+    `ProcessBackend`).
+  - Screw assembly: a missed grasp opens the hand, plans from the observed
+    configuration and retries the pick (`--grasp-retries`); `--inject-miss` displaces a
+    part before a step to test it. A retry or a drift replans from the observed arms and
+    hands, but keeps a hand that carries something, and what it carries, as planned: an
+    observed driver sits where it slipped, and replanning from there put a finger inside it.
+    A retry also observes the objects (`observed_config(like, objects=True)`) and moves
+    one that is more than 5 mm from its planned pose; a drift replan keeps them as planned.
+    A hand the backend can't open (weld grasps) starts the retry open.
+
 - Grasp verification (#127, ADR-0009).
   - `GripperActuation` protocol for backends with a hand: `open_gripper`,
     `close_gripper(width|effort)`, `gripper_state` (a `GripperState` with the measured
