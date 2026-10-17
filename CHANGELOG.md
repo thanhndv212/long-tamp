@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     implementation. It wraps `screw_domain`; the mission itself is unchanged.
   - `mypy` is in the `dev` extra, and a test type-checks both implementations against the
     protocol.
+- `long_tamp.mission.MissionRunner`: the mission loop as a library (#132, ADR-0012),
+  parameterised by a `MissionDomain`, a refiner and an execution backend. It runs one plan
+  (`run_mission`), the repair loop (`run_with_repair`) and the supervisor
+  (`run_supervised`), and plans from a goal or an instruction. The run folder, events and
+  replay files are those of the screw runner.
+  - New domain hooks: `world_state`, `observed_start`, `opened_config` and
+    `execution_metrics`; the screw domain implements them.
+  - `task_screw_assembly.py` is unchanged; it moves onto the runner in #134.
 - Guide: [run long_tamp on your robot](docs/usage/run-on-your-robot.md) (#129) — the
   execution contract, writing and serving a backend, registering a gripper model, the drift
   check and the robot side's safety duties, with the SO-101 as the worked example.
