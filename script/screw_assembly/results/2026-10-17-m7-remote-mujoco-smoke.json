@@ -1,0 +1,31 @@
+{
+ "date": "2026-10-17",
+ "validation": "#130 M7 exit test, MuJoCo half (V2 smoke mission): the screw assembly through RemoteBackend (TCP, ADR-0007) instead of the process pipe",
+ "environment": "hpp-agimus-arm64 (source-built HPP, hpp-core 9.1.0), MuJoCo backend served by RemoteBackend.spawn over localhost TCP, one mission",
+ "scene": "four-part screw assembly",
+ "command": "task_screw_assembly.py --seed 1 --no-viewer --backend mujoco --remote --summary batch_remote/seed_001.json",
+ "runs": [
+  {
+   "seed": 1,
+   "success": true,
+   "seconds": 1025.96,
+   "blocks": 19,
+   "resumes": 3,
+   "replans": 0,
+   "execution": {
+    "commands": 67,
+    "failed": 0,
+    "sim_seconds": 466.11,
+    "max_tracking_error": 0.01094,
+    "max_drift": 2e-05,
+    "max_object_drift": 3e-05,
+    "max_start_drift": 0.00218,
+    "screws_driven": 8,
+    "max_screw_lateral_error": 0.00083,
+    "grasps_held": 0,
+    "grasps_missed": 0
+   }
+  }
+ ],
+ "notes": "Mission complete, 19/19 blocks, 0 replans, 3 resumes; 67 commands over the wire, 0 failed, no disconnects; 8/8 screws driven (max lateral error 0.83 mm). Same planner path as the ProcessBackend runs; only the transport differs."
+}
