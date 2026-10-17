@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- RoboCerebra env server (#156, M11 R1). `script/robocerebra/env_server.py` serves the
+  benchmark's env (a LIBERO fork on robosuite 1.4.0, Python 3.10) from its own interpreter
+  over the `long_tamp.execution.remote` wire, and `long_tamp.eval.RoboCerebraClient` drives
+  it: `load`, `reset`, the benchmark's mid-episode `resume`, chunked `OSC_POSE` `step`s scored
+  by the benchmark's own checker, `get_state`/`set_state` with the controller goal, `render`.
+  `replay_demo.py` replays a case's demo continuously and step by step and measures the drift;
+  the Ideal results are in `script/robocerebra/results/`.
 - Guide: [run long_tamp on your robot](docs/usage/run-on-your-robot.md) (#129) — the
   execution contract, writing and serving a backend, registering a gripper model, the drift
   check and the robot side's safety duties, with the SO-101 as the worked example.
