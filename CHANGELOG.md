@@ -17,6 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   by the benchmark's own checker, `get_state`/`set_state` with the controller goal, `render`.
   `replay_demo.py` replays a case's demo continuously and step by step and measures the drift;
   the Ideal results are in `script/robocerebra/results/`.
+- `long_tamp.mission`: the `MissionDomain` interface (#131, ADR-0011). This is the
+  boundary between the mission loop and one robot and task.
+  - `MissionDomain` (a protocol), `BaseMissionDomain` (generic defaults: PDDL export,
+    goal vocabulary, planned document, repair policy, mock backend) and `check_domain`.
+  - Shared object-level goals `grasped(gripper, object)` / `placed_at(object, region)`,
+    with `ObjectLevelState` deriving `grasped` from `holds`.
+  - Screw assembly: `script/screw_assembly/screw_mission.py`, the reference
+    implementation. It wraps `screw_domain`; the mission itself is unchanged.
+  - `mypy` is in the `dev` extra, and a test type-checks both implementations against the
+    protocol.
 - Guide: [run long_tamp on your robot](docs/usage/run-on-your-robot.md) (#129) — the
   execution contract, writing and serving a backend, registering a gripper model, the drift
   check and the robot side's safety duties, with the SO-101 as the worked example.
