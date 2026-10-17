@@ -134,6 +134,17 @@ def test_a_failed_execution_fails_its_step_and_stops_the_plan():
     assert planned == [("grasp", "ball")]  # release never planned
 
 
+def test_a_failed_executions_facts_are_in_the_message_and_its_result():
+    backend = MockBackend(
+        fail_at=0.0, message="grasp missed", facts=("grasp_missed(left, ball)",)
+    )
+    executor, _ = _executor(set(), backend=backend)
+    run = executor.run()
+    assert not run.success
+    assert "grasp missed [grasp_missed(left, ball)]" in run.message
+    assert run.executions[-1].result.facts == ("grasp_missed(left, ball)",)
+
+
 def test_a_skipped_step_executes_nothing():
     backend = MockBackend(rtf=1000.0)
     executor, planned = _executor({"holds(left, ball)"}, backend=backend)

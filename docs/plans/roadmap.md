@@ -237,9 +237,9 @@ Uncoloured nodes are the library milestones and sim pieces both paths build on.
 
 Run missions on a robot driven from another host (a container and a USB-attached arm, a robot's own controller PC), with grippers beyond symmetric parallel jaws and grasp outcomes checked, not assumed.
 
-- [ ] [#125](https://github.com/thanhndv212/long-tamp/issues/125) Remote execution backend over TCP
-- [ ] [#126](https://github.com/thanhndv212/long-tamp/issues/126) Gripper model interface beyond symmetric parallel jaws
-- [ ] [#127](https://github.com/thanhndv212/long-tamp/issues/127) Gripper actuation and grasp verification facts
+- [x] [#125](https://github.com/thanhndv212/long-tamp/issues/125) Remote execution backend over TCP
+- [x] [#126](https://github.com/thanhndv212/long-tamp/issues/126) Gripper model interface beyond symmetric parallel jaws
+- [x] [#127](https://github.com/thanhndv212/long-tamp/issues/127) Gripper actuation and grasp verification facts
 - [ ] [#128](https://github.com/thanhndv212/long-tamp/issues/128) Repair from grasp_missed
 - [ ] [#129](https://github.com/thanhndv212/long-tamp/issues/129) Run long_tamp on your robot
 - [ ] [#130](https://github.com/thanhndv212/long-tamp/issues/130) M7 exit test, a mission through RemoteBackend on a real robot

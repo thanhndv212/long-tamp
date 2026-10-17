@@ -13,7 +13,8 @@ class MockBackend:
 
     - ``rtf``: real-time factor (0.4 = a simulator at 40 % of real time);
     - ``busy_starts``: the first N ``start`` calls answer ``BUSY``;
-    - ``fail_at``: fail this many seconds after starting, with ``message``;
+    - ``fail_at``: fail this many seconds after starting, with ``message``
+      and ``facts`` (``grasp_missed(left, ball)``, say);
     - ``stall_at``: stop sending heartbeats (and never finish) from then on.
 
     A heartbeat is sent on every poll while progressing.
@@ -27,6 +28,7 @@ class MockBackend:
         fail_at: float | None = None,
         stall_at: float | None = None,
         message: str = "mock failure",
+        facts: tuple[str, ...] = (),
     ) -> None:
         self.clock = clock
         self.rtf = rtf
@@ -34,6 +36,7 @@ class MockBackend:
         self.fail_at = fail_at
         self.stall_at = stall_at
         self.message = message
+        self.facts = tuple(facts)
         self.cancelled = False
         self.command: ExecutionCommand | None = None
         self._t_start: float | None = None
@@ -55,7 +58,9 @@ class MockBackend:
         t = self.clock() - self._t_start
         duration = (self.command.duration if self.command else None) or 1.0
         if self.fail_at is not None and t >= self.fail_at:
-            return ExecutionStatus.FAILURE, Feedback(message=self.message)
+            return ExecutionStatus.FAILURE, Feedback(
+                message=self.message, facts=self.facts
+            )
         if self.stall_at is not None and t >= self.stall_at:
             return ExecutionStatus.RUNNING, None
         progress = min(1.0, t * self.rtf / duration)

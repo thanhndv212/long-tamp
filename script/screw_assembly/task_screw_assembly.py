@@ -1207,7 +1207,7 @@ def contact_grasps(export) -> dict[str, Any]:
 
     model = export.load()
     closures = finger_closures()
-    table = {}
+    table, expected = {}, {}
     for gripper, handle in closures.pairs():
         arm, obj = gripper.split("/")[0], handle.split("/")[0]
         if obj not in export.free_joints:
@@ -1215,11 +1215,15 @@ def contact_grasps(export) -> dict[str, Any]:
         joint = model.joint(export.free_joints[obj]).id
         root = model.body(int(model.jnt_bodyid[joint])).name
         table[(root, arm)] = closures.closed_values(gripper, handle)
+        expected[(root, arm)] = closures.expected_grasp(gripper, handle)
+    grip = GripTable(table, expected)
     return {
         "fingers": tuple(
             f"{arm}/robotiq_85_left_knuckle_joint" for arm in (LEFT, RIGHT)
         ),
-        "grip": GripTable(table),
+        "grip": grip,
+        "expect": grip.expect,
+        "hands": tuple(closures.bindings.values()),
         "pads": {**robotiq_pads(LEFT), **robotiq_pads(RIGHT)},
     }
 
@@ -1294,6 +1298,11 @@ def execution_summary(executions) -> dict[str, Any] | None:
         values = [m[key] for m in metrics if key in m]
         return max(values) if values else None
 
+    def count(prefix):
+        return sum(
+            1 for e in executions for f in e.result.facts if f.startswith(prefix)
+        )
+
     return {
         "commands": len(executions),
         "failed": sum(1 for e in executions if e.result.status.value != "success"),
@@ -1302,10 +1311,11 @@ def execution_summary(executions) -> dict[str, Any] | None:
         "max_drift": worst("drift"),
         "max_object_drift": worst("object_drift"),
         "max_start_drift": worst("start_drift"),
-        "screws_driven": sum(
-            1 for e in executions for f in e.result.facts if f.startswith("screwed(")
-        ),
+        "screws_driven": count("screwed("),
         "max_screw_lateral_error": worst("lateral_error"),
+        # --grasp contact: each close verified against the hand model (#127)
+        "grasps_held": count("holds("),
+        "grasps_missed": count("grasp_missed("),
     }
 
 

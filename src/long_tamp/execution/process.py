@@ -25,7 +25,14 @@ from .contract import ExecutionCommand, ExecutionStatus, Feedback
 from .sampled import sampled
 
 #: Optional backend methods forwarded when the backend has them.
-OPTIONAL = ("start_error", "observed_config", "disturb")
+OPTIONAL = (
+    "start_error",
+    "observed_config",
+    "disturb",
+    "open_gripper",
+    "close_gripper",
+    "gripper_state",
+)
 
 
 def _serve(conn: Any, factory: Callable[..., Any], args: tuple, kwargs: dict) -> None:

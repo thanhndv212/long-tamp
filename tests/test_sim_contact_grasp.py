@@ -1,5 +1,6 @@
 """Contact grasps in the MuJoCo backend (#71): the Robotiq 2F-85 holds a part
-by friction through a carry move, on the screw-assembly scene.
+by friction through a carry move, on the screw-assembly scene. Grasp
+verification and the gripper actuation interface (#127, ADR-0009).
 
 No planner: ``ur10_left`` starts at its zero configuration with part 1 in
 its open fingers, placed so the part's handle sits on the gripper frame (the
@@ -22,7 +23,7 @@ from long_tamp.execution import (
     ExecutionStatus,
     run_command,
 )
-from long_tamp.grasping import ROBOTIQ_2F85, FingerClosureTable
+from long_tamp.grasping import ROBOTIQ_2F85, FingerClosureTable, GripperBinding
 from long_tamp.sim import MuJoCoBackend, export_mjcf
 
 SCREW_DIR = Path(__file__).resolve().parents[1] / "script" / "screw_assembly"
@@ -59,6 +60,7 @@ class Scene:
         self.data = mujoco.MjData(self.model)
         table = FingerClosureTable.from_task_yaml(CONFIG, {GRIPPER: ROBOTIQ_2F85})
         self.closure = table.closed_values(GRIPPER, HANDLE)
+        self.expected = table.expected_grasp(GRIPPER, HANDLE)
         handle = table.objects["part1"].handle_pose(HANDLE)
         # the part in the gripper frame: the inverse of the handle's pose
         self.part_pos = -handle[:3, :3].T @ handle[:3, 3]
@@ -78,7 +80,9 @@ class Scene:
         grip_rot = np.zeros(9)
         mujoco.mju_quat2Mat(grip_rot, grip_quat)
         a = self.part
-        qpos[a : a + 3] = self.data.xpos[self.tcp] + grip_rot.reshape(3, 3) @ self.part_pos
+        qpos[a : a + 3] = (
+            self.data.xpos[self.tcp] + grip_rot.reshape(3, 3) @ self.part_pos
+        )
         qpos[a + 3 : a + 7] = _quat_mul(grip_quat, self.part_quat)
         return qpos
 
@@ -139,7 +143,13 @@ def pads(arm):
     }
 
 
-def make_backend(scene, grasp="contact"):
+def make_backend(scene, grasp="contact", verify=False):
+    verified = {}
+    if verify:
+        verified = {
+            "expect": lambda obj, carrier: scene.expected if obj == PART else None,
+            "hands": (GripperBinding(GRIPPER, ROBOTIQ_2F85),),
+        }
     return MuJoCoBackend(
         scene.export,
         lambda q: np.asarray(q, float),
@@ -148,6 +158,7 @@ def make_backend(scene, grasp="contact"):
         fingers=(FINGER, "ur10_right/robotiq_85_left_knuckle_joint"),
         grip=lambda obj, carrier: scene.closure if obj == PART else None,
         pads={**pads("ur10_left"), **pads("ur10_right")},
+        **verified,
     )
 
 
@@ -205,3 +216,98 @@ def test_welds_remain_the_default(scene):
 def test_contact_grasps_need_fingers_and_grip(scene):
     with pytest.raises(ValueError):
         MuJoCoBackend(scene.export, lambda q: q, grasp="contact")
+
+
+# ------------------------------------------------- grasp verification (#127)
+
+HELD = "holds(ur10_left/gripper, part1)"
+MISSED = "grasp_missed(ur10_left/gripper, part1)"
+
+
+def removed(scene, qpos):
+    """``qpos`` with part 1 moved 30 cm away (it was taken before the grasp)."""
+    qpos = np.array(qpos, float)
+    qpos[scene.part + 1] += 0.3
+    return qpos
+
+
+def test_a_contact_grasp_that_holds_reports_it(scene):
+    backend = make_backend(scene, verify=True)
+    start = scene.start()
+    backend.reset(start)
+    result = run(backend, Carry(scene, start, scene.carried(start), 2.0))
+    assert result.status is ExecutionStatus.SUCCESS, result.message
+    assert result.facts == (HELD,)
+    assert scene.expected.held(backend.gripper_state(GRIPPER))
+
+
+def test_a_grasp_of_a_removed_part_misses_and_fails_the_step(scene):
+    backend = make_backend(scene, verify=True)
+    start = scene.start()
+    backend.reset(removed(scene, start))
+    away = backend.data.xpos[backend.model.body(PART).id].copy()
+    result = run(backend, Carry(scene, start, scene.carried(start), 2.0))
+    assert result.status is ExecutionStatus.FAILURE
+    assert result.facts == (MISSED,)
+    assert "grasp missed: part1 not in ur10_left/gripper" in result.message
+    # the fingers closed past where the part would have stopped them
+    state = backend.gripper_state(GRIPPER)
+    assert state.width < scene.expected.threshold
+    # and the part stayed where it was
+    here = backend.data.xpos[backend.model.body(PART).id]
+    assert np.linalg.norm(here - away) < 1e-3
+
+
+def test_a_missed_weld_grasp_reports_the_fact(scene):
+    backend = make_backend(scene, grasp="weld", verify=True)
+    start = scene.start()
+    backend.reset(removed(scene, start))
+    result = run(backend, Carry(scene, start, scene.carried(start), 2.0))
+    assert result.status is ExecutionStatus.FAILURE
+    assert result.facts == (MISSED,)
+    assert "from its planned grasp" in result.message
+
+
+def test_without_expectations_nothing_is_verified(scene):
+    backend = make_backend(scene)
+    start = scene.start()
+    backend.reset(start)
+    result = run(backend, Carry(scene, start, scene.carried(start), 2.0))
+    assert result.status is ExecutionStatus.SUCCESS
+    assert result.facts == ()
+
+
+def test_the_gripper_opens_and_closes_between_commands(scene):
+    backend = make_backend(scene, verify=True)
+    with pytest.raises(RuntimeError, match="no state"):
+        backend.close_gripper(GRIPPER)
+    backend.reset(removed(scene, scene.start()))
+    assert backend.gripper_state(GRIPPER).width == pytest.approx(
+        ROBOTIQ_2F85.max_width, abs=0.002
+    )
+    backend.close_gripper(GRIPPER, width=0.04)
+    assert backend.gripper_state(GRIPPER).width == pytest.approx(0.04, abs=0.002)
+    backend.close_gripper(GRIPPER)
+    closed = backend.gripper_state(GRIPPER)
+    assert closed.width < 0.005 and closed.effort is not None
+    backend.open_gripper(GRIPPER)
+    assert backend.gripper_state(GRIPPER).width == pytest.approx(
+        ROBOTIQ_2F85.max_width, abs=0.002
+    )
+    with pytest.raises(KeyError):
+        backend.gripper_state("ur10_right/gripper")  # no hand bound
+
+
+def test_opening_a_holding_gripper_lets_the_part_go_where_it_is(scene):
+    backend = make_backend(scene, verify=True)
+    start = scene.start()
+    backend.reset(start)
+    assert run(backend, Carry(scene, start, scene.carried(start), 2.0)).facts == (HELD,)
+    with pytest.raises(RuntimeError, match="holds an object"):
+        backend.close_gripper(GRIPPER)
+    here = backend.data.xpos[backend.model.body(PART).id].copy()
+    backend.open_gripper(GRIPPER)
+    assert backend.data.eq_active[backend._weld(PART)]  # welded where it was
+    moved = backend.data.xpos[backend.model.body(PART).id] - here
+    assert np.linalg.norm(moved) < 0.005
+    assert backend.gripper_state(GRIPPER).width > 0.07

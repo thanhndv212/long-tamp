@@ -31,6 +31,14 @@
   reports how far a gripped object moved in its carrier's frame. Unless
   ``contacts`` is on, only fingers and objects touch, with friction and an
   elliptic cone (after MuJoCo Menagerie's ``robotiq_2f85``).
+- **Grasp verification** (ADR-0009): with ``expect`` (an ``ExpectedGrasp``
+  per object and carrier, e.g. ``GripTable.expect``), the fingers of a new
+  contact grasp close even when the object is not where the plan put it, and
+  the measured opening decides: the command reports ``holds(g, o)``, or fails
+  with ``grasp_missed(g, o)`` (``Feedback.facts``). A missed weld grasp
+  reports ``grasp_missed`` too. ``open_gripper`` / ``close_gripper`` /
+  ``gripper_state`` actuate the ``hands`` between commands
+  (``GripperActuation``).
 - **Retiming.** Planned paths keep their geometry, which the planner checked
   for collisions, but not always a timing a robot can follow: they may start
   at full speed or turn corners instantly. Each path is retimed along its own
@@ -66,7 +74,13 @@ from typing import Any
 import numpy as np
 
 from long_tamp.execution.contract import ExecutionCommand, ExecutionStatus, Feedback
+from long_tamp.execution.gripper import (
+    ExpectedGrasp,
+    GripperState,
+    driving_value,
+)
 from long_tamp.execution.playback import _t0
+from long_tamp.grasping.objects import GripperBinding
 from long_tamp.tasks.task_planning.skills import SkillCommand
 
 from .mjcf import MjcfExport
@@ -87,11 +101,21 @@ class GripTable:
     (``"ur10_left"`` for ``"ur10_left/wrist_3_link"``). Picklable, for a
     backend in its own process."""
 
-    def __init__(self, closures: dict[tuple[str, str], dict[str, float]]) -> None:
+    def __init__(
+        self,
+        closures: dict[tuple[str, str], dict[str, float]],
+        expected: dict[tuple[str, str], ExpectedGrasp] | None = None,
+    ) -> None:
         self.closures = dict(closures)
+        #: What each closure should measure, for grasp verification: the same
+        #: keys (``expect``).
+        self.expected = dict(expected or {})
 
     def __call__(self, obj: str, carrier: str) -> dict[str, float] | None:
         return self.closures.get((obj, carrier.split("/", 1)[0]))
+
+    def expect(self, obj: str, carrier: str) -> ExpectedGrasp | None:
+        return self.expected.get((obj, carrier.split("/", 1)[0]))
 
 
 def _quat_distance(q1: np.ndarray, q2: np.ndarray) -> float:
@@ -131,6 +155,8 @@ class MuJoCoBackend:
         grip_torque: float = 15.0,
         pads: dict[str, tuple[Any, Any]] | None = None,
         grip_time: float = 0.6,
+        expect: Callable[[str, str], ExpectedGrasp | None] | None = None,
+        hands: tuple[GripperBinding, ...] = (),
         clock: Callable[[], float] = time.monotonic,
         record: str | Path | None = None,
         record_fps: float = 30.0,
@@ -182,6 +208,12 @@ class MuJoCoBackend:
         self.grip = grip
         self.grip_torque = grip_torque
         self.grip_time = grip_time
+        #: (object body, carrier body) -> what closing on it should measure
+        #: (contact grasps verify it; welds name the missed grasp).
+        self.expect = expect
+        #: Hands ``open_gripper`` / ``close_gripper`` / ``gripper_state``
+        #: know, by HPP gripper name.
+        self.hands = {b.gripper: b for b in hands}
         self._pads = dict(pads or {}) if grasp == "contact" else {}
         self.model, self._objects, self._actuated = self._build(
             path, timestep, contacts, fingers if grasp == "contact" else ()
@@ -234,6 +266,16 @@ class MuJoCoBackend:
             str, tuple[int, dict[int, tuple[float, float]], np.ndarray]
         ] = {}
         self._slip = 0.0
+        self._carried: dict[str, int | None] = {}
+        self._closing: list[str] = []
+        self._opening = False
+        #: Facts the current command reports (``holds`` / ``grasp_missed``).
+        self._facts: list[str] = []
+        #: What each closing grasp should measure.
+        self._expecting: dict[str, ExpectedGrasp] = {}
+        self._t = 0.0
+        self._tracking = 0.0
+        self._running = False
 
     # -- model -----------------------------------------------------------
 
@@ -489,14 +531,18 @@ class MuJoCoBackend:
         across commands). A new grasp (a robot link starts carrying the
         object) snaps the object into the planner's grasp, as closing fingers
         would, if it is within ``grasp_tolerance`` of it: otherwise the grasp
-        missed. A new world weld (a release) keeps the object where the
-        simulation put it, so placement error shows as ``object_drift``.
+        missed. Under contact grasps with an expected opening (``expect``),
+        the fingers close anyway, on whatever is there, and the measured
+        opening says whether they hold it (``_grip_phase``). A new world weld
+        (a release) keeps the object where the simulation put it, so
+        placement error shows as ``object_drift``.
         """
         mujoco, scratch = self.mujoco, self._scratch
         scratch.qpos[:] = planned
         mujoco.mj_kinematics(self.model, scratch)
-        self._closing: list[str] = []
+        self._closing = []
         self._opening = False
+        self._expecting = {}
         for name, carrier in carriers.items():
             eq = self._weld(name)
             obj = self._objects[name]
@@ -525,14 +571,26 @@ class MuJoCoBackend:
                 pos_plan, quat_plan = self._relative(scratch, carrier, obj)
                 error = float(np.linalg.norm(pos - pos_plan))
                 self._grasp_error = max(self._grasp_error, error)
+                closure = self._closure(name, carrier)
+                expected = self._expected(name, carrier)
+                if expected is not None and closure:
+                    self._expecting[name] = expected
                 if error > self.grasp_tolerance:
+                    if name in self._expecting:
+                        # Close on what is there; the object stays put.
+                        self._gripped[name] = (carrier, closure, np.zeros(3))
+                        self._closing.append(name)
+                        if not self.data.eq_active[eq]:
+                            self._set_weld(name, 0, *self._relative(self.data, 0, obj))
+                        continue
+                    if expected is not None:
+                        self._facts.append(expected.fact(False))
                     return (
                         f"grasp missed: {name} is {error * 1000:.0f} mm from "
                         f"its planned grasp (tolerance "
                         f"{self.grasp_tolerance * 1000:.0f} mm)"
                     )
                 pos, quat = pos_plan, quat_plan
-                closure = self._closure(name, carrier)
                 if closure:
                     # Snap it into the planned grasp, resting (welded to the
                     # world) while the fingers close on it.
@@ -541,13 +599,39 @@ class MuJoCoBackend:
                     self._closing.append(name)
                     pos, quat = self._relative(self.data, 0, obj)
                     carrier = 0
-            self.model.eq_obj1id[eq] = carrier
-            self.model.eq_data[eq][:] = 0.0
-            self.model.eq_data[eq][3:6] = pos
-            self.model.eq_data[eq][6:10] = quat
-            self.model.eq_data[eq][10] = 1.0  # torquescale
-            self.data.eq_active[eq] = 1
+            self._set_weld(name, carrier, pos, quat)
         return ""
+
+    def _set_weld(self, name: str, carrier: int, pos, quat) -> None:
+        """Weld object ``name`` to body ``carrier`` at pose (``pos``,
+        ``quat``) in its frame."""
+        eq = self._weld(name)
+        self.model.eq_obj1id[eq] = carrier
+        self.model.eq_data[eq][:] = 0.0
+        self.model.eq_data[eq][3:6] = pos
+        self.model.eq_data[eq][6:10] = quat
+        self.model.eq_data[eq][10] = 1.0  # torquescale
+        self.data.eq_active[eq] = 1
+
+    def _expected(self, name: str, carrier: int) -> ExpectedGrasp | None:
+        if self.expect is None:
+            return None
+        return self.expect(name, self.model.body(carrier).name)
+
+    def _measure(self, model: Any, prefix: str) -> GripperState | None:
+        """A hand's opening from its driven finger joints, or ``None`` if
+        none of them is driven here."""
+        values, effort = {}, None
+        for joint in model.joint_values(0.0, prefix):
+            i = self._finger_index.get(joint)
+            if i is not None:
+                values[joint] = float(self.data.qpos[self._qadr[i]])
+                if effort is None:
+                    effort = abs(float(self.data.ctrl[i]))
+        q = driving_value(model, values, prefix)
+        if q is None:
+            return None
+        return GripperState(model.width_at(q), effort)
 
     def _closure(self, name: str, carrier: int) -> dict[int, tuple[float, float]]:
         """Driven-joint index -> (closure, closing direction) for gripping
@@ -595,9 +679,26 @@ class MuJoCoBackend:
             error = self.control_step(start, qvel, start)
             if error:
                 return error
+        missed = []
         for name in self._closing:
             carrier, closure, _ = self._gripped[name]
             obj = self._objects[name]
+            expected = self._expecting.get(name)
+            state = (
+                self._measure(expected.model, expected.prefix)
+                if expected is not None
+                else None
+            )
+            if state is not None:
+                self._facts.append(expected.verify(state))
+                if not expected.held(state):
+                    del self._gripped[name]
+                    missed.append(
+                        f"{expected.obj} not in {expected.gripper} (opening "
+                        f"{state.width * 1000:.1f} mm, holding is "
+                        f"{expected.threshold * 1000:.1f} mm or more)"
+                    )
+                    continue
             self.data.eq_active[self._weld(name)] = 0
             hand = self._hand(closure)
             self._gripped[name] = (
@@ -606,7 +707,7 @@ class MuJoCoBackend:
                 self._relative(self.data, hand, obj)[0],
             )
         self._closing = []
-        return ""
+        return f"grasp missed: {'; '.join(missed)}" if missed else ""
 
     def _retime(self) -> tuple[np.ndarray, np.ndarray]:
         """A time law along the planned path that the robot can follow.
@@ -865,6 +966,7 @@ class MuJoCoBackend:
         if any(s is None for s in samples):
             return ExecutionStatus.FAILURE
         self._grasp_error = 0.0
+        self._facts = []
         self._carried = self._carriers(samples)
         self._skill = None
         self.feedforward[:] = 0.0
@@ -888,6 +990,7 @@ class MuJoCoBackend:
                 self._tracking = 0.0
                 self._started = self.clock()
                 self._skill = factory(self, payload)
+                self._running = True
                 return ExecutionStatus.RUNNING
         self._times, self._grid = self._retime()
         self._duration = float(self._times[-1])
@@ -897,6 +1000,7 @@ class MuJoCoBackend:
         self._t = 0.0
         self._tracking = 0.0
         self._started = self.clock()
+        self._running = True
         return ExecutionStatus.RUNNING
 
     def _path_time(self, t: float) -> float:
@@ -921,6 +1025,7 @@ class MuJoCoBackend:
     def poll(self) -> tuple[ExecutionStatus, Feedback | None]:
         status, feedback = self._poll()
         if status is not ExecutionStatus.RUNNING:
+            self._running = False
             self._flush_frames()
         return status, feedback
 
@@ -945,7 +1050,9 @@ class MuJoCoBackend:
             return ExecutionStatus.FAILURE, Feedback(message="cancelled")
         if self._failure:
             return ExecutionStatus.FAILURE, Feedback(
-                message=self._failure, metrics=self._metrics()
+                message=self._failure,
+                metrics=self._metrics(),
+                facts=tuple(self._facts),
             )
         if self._skill is not None:
             return self._skill.poll()
@@ -982,6 +1089,7 @@ class MuJoCoBackend:
                 progress=1.0,
                 message=f"carried: {carried}" if carried else "",
                 metrics=metrics,
+                facts=tuple(self._facts),
             )
         progress = min(1.0, self._t / end) if end > 0 else 1.0
         return ExecutionStatus.RUNNING, Feedback(progress=progress, metrics=metrics)
@@ -1166,3 +1274,81 @@ class MuJoCoBackend:
 
     def cancel(self) -> None:
         self.cancelled = True
+        self._running = False
+
+    # -- the hand (GripperActuation, ADR-0009) -----------------------------
+
+    def gripper_state(self, gripper: str) -> GripperState:
+        """``gripper``'s measured opening and its driven finger's effort."""
+        hand = self._hand_binding(gripper)
+        state = self._measure(hand.model, hand.joint_prefix)
+        if state is None:
+            raise KeyError(f"{gripper}: none of its finger joints is driven")
+        return state
+
+    def open_gripper(self, gripper: str) -> None:
+        """Open ``gripper`` fully; an object it holds is let go where it is."""
+        hand = self._hand_binding(gripper)
+        for name in self._held_by(hand):
+            del self._gripped[name]
+            pos, quat = self._relative(self.data, 0, self._objects[name])
+            self._set_weld(name, 0, pos, quat)
+        self._actuate(hand, hand.model.q_open, None)
+
+    def close_gripper(
+        self, gripper: str, width: float | None = None, effort: float | None = None
+    ) -> None:
+        """Close ``gripper`` to ``width`` (default: fully), its driven finger
+        pushing with at most ``effort``."""
+        hand = self._hand_binding(gripper)
+        model = hand.model
+        q = model.q_for_width(model.min_width if width is None else width)
+        self._actuate(hand, q, effort)
+
+    def _hand_binding(self, gripper: str) -> GripperBinding:
+        if gripper not in self.hands:
+            raise KeyError(f"no hand for {gripper!r} (hands: {sorted(self.hands)})")
+        return self.hands[gripper]
+
+    def _held_by(self, hand: GripperBinding) -> list[str]:
+        joints = set(hand.model.joint_values(0.0, hand.joint_prefix))
+        return [
+            name
+            for name, (_, closure, _) in self._gripped.items()
+            if any(self.model.joint(self._actuated[i]).name in joints for i in closure)
+        ]
+
+    def _actuate(self, hand: GripperBinding, q: float, effort: float | None) -> None:
+        """Drive ``hand`` to driving value ``q`` for ``grip_time``, the arm
+        holding where it is. The fingers stay there until the next command
+        drives them (to its path's values, or a grasp's closure)."""
+        if not self._initialized:
+            raise RuntimeError("the simulation has no state yet (reset it first)")
+        if self._running:
+            raise RuntimeError("a command is running")
+        if self._held_by(hand):
+            raise RuntimeError(f"{hand.gripper} holds an object: open it first")
+        ref = self.data.qpos.copy()
+        driven = []
+        for joint, value in hand.model.joint_values(q, hand.joint_prefix).items():
+            i = self._finger_index.get(joint)
+            if i is not None:
+                ref[self._qadr[i]] = value
+                driven.append(i)
+        if not driven:
+            raise KeyError(f"{hand.gripper}: none of its finger joints is driven")
+        limit, tracking = self._effort.copy(), self.max_tracking_error
+        if effort is not None:
+            self._effort[driven] = np.minimum(self._effort[driven], effort)
+        self.max_tracking_error = None  # the fingers start far from ``ref``
+        self.feedforward[:] = 0.0
+        qvel = np.zeros(self.model.nv)
+        try:
+            for _ in range(round(self.grip_time / self.model.opt.timestep)):
+                error = self.control_step(ref, qvel, ref)
+                if error:
+                    raise RuntimeError(error)
+        finally:
+            self._effort[:] = limit
+            self.max_tracking_error = tracking
+        self._flush_frames()
