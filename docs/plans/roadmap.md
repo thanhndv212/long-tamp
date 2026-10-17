@@ -241,7 +241,7 @@ Run missions on a robot driven from another host (a container and a USB-attached
 - [x] [#126](https://github.com/thanhndv212/long-tamp/issues/126) Gripper model interface beyond symmetric parallel jaws
 - [x] [#127](https://github.com/thanhndv212/long-tamp/issues/127) Gripper actuation and grasp verification facts
 - [x] [#128](https://github.com/thanhndv212/long-tamp/issues/128) Repair from grasp_missed
-- [ ] [#129](https://github.com/thanhndv212/long-tamp/issues/129) Run long_tamp on your robot
+- [x] [#129](https://github.com/thanhndv212/long-tamp/issues/129) Run long_tamp on your robot
 - [ ] [#130](https://github.com/thanhndv212/long-tamp/issues/130) M7 exit test, a mission through RemoteBackend on a real robot
 
 **Exit test:** a mission runs through `RemoteBackend` on the SO-101 (cube pick-and-place, 10 runs, soarm_tamp S1) and the screw assembly runs through it in MuJoCo.
