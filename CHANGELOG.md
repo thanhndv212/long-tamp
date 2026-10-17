@@ -112,6 +112,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `long_tamp_bt` namespace. `PythonSession` is now `PythonTaskSession` (a `TaskSession`),
   and the host reads the session from the blackboard instead of binding it to the nodes.
 
+### Fixed
+
+- Repair no longer runs out of memory after blocking a whole step (#168).
+  - `to_pddl(blocked=...)` encodes a block as a positive `unblocked_...` predicate: the
+    bindings the static preconditions allow, minus the blocked ones.
+  - It keeps only the parameters that tell those bindings apart, so a 9-parameter
+    `clamp_and_screw` block becomes a 2-parameter one.
+  - Before, unified-planning's STRIPS compilation for pyperplan listed every grounding of
+    the 9-ary negated predicate. A screw-assembly repair (`--grasp contact` after
+    `screw_misaligned`) was killed with exit 137. It now gets `NoPlanFound` in about
+    3 s and gives up with the failures in its summary.
+
 ## [0.8.0] - 2026-10-02
 
 The mission UI. One page, started with one command (`mission_ui.py`), shows the 3D scene, an

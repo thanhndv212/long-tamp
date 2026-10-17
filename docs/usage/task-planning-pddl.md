@@ -95,9 +95,16 @@ outcome = plan_execute_repair(plan, execute, policy, max_rounds=3)
 ```
 
 - `to_pddl(..., blocked=[("clamp_and_screw", {"clamp": "fixtures/clamp1", "seat":
-  "part1/h_seat"})])` adds `(not (blocked_clamp_and_screw__clamp__seat ?clamp ?seat))`
-  to the action and the blocked values to the problem, so a planner can't choose that
-  pair again, whatever the other parameters.
+  "part1/h_seat"})])` adds `(unblocked_clamp_and_screw__clamp__seat ?clamp ?seat)` to
+  the action, and to the problem every pair the action's static preconditions allow
+  except the blocked one, so a planner can't choose that pair again, whatever the other
+  parameters. The predicate keeps only the parameters that tell the allowed bindings
+  apart: blocking a whole 9-parameter `clamp_and_screw` binding becomes a block on the
+  clamp and the holding hand. That keeps the predicate's arity low, which matters for
+  planners reached through unified-planning: compiling a STRIPS problem for pyperplan
+  lists every grounding of every predicate, and a 9-ary one ran out of memory. Past
+  20 000 allowed bindings the export falls back to `(not (blocked_... ?clamp ?seat))`
+  and the blocked values.
 - The policy maps a failure to bindings to block (the default blocks the failed step's
   own binding). The loop stops on success, after `max_rounds` plans, when the policy has
   nothing new to block, or when no plan avoids the blocks (`NoPlanFound`).
