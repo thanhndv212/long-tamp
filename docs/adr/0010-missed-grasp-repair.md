@@ -47,6 +47,20 @@ than the last failure to decide what to do.
   is transient.
 - Each retry uses a round, so `--replan` must allow for the retries
   (`--grasp-retries`, default 2).
+- The replan takes the observed arms, hands and objects, but a hand that carries
+  something as planned, and what it carries where it was planned in that hand. A carried
+  object observed where it slipped, with a hand closed into it, would start every later
+  configuration with a finger inside it. An empty hand is taken as it is: one the retry
+  just opened, kept closed as planned, would arrive closed at the object. An object
+  resting in a fixture (a part in the rack) is taken where it is, if it is more than 5 mm
+  from where it was planned: it may be the one that moved. Within 5 mm the planned pose is
+  kept, which the constraint graph projects exactly; the simulated one sits a little off.
+  Only a retry asks the backend for the objects (`observed_config(like, True)`; without it
+  the objects come back from `like`). The drift replan follows the same rule for the arms
+  and hands and keeps the objects as planned.
+- A hand the backend can't open (weld grasps: no hand is bound) starts the retry with
+  its fingers as in the initial configuration, open: the observed ones are still closed,
+  and the grasp edge keeps the fingers where they start.
 - "Re-observe" is the backend's configuration. A real robot needs a perception update of
   the object poses here. Until there is one, a retry on hardware replans against the pose
   the object had last time.

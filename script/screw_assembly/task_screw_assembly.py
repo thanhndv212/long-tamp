@@ -532,11 +532,7 @@ def mission_session(
         observed = observe(ctx["q"]) if observe is not None else None
         if observed is None:
             raise RuntimeError("the backend can't report the observed configuration")
-        # Within the planner's bounds: a simulated finger at -1e-9 rad is
-        # "out of range" to HPP, which then rejects the start configuration.
-        model = task.robot.model()
-        observed = np.clip(observed, model.lowerPositionLimit, model.upperPositionLimit)
-        ctx["q"] = [float(v) for v in observed]
+        ctx["q"] = observed_start(task, planner, ctx["q"], observed)
         print(f"\n=== {label} === the robot drifted: replanning from where it is")
         executor = ctx["executor"]
         submitted = len(executor._pending)
@@ -1161,6 +1157,80 @@ def run_mission(
     }
 
 
+#: How far an object must be from where it was planned to be taken where it
+#: is observed [m] (a part knocked out of place, #128).
+MOVED = 0.005
+
+
+def observed_start(task, planner, planned, observed) -> list[float]:
+    """The configuration to replan from: the arms and the objects where the
+    backend observes them, but a hand that carries something as planned, and
+    what it carries where it was planned in that hand. An observed carried object sits a
+    little off its grasp (contact grasps slip) and an observed closed hand
+    squeezes into it; the planner would keep both, and every later
+    configuration would have a finger in the driver (#128). An object resting
+    in a fixture (a part in the rack) is taken where it is: it may have been
+    knocked out of place, which is what a retry is for."""
+    import pinocchio as pin
+
+    model = task.robot.model()
+    # Within the planner's bounds: a simulated finger at -1e-9 rad is
+    # "out of range" to HPP, which then rejects the start configuration.
+    observed = np.clip(observed, model.lowerPositionLimit, model.upperPositionLimit)
+    holder = {  # held object -> what holds it (an arm, an object, a fixture)
+        h.split("/")[0]: g.split("/")[0]
+        for g, h in planner.grasp_tracker.current_grasps.items()
+        if h
+    }
+    arms = {
+        name.split("/")[0]: model.parents[jid]  # arm -> its wrist joint
+        for jid, name in enumerate(model.names)
+        if name.endswith("robotiq_85_left_knuckle_joint")
+    }
+
+    def arm_of(body: str) -> str | None:
+        """The arm carrying ``body``, through what holds it, if any."""
+        for _ in range(len(holder) + 1):
+            if body in arms:
+                return body
+            if body not in holder:
+                return None
+            body = holder[body]
+        return None
+
+    carried = {obj: arm for obj in holder if (arm := arm_of(obj)) is not None}
+    q = [float(v) for v in planned]
+    objects = {f"{o}/root_joint" for o in task.task_config.OBJECTS}
+    for jid in range(1, model.njoints):
+        name, r, nq = model.names[jid], model.idx_qs[jid], model.nqs[jid]
+        body = name.split("/")[0]
+        moved = np.linalg.norm(np.subtract(observed[r : r + 3], planned[r : r + 3]))
+        if name in objects and moved < MOVED:
+            # Where the plan's constraints put it, not 10 µm off in the
+            # simulation: only an object that really moved is re-placed.
+            continue
+        # A hand that carries something stays as planned; an empty one (the
+        # hand a retry just opened) is taken as it is, or the replanned
+        # approach would arrive closed.
+        if body in carried or ("robotiq" in name and body in carried.values()):
+            continue
+        q[r : r + nq] = [float(v) for v in observed[r : r + nq]]
+    # A carried object moves with its arm's wrist, from where it was planned.
+    before, after = model.createData(), model.createData()
+    pin.forwardKinematics(model, before, np.asarray(planned, dtype=float))
+    pin.forwardKinematics(model, after, np.asarray(q, dtype=float))
+    for obj, arm in carried.items():
+        jid = model.getJointId(f"{obj}/root_joint")
+        if jid >= model.njoints:
+            continue
+        wrist = arms[arm]
+        m = after.oMi[wrist] * before.oMi[wrist].inverse()
+        r = model.idx_qs[jid]
+        pose = pin.XYZQUATToSE3(np.asarray(planned[r : r + 7], dtype=float))
+        q[r : r + 7] = [float(v) for v in pin.SE3ToXYZQUAT(m * pose)]
+    return q
+
+
 def recover_missed_grasp(
     task: ScrewAssemblyTask,
     planner: GraspSequencePlanner,
@@ -1178,12 +1248,19 @@ def recover_missed_grasp(
         for atom in map(parse_atom, failure.get("facts", []))
         if atom.name == "grasp_missed"
     ]
+    unopened = []  # hands the backend can't open: their fingers stay closed
     for gripper, _ in missed:
-        if hasattr(backend, "open_gripper"):
-            try:
-                backend.open_gripper(gripper)
-            except KeyError:  # no hand bound (weld grasps): nothing to open
-                pass
+        if not hasattr(backend, "open_gripper"):
+            unopened.append(gripper)
+            continue
+        try:
+            backend.open_gripper(gripper)
+        except (KeyError, RuntimeError) as e:
+            # No hand bound (weld grasps): nothing to open. In its own
+            # process the backend's KeyError comes back as a RuntimeError.
+            if "no hand for" not in str(e):
+                raise
+            unopened.append(gripper)
     held = dict(ctx.get("step_start", {}).get(failure["step"]) or {})
     if not held:
         held = {g: h for g, h in planner.grasp_tracker.current_grasps.items() if h}
@@ -1191,22 +1268,20 @@ def recover_missed_grasp(
         if str(held.get(gripper, "")).startswith(f"{obj}/"):
             del held[gripper]
     MissionCheckpoint.restore_grasps(planner.grasp_tracker, held)
-    # Objects where they are; the robot, and what it holds, as planned. An
-    # observed held object sits a little off its grasp (contact grasps slip),
-    # and the planner would keep that offset: a finger in the driver.
     observe = getattr(backend, "observed_config", None)
-    observed = observe(ctx["q"]) if observe is not None else None
+    # With the objects: the one the hand missed has moved.
+    observed = observe(ctx["q"], True) if observe is not None else None
     if observed is not None:
-        held = {
-            h.split("/")[0] for h in planner.grasp_tracker.current_grasps.values() if h
-        }
-        rank = dict(task.robot.rankInConfiguration)
-        q = list(ctx["q"])
-        for obj in task.task_config.OBJECTS:
-            r = rank.get(f"{obj}/root_joint")
-            if r is not None and obj not in held:
-                q[r : r + 7] = [float(v) for v in observed[r : r + 7]]
-        ctx["q"] = q
+        ctx["q"] = observed_start(task, planner, ctx["q"], observed)
+    if unopened:
+        # Open as at the start: closed, the retry's approach puts a finger
+        # in the part.
+        model = task.robot.model()
+        arms = {g.split("/")[0] for g in unopened}
+        for jid in range(1, model.njoints):
+            name, r, nq = model.names[jid], model.idx_qs[jid], model.nqs[jid]
+            if "robotiq" in name and name.split("/")[0] in arms:
+                ctx["q"][r : r + nq] = task.q_init[r : r + nq]
     print(
         f"\n=== {failure['step']} === {', '.join(failure['facts'])}: hand opened, "
         f"world {'observed' if observed is not None else 'NOT observed'}",
@@ -1553,8 +1628,9 @@ def main() -> int:
         metavar="LABEL:OBJECT:DX,DY,DZ",
         help="with --backend mujoco: move OBJECT by (DX, DY, DZ) m just before "
         "step LABEL's motion, so its grasp misses (repeatable), e.g. "
-        "'part1 A0: grasp:part1:0,-0.06,0'; with --grasp contact and --replan "
-        "the step is retried where the object is (#128)",
+        "'part1 A0: grasp:part1:0,-0.10,0' (clear of the open fingers, which "
+        "close across y); with --replan the step is retried where the object "
+        "is (#128)",
     )
     ap.add_argument(
         "--grasp-retries",

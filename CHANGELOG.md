@@ -20,7 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `ProcessBackend`).
   - Screw assembly: a missed grasp opens the hand, plans from the observed
     configuration and retries the pick (`--grasp-retries`); `--inject-miss` displaces a
-    part before a step to test it.
+    part before a step to test it. A retry or a drift replans from the observed arms and
+    hands, but keeps a hand that carries something, and what it carries, as planned: an
+    observed driver sits where it slipped, and replanning from there put a finger inside it.
+    A retry also observes the objects (`observed_config(like, objects=True)`) and moves
+    one that is more than 5 mm from its planned pose; a drift replan keeps them as planned.
+    A hand the backend can't open (weld grasps) starts the retry open.
 
 - Grasp verification (#127, ADR-0009).
   - `GripperActuation` protocol for backends with a hand: `open_gripper`,

@@ -113,10 +113,11 @@ Screw assembly: `task_screw_assembly.py --planner up --replan 3` runs this loop 
 `screw_domain.repair_policy` (a clamp that can't reach a part's seat is blocked for that
 part; anything else blocks the failed step), and `--inject-failure
 clamp_and_screw:clamp=fixtures/clamp1` makes that step fail once, as if unreachable, to
-test it. With `--backend mujoco --grasp contact`, `--inject-miss 'part1 A0:
-grasp:part1:0,-0.06,0'` moves part1 6 cm just before its grasp, so the grasp misses and
-is retried where the part is (`--grasp-retries N`, default 2; each retry uses a
-`--replan` round).
+test it. With `--backend mujoco`, `--inject-miss 'part1 A0: grasp:part1:0,-0.10,0'`
+moves part1 10 cm just before its grasp, so the grasp misses and is retried where the
+part (`--grasp-retries N`, default 2; each retry uses a `--replan` round). At 6 cm the
+part is still between the fingers, which close across y, so the opened hand starts inside
+it; moved along x, the part goes into the rack.
 
 ## Running Fast Downward directly
 

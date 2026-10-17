@@ -1207,11 +1207,17 @@ class MuJoCoBackend:
             return None
         return self._joint_error(self.to_qpos(q))
 
-    def observed_config(self, like: Any) -> np.ndarray | None:
+    def observed_config(self, like: Any, objects: bool = False) -> np.ndarray | None:
         """The simulation's state as a planner configuration (``like`` fills
-        what MuJoCo doesn't map), or ``None`` without ``from_qpos``."""
+        what MuJoCo doesn't map), or ``None`` without ``from_qpos``. The
+        objects are kept from ``like`` unless ``objects``: a retry looks for
+        an object that moved (#128); a drift replan wants them where the
+        plan's constraints put them. ``objects`` is positional-safe, so a
+        backend in its own process forwards it."""
         if self.from_qpos is None:
             return None
+        if objects:
+            return self.from_qpos(self.data.qpos.copy(), like, True)
         return self.from_qpos(self.data.qpos.copy(), like)
 
     def disturb(self, joint: str, delta: float) -> None:
