@@ -30,9 +30,21 @@ capabilities' run-time preconditions are unchanged.
 
 ``blocked`` rules out bindings a refinement failed on (issue #15): a
 ``(capability, {parameter: value, ...})`` pair adds a precondition
-``(not (blocked_<capability>__<parameters> ?p ...))`` to the action and the
-blocked values to ``init``, so a planner can't choose that binding again
-(e.g. part 1 into clamp 1), whatever the other parameters.
+``(unblocked_<capability>__<parameters> ?p ...)`` to the action, and to
+``init`` every value tuple of those parameters the action's static
+preconditions allow, minus the blocked ones, so a planner can't choose that
+binding again (e.g. part 1 into clamp 1), whatever the other parameters.
+Parameters no static precondition binds range over every object, and the
+predicate keeps only parameters that tell the allowed tuples apart (blocking
+a whole ``clamp_and_screw`` binding needs the clamp, the part and the hands,
+not the part's seat and holes, which the part determines).
+
+Planners that only read STRIPS (pyperplan, through unified-planning) list
+every grounding of every predicate when they compile negations away,
+|objects|^n facts for an n-ary one: a negated, or merely high-arity, block on
+a 9-parameter ``clamp_and_screw`` exhausts memory. Only when the allowed
+tuples would exceed ``_UNBLOCKED_LIMIT`` does the export fall back to
+``(not (blocked_<capability>__<parameters> ?p ...))`` and the blocked facts.
 """
 
 from __future__ import annotations
@@ -46,6 +58,8 @@ from .capabilities import CapabilityDescriptor
 from .predicates import WILDCARD, Atom, Literal, parse_atom
 
 _VALID = re.compile(r"[A-Za-z][A-Za-z0-9_-]*")
+#: Most allowed tuples a blocked signature is encoded with positively.
+_UNBLOCKED_LIMIT = 20_000
 
 
 @dataclass
@@ -87,6 +101,75 @@ def _sanitize(name: str) -> str:
 
 def _blocked_predicate(capability: str, keys: tuple[str, ...]) -> str:
     return f"blocked_{capability}__{'__'.join(keys)}"
+
+
+def _unblocked_predicate(capability: str, keys: tuple[str, ...]) -> str:
+    return f"unblocked_{capability}__{'__'.join(keys)}"
+
+
+def _allowed_values(
+    keys: tuple[str, ...],
+    static: list[Literal],
+    init: list[Atom],
+    universe: list[str],
+    limit: int,
+) -> list[tuple[str, ...]] | None:
+    """Every value tuple of ``keys`` that the positive ``static`` literals
+    allow in ``init``; keys they don't bind range over ``universe``. None if
+    there would be more than ``limit``.
+
+    It joins the literals over their facts, keeping only the variables still
+    needed (``keys`` and those of later literals), then projects onto ``keys``.
+    """
+    facts: dict[str, list[tuple[str, ...]]] = {}
+    for atom in init:
+        facts.setdefault(atom.name, []).append(atom.args)
+    literals = [lit for lit in static if lit.positive]
+    rows: set[tuple[tuple[str, str], ...]] = {()}
+    for i, literal in enumerate(literals):
+        needed = set(keys).union(*(lit.variables() for lit in literals[i + 1 :]))
+        args = literal.atom.args
+        joined = set()
+        for row in rows:
+            for fact in facts.get(literal.atom.name, ()):
+                if len(fact) != len(args):
+                    continue
+                values = dict(row)
+                for arg, value in zip(args, fact):
+                    if arg == WILDCARD:
+                        continue
+                    if arg.startswith("?"):
+                        if values.setdefault(arg[1:], value) != value:
+                            break
+                    elif arg != value:
+                        break
+                else:
+                    joined.add(tuple(sorted(
+                        (k, v) for k, v in values.items() if k in needed
+                    )))  # fmt: skip
+            if len(joined) > limit:
+                return None
+        rows = joined
+    bound = [k for k in keys if any(k == name for name, _ in next(iter(rows), ()))]
+    free = [k for k in keys if k not in bound]
+    if len(rows) * len(universe) ** len(free) > limit:
+        return None
+    allowed = [dict(row) for row in rows]
+    for key in free:
+        allowed = [{**a, key: value} for a in allowed for value in universe]
+    return sorted({tuple(a[k] for k in keys) for a in allowed})
+
+
+def _determining(keys: tuple[str, ...], allowed: list[tuple[str, ...]]) -> list[int]:
+    """Indices of a subset of ``keys`` whose values tell the ``allowed``
+    tuples apart (at least one key): dropping a key the others determine
+    (a part's seat and holes) keeps "this tuple is blocked" exact."""
+    kept = list(range(len(keys)))
+    for i in reversed(range(len(keys))):
+        rest = [j for j in kept if j != i]
+        if rest and len({tuple(t[j] for j in rest) for t in allowed}) == len(allowed):
+            kept = rest
+    return kept
 
 
 def _literals(texts: Iterable[str]) -> list[Literal]:
@@ -169,18 +252,14 @@ def to_pddl(
     (see the module docstring).
     """
     static_preconditions = dict(static_preconditions or {})
-    # capability -> parameter-name signatures blocked, and the blocked facts.
-    block_signatures: dict[str, list[tuple[str, ...]]] = {}
-    block_facts: list[Atom] = []
+    # capability -> parameter-name signature -> the value tuples blocked.
+    block_signatures: dict[str, dict[tuple[str, ...], set[tuple[str, ...]]]] = {}
     for capability, binding in blocked:
         keys = tuple(sorted(binding))
         if not keys:
             raise ValueError(f"blocked {capability}: empty binding")
-        signatures = block_signatures.setdefault(capability, [])
-        if keys not in signatures:
-            signatures.append(keys)
-        predicate = _blocked_predicate(capability, keys)
-        block_facts.append(Atom(predicate, tuple(str(binding[k]) for k in keys)))
+        signatures = block_signatures.setdefault(capability, {})
+        signatures.setdefault(keys, set()).add(tuple(str(binding[k]) for k in keys))
     items = descriptors.values() if isinstance(descriptors, Mapping) else descriptors
     names = _Names()
     requirements = {":strips"}
@@ -201,7 +280,12 @@ def to_pddl(
             if arg not in target:
                 target.append(arg)
 
-    actions, parameters = [], {}
+    # (action, its parameters, preconditions, effects), rendered once the
+    # blocked signatures are encoded, which needs every object.
+    actions: list[tuple[str, list[str], list[str], list[str]]] = []
+    parameters = {}
+    # (capability, signature, blocked tuples, static literals, preconditions)
+    pending_blocks = []
     for descriptor in sorted(items, key=lambda d: d.capability_id):
         if not descriptor.effects:
             continue
@@ -230,25 +314,15 @@ def to_pddl(
             text, needs = _effect(literal, names)
             eff.append(text)
             requirements |= needs
-        for keys in block_signatures.pop(descriptor.capability_id, []):
+        for keys, values in block_signatures.pop(descriptor.capability_id, {}).items():
             missing = [k for k in keys if k not in used]
             if missing:
                 raise ValueError(
                     f"blocked {descriptor.capability_id}: {missing} are not "
                     f"planning parameters (used: {used})"
                 )
-            predicate = _blocked_predicate(descriptor.capability_id, keys)
-            atom = Atom(predicate, tuple(f"?{k}" for k in keys))
-            note(atom, in_domain=True)
-            text, needs = _condition(Literal(atom, positive=False), names)
-            pre.append(text)
-            requirements |= needs
-        actions.append(
-            f"  (:action {action}\n"
-            f"    :parameters ({' '.join('?' + p for p in used)})\n"
-            f"    :precondition {_conjunction(pre)}\n"
-            f"    :effect {_conjunction(eff)})"
-        )
+            pending_blocks.append((descriptor.capability_id, keys, values, static, pre))
+        actions.append((action, used, pre, eff))
 
     if block_signatures:
         raise ValueError(
@@ -261,7 +335,6 @@ def to_pddl(
             f"{sorted(static_preconditions)}"
         )
     init_atoms = [a if isinstance(a, Atom) else parse_atom(str(a)) for a in init]
-    init_atoms += block_facts
     goal_literals = _literals(goal)
     for atom in init_atoms:
         note(atom)
@@ -270,6 +343,33 @@ def to_pddl(
     for obj in objects:
         if obj not in constants:
             constants.append(obj)
+
+    universe = [*domain_constants, *(c for c in constants if c not in domain_constants)]
+    block_facts: list[Atom] = []
+    for capability, keys, values, static, pre in pending_blocks:
+        variables = tuple(f"?{k}" for k in keys)
+        allowed = _allowed_values(keys, static, init_atoms, universe, _UNBLOCKED_LIMIT)
+        if allowed is None:  # too many to list: the negated form
+            atom = Atom(_blocked_predicate(capability, keys), variables)
+            facts = [Atom(atom.name, v) for v in sorted(values)]
+        else:  # on the keys that tell the allowed tuples apart
+            kept = _determining(keys, allowed)
+            atom = Atom(
+                _unblocked_predicate(capability, tuple(keys[i] for i in kept)),
+                tuple(variables[i] for i in kept),
+            )
+            facts = sorted({
+                Atom(atom.name, tuple(v[i] for i in kept))
+                for v in allowed if v not in values
+            })  # fmt: skip
+        note(atom, in_domain=True)
+        for fact in facts:
+            note(fact)
+        text, needs = _condition(Literal(atom, positive=allowed is not None), names)
+        pre.append(text)
+        requirements |= needs
+        block_facts += facts
+    init_atoms += block_facts
 
     goal_parts = []
     for literal in goal_literals:
@@ -293,7 +393,13 @@ def to_pddl(
         f"  (:requirements {' '.join(r for r in order if r in requirements)})\n"
         + constants_decl
         + f"  (:predicates {predicate_decls})\n"
-        + "\n".join(actions)
+        + "\n".join(
+            f"  (:action {action}\n"
+            f"    :parameters ({' '.join('?' + p for p in used)})\n"
+            f"    :precondition {_conjunction(pre)}\n"
+            f"    :effect {_conjunction(eff)})"
+            for action, used, pre, eff in actions
+        )
         + "\n)\n"
     )
     object_names = " ".join(names(c) for c in constants if c not in domain_constants)

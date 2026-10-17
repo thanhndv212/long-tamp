@@ -7,6 +7,7 @@ replan into a spare clamp and complete (no HPP; the planner runs when the
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -68,6 +69,34 @@ def test_a_blocked_clamp_is_swapped_for_a_spare_one():
     steps = _planner().solve(screw_domain.pddl_problem(1, blocked=blocked, clamps=SPARE))
     clamps = [p["clamp"] for c, p in steps if c == "clamp_and_screw"]
     assert clamps == ["fixtures/clamp2"]
+
+
+def test_blocking_every_parameter_of_a_step_stays_small_and_unsolvable():
+    """The repair blocks the whole failed binding, 9 parameters for
+    clamp_and_screw. As a 9-ary predicate, unified-planning's STRIPS
+    compilation listed |objects|^9 groundings (OOM, exit 137); the export
+    keeps the parameters that tell the allowed bindings apart, the clamp and
+    the holding hand, so the planner says no plan quickly."""
+    from long_tamp.tasks.task_planning.skeleton import NoPlanFound
+
+    left, right = f"{screw_domain.LEFT}/gripper", f"{screw_domain.RIGHT}/gripper"
+    done = ["holds(fixtures/clamp4, part4/h_seat)", "screwed(part4, part4/h_hole1)",
+            "screwed(part4, part4/h_hole2)"]  # fmt: skip
+    state = [f"holds({right}, driver/h_grip)", f"holds({left}, part2/h_grasp)", *done]
+    binding = {"clamp": "fixtures/clamp2", "held": "part2/h_grasp", "holder": left,
+               "hole1": "part2/h_hole1", "hole2": "part2/h_hole2", "part": "part2",
+               "seat": "part2/h_seat", "tool": "driver/h_grip",
+               "tool_gripper": right}  # fmt: skip
+    export = screw_domain.pddl_problem(4, state, [("clamp_and_screw", binding)])
+    assert "(unblocked_clamp_and_screw__clamp__holder ?clamp ?holder)" in export.domain
+    assert "(unblocked_clamp_and_screw__clamp__holder fixtures__clamp2 ur10_left__gripper)" \
+        not in export.problem  # fmt: skip
+    assert "(unblocked_clamp_and_screw__clamp__holder fixtures__clamp2 ur10_right__gripper)" \
+        in export.problem  # fmt: skip
+    started = time.monotonic()
+    with pytest.raises(NoPlanFound):  # part2 fits clamp2 only, held by the left hand
+        _planner().solve(export)
+    assert time.monotonic() - started < 60
 
 
 class _Cell:

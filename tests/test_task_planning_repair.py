@@ -38,12 +38,23 @@ def _export(blocked=()):
 
 def test_blocked_bindings_become_a_precondition_and_facts():
     x = _export(blocked=[("place", {"slot": "slot1"})])
-    assert "(not (blocked_place__slot ?slot))" in x.domain
-    assert "(blocked_place__slot slot1)" in x.problem
+    # Positive: the slots fits() allows, minus the blocked one.
+    assert "(unblocked_place__slot ?slot)" in x.domain
+    assert "(unblocked_place__slot slot2)" in x.problem
+    assert "(unblocked_place__slot slot1)" not in x.problem
     with pytest.raises(ValueError, match="not planning parameters"):
         _export(blocked=[("place", {"colour": "red"})])
     with pytest.raises(ValueError, match="unknown or effect-less"):
         _export(blocked=[("fly", {"slot": "slot1"})])
+
+
+def test_too_many_allowed_bindings_fall_back_to_a_negated_block(monkeypatch):
+    from long_tamp.tasks.task_planning import pddl
+
+    monkeypatch.setattr(pddl, "_UNBLOCKED_LIMIT", 1)
+    x = _export(blocked=[("place", {"slot": "slot1"})])
+    assert "(not (blocked_place__slot ?slot))" in x.domain
+    assert "(blocked_place__slot slot1)" in x.problem
 
 
 def _slot_policy(failure):
@@ -88,9 +99,11 @@ def _first_fit(export, world):
     """A stand-in planner: the first slot not blocked, unless already placed."""
     if "placed(box)" in world:
         return []
-    blocked = {line.split()[-1].rstrip(")") for line in export.problem.split("(")
-               if line.startswith("blocked_place__slot")}  # fmt: skip
-    slot = next(s for s in ("slot1", "slot2") if s not in blocked)
+    if "unblocked_place__slot" not in export.domain:  # nothing blocked yet
+        return [("place", {"obj": "box", "slot": "slot1"})]
+    allowed = {line.split()[-1].rstrip(")") for line in export.problem.split("(")
+               if line.startswith("unblocked_place__slot")}  # fmt: skip
+    slot = next(s for s in ("slot1", "slot2") if s in allowed)
     return [("place", {"obj": "box", "slot": slot})]
 
 
