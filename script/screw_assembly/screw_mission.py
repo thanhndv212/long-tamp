@@ -3,8 +3,8 @@
 The reference implementation of ``long_tamp.mission.MissionDomain``. It
 delegates to ``screw_domain`` (and, for the geometry, ``task_screw_assembly``),
 so nothing about the mission changes: ``task_screw_assembly.py`` still calls
-those functions directly until the generic runner replaces its loop (#132,
-#134).
+those functions directly until it moves onto the generic runner
+(``long_tamp.mission.runner``, #134).
 
 Importing this module needs no HPP; ``setup``, ``plan_move`` and
 ``make_backend`` import ``task_screw_assembly`` (HPP) when called.
@@ -196,3 +196,37 @@ class ScrewAssemblyDomain(BaseMissionDomain):
         import task_screw_assembly as T
 
         return T.make_backend(name, scene.task, **options)
+
+    # -- recovery --------------------------------------------------------------
+
+    def observed_start(
+        self, scene: MissionScene, planned: Sequence[float], observed: Sequence[float]
+    ) -> list[float]:
+        """The arms and resting objects as observed, a carried object where
+        it was planned in its hand (``task_screw_assembly.observed_start``)."""
+        import task_screw_assembly as T
+
+        return T.observed_start(scene.task, scene.planner, list(planned), observed)
+
+    def opened_config(
+        self, scene: MissionScene, q: Sequence[float], grippers: Sequence[str]
+    ) -> list[float]:
+        """The Robotiq fingers of the grippers' arms as at the start (open),
+        as in ``task_screw_assembly.recover_missed_grasp``."""
+        q = [float(v) for v in q]
+        model = scene.task.robot.model()
+        arms = {g.split("/")[0] for g in grippers}
+        for jid in range(1, model.njoints):
+            name, r, nq = model.names[jid], model.idx_qs[jid], model.nqs[jid]
+            if "robotiq" in name and name.split("/")[0] in arms:
+                q[r : r + nq] = [float(v) for v in scene.q_init[r : r + nq]]
+        return q
+
+    def execution_metrics(self, executions: Sequence[Any]) -> dict[str, Any]:
+        """The screws the screw skill drove, and its worst lateral error."""
+        from long_tamp.mission.runner import fact_count, metric_max
+
+        return {
+            "screws_driven": fact_count(executions, "screwed("),
+            "max_screw_lateral_error": metric_max(executions, "lateral_error"),
+        }

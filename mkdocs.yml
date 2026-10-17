@@ -97,6 +97,7 @@ nav:
           - "0009 Grasp verification": adr/0009-grasp-verification.md
           - "0010 Missed-grasp repair": adr/0010-missed-grasp-repair.md
           - "0011 Mission domains": adr/0011-mission-domain.md
+          - "0012 Mission runner": adr/0012-mission-runner.md
   - Plans:
       - Roadmap: plans/roadmap.md
       - "Simulation benchmark selection": plans/sim-benchmark-selection.md

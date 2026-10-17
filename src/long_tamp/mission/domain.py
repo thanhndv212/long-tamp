@@ -15,7 +15,12 @@ repair -> supervisor loop needs to know about one robot and one kind of task:
   which failures are retried in place (``retry``);
 - **geometry and execution**: building the scene (``setup``), planning a
   move (``plan_move``), what a planned path is sent to the executor as
-  (``execution_payload``), and the backends it runs on (``make_backend``).
+  (``execution_payload``), and the backends it runs on (``make_backend``);
+- **the runner's hooks**: the world state guards and effects are checked
+  on (``world_state``), where to replan from when the backend observes something
+  else than planned (``observed_start``), opening hands in a configuration
+  (``opened_config``), and domain-specific execution metrics
+  (``execution_metrics``).
 
 The generic runner (``long_tamp.mission.runner``, #132) drives any
 :class:`MissionDomain`. :class:`BaseMissionDomain` gives the parts with a
@@ -47,9 +52,15 @@ from long_tamp.tasks.task_planning.repair import (
     Failure,
     retry_missed_grasp,
 )
+from long_tamp.tasks.task_planning.session import WorldState
 from long_tamp.tasks.task_planning.skeleton import Step, skeleton_document
+from long_tamp.tasks.task_planning.world_state import (
+    CompositeWorldState,
+    GraspTrackerState,
+    RecordedFacts,
+)
 
-from .goals import GRASPED, check_object_goal
+from .goals import GRASPED, ObjectLevelState, check_object_goal
 
 #: The predicates saying what a gripper holds: ``holds(gripper, handle)``,
 #: ``grasped(gripper, object)``.
@@ -224,8 +235,9 @@ class MissionDomain(Protocol):
         q: Sequence[float],
         verbose: bool = True,
     ) -> dict[str, Any]:
-        """Plan ``move`` from ``q``: a result dict with ``success`` and, on
-        success, ``q_end`` and ``paths``."""
+        """Plan ``move`` from ``q``: a result dict like a refinement's
+        (``success``, ``final_config``, ``resumes``, ``replans``,
+        ``message``) plus the planned ``phase_results``."""
         ...
 
     def execution_payload(self, phase: Mapping[str, Any], edge: Any, path: Any) -> Any:
@@ -236,6 +248,32 @@ class MissionDomain(Protocol):
     def make_backend(self, name: str, scene: MissionScene, **options: Any) -> Any:
         """The execution backend called ``name`` (``"mock"``,
         ``"playback"``, ...), or None to plan without executing."""
+        ...
+
+    # -- the runner's hooks (#132) -------------------------------------------
+
+    def world_state(self, scene: MissionScene, recorded: RecordedFacts) -> WorldState:
+        """The world-state source the runner checks guards and effects on:
+        what the scene's grasp tracker holds, plus the ``recorded`` facts."""
+        ...
+
+    def observed_start(
+        self, scene: MissionScene, planned: Sequence[float], observed: Sequence[float]
+    ) -> list[float]:
+        """The configuration to replan a step from when the backend observes
+        ``observed`` where ``planned`` was expected (drift, a missed grasp)."""
+        ...
+
+    def opened_config(
+        self, scene: MissionScene, q: Sequence[float], grippers: Sequence[str]
+    ) -> list[float]:
+        """``q`` with the hands of ``grippers`` open, for hands the backend
+        could not open itself (so a retried approach does not arrive closed)."""
+        ...
+
+    def execution_metrics(self, executions: Sequence[Any]) -> dict[str, Any]:
+        """Domain-specific entries for the run's execution summary
+        (``runner.execution_summary``), from ``PlanRun.executions``."""
         ...
 
 
@@ -393,6 +431,41 @@ class BaseMissionDomain:
 
             return MockBackend(**options)
         raise ValueError(f"{self.name}: unknown backend {name!r}")
+
+    def world_state(self, scene: MissionScene, recorded: RecordedFacts) -> WorldState:
+        """The grasp tracker's ``holds`` atoms if a capability uses
+        ``holds``, the ``grasped`` atoms derived from them if one uses
+        ``grasped``, and the recorded facts."""
+        used = {
+            literal.atom.name
+            for descriptor in self.descriptors().values()
+            for literal in (
+                *descriptor.precondition_literals,
+                *descriptor.effect_literals,
+            )
+        }
+        tracker = GraspTrackerState(scene.planner)
+        sources: list[Callable[[], Iterable[Any]]] = []
+        if "holds" in used:
+            sources.append(tracker)
+        if GRASPED in used:
+            sources.append(ObjectLevelState(tracker))
+        return CompositeWorldState(*sources, recorded)
+
+    def observed_start(
+        self, scene: MissionScene, planned: Sequence[float], observed: Sequence[float]
+    ) -> list[float]:
+        """Everything where it is observed."""
+        return [float(v) for v in observed]
+
+    def opened_config(
+        self, scene: MissionScene, q: Sequence[float], grippers: Sequence[str]
+    ) -> list[float]:
+        """No finger joints to open."""
+        return [float(v) for v in q]
+
+    def execution_metrics(self, executions: Sequence[Any]) -> dict[str, Any]:
+        return {}
 
 
 def held_by_gripper(state: Iterable[str | Atom]) -> dict[str, str]:
