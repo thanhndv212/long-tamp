@@ -71,6 +71,7 @@ nav:
       - Automatic task planning: usage/task-planning-pddl.md
       - AI models: usage/ai-models.md
       - Execution backends: usage/execution.md
+      - Run on your robot: usage/run-on-your-robot.md
       - Simulation (MuJoCo): usage/simulation-mujoco.md
       - Skills: usage/skills.md
       - Mission events: usage/events.md

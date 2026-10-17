@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Guide: [run long_tamp on your robot](docs/usage/run-on-your-robot.md) (#129) — the
+  execution contract, writing and serving a backend, registering a gripper model, the drift
+  check and the robot side's safety duties, with the SO-101 as the worked example.
 - Missed-grasp repair (#128, ADR-0010).
   - `plan_execute_repair(retry=, max_retries=)` retries a failure instead of blocking it,
     at most `max_retries` times per step; `retry_missed_grasp` retries `grasp_missed`.

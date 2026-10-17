@@ -171,6 +171,7 @@ Python `logging` hierarchy — see [`docs/usage/standalone-usage.md`](docs/usage
 - **Development report**: [`docs/legacy/report/development-report.md`](docs/legacy/report/development-report.md) — *why* the framework is built this way: architecture decisions vs. bare HPP, measured before/after numbers, project timeline, and a bugs-found appendix. A point-in-time report, not a living reference.
 - **Design rationale for specific mechanisms**: [`docs/features/`](docs/features/); **upstream HPP defects worked around here**: [`docs/bugs/`](docs/bugs/).
 - **API Reference**: See docstrings in source files.
+- **Run on your robot**: [`docs/usage/run-on-your-robot.md`](docs/usage/run-on-your-robot.md) — write an execution backend for your arm, serve it over TCP, register its gripper, the drift check and the robot side's safety duties (SO-101 worked example).
 - **ROS-free BehaviorTree.CPP integration**: [`docs/usage/behaviortree-integration.md`](docs/usage/behaviortree-integration.md).
 
 ## License
