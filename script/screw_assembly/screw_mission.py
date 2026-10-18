@@ -1,10 +1,9 @@
 """The screw assembly as a ``MissionDomain`` (ADR-0011, #131).
 
 The reference implementation of ``long_tamp.mission.MissionDomain``. It
-delegates to ``screw_domain`` (and, for the geometry, ``task_screw_assembly``),
-so nothing about the mission changes: ``task_screw_assembly.py`` still calls
-those functions directly until it moves onto the generic runner
-(``long_tamp.mission.runner``, #134).
+delegates to ``screw_domain`` (and, for the geometry, ``task_screw_assembly``);
+``task_screw_assembly.py`` runs it on the generic runner
+(``long_tamp.mission.MissionRunner``, #134).
 
 Importing this module needs no HPP; ``setup``, ``plan_move`` and
 ``make_backend`` import ``task_screw_assembly`` (HPP) when called.
@@ -115,11 +114,15 @@ class ScrewAssemblyDomain(BaseMissionDomain):
         )
 
     def step_for(self, capability: str, parameters: Mapping[str, Any]) -> MissionStep:
-        block = D.block_for(capability, dict(parameters))
+        return self.step_of(D.block_for(capability, dict(parameters)))
+
+    @staticmethod
+    def step_of(block: Mapping[str, Any]) -> MissionStep:
+        """A ``screw_domain`` block as the step the runner refines."""
         if "move" in block:
             arm, carried = block["move"]
             return Move(block["label"], {"arm": arm, "carried": carried})
-        return D.refinement_step(block)
+        return D.refinement_step(dict(block))
 
     # -- repair --------------------------------------------------------------
 
@@ -172,8 +175,8 @@ class ScrewAssemblyDomain(BaseMissionDomain):
 
     def execution_payload(self, phase: Mapping[str, Any], edge: Any, path: Any) -> Any:
         """Driving a screw is a skill: the driver tip's insertion into a hole
-        (grasp edge ``_12``) is a ``SkillCommand`` for the screw skill, as in
-        ``task_screw_assembly.block_commands``."""
+        (grasp edge ``_12``) is a ``SkillCommand`` for the screw skill. A backend
+        that runs skills (MuJoCo) drives the screw; any other plays the path."""
         if (
             phase.get("gripper") == D.DRIVER_TIP
             and edge is not None
@@ -212,7 +215,7 @@ class ScrewAssemblyDomain(BaseMissionDomain):
         self, scene: MissionScene, q: Sequence[float], grippers: Sequence[str]
     ) -> list[float]:
         """The Robotiq fingers of the grippers' arms as at the start (open),
-        as in ``task_screw_assembly.recover_missed_grasp``."""
+        for a missed grasp on a backend that can't open them."""
         q = [float(v) for v in q]
         model = scene.task.robot.model()
         arms = {g.split("/")[0] for g in grippers}

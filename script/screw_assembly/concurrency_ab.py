@@ -29,6 +29,8 @@ sys.path.insert(0, str(HERE))
 
 import task_screw_assembly as T  # noqa: E402
 
+import long_tamp.mission.runner as mission_runner_module  # noqa: E402
+
 from long_tamp.execution import ExecutionPolicy, ExecutionStatus  # noqa: E402
 from long_tamp.execution.concurrent import merge_lanes  # noqa: E402
 from long_tamp.execution.executor import PlanExecutor  # noqa: E402
@@ -121,28 +123,19 @@ def main() -> int:
     task, planner = T.setup(log_dir=str(run_dir))
     n_parts = sum(1 for o in task.task_config.OBJECTS if o.startswith("part"))
     recorded = RecordedFacts(None, predicates=T.RECORDED_PREDICATES)
-    document = T.plan_from_goal(
-        n_parts,
-        T.world_atoms(planner, recorded),
-        clamps=T.clamp_seats(task.task_config.VALID_PAIRS),
-    )
+    runner = T.mission_runner(task, planner, n_parts, recorded, verbose=False)
+    document = runner.plan_from_goal()
     recorder: dict[str, RecordingExecutor] = {}
 
     def make(session, **kwargs):
         recorder["x"] = RecordingExecutor(session, **kwargs)
         return recorder["x"]
 
-    T.PlanExecutor = make  # run_mission builds its executor through this name
+    # run_mission builds its executor through this name
+    mission_runner_module.PlanExecutor = make
     t0 = time.time()
-    result = T.run_mission(
-        task,
-        planner,
-        n_parts,
-        verbose=False,
-        recorded=recorded,
-        document=document,
-        concurrent=True,
-        backend=_Recorder(),
+    result = runner.run_mission(
+        document=document, concurrent=True, backend=_Recorder()
     )
     planning = time.time() - t0
     if not result["success"]:

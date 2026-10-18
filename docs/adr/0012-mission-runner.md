@@ -52,17 +52,19 @@ backend can't open. The execution summary also has screw-only keys (`screws_driv
    dumps from `MissionCheckpoint`, and `trajectory.json` with `dt` and `segments`. The
    trajectory header is now `domain.scene_info()`, so the screw run also writes
    `"id": "screw-assembly"` next to `parts`; `replay.py` reads only `dt` and `segments`.
-4. **The script is unchanged.** `task_screw_assembly.py` moves onto the runner in #134;
-   `run_chat` (the chat tools take the script module) moves with #133.
+4. **The script runs on the runner** (#134). `task_screw_assembly.py` keeps its CLI and a
+   `run_mission(task, planner, n_parts, **mission)` wrapper for the chat tools; the rest of
+   its loop is deleted. The runner's state, `MissionRun`, is public: `refine(run, index,
+   step)` and `session(run, document)` take one, for a scenario's setup steps and the BT
+   host.
 
 ## Consequences
 
 - A second domain gets the whole loop (repair, supervisor, drift, missed-grasp retry) by
   implementing ADR-0011's methods. The tests run the toy pick/place domain and the screw
   assembly on the runner with a fake planner and the `MockBackend`.
-- Until #134 the loop exists twice, in the script and in the runner. The screw tests check
-  that the runner gives the script's step labels and skill commands; a fix to one must go
-  to the other until then.
+- The loop exists once. Until #134 it existed twice; the screw tests that checked the
+  runner against the script now run the script on the runner.
 - The runner still reads `scene.planner.grasp_tracker` and
   `reset_grasp_tracker_to_call_start`, so a refiner other than the grasp-sequence one
   must keep a tracker of that shape. That and `held` (gripper → handle) are what remain
