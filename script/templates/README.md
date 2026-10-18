@@ -1,6 +1,9 @@
 # Script templates
 
 This folder holds copy/paste templates for creating new manipulation tasks.
+For a whole *mission* (the operator chat, a task planner, repair), start from the
+template domain instead: [Write your own mission](../../docs/usage/write-your-own-mission.md).
+Its HPP scene is what these templates build.
 
 There are two styles — **YAML-driven** (recommended for all new work) and the
 older **Python-config** style (kept for reference).

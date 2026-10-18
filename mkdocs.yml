@@ -76,6 +76,7 @@ nav:
       - Skills: usage/skills.md
       - Mission events: usage/events.md
       - Mission viewer: usage/viewer.md
+      - Write your own mission: usage/write-your-own-mission.md
   - Features:
       - Overview: features/README.md
       - Phase-target lookahead: features/phase-target-lookahead.md

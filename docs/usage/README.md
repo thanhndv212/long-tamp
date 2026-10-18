@@ -8,6 +8,7 @@ workspace. Companion to [`../features/`](../features/) (why specific mechanisms 
 | --- | --- |
 | [standalone-usage.md](standalone-usage.md) | Using `long_tamp` as a plain Python library: writing a task, multi-phase grasp sequences, resume/replay/checkpoints, backends, example scripts. No ROS required. |
 | [behaviortree-integration.md](behaviortree-integration.md) | Running missions through the ROS-free BehaviorTree.CPP host: the versioned task-plan IR, capability registry, deterministic IR-to-BT compiler, the CPython bridge, and checkpointing/path capture. |
+| [write-your-own-mission.md](write-your-own-mission.md) | A mission domain of your own, from the template (`long_tamp.mission.template`): capabilities, steps, scene, backend; the chat, the plan and repair with no HPP. |
 | [run-on-your-robot.md](run-on-your-robot.md) | Running a mission on a real arm: writing an execution backend, serving it over TCP, registering a gripper model, the drift check, and the robot side's safety duties. The SO-101 is the worked example. |
 
 Start with `standalone-usage.md` even if your end goal is the BehaviorTree host — it's a
