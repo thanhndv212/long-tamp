@@ -84,5 +84,9 @@ the domain is written down.
     are not part of the protocol yet. #132 may turn them into hooks.
 
   Expect changes then; this ADR is superseded rather than edited.
+- Amended by #133 (additive, no change to existing members): `scene_viewer(scene, port)`
+  returns the domain's live 3D scene, or None, for the generic mission UI
+  (`python -m long_tamp.mission ui`). The scene's `extras["refiner"]` and `extras["facts"]`
+  are the runner's default refiner and the recorded facts true at the start.
 - The protocol has many members (about 25). That is the price of making the boundary
   explicit. Most of them come from `BaseMissionDomain`.

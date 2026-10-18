@@ -15,7 +15,8 @@ repair -> supervisor loop needs to know about one robot and one kind of task:
   which failures are retried in place (``retry``);
 - **geometry and execution**: building the scene (``setup``), planning a
   move (``plan_move``), what a planned path is sent to the executor as
-  (``execution_payload``), and the backends it runs on (``make_backend``);
+  (``execution_payload``), the backends it runs on (``make_backend``), and
+  a live view of the scene for the mission UI (``scene_viewer``);
 - **the runner's hooks**: the world state guards and effects are checked
   on (``world_state``), where to replan from when the backend observes something
   else than planned (``observed_start``), opening hands in a configuration
@@ -106,7 +107,9 @@ class Scenario:
 class MissionScene:
     """A built scene: the task (robot, objects, constraint graph), its
     planner, the start configuration, and anything else the domain keeps
-    (``extras``)."""
+    (``extras``; a ``"refiner"`` there is the runner's default refiner, and
+    ``"facts"``, recorded facts true at the start, seed the mission UI's
+    ``RecordedFacts``)."""
 
     task: Any
     planner: Any
@@ -247,7 +250,15 @@ class MissionDomain(Protocol):
 
     def make_backend(self, name: str, scene: MissionScene, **options: Any) -> Any:
         """The execution backend called ``name`` (``"mock"``,
-        ``"playback"``, ...), or None to plan without executing."""
+        ``"playback"``, ...), or None to plan without executing. The mission
+        launcher (``python -m long_tamp.mission``) passes ``live_viewer``
+        (``scene_viewer``'s, or None), ``run_dir`` and its
+        ``--backend-option`` values."""
+        ...
+
+    def scene_viewer(self, scene: MissionScene, port: int) -> Any:
+        """A live 3D view of the scene on ``port`` for the mission UI (a
+        ``MissionViewer``), or None for none."""
         ...
 
     # -- the runner's hooks (#132) -------------------------------------------
@@ -423,7 +434,10 @@ class BaseMissionDomain:
         return path
 
     def make_backend(self, name: str, scene: MissionScene, **options: Any) -> Any:
-        """``"none"`` (plan only) and ``"mock"``; a domain adds its own."""
+        """``"none"`` (plan only) and ``"mock"``; a domain adds its own. The
+        launcher's ``live_viewer`` and ``run_dir`` are not the mock's."""
+        options.pop("live_viewer", None)
+        options.pop("run_dir", None)
         if name == "none":
             return None
         if name == "mock":
@@ -431,6 +445,9 @@ class BaseMissionDomain:
 
             return MockBackend(**options)
         raise ValueError(f"{self.name}: unknown backend {name!r}")
+
+    def scene_viewer(self, scene: MissionScene, port: int) -> Any:
+        return None
 
     def world_state(self, scene: MissionScene, recorded: RecordedFacts) -> WorldState:
         """The grasp tracker's ``holds`` atoms if a capability uses

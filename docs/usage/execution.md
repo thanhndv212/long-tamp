@@ -124,7 +124,7 @@ executor = PlanExecutor(session, backend, control=control,
 
 Every decision is a `watchdog` event, and the viewer and the chat show it. An operator's
 pending request always comes first, and so does a pause. In the screw assembly, use
-`--watchdog 300,900`. `mission_ui.py` turns it on by default.
+`--watchdog 300,900`. The mission UI (`python -m long_tamp.mission ui`) turns it on by default.
 
 `MockBackend` (scriptable: busy starts, failures, stalls, slow real-time factor) is there
 for tests and demos.

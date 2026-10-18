@@ -4,7 +4,7 @@ calls: the model is scripted through a fake gateway client."""
 import json
 import sys
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 
 import pytest
 
@@ -106,24 +106,16 @@ def test_the_model_steps_are_bounded():
 # -- the mission tools: the acceptance conversation ---------------------------------
 
 
-def stub_mission_module(world):
-    """What MissionChat needs from task_screw_assembly, without HPP: the
-    real domain and task planner, a fixed world and a run that fails."""
-    import screw_domain as D
+def stub_runner(world):
+    """What MissionChat needs from a MissionRunner, without HPP: the real
+    screw domain and task planner, a fixed world and a run that fails."""
+    from screw_mission import ScrewAssemblyDomain
 
-    T = ModuleType("T")
-    T.clamp_seats = lambda pairs: [
-        (f"fixtures/clamp{i}", f"part{i}/h_seat") for i in (1, 2)
-    ]
-    T.descriptors = D.descriptors
-    T.world_atoms = lambda planner, recorded: list(world)
-    T.goal_vocabulary = D.goal_vocabulary
-    T.pddl_problem = D.pddl_problem
-    T.planned_document = D.planned_document
-    T.runs = []
+    clamps = [(f"fixtures/clamp{i}", f"part{i}/h_seat") for i in (1, 2)]
+    runs = []
 
-    def run_mission(task, planner, n_parts, q_start=None, document=None, **kw):
-        T.runs.append(document)
+    def run_mission(q_start=None, document=None, **kw):
+        runs.append(document)
         return {
             "success": False,
             "seconds": 1.0,
@@ -136,8 +128,12 @@ def stub_mission_module(world):
             },
         }
 
-    T.run_mission = run_mission
-    return T
+    return SimpleNamespace(
+        domain=ScrewAssemblyDomain(2, clamps),
+        world_atoms=lambda: list(world),
+        run_mission=run_mission,
+        runs=runs,
+    )
 
 
 GOAL = [
@@ -150,11 +146,10 @@ GOAL = [
 
 def test_a_conversation_changes_the_plan_only_through_the_tools():
     pytest.importorskip("unified_planning")
-    from chat_tools import INTRO, MissionChat
+    from long_tamp.mission import MissionChat
 
-    T = stub_mission_module(world=[])
-    task = SimpleNamespace(task_config=SimpleNamespace(VALID_PAIRS={}))
-    work = MissionChat(T, task, planner=None, recorded=None, n_parts=2, mission={})
+    T = stub_runner(world=[])
+    work = MissionChat(T)
     first = ["screwed(part2, part2/h_hole1)", "screwed(part2, part2/h_hole2)"]
     client, prompts = scripted_client(
         # "assemble parts 1 and 2": set the goal, plan
@@ -180,7 +175,7 @@ def test_a_conversation_changes_the_plan_only_through_the_tools():
         act("explaining", ("explain_failure", {}), done=False),
         act("clamp 2 can't reach part 2's seat"),
     )
-    session = ChatSession(client, work.tools(), INTRO)
+    session = ChatSession(client, work.tools(), work.instructions())
 
     session.turn("assemble parts 1 and 2")
     assert work.goal == GOAL
@@ -203,11 +198,9 @@ def test_a_conversation_changes_the_plan_only_through_the_tools():
 
 
 def test_mission_tools_refuse_what_their_checks_refuse():
-    from chat_tools import MissionChat
+    from long_tamp.mission import MissionChat
 
-    T = stub_mission_module(world=[])
-    task = SimpleNamespace(task_config=SimpleNamespace(VALID_PAIRS={}))
-    work = MissionChat(T, task, planner=None, recorded=None, n_parts=2, mission={})
+    work = MissionChat(stub_runner(world=[]))
     with pytest.raises(ToolRejected, match="unknown object"):
         work.set_goal(["screwed(part9, part9/h_hole1)"])
     with pytest.raises(ToolRejected, match="set a goal first"):

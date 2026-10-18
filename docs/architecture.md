@@ -269,7 +269,8 @@ Missions live in `script/`, built from the library, never inside it.
 - **Screw assembly** (`script/screw_assembly/`): the reference track. `task_screw_assembly.py`
   runs it (`--backend none|mock|playback|mujoco`, `--replan`, `--inject-failure`,
   `--resume`, `--chat`, `--instruction … --supervise`); `mission_ui.py` opens the mission UI
-  (instruction, plan card, Start/Reset, live plan monitor). Gates: `summarize.py --gate`
+  (instruction, plan card, Start/Reset, live plan monitor) through the generic launcher,
+  `python -m long_tamp.mission ui --domain …` (`long_tamp.mission.ui`, #133). Gates: `summarize.py --gate`
   (V3 batch), `scenarios.py` and `kill_resume.py` (V4), `concurrency_ab.py`,
   `autonomy_batch.py` (M6). Robot models come from Universal Robots' and PickNik's official
   descriptions.

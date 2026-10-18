@@ -31,15 +31,17 @@ from long_tamp.tasks.task_planning.repair import Binding, Failure
 from long_tamp.tasks.task_planning.skeleton import Step
 
 INTRO = """\
-Two UR10 arms assemble parts on a jig: the left arm carries each part to a
-clamp, the right arm drives its two screws with a screwdriver it picks from
-a rack, and puts the driver back at the end."""
+Two UR10 arms assemble parts on a jig: the left arm (ur10_left) carries each
+part to a jig clamp, the right arm (ur10_right) drives its two screws with a
+screwdriver ("driver") it picks from a rack, and puts the driver back at the
+end."""
 
 
 class ScrewAssemblyDomain(BaseMissionDomain):
     """``n_parts`` parts screwed in the jig's clamps. ``clamps`` are the
     scene's (clamp, seat) pairs (``screw_domain.clamp_seats``); by default
-    clamp i takes part i. ``setup`` reads them from the scene."""
+    clamp i takes part i. ``setup`` reads them from the scene, and
+    ``n_parts`` too when it is None."""
 
     name = "screw-assembly"
     recorded_predicates = D.RECORDED_PREDICATES
@@ -47,10 +49,17 @@ class ScrewAssemblyDomain(BaseMissionDomain):
     intro = INTRO
 
     def __init__(
-        self, n_parts: int, clamps: list[tuple[str, str]] | None = None
+        self, n_parts: int | None = None, clamps: list[tuple[str, str]] | None = None
     ) -> None:
         self.n_parts = n_parts
         self.clamps = clamps
+
+    @property
+    def parts(self) -> int:
+        """``n_parts``, once known (``setup`` reads it from the scene)."""
+        if self.n_parts is None:
+            raise RuntimeError("the number of parts is set by setup()")
+        return self.n_parts
 
     # -- symbolic ------------------------------------------------------------
 
@@ -58,16 +67,16 @@ class ScrewAssemblyDomain(BaseMissionDomain):
         return {"id": self.name, "parts": self.n_parts}
 
     def descriptors(self) -> dict[str, CapabilityDescriptor]:
-        return D.descriptors(self.n_parts)
+        return D.descriptors(self.parts)
 
     def static_facts(self) -> tuple[str, ...]:
-        return tuple(D.static_facts(self.n_parts, self.clamps))
+        return tuple(D.static_facts(self.parts, self.clamps))
 
     def static_preconditions(self) -> dict[str, tuple[str, ...]]:
         return dict(D.STATIC_PRECONDITIONS)
 
     def default_goal(self) -> list[str]:
-        return D.mission_goal(self.n_parts)
+        return D.mission_goal(self.parts)
 
     def pddl_problem(
         self,
@@ -76,7 +85,7 @@ class ScrewAssemblyDomain(BaseMissionDomain):
         goal: Sequence[str] | None = None,
     ) -> PddlExport:
         return D.pddl_problem(
-            self.n_parts,
+            self.parts,
             [str(a) for a in state],
             blocked=list(blocked),
             clamps=self.clamps,
@@ -84,12 +93,12 @@ class ScrewAssemblyDomain(BaseMissionDomain):
         )
 
     def goal_vocabulary(self, state: Iterable[str | Atom] = ()) -> Vocabulary:
-        return D.goal_vocabulary(self.n_parts, [str(a) for a in state], self.clamps)
+        return D.goal_vocabulary(self.parts, [str(a) for a in state], self.clamps)
 
     def plan_document(
         self, initial_state: Iterable[str] = ()
     ) -> dict[str, Any] | None:
-        return D.build_plan_document(self.n_parts, list(initial_state) or None)
+        return D.build_plan_document(self.parts, list(initial_state) or None)
 
     # -- skeleton -> plan ----------------------------------------------------
 
@@ -110,7 +119,7 @@ class ScrewAssemblyDomain(BaseMissionDomain):
         generator: str = "unified-planning",
     ) -> dict[str, Any]:
         return D.planned_document(
-            list(steps), self.n_parts, [str(a) for a in state], generator
+            list(steps), self.parts, [str(a) for a in state], generator
         )
 
     def step_for(self, capability: str, parameters: Mapping[str, Any]) -> MissionStep:
@@ -153,7 +162,23 @@ class ScrewAssemblyDomain(BaseMissionDomain):
         task, planner = T.setup(log_dir=log_dir)
         config: Any = task.task_config
         self.clamps = D.clamp_seats(config.VALID_PAIRS)
+        if self.n_parts is None:  # the scene's (build_scene.py --parts)
+            self.n_parts = sum(1 for o in config.OBJECTS if o.startswith("part"))
         return MissionScene(task, planner, list(task.q_init))
+
+    def scene_viewer(self, scene: MissionScene, port: int) -> Any:
+        """The live Viser scene, in its own process so it stays live while
+        HPP plans (#106)."""
+        import task_screw_assembly as T
+
+        return T.MissionViewer(
+            scene.task,
+            port,
+            scene.q_init,
+            camera=((2.15, -2.30, 1.55), (0.75, 0.0, 0.58)),
+            closures=T.finger_closures(),
+            separate_process=True,
+        )
 
     def plan_move(
         self,
@@ -233,3 +258,10 @@ class ScrewAssemblyDomain(BaseMissionDomain):
             "screws_driven": fact_count(executions, "screwed("),
             "max_screw_lateral_error": metric_max(executions, "lateral_error"),
         }
+
+
+def domain() -> ScrewAssemblyDomain:
+    """The domain for ``python -m long_tamp.mission ui --domain
+    script/screw_assembly/screw_mission.py:domain``: as many parts as the
+    built scene has."""
+    return ScrewAssemblyDomain()

@@ -254,7 +254,7 @@ The mission runtime that uses every layer (task planner, refiner, executor, repa
 
 - [x] [#131](https://github.com/thanhndv212/long-tamp/issues/131) MissionDomain interface and long_tamp.mission package
 - [x] [#132](https://github.com/thanhndv212/long-tamp/issues/132) Generic mission runner
-- [ ] [#133](https://github.com/thanhndv212/long-tamp/issues/133) Generic chat tools and mission UI launcher
+- [x] [#133](https://github.com/thanhndv212/long-tamp/issues/133) Generic chat tools and mission UI launcher
 - [x] [#134](https://github.com/thanhndv212/long-tamp/issues/134) Run on long_tamp.mission
 - [ ] [#135](https://github.com/thanhndv212/long-tamp/issues/135) Template domain and "write your own mission" tutorial
 - [ ] [#136](https://github.com/thanhndv212/long-tamp/issues/136) M8 exit test, two domains on one runtime

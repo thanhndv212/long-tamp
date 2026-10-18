@@ -286,13 +286,8 @@ def test_features_carry_a_session_that_changes_with_the_server(run_dir):
 
 
 def test_the_launcher_restarts_a_reset_mission(monkeypatch, tmp_path):
-    import importlib.util
-    from pathlib import Path
+    from long_tamp.mission import ui
 
-    path = Path(__file__).resolve().parents[1] / "script/screw_assembly/mission_ui.py"
-    spec = importlib.util.spec_from_file_location("mission_ui", path)
-    ui = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(ui)
     runs, codes = [], [ui.RESTART, 0]
 
     def fake_run(args, extra, run_dir, opened):
@@ -301,9 +296,9 @@ def test_the_launcher_restarts_a_reset_mission(monkeypatch, tmp_path):
 
     monkeypatch.setattr(ui, "_run", fake_run)
     monkeypatch.setattr(ui.time, "sleep", lambda s: None)
-    assert ui.main(["--run-dir", str(tmp_path / "first"), "--no-open"]) == 0
+    argv = ["--domain", "x:y", "--run-dir", str(tmp_path / "first"), "--no-open"]
+    assert ui.launch(argv, runs=tmp_path) == 0
     assert len(runs) == 2
     assert runs[0] == (tmp_path / "first", False)
-    assert (
-        runs[1][0] != tmp_path / "first" and runs[1][1] is True
-    )  # new folder, no new tab
+    # A new folder under ``runs``, no new tab.
+    assert runs[1][0].parent == tmp_path and runs[1][1] is True

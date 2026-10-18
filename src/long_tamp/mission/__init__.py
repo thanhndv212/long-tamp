@@ -34,6 +34,7 @@ from .goals import (
     object_of,
     placed_at,
 )
+from .chat import MissionChat, run_chat
 from .runner import MissionRun, MissionRunner, execution_summary, parse_injection
 
 __all__ = [
@@ -42,6 +43,7 @@ __all__ = [
     "OBJECT_PREDICATES",
     "PLACED_AT",
     "BaseMissionDomain",
+    "MissionChat",
     "MissionDomain",
     "MissionRun",
     "MissionRunner",
@@ -60,5 +62,6 @@ __all__ = [
     "object_of",
     "parse_injection",
     "placed_at",
+    "run_chat",
     "update_held",
 ]
