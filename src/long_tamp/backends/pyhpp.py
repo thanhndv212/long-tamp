@@ -412,13 +412,20 @@ class PyHPPBackend(BackendBase):
             return
         self.problem.distance(WeighedDistance(self.device).asDistancePtr_t())
 
-    def load_environment(self, name: str, urdf_path: str, pose: Optional[SE3] = None):
+    def load_environment(
+        self,
+        name: str,
+        urdf_path: str,
+        pose: Optional[SE3] = None,
+        srdf_path: Optional[str] = None,
+    ):
         """Load environment model.
 
         Args:
             name: Name for the environment object
             urdf_path: Path to URDF file
             pose: Optional SE3 pose (defaults to identity)
+            srdf_path: Optional SRDF (the environment's contact surfaces)
         """
         if self.device is None:
             raise RuntimeError("Must load robot first")
@@ -427,7 +434,13 @@ class PyHPPBackend(BackendBase):
             pose = SE3.Identity()
 
         urdf.loadModel(
-            self.device, 0, name, "anchor", resolve_mesh_paths(urdf_path), "", pose
+            self.device,
+            0,
+            name,
+            "anchor",
+            resolve_mesh_paths(urdf_path),
+            srdf_path or "",
+            pose,
         )
 
         return name

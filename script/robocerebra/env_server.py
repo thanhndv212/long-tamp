@@ -25,7 +25,7 @@ Operations (``{"op": name, "args": [...]}`` → ``{"ok": true, "value": ...}``):
 ``reset(step=0, settle=None, restore_demo=False)``, ``resume(step)``,
 ``step(actions)``, ``check()``, ``get_state()``,
 ``set_state(sim_state, controller=None)``, ``render(cameras=None, size=256)``,
-``demo()``.
+``demo()``, ``export_scene()`` (the scene as URDF/SRDF, ``scene_export.py``).
 
 Usage, in the benchmark env (``source ~/devel/hpp/robocerebra/env.sh``)::
 
@@ -160,6 +160,7 @@ OPS = (
     "set_state",
     "render",
     "demo",
+    "export_scene",
 )
 
 
@@ -566,6 +567,38 @@ class RoboCerebraEnv:
         (T, 7); ``states[i]`` is the state ``actions[i]`` was applied in."""
         self._need()
         return {"states": self.demo_states, "actions": self.demo_actions}
+
+    def export_scene(self) -> dict[str, Any]:
+        """The scene as it stands, as URDF/SRDF file texts and a manifest
+        (issue #157; see ``scene_export.py``). Call after ``reset``: the
+        fixtures and objects are exported where they are now."""
+        env = self._need()
+        robot = env.robots[0]
+        export = _scene_export().export_scene(
+            env.sim.model._model,
+            env.sim.data._data,
+            objects={name: obj.root_body for name, obj in env.objects_dict.items()},
+            regions=list(env.regions),
+            robot_root=robot.robot_model.root_body,
+            robot_joints=list(robot.robot_joints) + list(robot.gripper.joints),
+        )
+        export["manifest"].update(case=self.case, model=self.model, t=self.t)
+        return export
+
+
+def _scene_export() -> Any:
+    # A sibling file, not a package: under ``python -I`` the script's own
+    # directory is not on sys.path.
+    import importlib.util
+    import sys
+
+    if "robocerebra_scene_export" not in sys.modules:
+        path = Path(__file__).with_name("scene_export.py")
+        spec = importlib.util.spec_from_file_location("robocerebra_scene_export", path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+    return sys.modules["robocerebra_scene_export"]
 
 
 def _region_sites(model: Any) -> dict[str, tuple[np.ndarray, ...]]:

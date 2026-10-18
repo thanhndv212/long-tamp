@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- RoboCerebra scenes in HPP (#157, M11 R2). The env server's `export_scene` op turns a
+  case's MuJoCo model into an environment URDF/SRDF (the LIBERO regions as contact
+  surfaces), one freeflyer URDF/SRDF per object and a manifest; `long_tamp.eval`'s
+  `write_export`/`load_export`/`ExportedScene` give them as `SceneBuilder` file paths and
+  configurations. `script/robocerebra/export_scene.py` checks all 60 cases against MuJoCo
+  (0 collision disagreements, shapes within 1e-9 m). `SceneBuilder.load_environment` and
+  `PyHPPBackend.load_environment` take an environment SRDF.
 - RoboCerebra env server (#156, M11 R1). `script/robocerebra/env_server.py` serves the
   benchmark's env (a LIBERO fork on robosuite 1.4.0, Python 3.10) from its own interpreter
   over the `long_tamp.execution.remote` wire, and `long_tamp.eval.RoboCerebraClient` drives

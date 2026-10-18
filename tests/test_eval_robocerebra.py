@@ -101,6 +101,12 @@ class StubEnv:
     def demo(self):
         return {"states": np.zeros((4, 2)), "actions": np.full((4, 7), 1.0)}
 
+    def export_scene(self):
+        return {
+            "files": {"environment.urdf": "<robot/>", "objects/a_1.urdf": "<robot/>"},
+            "manifest": {"case": self.case, "objects": {"a_1": {"pose": [0] * 7}}},
+        }
+
 
 @contextmanager
 def served(server_module, env):
@@ -180,6 +186,17 @@ def test_drives_a_case_end_to_end(server_module):
         state = env.get_state()
         env.set_state(state["sim_state"])
         env.set_state(state["sim_state"], controller=state["controller"])
+
+
+def test_export_scene(server_module, tmp_path):
+    with served(server_module, StubEnv()) as port, RoboCerebraClient(port=port) as env:
+        env.load("Ideal/case1")
+        assert "export_scene" in env.server_info["ops"]
+        assert set(env.export_scene()["files"]) == {"environment.urdf", "objects/a_1.urdf"}
+        scene = env.export_scene(tmp_path / "case1")
+    assert scene.manifest["case"] == "Ideal/case1"
+    assert (tmp_path / "case1" / "objects" / "a_1.urdf").read_text() == "<robot/>"
+    assert scene.objects == ["a_1"]
 
 
 def test_resume_reset(server_module):
