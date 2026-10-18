@@ -62,6 +62,7 @@ def build_screw_session(options_json: str = "{}"):
     """A ``HostSession`` for the short plan, independent steps in parallel."""
     import task_screw_assembly as T
 
+    from long_tamp.mission import MissionRun
     from long_tamp.tasks.task_planning.host import HostSession
     from long_tamp.tasks.task_planning.world_state import RecordedFacts
 
@@ -70,24 +71,13 @@ def build_screw_session(options_json: str = "{}"):
     task, planner = T.setup()
     n_parts = sum(1 for o in task.task_config.OBJECTS if o.startswith("part"))
     recorded = RecordedFacts(None, predicates=T.RECORDED_PREDICATES)
-    ctx: dict[str, Any] = {
-        "q": list(task.q_init),
-        "records": [],
-        "trajectory": None,
-        "checkpoint": None,
-        "live_viewer": None,
-        "n_parts": n_parts,
-        "backend_displays": False,
-        "inject": [],
-        "concurrent": True,
-    }
+    runner = T.mission_runner(task, planner, n_parts, recorded, verbose=False)
+    run = MissionRun(q=list(task.q_init), concurrent=True)
     if options.get("plan", "short") == "full":
         document = T.build_plan_document(n_parts)
     else:
         document = plan_document(n_parts)
-    session = T.mission_session(
-        task, planner, ctx, recorded, verbose=False, document=document
-    )
+    session = runner.session(run, document)
     host = HostSession(session.plan, session.registry, session.world_state, recorded)
-    host.ctx = ctx  # what the steps planned (records), for checks
+    host.run = run  # what the steps planned (records), for checks
     return host

@@ -1,0 +1,331 @@
+{
+  "date": "2026-10-18",
+  "validation": "#134: M6 autonomy batch on the mission runner (task_screw_assembly.py on long_tamp.mission.MissionRunner), 10 seeds, MuJoCo",
+  "environment": "hpp-agimus-arm64 (source-built HPP, hpp-core 9.1.0), MuJoCo, two parts, two clamps (one per part), two missions at a time; the local OpenAI-compatible gateway (9router)",
+  "command": "autonomy_batch.py --seeds 10 --par 2 --env <ai env> --model openai:cx/gpt-6-luna",
+  "instruction": "assemble both parts and rack the driver",
+  "injected": "clamp_and_screw failure: part1 on odd seeds, part2 on even ones (repair can't route around it)",
+  "notes": "Gate PASS: 0 unclean, 0 unchecked decisions. 2 completed (relax_goal), 8 escalated. gpt-6.1-sol (the 2026-10-01 model) is refused by the gateway's provider now, so this ran on cx/gpt-6-luna; dev with that model gives 1 completed / 9 escalated (2026-10-18-m6-autonomy-dev-baseline.json), so the escalations are the model's choice, not the runner's. Escalation reasons: cannot_reach on one clamp does not prove the part impossible; pyperplan reports UNSOLVABLE_INCOMPLETELY.",
+  "summary": {
+    "runs": 10,
+    "completed": 2,
+    "escalated": 8,
+    "unclean": 0,
+    "decisions": {
+      "escalate": 8,
+      "relax_goal": 2
+    },
+    "unchecked_decisions": [],
+    "model_calls": 69,
+    "model_tokens": 61467,
+    "gate": "PASS"
+  },
+  "runs": [
+    {
+      "seed": 1,
+      "injected": "part1",
+      "exit": 1,
+      "wall_s": 76.4,
+      "outcome": "escalated",
+      "mission_s": 38.01,
+      "stopped": "escalate: The failure shows that fixtures/clamp1 cannot reach part1/h_seat, but it does not establish that assembling part1 is impossible with another clamp. The repair loop was incomplete, so I\u2019m unsure which parts of the goal are still achievable and need a human to decide how to proceed.",
+      "repair_loops": 1,
+      "decisions": [
+        "escalate"
+      ],
+      "final_goal": [
+        "screwed(part1, part1/h_hole1)",
+        "screwed(part1, part1/h_hole2)",
+        "screwed(part2, part2/h_hole1)",
+        "screwed(part2, part2/h_hole2)",
+        "not holds(ur10_left/gripper, _)",
+        "holds(fixtures/rack_hold, driver/h_rack)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 2,
+        "goal": 2,
+        "review": 2,
+        "supervise": 1
+      },
+      "model_tokens": 6033,
+      "model_seconds": 34.4,
+      "model_errors": 3
+    },
+    {
+      "seed": 2,
+      "injected": "part2",
+      "exit": 1,
+      "wall_s": 72.1,
+      "outcome": "escalated",
+      "mission_s": 40.14,
+      "stopped": "escalate: The failure only establishes that clamp2 cannot reach part2's seat; it does not show that assembling part2 is impossible with another clamp. The planner reported an incomplete unsolvable result, so I can't safely decide which goal literals to drop or whether to abort.",
+      "repair_loops": 1,
+      "decisions": [
+        "escalate"
+      ],
+      "final_goal": [
+        "screwed(part1, part1/h_hole1)",
+        "screwed(part1, part1/h_hole2)",
+        "screwed(part2, part2/h_hole1)",
+        "screwed(part2, part2/h_hole2)",
+        "holds(fixtures/rack_hold, driver/h_rack)",
+        "not holds(ur10_left/gripper, _)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 2,
+        "goal": 1,
+        "review": 2,
+        "supervise": 1
+      },
+      "model_tokens": 5370,
+      "model_seconds": 28.0,
+      "model_errors": 2
+    },
+    {
+      "seed": 3,
+      "injected": "part1",
+      "exit": 1,
+      "wall_s": 138.8,
+      "outcome": "escalated",
+      "mission_s": 98.18,
+      "stopped": "escalate: The planner failed on one clamp-and-screw step because it could not reach the seat, but that does not establish that either part is impossible to assemble or which goal literals should be dropped. A human should assess the setup before retrying or relaxing the goal.",
+      "repair_loops": 1,
+      "decisions": [
+        "escalate"
+      ],
+      "final_goal": [
+        "screwed(part1, part1/h_hole1)",
+        "screwed(part1, part1/h_hole2)",
+        "screwed(part2, part2/h_hole1)",
+        "screwed(part2, part2/h_hole2)",
+        "holds(fixtures/rack_hold, driver/h_rack)",
+        "not holds(ur10_left/gripper, _)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 2,
+        "goal": 2,
+        "review": 2,
+        "supervise": 1
+      },
+      "model_tokens": 6183,
+      "model_seconds": 36.7,
+      "model_errors": 3
+    },
+    {
+      "seed": 4,
+      "injected": "part2",
+      "exit": 1,
+      "wall_s": 137.2,
+      "outcome": "escalated",
+      "mission_s": 97.82,
+      "stopped": "escalate: The attempted clamp for part2 is reported unreachable, but the repair result is incomplete and does not establish that part2 cannot be assembled using another clamp. A human should determine whether an alternative is available before changing the goal or stopping.",
+      "repair_loops": 1,
+      "decisions": [
+        "escalate"
+      ],
+      "final_goal": [
+        "screwed(part1, part1/h_hole1)",
+        "screwed(part1, part1/h_hole2)",
+        "screwed(part2, part2/h_hole1)",
+        "screwed(part2, part2/h_hole2)",
+        "not holds(ur10_left/gripper, _)",
+        "holds(fixtures/rack_hold, driver/h_rack)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 2,
+        "goal": 2,
+        "review": 2,
+        "supervise": 1
+      },
+      "model_tokens": 6050,
+      "model_seconds": 35.5,
+      "model_errors": 3
+    },
+    {
+      "seed": 5,
+      "injected": "part1",
+      "exit": 1,
+      "wall_s": 69.7,
+      "outcome": "escalated",
+      "mission_s": 29.24,
+      "stopped": "escalate: The reported failure rules out reaching part1's seat with clamp1, but it does not establish that part1 cannot be assembled using another clamp. Since the repair loop found no plan and the remaining options are uncertain, ask a human rather than dropping goal literals.",
+      "repair_loops": 1,
+      "decisions": [
+        "escalate"
+      ],
+      "final_goal": [
+        "screwed(part1, part1/h_hole1)",
+        "screwed(part1, part1/h_hole2)",
+        "screwed(part2, part2/h_hole1)",
+        "screwed(part2, part2/h_hole2)",
+        "holds(fixtures/rack_hold, driver/h_rack)",
+        "not holds(ur10_left/gripper, _)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 2,
+        "goal": 2,
+        "review": 2,
+        "supervise": 1
+      },
+      "model_tokens": 6579,
+      "model_seconds": 36.5,
+      "model_errors": 3
+    },
+    {
+      "seed": 6,
+      "injected": "part2",
+      "exit": 0,
+      "wall_s": 339.4,
+      "outcome": "completed",
+      "mission_s": 297.12,
+      "stopped": "",
+      "repair_loops": 2,
+      "decisions": [
+        "relax_goal"
+      ],
+      "final_goal": [
+        "screwed(part1, part1/h_hole1)",
+        "screwed(part1, part1/h_hole2)",
+        "holds(fixtures/rack_hold, driver/h_rack)",
+        "not holds(ur10_left/gripper, _)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 2,
+        "goal": 2,
+        "review": 2,
+        "supervise": 1
+      },
+      "model_tokens": 6416,
+      "model_seconds": 37.7,
+      "model_errors": 3
+    },
+    {
+      "seed": 7,
+      "injected": "part1",
+      "exit": 1,
+      "wall_s": 273.5,
+      "outcome": "escalated",
+      "mission_s": 246.2,
+      "stopped": "escalate: The attempted clamp1 approach cannot reach part1\u2019s seat, but the planner reports an incomplete search and has ruled out only that clamp. I can\u2019t conclude that part1 assembly is impossible or safely drop its goals without knowing whether another clamp or recovery is available.",
+      "repair_loops": 1,
+      "decisions": [
+        "escalate"
+      ],
+      "final_goal": [
+        "screwed(part1, part1/h_hole1)",
+        "screwed(part1, part1/h_hole2)",
+        "screwed(part2, part2/h_hole1)",
+        "screwed(part2, part2/h_hole2)",
+        "not holds(ur10_left/gripper, _)",
+        "holds(fixtures/rack_hold, driver/h_rack)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 2,
+        "goal": 2,
+        "review": 2,
+        "supervise": 1
+      },
+      "model_tokens": 6135,
+      "model_seconds": 23.3,
+      "model_errors": 3
+    },
+    {
+      "seed": 8,
+      "injected": "part2",
+      "exit": 1,
+      "wall_s": 75.2,
+      "outcome": "escalated",
+      "mission_s": 36.29,
+      "stopped": "escalate: The failure rules out using clamp2 to seat part2, but it does not establish that part2 cannot be assembled using another clamp. The repair loop found no plan, but reports an incomplete unsolvability result, so I can\u2019t safely decide which goal literals are impossible to keep.",
+      "repair_loops": 1,
+      "decisions": [
+        "escalate"
+      ],
+      "final_goal": [
+        "screwed(part1, part1/h_hole1)",
+        "screwed(part1, part1/h_hole2)",
+        "screwed(part2, part2/h_hole1)",
+        "screwed(part2, part2/h_hole2)",
+        "holds(fixtures/rack_hold, driver/h_rack)",
+        "not holds(ur10_left/gripper, _)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 2,
+        "goal": 2,
+        "review": 2,
+        "supervise": 1
+      },
+      "model_tokens": 5873,
+      "model_seconds": 35.1,
+      "model_errors": 3
+    },
+    {
+      "seed": 9,
+      "injected": "part1",
+      "exit": 0,
+      "wall_s": 368.0,
+      "outcome": "completed",
+      "mission_s": 324.9,
+      "stopped": "",
+      "repair_loops": 2,
+      "decisions": [
+        "relax_goal"
+      ],
+      "final_goal": [
+        "screwed(part2, part2/h_hole1)",
+        "screwed(part2, part2/h_hole2)",
+        "holds(fixtures/rack_hold, driver/h_rack)",
+        "not holds(ur10_left/gripper, _)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 2,
+        "goal": 2,
+        "review": 2,
+        "supervise": 1
+      },
+      "model_tokens": 6714,
+      "model_seconds": 38.6,
+      "model_errors": 3
+    },
+    {
+      "seed": 10,
+      "injected": "part2",
+      "exit": 1,
+      "wall_s": 64.2,
+      "outcome": "escalated",
+      "mission_s": 36.94,
+      "stopped": "escalate: The reported failure shows that fixtures/clamp2 cannot reach part2's seat, but it rules out only that clamp-and-screw binding. It does not establish that part2 is impossible with another clamp, nor that retrying would help. A human should decide how to proceed.",
+      "repair_loops": 1,
+      "decisions": [
+        "escalate"
+      ],
+      "final_goal": [
+        "screwed(part1, part1/h_hole1)",
+        "screwed(part1, part1/h_hole2)",
+        "screwed(part2, part2/h_hole1)",
+        "screwed(part2, part2/h_hole2)",
+        "holds(fixtures/rack_hold, driver/h_rack)",
+        "not holds(ur10_left/gripper, _)"
+      ],
+      "unchecked": [],
+      "model_calls": {
+        "ground": 2,
+        "goal": 2,
+        "review": 2,
+        "supervise": 1
+      },
+      "model_tokens": 6114,
+      "model_seconds": 23.4,
+      "model_errors": 3
+    }
+  ]
+}

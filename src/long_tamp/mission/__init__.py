@@ -34,7 +34,7 @@ from .goals import (
     object_of,
     placed_at,
 )
-from .runner import MissionRunner, execution_summary, parse_injection
+from .runner import MissionRun, MissionRunner, execution_summary, parse_injection
 
 __all__ = [
     "GRASPED",
@@ -43,6 +43,7 @@ __all__ = [
     "PLACED_AT",
     "BaseMissionDomain",
     "MissionDomain",
+    "MissionRun",
     "MissionRunner",
     "MissionScene",
     "MissionStep",

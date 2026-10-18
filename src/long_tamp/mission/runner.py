@@ -53,8 +53,10 @@ TRAJECTORY_DT = 0.05
 
 
 @dataclass
-class _Run:
-    """One ``run_mission`` call's running state."""
+class MissionRun:
+    """One ``run_mission`` call's running state. ``session`` and ``refine``
+    take one too, so a caller can refine steps outside a plan (a scenario's
+    setup) or bind a plan it runs itself (a BT host)."""
 
     q: list[float]
     trajectory: list[dict[str, Any]] | None = None
@@ -253,7 +255,7 @@ class MissionRunner:
         specs (``parse_injection``); ``control`` (an ``ExecutionControl``)
         pauses, resumes or stops the run between steps.
         """
-        run = _Run(
+        run = MissionRun(
             q=[
                 float(v)
                 for v in (q_start if q_start is not None else self.scene.q_init)
@@ -313,7 +315,7 @@ class MissionRunner:
         }
 
     def session(
-        self, run: _Run, document: dict[str, Any] | None = None
+        self, run: MissionRun, document: dict[str, Any] | None = None
     ) -> TaskPlanningSession:
         """``document`` bound to this scene: guards evaluated on the world,
         every other capability refined and executed by ``_run_step``."""
@@ -359,7 +361,7 @@ class MissionRunner:
         )
 
     def _run_step(
-        self, run: _Run, capability: str, parameters: dict[str, Any]
+        self, run: MissionRun, capability: str, parameters: dict[str, Any]
     ) -> dict[str, Any]:
         """Refine one transaction and submit its motion; a failure raises,
         leaving ``run.q`` and the grasps as they were (the transaction
@@ -408,7 +410,7 @@ class MissionRunner:
         return {"replans": r["replans"], "resumes": r["resumes"]}
 
     def refine(
-        self, run: _Run, index: int, step: RefinementStep | Move
+        self, run: MissionRun, index: int, step: RefinementStep | Move
     ) -> dict[str, Any]:
         """Plan one step from ``run.q``, then log and record it (``run.q``
         advances only on success)."""
@@ -521,7 +523,7 @@ class MissionRunner:
     # -- recovery ------------------------------------------------------------
 
     def _on_drift(
-        self, run: _Run, node: dict[str, Any], observe: Any
+        self, run: MissionRun, node: dict[str, Any], observe: Any
     ) -> list[ExecutionCommand]:
         """The robot drifted before this step's motion: plan the step again
         from where it is (the grasps it started with, the observed config)."""
@@ -546,7 +548,7 @@ class MissionRunner:
         return commands
 
     def recover_missed_grasp(
-        self, run: _Run, backend: Any, failure: dict[str, Any]
+        self, run: MissionRun, backend: Any, failure: dict[str, Any]
     ) -> None:
         """After ``grasp_missed`` (#128): open the hand that missed, undo the
         step's grasps and the missed one in the grasp tracker, and take the
@@ -943,6 +945,7 @@ def execution_summary(
 
 __all__ = [
     "TRAJECTORY_DT",
+    "MissionRun",
     "MissionRunner",
     "execution_failure",
     "execution_summary",

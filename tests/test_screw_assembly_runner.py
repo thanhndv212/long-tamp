@@ -152,10 +152,10 @@ def test_a_failing_block_stops_the_mission():
 
 def test_an_aborted_step_is_the_runs_failure():
     """#108: a step aborted mid-planning reported no failure of its own."""
-    import pytest
     from types import SimpleNamespace
 
-    T = pytest.importorskip("task_screw_assembly")
+    from long_tamp.mission.runner import stopped_failure
+
     plan = SimpleNamespace(
         document={
             "root": {
@@ -165,9 +165,9 @@ def test_an_aborted_step_is_the_runs_failure():
         }
     )
     run = SimpleNamespace(failed_step="b07", message="aborted (abort_step by operator)")
-    assert T.stopped_failure(run, SimpleNamespace(plan=plan)) == {
+    assert stopped_failure(run, SimpleNamespace(plan=plan)) == {
         "step": "part1 A: clamp + screw",
         "facts": [],
         "message": "aborted (abort_step by operator)",
     }
-    assert T.stopped_failure(SimpleNamespace(failed_step=None), None) is None
+    assert stopped_failure(SimpleNamespace(failed_step=None), None) is None

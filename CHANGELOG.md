@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   replay files are those of the screw runner.
   - New domain hooks: `world_state`, `observed_start`, `opened_config` and
     `execution_metrics`; the screw domain implements them.
-  - `task_screw_assembly.py` is unchanged; it moves onto the runner in #134.
+  - `task_screw_assembly.py` runs on it since #134 (see Changed).
 - Guide: [run long_tamp on your robot](docs/usage/run-on-your-robot.md) (#129) — the
   execution contract, writing and serving a backend, registering a gripper model, the drift
   check and the robot side's safety duties, with the SO-101 as the worked example.
@@ -115,6 +115,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The screw-assembly example runs on `long_tamp.mission.MissionRunner` (#134, ADR-0012).
+  `task_screw_assembly.py` builds a runner on `ScrewAssemblyDomain` and calls its
+  `run_mission`, `run_with_repair`, `run_supervised`, `plan_from_goal` and
+  `understand_instruction`; its own copy of the loop (about 800 lines) is gone. The CLI,
+  the run folder and the `run_mission(task, planner, n_parts, **mission)` entry the chat
+  tools call are unchanged. `scenarios.py`, `screw_bt_session.py` and `concurrency_ab.py`
+  use the runner too. The runner's running state, `MissionRun`, is public, so a caller can
+  refine steps outside a plan (a scenario's setup) or bind a plan it runs itself (a BT
+  host).
+
 - The spline optimizer's QP cap (`SplineGradientBased/QPMaxIterations`) is now upstream:
   hpp-core [#459](https://github.com/humanoid-path-planner/hpp-core/pull/459), released in
   hpp-core 9.1.0. Docs no longer call it a local patch. With hpp-core < 9.1.0 (including the
@@ -141,6 +151,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the host reads the session from the blackboard instead of binding it to the nodes.
 
 ### Fixed
+
+- `script/screw_assembly/kill_resume.py` read the part count from the first `mission`
+  event, which since the web viewer (#102) is the plan event (`ScrewAssembly4`), and
+  crashed after the resumed run. It now reads the root node's event (#134).
 
 - Repair no longer runs out of memory after blocking a whole step (#168).
   - `to_pddl(blocked=...)` encodes a block as a positive `unblocked_...` predicate: the
