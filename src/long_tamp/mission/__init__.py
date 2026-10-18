@@ -4,10 +4,10 @@
 - :mod:`.domain`: the :class:`MissionDomain` protocol, :class:`BaseMissionDomain`
   with its generic defaults, and :func:`check_domain`;
 - :mod:`.goals`: the object-level goal predicates ``grasped`` and
-  ``placed_at`` that domains may share.
-
-The generic runner (``run_mission``, ``run_with_repair``, ...) lands in
-``long_tamp.mission.runner`` (#132).
+  ``placed_at`` that domains may share;
+- :mod:`.runner`: :class:`MissionRunner`, the generic loop (``run_mission``,
+  ``run_with_repair``, ``run_supervised``, ``plan_from_goal``,
+  ``understand_instruction``; ADR-0012).
 """
 
 from .domain import (
@@ -34,6 +34,7 @@ from .goals import (
     object_of,
     placed_at,
 )
+from .runner import MissionRunner, execution_summary, parse_injection
 
 __all__ = [
     "GRASPED",
@@ -42,6 +43,7 @@ __all__ = [
     "PLACED_AT",
     "BaseMissionDomain",
     "MissionDomain",
+    "MissionRunner",
     "MissionScene",
     "MissionStep",
     "Move",
@@ -51,9 +53,11 @@ __all__ = [
     "capability_registry",
     "check_domain",
     "check_object_goal",
+    "execution_summary",
     "grasped",
     "held_by_gripper",
     "object_of",
+    "parse_injection",
     "placed_at",
     "update_held",
 ]

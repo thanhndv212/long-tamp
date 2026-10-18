@@ -46,3 +46,4 @@ What becomes easier, harder, or required. What we give up.
 | [0009](0009-grasp-verification.md) | Grasp verification: a hand interface, measured openings, facts | Accepted |
 | [0010](0010-missed-grasp-repair.md) | Repairing a missed grasp: retry from the observed world, then escalate | Accepted |
 | [0011](0011-mission-domain.md) | Mission domains: one protocol for any robot and task | Accepted |
+| [0012](0012-mission-runner.md) | The generic mission runner | Accepted |

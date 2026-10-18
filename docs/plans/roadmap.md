@@ -253,7 +253,7 @@ Run missions on a robot driven from another host (a container and a USB-attached
 The mission runtime that uses every layer (task planner, refiner, executor, repair, supervisor, chat, UI) is about 3,100 lines of `script/screw_assembly/`. Move it into `long_tamp.mission` behind a domain interface, so any robot and task can use the AI features without copying the example.
 
 - [x] [#131](https://github.com/thanhndv212/long-tamp/issues/131) MissionDomain interface and long_tamp.mission package
-- [ ] [#132](https://github.com/thanhndv212/long-tamp/issues/132) Generic mission runner
+- [x] [#132](https://github.com/thanhndv212/long-tamp/issues/132) Generic mission runner
 - [ ] [#133](https://github.com/thanhndv212/long-tamp/issues/133) Generic chat tools and mission UI launcher
 - [ ] [#134](https://github.com/thanhndv212/long-tamp/issues/134) Run on long_tamp.mission
 - [ ] [#135](https://github.com/thanhndv212/long-tamp/issues/135) Template domain and "write your own mission" tutorial
