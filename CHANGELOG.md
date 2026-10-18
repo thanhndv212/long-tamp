@@ -152,6 +152,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `script/screw_assembly/kill_resume.py` read the part count from the first `mission`
+  event, which since the web viewer (#102) is the plan event (`ScrewAssembly4`), and
+  crashed after the resumed run. It now reads the root node's event (#134).
+
 - Repair no longer runs out of memory after blocking a whole step (#168).
   - `to_pddl(blocked=...)` encodes a block as a positive `unblocked_...` predicate: the
     bindings the static preconditions allow, minus the blocked ones.
