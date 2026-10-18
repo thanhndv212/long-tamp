@@ -10,6 +10,8 @@ from screw_mission import ScrewAssemblyDomain
 from test_mission_domain import PickPlaceDomain
 
 from long_tamp.mission import MissionDomain
+from long_tamp.mission.template import TemplateDomain
 
 screw: MissionDomain = ScrewAssemblyDomain(2)
 toy: MissionDomain = PickPlaceDomain()
+template: MissionDomain = TemplateDomain()

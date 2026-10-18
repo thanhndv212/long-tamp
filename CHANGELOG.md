@@ -49,6 +49,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Screw assembly: `screw_mission.py:domain` launches through it; `mission_ui.py` is now
     that launcher with MuJoCo as the default backend. `chat_tools.py` is gone, and
     `task_screw_assembly.py --chat` uses the library's chat.
+- The template mission domain and the [write your own mission](docs/usage/write-your-own-mission.md)
+  tutorial (#135). `long_tamp.mission.template` is one arm moving a cube and a ball between
+  a table, a tray and a bin, on a kinematic scene (no HPP): `python -m long_tamp.mission ui
+  --domain long_tamp.mission.template:domain` plans, runs on the mock backend and repairs
+  (`:repair_demo` can't reach the tray). `tests/test_mission_template.py` runs the loop in CI.
 - Guide: [run long_tamp on your robot](docs/usage/run-on-your-robot.md) (#129) — the
   execution contract, writing and serving a backend, registering a gripper model, the drift
   check and the robot side's safety duties, with the SO-101 as the worked example.

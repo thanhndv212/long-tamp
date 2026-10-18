@@ -256,7 +256,7 @@ The mission runtime that uses every layer (task planner, refiner, executor, repa
 - [x] [#132](https://github.com/thanhndv212/long-tamp/issues/132) Generic mission runner
 - [x] [#133](https://github.com/thanhndv212/long-tamp/issues/133) Generic chat tools and mission UI launcher
 - [x] [#134](https://github.com/thanhndv212/long-tamp/issues/134) Run on long_tamp.mission
-- [ ] [#135](https://github.com/thanhndv212/long-tamp/issues/135) Template domain and "write your own mission" tutorial
+- [x] [#135](https://github.com/thanhndv212/long-tamp/issues/135) Template domain and "write your own mission" tutorial
 - [ ] [#136](https://github.com/thanhndv212/long-tamp/issues/136) M8 exit test, two domains on one runtime
 
 **Exit test:** the screw assembly passes the V3 batch gate and the M6 autonomy batch on the library runner; the template domain runs the full loop in the mission UI.
