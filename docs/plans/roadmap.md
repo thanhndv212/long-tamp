@@ -257,9 +257,11 @@ The mission runtime that uses every layer (task planner, refiner, executor, repa
 - [x] [#133](https://github.com/thanhndv212/long-tamp/issues/133) Generic chat tools and mission UI launcher
 - [x] [#134](https://github.com/thanhndv212/long-tamp/issues/134) Run on long_tamp.mission
 - [x] [#135](https://github.com/thanhndv212/long-tamp/issues/135) Template domain and "write your own mission" tutorial
-- [ ] [#136](https://github.com/thanhndv212/long-tamp/issues/136) M8 exit test, two domains on one runtime
+- [x] [#136](https://github.com/thanhndv212/long-tamp/issues/136) M8 exit test, two domains on one runtime
 
 **Exit test:** the screw assembly passes the V3 batch gate and the M6 autonomy batch on the library runner; the template domain runs the full loop in the mission UI.
+
+**Passed 2026-10-18 (#136):** V3 gate 10/10, 0/140 replanning blocks, 12/12 recoveries, median 1058 s (dev 1181 s); autonomy batch 0 unclean, 0 unchecked decisions (3 completed, 7 escalated); the template domain planned, ran and was repaired from the mission UI chat. Results: `script/screw_assembly/results/2026-10-18-m8-exit-*.json`.
 
 ## M9 — Perception-backed world state (0.11.0)
 

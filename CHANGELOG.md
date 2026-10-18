@@ -54,6 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a table, a tray and a bin, on a kinematic scene (no HPP): `python -m long_tamp.mission ui
   --domain long_tamp.mission.template:domain` plans, runs on the mock backend and repairs
   (`:repair_demo` can't reach the tray). `tests/test_mission_template.py` runs the loop in CI.
+- The M8 exit test (#136): the screw assembly passes the V3 batch gate (10/10, 0/140
+  replanning blocks) and the M6 autonomy batch (0 unclean) on `long_tamp.mission`, and the
+  template domain runs the whole loop, repair included, from the mission UI chat. Results in
+  `script/screw_assembly/results/2026-10-18-m8-exit-*.json`.
 - Guide: [run long_tamp on your robot](docs/usage/run-on-your-robot.md) (#129) — the
   execution contract, writing and serving a backend, registering a gripper model, the drift
   check and the robot side's safety duties, with the SO-101 as the worked example.
