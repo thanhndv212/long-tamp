@@ -23,7 +23,7 @@ from tests.test_ai_chat import (
     act,
     counter_tools,
     scripted_client,
-    stub_mission_module,
+    stub_runner,
 )
 
 
@@ -187,13 +187,10 @@ def test_the_scripted_mission_conversation_works_from_the_viewer(tmp_path):
     sent from the page; tool calls and the new plan land in the event
     stream the viewer shows."""
     pytest.importorskip("unified_planning")
-    from types import SimpleNamespace
+    from long_tamp.mission import MissionChat
 
-    from chat_tools import INTRO, MissionChat
-
-    T = stub_mission_module(world=[])
-    task = SimpleNamespace(task_config=SimpleNamespace(VALID_PAIRS={}))
-    work = MissionChat(T, task, planner=None, recorded=None, n_parts=2, mission={})
+    T = stub_runner(world=[])
+    work = MissionChat(T)
     first = ["screwed(part2, part2/h_hole1)", "screwed(part2, part2/h_hole2)"]
     client, _ = scripted_client(
         act(
@@ -217,7 +214,7 @@ def test_the_scripted_mission_conversation_works_from_the_viewer(tmp_path):
     )
     events = JsonlEventWriter(tmp_path / "events.jsonl")
 
-    def on_tool(call):  # as task_screw_assembly.run_chat does
+    def on_tool(call):  # as long_tamp.mission.run_chat does
         events(
             make_event(
                 "chat",
@@ -231,7 +228,7 @@ def test_the_scripted_mission_conversation_works_from_the_viewer(tmp_path):
         if call.tool == "plan" and call.ok and work.document is not None:
             events(plan_event(work.document, "planned in the chat"))
 
-    session = ChatSession(client, work.tools(), INTRO, on_tool=on_tool)
+    session = ChatSession(client, work.tools(), work.instructions(), on_tool=on_tool)
     with ViewerServer(tmp_path / "events.jsonl", port=0) as server:
         bridge = ChatBridge(session).attach(server)
         for message in (

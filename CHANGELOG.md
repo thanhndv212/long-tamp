@@ -35,6 +35,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New domain hooks: `world_state`, `observed_start`, `opened_config` and
     `execution_metrics`; the screw domain implements them.
   - `task_screw_assembly.py` runs on it since #134 (see Changed).
+- The mission UI for any domain (#133): `python -m long_tamp.mission ui --domain
+  pkg.module:factory` (or `file.py:factory`) starts the page with the 3D scene, the operator
+  chat and the live plan monitor, on the domain's backend (`--backend`, default `mock`;
+  `-- --backend-option KEY=VALUE` for its options). `serve` runs one mission of it.
+  - `long_tamp.mission.MissionChat` and `run_chat`: the chat tools (`state`, `write_goal`,
+    `set_goal`, `add_constraint`, `plan`, `run`, `explain_failure`) on any
+    `MissionRunner`. Their hints and the model's instructions come from the domain's
+    vocabulary, capabilities and `intro`.
+  - New domain hook `scene_viewer(scene, port)` (the live 3D scene; none by default).
+    `MissionScene.extras["refiner"]` is the runner's default refiner, and
+    `extras["facts"]` seeds the recorded facts at the start.
+  - Screw assembly: `screw_mission.py:domain` launches through it; `mission_ui.py` is now
+    that launcher with MuJoCo as the default backend. `chat_tools.py` is gone, and
+    `task_screw_assembly.py --chat` uses the library's chat.
 - Guide: [run long_tamp on your robot](docs/usage/run-on-your-robot.md) (#129) — the
   execution contract, writing and serving a backend, registering a gripper model, the drift
   check and the robot side's safety duties, with the SO-101 as the worked example.

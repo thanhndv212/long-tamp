@@ -81,8 +81,9 @@ class MissionRunner:
 
     ``recorded`` holds the facts only completed execution writes (default:
     empty, for the domain's ``recorded_predicates``); it persists across
-    calls, as the world does. ``refiner`` refines grasp sequences (default: a
-    ``GraspSequenceRefiner`` on ``scene.planner``, built per step).
+    calls, as the world does. ``refiner`` refines grasp sequences (default:
+    the scene's ``extras["refiner"]``, else a ``GraspSequenceRefiner`` on
+    ``scene.planner``, built per step).
     """
 
     def __init__(
@@ -476,6 +477,8 @@ class MissionRunner:
     def _refiner(self) -> Any:
         if self.refiner is not None:
             return self.refiner
+        if self.scene.extras.get("refiner") is not None:
+            return self.scene.extras["refiner"]
         from long_tamp.tasks.refiner import GraspSequenceRefiner
 
         return GraspSequenceRefiner(

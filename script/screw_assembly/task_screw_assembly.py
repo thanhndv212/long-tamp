@@ -50,6 +50,7 @@ from long_tamp.tasks.grasp_sequence import GraspSequencePlanner  # noqa: E402
 from long_tamp.tasks.mission_checkpoint import MissionCheckpoint  # noqa: E402
 from long_tamp.mission import MissionRunner, MissionScene  # noqa: E402
 from long_tamp.mission.runner import parse_injection, write_trajectory  # noqa: E402
+from long_tamp.mission.ui import RESTART, parse_watchdog  # noqa: E402, F401
 from long_tamp.tasks.task_planning import (  # noqa: E402
     CompositeWorldState,
     GraspTrackerState,
@@ -308,161 +309,14 @@ def run_mission(
     return mission_runner(task, planner, n_parts, **config).run_mission(**options)
 
 
-#: Exit code asking the launcher (mission_ui.py) for a fresh mission (#114).
-RESTART = 75
+def run_chat(runner, q_start, mission, client, events, web=None, watchdog=None):
+    """The operator chat (``--chat``, #89) on the library's generic chat
+    tools (``long_tamp.mission.chat``, #133)."""
+    from long_tamp.mission.chat import MissionChat
+    from long_tamp.mission.chat import run_chat as chat
 
-
-def parse_watchdog(text: str) -> tuple[float, float]:
-    """``SOFT[,HARD]`` seconds -> (soft, hard); hard defaults to 3 x soft."""
-    parts = [float(v) for v in text.split(",")]
-    soft = parts[0]
-    hard = parts[1] if len(parts) > 1 else 3 * soft
-    if not 0 < soft <= hard:
-        raise ValueError(f"--watchdog {text!r}: need 0 < SOFT <= HARD")
-    return soft, hard
-
-
-def run_chat(
-    task,
-    planner,
-    n_parts,
-    q_start,
-    recorded,
-    mission,
-    client,
-    events,
-    web=None,
-    watchdog=None,
-):
-    """An operator's chat with a model acting through gated mission tools
-    (``--chat``, #89): reads operator messages from stdin until EOF or
-    "quit", and writes every tool call to the event stream. With ``web`` (the
-    ``--web-port`` viewer), the same chat is also in the viewer's chat panel
-    (#90); after stdin closes, it goes on there until "quit" or Ctrl-C."""
-    from chat_tools import INTRO, MissionChat
-
-    from long_tamp.ai.chat import ChatSession, ChatTurn
-    from long_tamp.viewer import ChatBridge
-
-    work = MissionChat(
-        sys.modules[__name__],
-        task,
-        planner,
-        recorded,
-        n_parts,
-        mission,
-        q_start,
-        client=client,
-    )
-
-    def on_tool(call):
-        events(
-            make_event(
-                "chat",
-                "tool",
-                call.tool,
-                "SUCCESS" if call.ok else "FAILURE",
-                message=call.error,
-                metrics={"arguments": call.arguments},
-            )
-        )
-        if call.tool == "plan" and call.ok and work.document is not None:
-            events(plan_event(work.document, "planned in the chat"))
-
-    session = ChatSession(
-        client, work.tools(), INTRO + "\n\n" + work.domain(), on_tool=on_tool
-    )
-    bridge = ChatBridge(session)
-    if watchdog is not None:  # its decisions show in the chat too (#109)
-        printed = watchdog.on_decision
-
-        def on_decision(watch, decision):
-            if printed is not None:
-                printed(watch, decision)
-            bridge.note(
-                f"watchdog ({decision.by}) on {watch.label}: {decision.action}"
-                + (
-                    f" {decision.wait_s / 60:.1f} min more"
-                    if decision.action == "wait" and decision.wait_s
-                    else ""
-                )
-                + f": {decision.reason}"
-            )
-
-        watchdog.on_decision = on_decision
-
-    def start():
-        """The page's Start button (#104): run the plan, no model involved;
-        the model sees it in the history, like a run it called."""
-        call = session.call("run", {})
-        session.turns.append(
-            ChatTurn(user="(the operator pressed Start mission)", say="", calls=[call])
-        )
-        return call
-
-    bridge.add_action(
-        "start", "Start mission", start, enabled=lambda: work.document is not None
-    )
-    reset = []
-
-    def start_over():
-        """The page's Reset button (#114): end this mission; the launcher
-        (mission_ui.py) starts a fresh one."""
-        reset.append(True)
-        bridge.ended.set()
-        return "resetting: a fresh mission starts in a few seconds"
-
-    bridge.add_action("reset", "Reset mission", start_over)
-    if web is not None:
-        bridge.attach(web)
-        print(f"chat: also in the web viewer, {web.url}", flush=True)
-    echo = not sys.stdin.isatty()  # piped messages: show them in the log
-    print("chat: type an instruction, 'quit' or Ctrl-D to end", flush=True)
-    while True:
-        try:
-            line = input("operator> ")
-        except EOFError:
-            if web is not None and not bridge.ended.is_set():
-                print(
-                    "chat: stdin closed; the chat goes on in the web viewer "
-                    "('quit' there or Ctrl-C ends it)",
-                    flush=True,
-                )
-                try:
-                    bridge.ended.wait()
-                except KeyboardInterrupt:
-                    pass
-                bridge.wait()
-            break
-        if echo:
-            print(line, flush=True)
-        if line.strip().lower() in ("quit", "exit"):
-            break
-        if not line.strip():
-            continue
-        turn = bridge.turn(line.strip())
-        if turn is None:  # the error is in the transcript
-            print(f"  [error] {bridge.transcript()[-1]['text']}", flush=True)
-            continue
-        for call in turn.calls:
-            print(f"  [tool] {call.as_text()[:400]}", flush=True)
-        if turn.error:
-            print(f"  [error] {turn.error}", flush=True)
-        print(f"model> {turn.say}", flush=True)
-    last = work.last or {"success": True, "seconds": 0.0, "failure": None}
-    result = dict(last)
-    result.setdefault("final_config", work.q)
-    result["chat"] = {
-        "turns": [
-            {"user": t.user, "say": t.say, "calls": [c.as_text() for c in t.calls]}
-            for t in session.turns
-        ],
-        "goal": work.goal,
-        "constraints": work.constraints,
-    }
-    if reset:
-        result["reset"] = True
-    return result
+    work = MissionChat(runner, split_options(mission)[1], q_start, client)
+    return chat(work, client, events, web, watchdog)
 
 
 def world_atoms(planner: GraspSequencePlanner, recorded: RecordedFacts) -> list[str]:
@@ -1097,16 +951,7 @@ def main() -> int:
             mission["on_event"] = watched
         if args.chat:
             result = run_chat(
-                task,
-                planner,
-                n_parts,
-                q_start,
-                recorded,
-                mission,
-                client,
-                events,
-                web,
-                watchdog,
+                runner, q_start, mission, client, events, web, watchdog
             )
         elif args.instruction:
             goal, constraints = runner.understand_instruction(
@@ -1166,7 +1011,7 @@ def main() -> int:
     if result.get("reset"):
         if live_viewer is not None:
             live_viewer.close()
-        return RESTART  # mission_ui.py starts a fresh mission
+        return RESTART  # the mission UI launcher starts a fresh mission
     if live_viewer is not None:
         try:
             live_viewer.finish()
