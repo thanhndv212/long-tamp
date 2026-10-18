@@ -111,16 +111,27 @@ class SceneBuilder:
     def load_environment(
         self, environment_names: List[str], pose=None
     ) -> "SceneBuilder":
-        """Load the environment (dispenser, ground, etc.)."""
+        """Load the environment (dispenser, ground, etc.).
+
+        ``FILE_PATHS["environment"][name]`` is a URDF path, or
+        ``{"urdf": ..., "srdf": ...}`` for an environment with contact
+        surfaces."""
         logger.info("Loading environment (%s)...", environment_names)
         for id, env_name in enumerate(environment_names):
             if env_name in self.FILE_PATHS["environment"]:
                 logger.debug("Loading environment: %s", env_name)
                 logger.debug("  from: %s", self.FILE_PATHS["environment"][env_name])
+                paths = self.FILE_PATHS["environment"][env_name]
+                kwargs = {}
+                if isinstance(paths, dict):
+                    if paths.get("srdf"):
+                        kwargs["srdf_path"] = paths["srdf"]
+                    paths = paths["urdf"]
                 self.planner.load_environment(
                     name=env_name,
-                    urdf_path=self.FILE_PATHS["environment"][env_name],
+                    urdf_path=paths,
                     pose=pose[id] if pose is not None else None,
+                    **kwargs,
                 )
             else:
                 logger.warning("Unknown environment: %s", env_name)

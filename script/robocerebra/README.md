@@ -19,7 +19,8 @@ long_tamp's side (issue #156).
 `cases()`, `load(case, model="bddl")` (builds the env: Panda, `OSC_POSE`, 20 Hz,
 as the benchmark's `task_runner.py`), `reset(step=0, settle=None, restore_demo=False)`,
 `resume(step)`, `step(actions)` ((7,) or (N, 7)), `check()`, `get_state()`,
-`set_state(sim_state, controller=None)`, `render(cameras=None, size=256)`, `demo()`.
+`set_state(sim_state, controller=None)`, `render(cameras=None, size=256)`, `demo()`,
+`export_scene()`.
 See the docstrings in `env_server.py`.
 
 `model="bddl"` is the benchmark's scene, built from the case's BDDL. `"demo"` is the
@@ -162,3 +163,68 @@ count benchmark steps whose expected subtasks complete within their own span.
   butter pick of step 4 registers at demo step 2088, inside step 5's span. So
   replaying the demo isn't a 100 % oracle. Compare planners against the 56/76
   ceiling, or against `goal.json` with the dataset caveat.
+
+## Scene export (R2)
+
+`export_scene()` turns the loaded case's compiled MuJoCo model into a scene HPP loads
+(`scene_export.py`, #157):
+
+- the static fixtures as one environment model, `environment.urdf`, whose
+  `environment.srdf` holds each LIBERO `*_region` site as a contact surface on the geom
+  that supports it;
+- each movable object as its own freeflyer model, `objects/<name>.urdf|srdf`, with a
+  `bottom` contact;
+- a manifest: object poses, the robot base pose, links and joints, the regions (with a
+  `reason` when one has no support), the articulated joints, every exported shape's
+  pose under its pinocchio name, and MuJoCo's contacts.
+
+```python
+from long_tamp.eval import RoboCerebraClient, write_export
+
+scene = write_export(client.export_scene(), "out/Ideal_case1")
+scene.file_paths()            # SceneBuilder.FILE_PATHS entries, environment + objects
+scene.contacts                # the environment contact surfaces
+scene.object_config("butter_1")
+scene.robot_pose()            # where to put the Panda
+```
+
+`export_scene.py` exports cases, loads each in HPP and compares it with MuJoCo:
+
+```bash
+python script/robocerebra/export_scene.py all --plan \
+    --results script/robocerebra/results/2026-10-18-r2-scene-export.json
+```
+
+It runs in the HPP environment and starts the env server itself. `--plan` also plans one
+free arm motion per layout.
+
+`results/2026-10-18-r2-scene-export.json`, all 60 cases:
+
+| Check | Result |
+|---|---|
+| Distinct layouts (sets of fixtures) | 13 |
+| Load errors, missing shapes, missing contact surfaces | 0 |
+| Shape pose error, max | 8.9e-10 m, 1.4e-5 rad |
+| Arm link pose error, max (link0..7) | 1.1e-5 m, 1.1e-4 rad |
+| Finger frame offset, max | 6.5 mm |
+| Collision disagreements with MuJoCo | 0 |
+| Resting contacts (HPP distance ≤ 0) / near pairs (< 1 mm) | 892 / 278 |
+| Contact distance error, max | 1.1e-4 m |
+| Robot clearance at the start, min | 68 mm |
+| Free-space plans | 13/13 |
+
+- **A disagreement** is a pair HPP sees penetrating by more than 1 mm with no MuJoCo
+  contact, or a MuJoCo contact HPP sees more than 1 mm apart.
+- **Resting objects touch.** MuJoCo settles objects about 0.015 mm into their support,
+  so HPP sees them in collision at the start. R3 has to treat these pairs as contacts
+  (the object's placement), not as collisions.
+- **The fingers** sit 6.5 mm off: robosuite's finger frames and the Panda URDF's
+  differ by that offset. The arm links match.
+- **Not every region is a support surface.** `white_storage_box_1_left_side|right_side`
+  (6 cases each), `bowl_drainer_1_left|right_region` (6 each), `basket_1_contain_region`
+  (3) and `wine_rack_1_top_region` (3) are vertical slabs, not horizontal footprints, so
+  they have no contact. Case 1's two failed `In` subtasks of the demo are on the storage
+  box sides. Placing into these needs a different model than a support contact.
+- **Articulated joints** (drawers, doors) are exported in the manifest but locked at their
+  current value in the environment model.
+- The issue counts 15 layouts. The 60 cases have 13 distinct sets of fixtures.

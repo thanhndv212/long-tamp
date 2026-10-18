@@ -194,6 +194,17 @@ class RoboCerebraClient:
         """The loaded case's demonstration ``states`` and ``actions``."""
         return self._call("demo")
 
+    def export_scene(self, out_dir: str | os.PathLike[str] | None = None) -> Any:
+        """The scene as it stands, as URDF/SRDF texts and a manifest
+        (``{"files", "manifest"}``); with ``out_dir``, written there and
+        returned as a :class:`~long_tamp.eval.robocerebra_scene.ExportedScene`."""
+        export = self._call("export_scene")
+        if out_dir is None:
+            return export
+        from .robocerebra_scene import write_export
+
+        return write_export(export, out_dir)
+
 
 def _wait_ready(process: subprocess.Popen[str], timeout: float) -> int:
     import selectors
