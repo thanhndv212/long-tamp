@@ -272,17 +272,18 @@ def _collision_geoms(model: Any, body: int) -> list[int]:
     ]
 
 
+# Keyed by int: newer mujoco enums don't hash like the model's numpy ints.
 _KINDS = {
-    mujoco.mjtGeom.mjGEOM_BOX: "box",
-    mujoco.mjtGeom.mjGEOM_SPHERE: "sphere",
-    mujoco.mjtGeom.mjGEOM_CYLINDER: "cylinder",
-    mujoco.mjtGeom.mjGEOM_CAPSULE: "capsule",
-    mujoco.mjtGeom.mjGEOM_PLANE: "plane",
+    int(mujoco.mjtGeom.mjGEOM_BOX): "box",
+    int(mujoco.mjtGeom.mjGEOM_SPHERE): "sphere",
+    int(mujoco.mjtGeom.mjGEOM_CYLINDER): "cylinder",
+    int(mujoco.mjtGeom.mjGEOM_CAPSULE): "capsule",
+    int(mujoco.mjtGeom.mjGEOM_PLANE): "plane",
 }
 
 
 def _supported(model: Any, names: _Names, g: int, skipped: list) -> bool:
-    if model.geom_type[g] in _KINDS:
+    if int(model.geom_type[g]) in _KINDS:
         return True
     kind = mujoco.mjtGeom(model.geom_type[g]).name
     skipped.append({"what": names.geom(g), "reason": f"unsupported geom type {kind}"})
@@ -292,7 +293,7 @@ def _supported(model: Any, names: _Names, g: int, skipped: list) -> bool:
 def _shapes(model: Any, g: int) -> list[tuple[str, np.ndarray, np.ndarray]]:
     """URDF primitives for geom ``g``: (geometry xml, pos, rot) in its body
     frame."""
-    kind = _KINDS[model.geom_type[g]]
+    kind = _KINDS[int(model.geom_type[g])]
     size = model.geom_size[g]
     pos = model.geom_pos[g].copy()
     rot = _quat_to_mat(model.geom_quat[g])
@@ -317,7 +318,7 @@ def _shapes(model: Any, g: int) -> list[tuple[str, np.ndarray, np.ndarray]]:
 
 def _box_world(model: Any, data: Any, g: int) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
     """A box-like geom's (center, rotation, half-sizes) in the world, or None."""
-    kind = _KINDS.get(model.geom_type[g])
+    kind = _KINDS.get(int(model.geom_type[g]))
     pos, rot = data.geom_xpos[g].copy(), data.geom_xmat[g].reshape(3, 3).copy()
     size = model.geom_size[g]
     if kind == "box":
@@ -532,7 +533,7 @@ def _bottom_face(
 
 def _half_box(model: Any, g: int) -> np.ndarray:
     """Half-extents of the box bounding geom ``g`` in its own frame."""
-    kind, size = _KINDS[model.geom_type[g]], model.geom_size[g]
+    kind, size = _KINDS[int(model.geom_type[g])], model.geom_size[g]
     if kind == "box":
         return size.copy()
     if kind == "sphere":
