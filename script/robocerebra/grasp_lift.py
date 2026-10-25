@@ -11,9 +11,10 @@ actions until the benchmark's pick checker passes or the step budget runs
 out. The checker passes once the object has left every region with its
 orientation within the benchmark's threshold over the last steps; it prints
 ``pick suppressed: quaternion change`` when the object turned too much.
-An object that starts in no region, or only in its own (``start_regions``),
-can never leave one: its row is ``unregistrable`` and records how high the
-object was ``lifted``, the grasp's evidence instead of the checker's.
+An object that starts in no region (``start_regions``), or in one of its own
+that it carries along (a basket's contain region), cannot leave every region
+by being lifted: its row is ``unregistrable`` and records how high the object
+was ``lifted``, the grasp's evidence instead of the checker's.
 
     python script/robocerebra/grasp_lift.py
     python script/robocerebra/grasp_lift.py --classes butter popcorn
@@ -75,7 +76,8 @@ def grasp_lift(
         "seed": seed,
         "success": bool(result["all_done"]),
         "start_regions": start_regions,
-        "unregistrable": not any(not r.startswith(f"{instance}_") for r in start_regions),
+        "unregistrable": not start_regions
+        or any(r.startswith(f"{instance}_") for r in start_regions),
         "lifted": round(end[2] - start[2], 4) if start and end else None,
         "steps_used": used,
         "suppressed": [line for line in monitor if "suppressed" in line],

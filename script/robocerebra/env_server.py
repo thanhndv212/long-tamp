@@ -542,8 +542,8 @@ class RoboCerebraEnv:
         """The regions ``obj`` is ``in`` by the benchmark's predicate. Its
         pick counts only when this goes from some region to none: an object
         that starts in none (a bottle whose origin is above the table
-        region's band) or only in one it carries (a basket's own contain
-        region) can be lifted but never picked."""
+        region's band) or in one it carries (a basket's own contain region)
+        does not register by being lifted."""
         env = self._need()
         return [r for r in env.regions if env._eval_predicate(["in", obj, r])]
 
