@@ -2,11 +2,11 @@
  "cases": {
   "Ideal/case10": {
    "objects": 10,
-   "handles": 52
+   "handles": 60
   },
   "Memory_Execution/case9": {
    "objects": 7,
-   "handles": 36
+   "handles": 42
   },
   "Ideal/case5": {
    "objects": 4,
@@ -14,7 +14,7 @@
   },
   "Ideal/case1": {
    "objects": 4,
-   "handles": 10
+   "handles": 14
   },
   "Ideal/case2": {
    "objects": 5,
@@ -22,7 +22,7 @@
   },
   "Ideal/case4": {
    "objects": 5,
-   "handles": 21
+   "handles": 20
   },
   "Memory_Exploration/case3": {
    "objects": 5,
@@ -42,134 +42,202 @@
     "handles": [
      {
       "name": "grasp_0",
-      "source": "top-rim",
-      "requires_scene_planning": false,
-      "score": 1.12,
+      "source": "akita_black_bowl_1_g5: close x, approach +z",
+      "requires_scene_planning": true,
+      "score": 1.49966,
       "approach": [
-       0.0,
-       0.0,
-       -1.0
+       0.85051,
+       0.16437,
+       -0.49961
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.06361,
-       "width": 0.06261,
-       "q": 0.06261,
-       "offset": 0.0,
-       "contact_ratio": 0.12,
+       "contact_width": 0.00382,
+       "width": 0.00282,
+       "q": 0.00282,
+       "offset": -0.00017,
+       "contact_ratio": 1.0,
        "collisions": [
-        "closed finger_left:akita_black_bowl_1_g19",
-        "closed finger_right:akita_black_bowl_1_g33"
+        "closed finger_left:akita_black_bowl_1_g21",
+        "closed finger_left:akita_black_bowl_1_g22",
+        "closed finger_left:akita_black_bowl_1_g23"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0003444,
-       0.0506372,
-       0.0421316,
-       0.7071068,
-       0.7071068,
-       0.0,
-       0.0
+       -0.0328677,
+       -0.0075411,
+       0.0099524,
+       -0.6644573,
+       0.5552512,
+       -0.3159863,
+       0.3877439
       ]
      },
      {
       "name": "grasp_1",
-      "source": "top-rim",
-      "requires_scene_planning": false,
-      "score": 1.12,
+      "source": "akita_black_bowl_1_g5: close x, approach +z flipped",
+      "requires_scene_planning": true,
+      "score": 1.49966,
       "approach": [
-       0.0,
-       0.0,
-       -1.0
+       0.85051,
+       0.16437,
+       -0.49961
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.06281,
-       "width": 0.06181,
-       "q": 0.06181,
-       "offset": 0.0,
-       "contact_ratio": 0.12,
+       "contact_width": 0.00382,
+       "width": 0.00282,
+       "q": 0.00282,
+       "offset": 0.00017,
+       "contact_ratio": 1.0,
        "collisions": [
-        "closed finger_left:akita_black_bowl_1_g20",
-        "closed finger_right:akita_black_bowl_1_g24"
+        "closed finger_right:akita_black_bowl_1_g21",
+        "closed finger_right:akita_black_bowl_1_g22",
+        "closed finger_right:akita_black_bowl_1_g23"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.0489656,
-       -0.0128797,
-       0.0421317,
-       0.9917949,
-       0.1278393,
-       0.0,
-       0.0
+       -0.0328677,
+       -0.0075411,
+       0.0099524,
+       0.5552512,
+       0.6644573,
+       0.3877439,
+       0.3159863
       ]
      },
      {
       "name": "grasp_2",
-      "source": "top-rim",
-      "requires_scene_planning": false,
-      "score": 1.12,
+      "source": "akita_black_bowl_1_g5: close x, approach +z",
+      "requires_scene_planning": true,
+      "score": 1.49966,
       "approach": [
-       0.0,
-       0.0,
-       -1.0
+       0.85051,
+       0.16437,
+       -0.49961
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.06284,
-       "width": 0.06184,
-       "q": 0.06184,
-       "offset": 0.0,
-       "contact_ratio": 0.12,
+       "contact_width": 0.00402,
+       "width": 0.00302,
+       "q": 0.00302,
+       "offset": -0.00034,
+       "contact_ratio": 1.0,
        "collisions": [
-        "closed finger_left:akita_black_bowl_1_g23",
-        "closed finger_right:akita_black_bowl_1_g27"
+        "closed finger_left:akita_black_bowl_1_g21",
+        "closed finger_left:akita_black_bowl_1_g22"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.0109543,
-       -0.049433,
-       0.0421316,
-       0.7798761,
-       0.6259339,
-       0.0,
-       0.0
+       -0.0330826,
+       -0.0063911,
+       0.0099649,
+       -0.6644573,
+       0.5552512,
+       -0.3159863,
+       0.3877439
       ]
      },
      {
       "name": "grasp_3",
-      "source": "top-rim",
-      "requires_scene_planning": false,
-      "score": 1.12,
+      "source": "akita_black_bowl_1_g5: close x, approach +z flipped",
+      "requires_scene_planning": true,
+      "score": 1.49966,
       "approach": [
-       0.0,
-       0.0,
-       -1.0
+       0.85051,
+       0.16437,
+       -0.49961
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.06287,
-       "width": 0.06187,
-       "q": 0.06187,
-       "offset": -0.0,
-       "contact_ratio": 0.12,
+       "contact_width": 0.00402,
+       "width": 0.00302,
+       "q": 0.00302,
+       "offset": 0.00034,
+       "contact_ratio": 1.0,
        "collisions": [
-        "closed finger_left:akita_black_bowl_1_g29",
-        "closed finger_right:akita_black_bowl_1_g25"
+        "closed finger_right:akita_black_bowl_1_g21",
+        "closed finger_right:akita_black_bowl_1_g22"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0249057,
-       -0.0440837,
-       0.0421317,
-       0.8635998,
-       -0.504178,
-       0.0,
-       0.0
+       -0.0330826,
+       -0.0063911,
+       0.0099649,
+       0.5552512,
+       0.6644573,
+       0.3877439,
+       0.3159863
+      ]
+     },
+     {
+      "name": "grasp_4",
+      "source": "akita_black_bowl_1_g5: close x, approach +z",
+      "requires_scene_planning": true,
+      "score": 1.49966,
+      "approach": [
+       0.85051,
+       0.16437,
+       -0.49961
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.00494,
+       "width": 0.00394,
+       "q": 0.00394,
+       "offset": -0.00034,
+       "contact_ratio": 1.0,
+       "collisions": [
+        "closed finger_left:akita_black_bowl_1_g21",
+        "closed finger_left:akita_black_bowl_1_g22"
+       ],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       -0.0332976,
+       -0.0052411,
+       0.0099774,
+       -0.6644573,
+       0.5552512,
+       -0.3159863,
+       0.3877439
+      ]
+     },
+     {
+      "name": "grasp_5",
+      "source": "akita_black_bowl_1_g5: close x, approach +z flipped",
+      "requires_scene_planning": true,
+      "score": 1.49966,
+      "approach": [
+       0.85051,
+       0.16437,
+       -0.49961
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.00494,
+       "width": 0.00394,
+       "q": 0.00394,
+       "offset": 0.00034,
+       "contact_ratio": 1.0,
+       "collisions": [
+        "closed finger_right:akita_black_bowl_1_g21",
+        "closed finger_right:akita_black_bowl_1_g22"
+       ],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       -0.0332976,
+       -0.0052411,
+       0.0099774,
+       0.5552512,
+       0.6644573,
+       0.3877439,
+       0.3159863
       ]
      }
     ]
@@ -193,19 +261,17 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.05432,
-       "width": 0.05332,
-       "q": 0.05332,
-       "offset": -0.00095,
+       "contact_width": 0.05407,
+       "width": 0.05307,
+       "q": 0.05307,
+       "offset": -0.00093,
        "contact_ratio": 0.2,
-       "collisions": [
-        "closed finger_left:alphabet_soup_1_g15"
-       ],
+       "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        0.02599,
-       0.0038,
+       0.014425,
        -0.00209,
        0.7071068,
        0.0,
@@ -225,19 +291,17 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.05432,
-       "width": 0.05332,
-       "q": 0.05332,
-       "offset": 0.00095,
+       "contact_width": 0.05407,
+       "width": 0.05307,
+       "q": 0.05307,
+       "offset": 0.00093,
        "contact_ratio": 0.2,
-       "collisions": [
-        "closed finger_right:alphabet_soup_1_g15"
-       ],
+       "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        0.02599,
-       0.0038,
+       0.014425,
        -0.00209,
        0.0,
        0.7071068,
@@ -247,6 +311,66 @@
      },
      {
       "name": "grasp_2",
+      "source": "alphabet_soup_1_g2: close y, approach +z",
+      "requires_scene_planning": false,
+      "score": 1.19998,
+      "approach": [
+       0.0,
+       -1.0,
+       -0.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.05407,
+       "width": 0.05307,
+       "q": 0.05307,
+       "offset": -0.00093,
+       "contact_ratio": 0.2,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       0.02599,
+       0.00025,
+       -0.00209,
+       0.7071068,
+       0.0,
+       0.0,
+       0.7071068
+      ]
+     },
+     {
+      "name": "grasp_3",
+      "source": "alphabet_soup_1_g2: close y, approach +z flipped",
+      "requires_scene_planning": false,
+      "score": 1.19998,
+      "approach": [
+       0.0,
+       -1.0,
+       -0.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.05407,
+       "width": 0.05307,
+       "q": 0.05307,
+       "offset": 0.00093,
+       "contact_ratio": 0.2,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       0.02599,
+       0.00025,
+       -0.00209,
+       0.0,
+       0.7071068,
+       -0.7071068,
+       0.0
+      ]
+     },
+     {
+      "name": "grasp_4",
       "source": "alphabet_soup_1_g3: close y, approach +z",
       "requires_scene_planning": false,
       "score": 1.19998,
@@ -257,19 +381,17 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.05746,
-       "width": 0.05646,
-       "q": 0.05646,
-       "offset": -0.00108,
+       "contact_width": 0.05729,
+       "width": 0.05629,
+       "q": 0.05629,
+       "offset": -0.00107,
        "contact_ratio": 0.2,
-       "collisions": [
-        "closed finger_left:alphabet_soup_1_g13"
-       ],
+       "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        -0.0247,
-       0.0032,
+       0.013825,
        -0.00209,
        0.7071068,
        0.0,
@@ -278,7 +400,7 @@
       ]
      },
      {
-      "name": "grasp_3",
+      "name": "grasp_5",
       "source": "alphabet_soup_1_g3: close y, approach +z flipped",
       "requires_scene_planning": false,
       "score": 1.19998,
@@ -289,88 +411,22 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.05746,
-       "width": 0.05646,
-       "q": 0.05646,
-       "offset": 0.00108,
+       "contact_width": 0.05729,
+       "width": 0.05629,
+       "q": 0.05629,
+       "offset": 0.00107,
        "contact_ratio": 0.2,
-       "collisions": [
-        "closed finger_right:alphabet_soup_1_g13"
-       ],
+       "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        -0.0247,
-       0.0032,
+       0.013825,
        -0.00209,
        0.0,
        0.7071068,
        -0.7071068,
        0.0
-      ]
-     },
-     {
-      "name": "grasp_4",
-      "source": "alphabet_soup_1_g1: close x, approach -z",
-      "requires_scene_planning": false,
-      "score": 1.99998,
-      "approach": [
-       0.0,
-       -1.0,
-       0.0
-      ],
-      "evaluation": {
-       "feasible": true,
-       "contact_width": 0.06447,
-       "width": 0.06347,
-       "q": 0.06347,
-       "offset": 0.00118,
-       "contact_ratio": 1.0,
-       "collisions": [
-        "closed finger_right:alphabet_soup_1_g13"
-       ],
-       "reasons": []
-      },
-      "handle_xyzquat": [
-       -0.0,
-       0.002085,
-       -0.00235,
-       -0.0,
-       0.7071068,
-       -0.7071068,
-       0.0
-      ]
-     },
-     {
-      "name": "grasp_5",
-      "source": "alphabet_soup_1_g1: close x, approach -z flipped",
-      "requires_scene_planning": false,
-      "score": 1.99998,
-      "approach": [
-       0.0,
-       -1.0,
-       0.0
-      ],
-      "evaluation": {
-       "feasible": true,
-       "contact_width": 0.06447,
-       "width": 0.06347,
-       "q": 0.06347,
-       "offset": -0.00118,
-       "contact_ratio": 1.0,
-       "collisions": [
-        "closed finger_left:alphabet_soup_1_g13"
-       ],
-       "reasons": []
-      },
-      "handle_xyzquat": [
-       -0.0,
-       0.002085,
-       -0.00235,
-       0.7071068,
-       0.0,
-       0.0,
-       0.7071068
       ]
      }
     ]
@@ -394,22 +450,22 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.01358,
-       "width": 0.01258,
-       "q": 0.01258,
+       "contact_width": 0.01373,
+       "width": 0.01273,
+       "q": 0.01273,
        "offset": 0.0,
        "contact_ratio": 0.52,
        "collisions": [
-        "closed finger_right:basket_1_g3"
+        "closed finger_right:basket_1_g2"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0004859,
-       -0.0710849,
-       0.1356852,
-       0.9999951,
-       0.0031408,
+       -0.0769719,
+       0.0,
+       0.1408219,
+       -0.7071068,
+       0.7071068,
        0.0,
        0.0
       ]
@@ -426,22 +482,22 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.01361,
-       "width": 0.01261,
-       "q": 0.01261,
+       "contact_width": 0.01356,
+       "width": 0.01256,
+       "q": 0.01256,
        "offset": 0.0,
        "contact_ratio": 0.52,
        "collisions": [
-        "closed finger_left:basket_1_g5"
+        "closed finger_right:basket_1_g3"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0783899,
-       -0.0,
-       0.1305035,
-       -0.7071068,
-       0.7071068,
+       0.000486,
+       -0.0711102,
+       0.1459352,
+       0.9999951,
+       0.0031408,
        0.0,
        0.0
       ]
@@ -450,7 +506,7 @@
       "name": "grasp_2",
       "source": "top-rim",
       "requires_scene_planning": false,
-      "score": 1.47999,
+      "score": 1.51999,
       "approach": [
        0.0,
        0.0,
@@ -458,24 +514,114 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.01376,
-       "width": 0.01276,
-       "q": 0.01276,
+       "contact_width": 0.01359,
+       "width": 0.01259,
+       "q": 0.01259,
        "offset": 0.0,
-       "contact_ratio": 0.48,
+       "contact_ratio": 0.52,
        "collisions": [
-        "closed finger_right:basket_1_g2"
+        "closed finger_left:basket_1_g5"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.0769293,
-       0.0,
-       0.1305719,
+       0.078418,
+       -0.0,
+       0.1407535,
        -0.7071068,
        0.7071068,
        0.0,
        0.0
+      ]
+     },
+     {
+      "name": "grasp_3",
+      "source": "basket_1_g4: close x, approach +y",
+      "requires_scene_planning": false,
+      "score": 1.99898,
+      "approach": [
+       0.00013,
+       -0.0449,
+       -0.99899
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.01334,
+       "width": 0.01234,
+       "q": 0.01234,
+       "offset": 0.0,
+       "contact_ratio": 1.0,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       -0.0002036,
+       0.0703231,
+       0.1092073,
+       -0.001375,
+       0.9997469,
+       -0.022455,
+       3.5e-05
+      ]
+     },
+     {
+      "name": "grasp_4",
+      "source": "basket_1_g4: close x, approach +y flipped",
+      "requires_scene_planning": false,
+      "score": 1.99898,
+      "approach": [
+       0.00013,
+       -0.0449,
+       -0.99899
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.01334,
+       "width": 0.01234,
+       "q": 0.01234,
+       "offset": 0.0,
+       "contact_ratio": 1.0,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       -0.0002036,
+       0.0703231,
+       0.1092073,
+       0.9997469,
+       0.001375,
+       3.5e-05,
+       0.022455
+      ]
+     },
+     {
+      "name": "grasp_5",
+      "source": "basket_1_g3: close x, approach +y",
+      "requires_scene_planning": false,
+      "score": 1.99898,
+      "approach": [
+       -0.00028,
+       0.04489,
+       -0.99899
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.01334,
+       "width": 0.01234,
+       "q": 0.01234,
+       "offset": -0.0,
+       "contact_ratio": 1.0,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       0.0004777,
+       -0.0697829,
+       0.1092073,
+       -0.999743,
+       -0.00314,
+       7e-05,
+       0.0224501
       ]
      }
     ]
@@ -489,7 +635,7 @@
     "handles": [
      {
       "name": "grasp_0",
-      "source": "bbq_sauce_1_g3: close x, approach +z",
+      "source": "bbq_sauce_1_g2: close x, approach -y",
       "requires_scene_planning": false,
       "score": 2.0,
       "approach": [
@@ -499,27 +645,29 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.0262,
-       "width": 0.0252,
-       "q": 0.0252,
+       "contact_width": 0.02856,
+       "width": 0.02756,
+       "q": 0.02756,
        "offset": 0.0,
        "contact_ratio": 1.0,
-       "collisions": [],
+       "collisions": [
+        "closed finger_left:bbq_sauce_1_g3"
+       ],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0,
+       0.00935,
        -0.0,
-       0.03078,
-       0.7402387,
-       -0.6723442,
+       0.01525,
+       1.0,
+       -0.0,
        0.0,
        0.0
       ]
      },
      {
       "name": "grasp_1",
-      "source": "bbq_sauce_1_g3: close x, approach +z flipped",
+      "source": "bbq_sauce_1_g2: close x, approach -y flipped",
       "requires_scene_planning": false,
       "score": 2.0,
       "approach": [
@@ -529,27 +677,29 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.0262,
-       "width": 0.0252,
-       "q": 0.0252,
+       "contact_width": 0.02856,
+       "width": 0.02756,
+       "q": 0.02756,
        "offset": 0.0,
        "contact_ratio": 1.0,
-       "collisions": [],
+       "collisions": [
+        "closed finger_right:bbq_sauce_1_g3"
+       ],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0,
+       0.00935,
        -0.0,
-       0.03078,
-       0.6723442,
-       0.7402387,
+       0.01525,
+       0.0,
+       1.0,
        -0.0,
        0.0
       ]
      },
      {
       "name": "grasp_2",
-      "source": "bbq_sauce_1_g3: close x, approach +z",
+      "source": "bbq_sauce_1_g2: close x, approach -y",
       "requires_scene_planning": false,
       "score": 2.0,
       "approach": [
@@ -559,27 +709,27 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.0262,
-       "width": 0.0252,
-       "q": 0.0252,
+       "contact_width": 0.02856,
+       "width": 0.02756,
+       "q": 0.02756,
        "offset": 0.0,
        "contact_ratio": 1.0,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0,
        -0.0,
-       0.0291,
-       0.7402387,
-       -0.6723442,
+       0.0,
+       0.01525,
+       1.0,
+       -0.0,
        0.0,
        0.0
       ]
      },
      {
       "name": "grasp_3",
-      "source": "bbq_sauce_1_g3: close x, approach +z flipped",
+      "source": "bbq_sauce_1_g2: close x, approach -y flipped",
       "requires_scene_planning": false,
       "score": 2.0,
       "approach": [
@@ -589,27 +739,27 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.0262,
-       "width": 0.0252,
-       "q": 0.0252,
+       "contact_width": 0.02856,
+       "width": 0.02756,
+       "q": 0.02756,
        "offset": 0.0,
        "contact_ratio": 1.0,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0,
        -0.0,
-       0.0291,
-       0.6723442,
-       0.7402387,
+       0.0,
+       0.01525,
+       0.0,
+       1.0,
        -0.0,
        0.0
       ]
      },
      {
       "name": "grasp_4",
-      "source": "bbq_sauce_1_g3: close y, approach +z",
+      "source": "bbq_sauce_1_g2: close x, approach -y",
       "requires_scene_planning": false,
       "score": 2.0,
       "approach": [
@@ -619,27 +769,27 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.02672,
-       "width": 0.02572,
-       "q": 0.02572,
+       "contact_width": 0.02856,
+       "width": 0.02756,
+       "q": 0.02756,
        "offset": 0.0,
        "contact_ratio": 1.0,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
+       -0.0,
        0.0,
+       0.01258,
+       1.0,
        -0.0,
-       0.03078,
-       -0.0480087,
-       0.9988469,
-       -0.0,
+       0.0,
        0.0
       ]
      },
      {
       "name": "grasp_5",
-      "source": "bbq_sauce_1_g3: close y, approach +z flipped",
+      "source": "bbq_sauce_1_g2: close x, approach -y flipped",
       "requires_scene_planning": false,
       "score": 2.0,
       "approach": [
@@ -649,21 +799,21 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.02672,
-       "width": 0.02572,
-       "q": 0.02572,
+       "contact_width": 0.02856,
+       "width": 0.02756,
+       "q": 0.02756,
        "offset": 0.0,
        "contact_ratio": 1.0,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0,
        -0.0,
-       0.03078,
-       0.9988469,
-       0.0480087,
        0.0,
+       0.01258,
+       0.0,
+       1.0,
+       -0.0,
        0.0
       ]
      }
@@ -678,9 +828,9 @@
     "handles": [
      {
       "name": "grasp_0",
-      "source": "top-rim",
+      "source": "black_book_1_g1: close x, approach +z",
       "requires_scene_planning": false,
-      "score": 1.52,
+      "score": 2.0,
       "approach": [
        0.0,
        0.0,
@@ -692,14 +842,14 @@
        "width": 0.02768,
        "q": 0.02768,
        "offset": 0.0,
-       "contact_ratio": 0.52,
+       "contact_ratio": 1.0,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        -0.00047,
        -0.01215,
-       0.12657,
+       0.098595,
        -0.7071068,
        0.7071068,
        0.0,
@@ -708,13 +858,13 @@
      },
      {
       "name": "grasp_1",
-      "source": "black_book_1_g1: close x, approach +y",
+      "source": "black_book_1_g1: close x, approach +z flipped",
       "requires_scene_planning": false,
-      "score": 1.00008,
+      "score": 2.0,
       "approach": [
        0.0,
-       1.0,
-       0.0
+       0.0,
+       -1.0
       ],
       "evaluation": {
        "feasible": true,
@@ -728,23 +878,23 @@
       },
       "handle_xyzquat": [
        -0.00047,
-       -0.024745,
-       0.06937,
-       -0.5,
-       0.5,
-       0.5,
-       0.5
+       -0.01215,
+       0.098595,
+       -0.7071068,
+       -0.7071068,
+       -0.0,
+       0.0
       ]
      },
      {
       "name": "grasp_2",
-      "source": "black_book_1_g1: close x, approach +y flipped",
+      "source": "black_book_1_g1: close x, approach +z",
       "requires_scene_planning": false,
-      "score": 1.00008,
+      "score": 2.0,
       "approach": [
        0.0,
-       1.0,
-       0.0
+       0.0,
+       -1.0
       ],
       "evaluation": {
        "feasible": true,
@@ -758,83 +908,23 @@
       },
       "handle_xyzquat": [
        -0.00047,
-       -0.024745,
-       0.06937,
-       -0.5,
-       -0.5,
-       -0.5,
-       0.5
+       0.03429,
+       0.098595,
+       -0.7071068,
+       0.7071068,
+       0.0,
+       0.0
       ]
      },
      {
       "name": "grasp_3",
-      "source": "black_book_1_g1: close x, approach +y",
+      "source": "black_book_1_g1: close x, approach +z flipped",
       "requires_scene_planning": false,
-      "score": 0.96008,
+      "score": 2.0,
       "approach": [
        0.0,
-       1.0,
-       0.0
-      ],
-      "evaluation": {
-       "feasible": true,
-       "contact_width": 0.02868,
-       "width": 0.02768,
-       "q": 0.02768,
-       "offset": 0.0,
-       "contact_ratio": 0.96,
-       "collisions": [],
-       "reasons": []
-      },
-      "handle_xyzquat": [
-       -0.00047,
-       -0.024745,
-       0.12757,
-       -0.5,
-       0.5,
-       0.5,
-       0.5
-      ]
-     },
-     {
-      "name": "grasp_4",
-      "source": "black_book_1_g1: close x, approach +y flipped",
-      "requires_scene_planning": false,
-      "score": 0.96008,
-      "approach": [
        0.0,
-       1.0,
-       0.0
-      ],
-      "evaluation": {
-       "feasible": true,
-       "contact_width": 0.02868,
-       "width": 0.02768,
-       "q": 0.02768,
-       "offset": 0.0,
-       "contact_ratio": 0.96,
-       "collisions": [],
-       "reasons": []
-      },
-      "handle_xyzquat": [
-       -0.00047,
-       -0.024745,
-       0.12757,
-       -0.5,
-       -0.5,
-       -0.5,
-       0.5
-      ]
-     },
-     {
-      "name": "grasp_5",
-      "source": "black_book_1_g1: close x, approach -y",
-      "requires_scene_planning": false,
-      "score": 1.0,
-      "approach": [
-       -0.0,
-       -1.0,
-       -0.0
+       -1.0
       ],
       "evaluation": {
        "feasible": true,
@@ -848,12 +938,72 @@
       },
       "handle_xyzquat": [
        -0.00047,
-       0.000445,
-       0.06937,
-       0.5,
-       -0.5,
-       0.5,
-       0.5
+       0.03429,
+       0.098595,
+       -0.7071068,
+       -0.7071068,
+       -0.0,
+       0.0
+      ]
+     },
+     {
+      "name": "grasp_4",
+      "source": "black_book_1_g1: close x, approach +z",
+      "requires_scene_planning": false,
+      "score": 1.92,
+      "approach": [
+       0.0,
+       0.0,
+       -1.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.02868,
+       "width": 0.02768,
+       "q": 0.02768,
+       "offset": 0.0,
+       "contact_ratio": 0.92,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       -0.00047,
+       -0.05859,
+       0.098595,
+       -0.7071068,
+       0.7071068,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "name": "grasp_5",
+      "source": "black_book_1_g1: close x, approach +z flipped",
+      "requires_scene_planning": false,
+      "score": 1.92,
+      "approach": [
+       0.0,
+       0.0,
+       -1.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.02868,
+       "width": 0.02768,
+       "q": 0.02768,
+       "offset": 0.0,
+       "contact_ratio": 0.92,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       -0.00047,
+       -0.05859,
+       0.098595,
+       -0.7071068,
+       -0.7071068,
+       -0.0,
+       0.0
       ]
      }
     ]
@@ -886,9 +1036,9 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.02909,
+       -0.02934,
        0.0,
-       -0.01,
+       0.00025,
        -0.0,
        -1.0,
        -0.0,
@@ -916,9 +1066,9 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.02909,
+       -0.02934,
        0.0,
-       -0.01,
+       0.00025,
        1.0,
        0.0,
        -0.0,
@@ -946,9 +1096,9 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.0,
        0.0,
-       -0.01,
+       0.0,
+       0.00025,
        -0.0,
        -1.0,
        -0.0,
@@ -976,9 +1126,9 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.0,
        0.0,
-       -0.01,
+       0.0,
+       0.00025,
        1.0,
        0.0,
        -0.0,
@@ -1006,9 +1156,9 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       0.02909,
+       0.02934,
        0.0,
-       -0.01,
+       0.00025,
        -0.0,
        -1.0,
        -0.0,
@@ -1036,9 +1186,9 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       0.02909,
+       0.02934,
        0.0,
-       -0.01,
+       0.00025,
        1.0,
        0.0,
        -0.0,
@@ -1066,20 +1216,18 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.02743,
-       "width": 0.02643,
-       "q": 0.02643,
+       "contact_width": 0.02738,
+       "width": 0.02638,
+       "q": 0.02638,
        "offset": 0.0,
        "contact_ratio": 0.56,
-       "collisions": [
-        "closed finger_left:chefmate_8_frypan_1_g11"
-       ],
+       "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.1226562,
-       0.0006373,
-       0.0232814,
+       0.1226568,
+       0.0006229,
+       0.0335314,
        0.9997604,
        0.0218902,
        0.0,
@@ -1090,7 +1238,7 @@
       "name": "grasp_1",
       "source": "top-rim",
       "requires_scene_planning": false,
-      "score": 1.32,
+      "score": 1.36,
       "approach": [
        0.0,
        0.0,
@@ -1098,18 +1246,18 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.02787,
-       "width": 0.02687,
-       "q": 0.02687,
+       "contact_width": 0.0278,
+       "width": 0.0268,
+       "q": 0.0268,
        "offset": 0.0,
-       "contact_ratio": 0.32,
+       "contact_ratio": 0.36,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.1299808,
-       0.0006145,
-       0.0299145,
+       0.1299818,
+       0.0006001,
+       0.0401645,
        0.9994127,
        0.034268,
        0.0,
@@ -1139,7 +1287,7 @@
       "handle_xyzquat": [
        0.2577284,
        -0.0,
-       0.0487155,
+       0.0589655,
        0.0,
        1.0,
        0.0,
@@ -1158,10 +1306,10 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.02907,
-       "width": 0.02807,
-       "q": 0.02807,
-       "offset": 0.00093,
+       "contact_width": 0.02903,
+       "width": 0.02803,
+       "q": 0.02803,
+       "offset": 0.00092,
        "contact_ratio": 0.68,
        "collisions": [
         "closed finger_right:chefmate_8_frypan_1_g3"
@@ -1169,9 +1317,9 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       0.1368902,
+       0.1353259,
        0.0,
-       0.0267721,
+       0.0369051,
        0.0,
        0.9979276,
        -0.0,
@@ -1190,10 +1338,10 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.02907,
-       "width": 0.02807,
-       "q": 0.02807,
-       "offset": -0.00093,
+       "contact_width": 0.02903,
+       "width": 0.02803,
+       "q": 0.02803,
+       "offset": -0.00092,
        "contact_ratio": 0.68,
        "collisions": [
         "closed finger_left:chefmate_8_frypan_1_g3"
@@ -1201,9 +1349,9 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       0.1368902,
+       0.1353259,
        0.0,
-       0.0267721,
+       0.0369051,
        0.9979276,
        -0.0,
        0.0643468,
@@ -1231,9 +1379,9 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       0.2508784,
-       -0.0,
-       0.0415335,
+       0.1925679,
+       0.0,
+       0.0443179,
        0.0,
        0.9979276,
        -0.0,
@@ -1270,9 +1418,9 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.0005,
+       -0.03185,
        0.0,
-       -0.007515,
+       0.00088,
        -0.0,
        -1.0,
        -0.0,
@@ -1300,9 +1448,9 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.0005,
+       -0.03185,
        0.0,
-       -0.007515,
+       0.00088,
        1.0,
        0.0,
        -0.0,
@@ -1332,7 +1480,7 @@
       "handle_xyzquat": [
        -0.0005,
        0.0,
-       -0.00937,
+       0.00311,
        -0.0,
        -1.0,
        -0.0,
@@ -1362,7 +1510,7 @@
       "handle_xyzquat": [
        -0.0005,
        0.0,
-       -0.00937,
+       0.00311,
        1.0,
        0.0,
        -0.0,
@@ -1390,9 +1538,9 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0306,
+       -0.0005,
        0.0,
-       -0.007515,
+       0.00088,
        -0.0,
        -1.0,
        -0.0,
@@ -1420,9 +1568,9 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0306,
+       -0.0005,
        0.0,
-       -0.007515,
+       0.00088,
        1.0,
        0.0,
        -0.0,
@@ -1440,12 +1588,12 @@
     "handles": [
      {
       "name": "grasp_0",
-      "source": "top-rim",
+      "source": "cookies_1_g1: close y, approach +x",
       "requires_scene_planning": false,
-      "score": 1.52,
+      "score": 2.0,
       "approach": [
        0.0,
-       0.0,
+       -0.0,
        -1.0
       ],
       "evaluation": {
@@ -1454,17 +1602,167 @@
        "width": 0.06108,
        "q": 0.06108,
        "offset": 0.0,
-       "contact_ratio": 0.52,
+       "contact_ratio": 1.0,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        0.0,
-       0.0,
-       -0.0006,
+       -0.03256,
+       0.000325,
        0.7071068,
        -0.7071068,
        0.0,
+       0.0
+      ]
+     },
+     {
+      "name": "grasp_1",
+      "source": "cookies_1_g1: close y, approach +x flipped",
+      "requires_scene_planning": false,
+      "score": 2.0,
+      "approach": [
+       0.0,
+       -0.0,
+       -1.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.06208,
+       "width": 0.06108,
+       "q": 0.06108,
+       "offset": 0.0,
+       "contact_ratio": 1.0,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       0.0,
+       -0.03256,
+       0.000325,
+       0.7071068,
+       0.7071068,
+       -0.0,
+       0.0
+      ]
+     },
+     {
+      "name": "grasp_2",
+      "source": "cookies_1_g1: close y, approach +x",
+      "requires_scene_planning": false,
+      "score": 2.0,
+      "approach": [
+       0.0,
+       -0.0,
+       -1.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.06208,
+       "width": 0.06108,
+       "q": 0.06108,
+       "offset": 0.0,
+       "contact_ratio": 1.0,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       0.0,
+       -0.03256,
+       0.00025,
+       0.7071068,
+       -0.7071068,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "name": "grasp_3",
+      "source": "cookies_1_g1: close y, approach +x flipped",
+      "requires_scene_planning": false,
+      "score": 2.0,
+      "approach": [
+       0.0,
+       -0.0,
+       -1.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.06208,
+       "width": 0.06108,
+       "q": 0.06108,
+       "offset": 0.0,
+       "contact_ratio": 1.0,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       0.0,
+       -0.03256,
+       0.00025,
+       0.7071068,
+       0.7071068,
+       -0.0,
+       0.0
+      ]
+     },
+     {
+      "name": "grasp_4",
+      "source": "cookies_1_g1: close y, approach +x",
+      "requires_scene_planning": false,
+      "score": 2.0,
+      "approach": [
+       0.0,
+       -0.0,
+       -1.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.06208,
+       "width": 0.06108,
+       "q": 0.06108,
+       "offset": 0.0,
+       "contact_ratio": 1.0,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       -0.0,
+       0.0,
+       0.000325,
+       0.7071068,
+       -0.7071068,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "name": "grasp_5",
+      "source": "cookies_1_g1: close y, approach +x flipped",
+      "requires_scene_planning": false,
+      "score": 2.0,
+      "approach": [
+       0.0,
+       -0.0,
+       -1.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.06208,
+       "width": 0.06108,
+       "q": 0.06108,
+       "offset": 0.0,
+       "contact_ratio": 1.0,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       -0.0,
+       0.0,
+       0.000325,
+       0.7071068,
+       0.7071068,
+       -0.0,
        0.0
       ]
      }
@@ -1500,7 +1798,7 @@
       "handle_xyzquat": [
        0.0,
        0.0,
-       -0.001064,
+       0.009186,
        0.0,
        1.0,
        0.0,
@@ -1528,25 +1826,25 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.00639,
-       "width": 0.00539,
-       "q": 0.00539,
-       "offset": -0.0,
+       "contact_width": 0.00664,
+       "width": 0.00564,
+       "q": 0.00564,
+       "offset": 0.0,
        "contact_ratio": 0.52,
        "collisions": [
-        "closed finger_left:glazed_rim_porcelain_ramekin_1_g2",
-        "closed finger_left:glazed_rim_porcelain_ramekin_1_g11",
-        "closed finger_right:glazed_rim_porcelain_ramekin_1_g10",
-        "closed finger_right:glazed_rim_porcelain_ramekin_1_g11"
+        "closed finger_right:glazed_rim_porcelain_ramekin_1_g5",
+        "closed finger_right:glazed_rim_porcelain_ramekin_1_g6",
+        "closed finger_right:glazed_rim_porcelain_ramekin_1_g7",
+        "closed finger_right:glazed_rim_porcelain_ramekin_1_g8"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0174,
-       -0.0360997,
-       0.0326648,
-       0.9748933,
-       0.2226724,
+       -0.0365904,
+       -0.0165159,
+       0.0429148,
+       0.8400794,
+       -0.5424634,
        0.0,
        0.0
       ]
@@ -1563,24 +1861,120 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.00644,
-       "width": 0.00544,
-       "q": 0.00544,
+       "contact_width": 0.00652,
+       "width": 0.00552,
+       "q": 0.00552,
        "offset": -0.0,
        "contact_ratio": 0.52,
        "collisions": [
-        "closed finger_left:glazed_rim_porcelain_ramekin_1_g3",
-        "closed finger_left:glazed_rim_porcelain_ramekin_1_g17",
-        "closed finger_right:glazed_rim_porcelain_ramekin_1_g3",
-        "closed finger_right:glazed_rim_porcelain_ramekin_1_g16",
-        "closed finger_right:glazed_rim_porcelain_ramekin_1_g17"
+        "closed finger_right:glazed_rim_porcelain_ramekin_1_g7",
+        "closed finger_right:glazed_rim_porcelain_ramekin_1_g8",
+        "closed finger_right:glazed_rim_porcelain_ramekin_1_g9"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.0180584,
-       0.0357504,
-       0.0326648,
+       -0.0274977,
+       -0.0291532,
+       0.0429148,
+       0.9293768,
+       -0.3691324,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "name": "grasp_2",
+      "source": "top-rim",
+      "requires_scene_planning": false,
+      "score": 1.52,
+      "approach": [
+       0.0,
+       0.0,
+       -1.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.00621,
+       "width": 0.00521,
+       "q": 0.00521,
+       "offset": 0.0,
+       "contact_ratio": 0.52,
+       "collisions": [
+        "closed finger_right:glazed_rim_porcelain_ramekin_1_g10"
+       ],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       0.0174642,
+       -0.0362329,
+       0.0429148,
+       0.9748933,
+       0.2226724,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "name": "grasp_3",
+      "source": "top-rim",
+      "requires_scene_planning": false,
+      "score": 1.52,
+      "approach": [
+       0.0,
+       0.0,
+       -1.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.00659,
+       "width": 0.00559,
+       "q": 0.00559,
+       "offset": 0.0,
+       "contact_ratio": 0.52,
+       "collisions": [
+        "closed finger_right:glazed_rim_porcelain_ramekin_1_g13",
+        "closed finger_right:glazed_rim_porcelain_ramekin_1_g14",
+        "closed finger_right:glazed_rim_porcelain_ramekin_1_g15"
+       ],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       0.0266473,
+       0.0299834,
+       0.0429148,
+       0.3554277,
+       0.9347038,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "name": "grasp_4",
+      "source": "top-rim",
+      "requires_scene_planning": false,
+      "score": 1.52,
+      "approach": [
+       0.0,
+       0.0,
+       -1.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.00626,
+       "width": 0.00526,
+       "q": 0.00526,
+       "offset": 0.0,
+       "contact_ratio": 0.52,
+       "collisions": [
+        "closed finger_right:glazed_rim_porcelain_ramekin_1_g16"
+       ],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       -0.0181246,
+       0.0358815,
+       0.0429148,
        -0.2317125,
        0.9727843,
        0.0,
@@ -1588,7 +1982,7 @@
       ]
      },
      {
-      "name": "grasp_2",
+      "name": "grasp_5",
       "source": "top-rim",
       "requires_scene_planning": false,
       "score": 1.48,
@@ -1599,131 +1993,23 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.00668,
-       "width": 0.00568,
-       "q": 0.00568,
-       "offset": -0.0,
+       "contact_width": 0.00652,
+       "width": 0.00552,
+       "q": 0.00552,
+       "offset": 0.0,
        "contact_ratio": 0.48,
        "collisions": [
-        "closed finger_left:glazed_rim_porcelain_ramekin_1_g13",
-        "closed finger_left:glazed_rim_porcelain_ramekin_1_g15",
         "closed finger_right:glazed_rim_porcelain_ramekin_1_g13",
-        "closed finger_right:glazed_rim_porcelain_ramekin_1_g14",
-        "closed finger_right:glazed_rim_porcelain_ramekin_1_g15"
+        "closed finger_right:glazed_rim_porcelain_ramekin_1_g14"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0265269,
-       0.029848,
-       0.0326648,
-       0.3554277,
-       0.9347038,
-       0.0,
-       0.0
-      ]
-     },
-     {
-      "name": "grasp_3",
-      "source": "top-rim",
-      "requires_scene_planning": false,
-      "score": 1.44,
-      "approach": [
-       0.0,
-       0.0,
-       -1.0
-      ],
-      "evaluation": {
-       "feasible": true,
-       "contact_width": 0.00684,
-       "width": 0.00584,
-       "q": 0.00584,
-       "offset": -0.0,
-       "contact_ratio": 0.44,
-       "collisions": [
-        "closed finger_left:glazed_rim_porcelain_ramekin_1_g2",
-        "closed finger_left:glazed_rim_porcelain_ramekin_1_g9",
-        "closed finger_right:glazed_rim_porcelain_ramekin_1_g9"
-       ],
-       "reasons": []
-      },
-      "handle_xyzquat": [
-       -0.0,
-       -0.0398572,
-       0.0326648,
-       -0.0,
-       1.0,
-       0.0,
-       0.0
-      ]
-     },
-     {
-      "name": "grasp_4",
-      "source": "top-rim",
-      "requires_scene_planning": false,
-      "score": 1.44,
-      "approach": [
-       0.0,
-       0.0,
-       -1.0
-      ],
-      "evaluation": {
-       "feasible": true,
-       "contact_width": 0.00684,
-       "width": 0.00584,
-       "q": 0.00584,
-       "offset": -0.0,
-       "contact_ratio": 0.44,
-       "collisions": [
-        "closed finger_left:glazed_rim_porcelain_ramekin_1_g2",
-        "closed finger_left:glazed_rim_porcelain_ramekin_1_g8",
-        "closed finger_right:glazed_rim_porcelain_ramekin_1_g2",
-        "closed finger_right:glazed_rim_porcelain_ramekin_1_g8",
-        "closed finger_right:glazed_rim_porcelain_ramekin_1_g9"
-       ],
-       "reasons": []
-      },
-      "handle_xyzquat": [
-       -0.0140919,
-       -0.0372825,
-       0.0326648,
-       0.9837158,
-       -0.1797308,
-       0.0,
-       0.0
-      ]
-     },
-     {
-      "name": "grasp_5",
-      "source": "top-rim",
-      "requires_scene_planning": false,
-      "score": 1.44,
-      "approach": [
-       0.0,
-       0.0,
-       -1.0
-      ],
-      "evaluation": {
-       "feasible": true,
-       "contact_width": 0.00681,
-       "width": 0.00581,
-       "q": 0.00581,
-       "offset": -0.0,
-       "contact_ratio": 0.44,
-       "collisions": [
-        "closed finger_left:glazed_rim_porcelain_ramekin_1_g12",
-        "closed finger_right:glazed_rim_porcelain_ramekin_1_g10",
-        "closed finger_right:glazed_rim_porcelain_ramekin_1_g11",
-        "closed finger_right:glazed_rim_porcelain_ramekin_1_g12"
-       ],
-       "reasons": []
-      },
-      "handle_xyzquat": [
-       0.0307485,
-       -0.0253787,
-       0.0326648,
-       0.9045984,
-       0.4262649,
+       0.0360074,
+       0.0175847,
+       0.0429148,
+       0.5296617,
+       0.848209,
        0.0,
        0.0
       ]
@@ -1758,8 +2044,8 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.002585,
-       0.00595,
+       0.00804,
+       0.0062,
        0.00079,
        0.5,
        -0.5,
@@ -1788,8 +2074,8 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.002585,
-       0.00595,
+       0.00804,
+       0.0062,
        0.00079,
        -0.5,
        -0.5,
@@ -1818,8 +2104,8 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.00955,
-       0.00595,
+       0.0007,
+       0.0062,
        0.00079,
        0.5,
        -0.5,
@@ -1848,8 +2134,8 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.00955,
-       0.00595,
+       0.0007,
+       0.0062,
        0.00079,
        -0.5,
        -0.5,
@@ -1878,7 +2164,7 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.002585,
+       0.00804,
        0.00369,
        0.00079,
        0.5,
@@ -1908,7 +2194,7 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.002585,
+       0.00804,
        0.00369,
        0.00079,
        -0.5,
@@ -1947,8 +2233,8 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.0,
-       0.014085,
+       0.03342,
+       0.02471,
        -0.0,
        -0.0,
        0.7071068,
@@ -1977,8 +2263,8 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.0,
-       0.014085,
+       0.03342,
+       0.02471,
        -0.0,
        0.7071068,
        0.0,
@@ -2007,8 +2293,8 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.03317,
-       0.014085,
+       -0.0,
+       0.02471,
        -0.0,
        -0.0,
        0.7071068,
@@ -2037,8 +2323,8 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.03317,
-       0.014085,
+       -0.0,
+       0.02471,
        -0.0,
        0.7071068,
        0.0,
@@ -2050,7 +2336,7 @@
       "name": "grasp_4",
       "source": "macaroni_and_cheese_1_g1: close x, approach -z",
       "requires_scene_planning": false,
-      "score": 1.96,
+      "score": 2.0,
       "approach": [
        0.0,
        -1.0,
@@ -2062,13 +2348,13 @@
        "width": 0.02444,
        "q": 0.02444,
        "offset": 0.0,
-       "contact_ratio": 0.96,
+       "contact_ratio": 1.0,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.03317,
-       0.014085,
+       -0.03342,
+       0.02471,
        -0.0,
        -0.0,
        0.7071068,
@@ -2080,7 +2366,7 @@
       "name": "grasp_5",
       "source": "macaroni_and_cheese_1_g1: close x, approach -z flipped",
       "requires_scene_planning": false,
-      "score": 1.96,
+      "score": 2.0,
       "approach": [
        0.0,
        -1.0,
@@ -2092,13 +2378,13 @@
        "width": 0.02444,
        "q": 0.02444,
        "offset": 0.0,
-       "contact_ratio": 0.96,
+       "contact_ratio": 1.0,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.03317,
-       0.014085,
+       -0.03342,
+       0.02471,
        -0.0,
        0.7071068,
        0.0,
@@ -2119,7 +2405,7 @@
       "name": "grasp_0",
       "source": "milk_1_g4: close z, approach +x",
       "requires_scene_planning": false,
-      "score": 1.24,
+      "score": 1.28,
       "approach": [
        -0.0,
        -1.0,
@@ -2131,13 +2417,13 @@
        "width": 0.052,
        "q": 0.052,
        "offset": 0.0,
-       "contact_ratio": 0.24,
+       "contact_ratio": 0.28,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        5e-05,
-       0.04849,
+       0.05874,
        5e-05,
        0.5,
        -0.5,
@@ -2149,7 +2435,7 @@
       "name": "grasp_1",
       "source": "milk_1_g4: close z, approach +x flipped",
       "requires_scene_planning": false,
-      "score": 1.24,
+      "score": 1.28,
       "approach": [
        -0.0,
        -1.0,
@@ -2161,13 +2447,13 @@
        "width": 0.052,
        "q": 0.052,
        "offset": 0.0,
-       "contact_ratio": 0.24,
+       "contact_ratio": 0.28,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        5e-05,
-       0.04849,
+       0.05874,
        5e-05,
        0.5,
        0.5,
@@ -2187,17 +2473,17 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.03218,
-       "width": 0.03118,
-       "q": 0.03118,
-       "offset": -4e-05,
+       "contact_width": 0.03042,
+       "width": 0.02942,
+       "q": 0.02942,
+       "offset": -2e-05,
        "contact_ratio": 0.2,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        5e-05,
-       0.04849,
+       0.05874,
        5e-05,
        0.7071068,
        -0.0,
@@ -2217,17 +2503,17 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.03218,
-       "width": 0.03118,
-       "q": 0.03118,
-       "offset": 4e-05,
+       "contact_width": 0.03042,
+       "width": 0.02942,
+       "q": 0.02942,
+       "offset": 2e-05,
        "contact_ratio": 0.2,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        5e-05,
-       0.04849,
+       0.05874,
        5e-05,
        -0.0,
        -0.7071068,
@@ -2247,17 +2533,17 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.03218,
-       "width": 0.03118,
-       "q": 0.03118,
-       "offset": -4e-05,
+       "contact_width": 0.03042,
+       "width": 0.02942,
+       "q": 0.02942,
+       "offset": -2e-05,
        "contact_ratio": 0.16,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.01755,
-       0.04849,
+       0.0178,
+       0.05874,
        5e-05,
        0.7071068,
        -0.0,
@@ -2277,17 +2563,17 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.03218,
-       "width": 0.03118,
-       "q": 0.03118,
-       "offset": 4e-05,
+       "contact_width": 0.03042,
+       "width": 0.02942,
+       "q": 0.02942,
+       "offset": 2e-05,
        "contact_ratio": 0.16,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.01755,
-       0.04849,
+       0.0178,
+       0.05874,
        5e-05,
        -0.0,
        -0.7071068,
@@ -2327,7 +2613,7 @@
       "handle_xyzquat": [
        0.0,
        0.0785598,
-       0.0459812,
+       0.0562312,
        -0.7071068,
        0.7071068,
        0.0,
@@ -2349,18 +2635,15 @@
        "contact_width": 0.0131,
        "width": 0.0121,
        "q": 0.0121,
-       "offset": 0.0,
+       "offset": -0.0,
        "contact_ratio": 0.52,
-       "collisions": [
-        "closed finger_left:moka_pot_1_g11",
-        "closed finger_right:moka_pot_1_g11"
-       ],
+       "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        0.0,
        0.05829,
-       0.05724,
+       0.06749,
        0.7071068,
        -0.7071068,
        0.0,
@@ -2390,7 +2673,7 @@
       "handle_xyzquat": [
        0.0,
        0.0693451,
-       0.0583916,
+       0.0686416,
        0.7071068,
        -0.7071068,
        0.0,
@@ -2420,7 +2703,7 @@
       "handle_xyzquat": [
        0.0,
        -0.00134,
-       0.07569,
+       0.08594,
        0.0,
        1.0,
        0.0,
@@ -2450,7 +2733,7 @@
       "handle_xyzquat": [
        0.0,
        -0.00134,
-       0.07569,
+       0.08594,
        -0.7071068,
        0.7071068,
        0.0,
@@ -2469,21 +2752,18 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.06557,
-       "width": 0.06457,
-       "q": 0.06457,
-       "offset": 0.0,
+       "contact_width": 0.06552,
+       "width": 0.06452,
+       "q": 0.06452,
+       "offset": 9e-05,
        "contact_ratio": 0.24,
-       "collisions": [
-        "closed finger_left:moka_pot_1_g6",
-        "closed finger_right:moka_pot_1_g7"
-       ],
+       "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
-       9.84e-05,
+       -0.0,
        -0.02594,
-       0.05699,
+       0.06724,
        0.7071068,
        0.7071068,
        0.0,
@@ -2503,7 +2783,7 @@
       "name": "grasp_0",
       "source": "orange_juice_1_g4: close z, approach +x",
       "requires_scene_planning": false,
-      "score": 1.24,
+      "score": 1.28,
       "approach": [
        -0.0,
        -1.0,
@@ -2515,13 +2795,13 @@
        "width": 0.052,
        "q": 0.052,
        "offset": 0.0,
-       "contact_ratio": 0.24,
+       "contact_ratio": 0.28,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        -5e-05,
-       0.04849,
+       0.05874,
        -5e-05,
        0.5,
        -0.5,
@@ -2533,7 +2813,7 @@
       "name": "grasp_1",
       "source": "orange_juice_1_g4: close z, approach +x flipped",
       "requires_scene_planning": false,
-      "score": 1.24,
+      "score": 1.28,
       "approach": [
        -0.0,
        -1.0,
@@ -2545,13 +2825,13 @@
        "width": 0.052,
        "q": 0.052,
        "offset": 0.0,
-       "contact_ratio": 0.24,
+       "contact_ratio": 0.28,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        -5e-05,
-       0.04849,
+       0.05874,
        -5e-05,
        0.5,
        0.5,
@@ -2571,17 +2851,17 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.03218,
-       "width": 0.03118,
-       "q": 0.03118,
-       "offset": 4e-05,
+       "contact_width": 0.03042,
+       "width": 0.02942,
+       "q": 0.02942,
+       "offset": 2e-05,
        "contact_ratio": 0.2,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        -5e-05,
-       0.04849,
+       0.05874,
        -5e-05,
        0.7071068,
        -0.0,
@@ -2601,17 +2881,17 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.03218,
-       "width": 0.03118,
-       "q": 0.03118,
-       "offset": -4e-05,
+       "contact_width": 0.03042,
+       "width": 0.02942,
+       "q": 0.02942,
+       "offset": -2e-05,
        "contact_ratio": 0.2,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        -5e-05,
-       0.04849,
+       0.05874,
        -5e-05,
        -0.0,
        -0.7071068,
@@ -2631,17 +2911,17 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.03218,
-       "width": 0.03118,
-       "q": 0.03118,
-       "offset": 4e-05,
+       "contact_width": 0.03042,
+       "width": 0.02942,
+       "q": 0.02942,
+       "offset": 2e-05,
        "contact_ratio": 0.16,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.01745,
-       0.04849,
+       0.0177,
+       0.05874,
        -5e-05,
        0.7071068,
        -0.0,
@@ -2661,17 +2941,17 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.03218,
-       "width": 0.03118,
-       "q": 0.03118,
-       "offset": -4e-05,
+       "contact_width": 0.03042,
+       "width": 0.02942,
+       "q": 0.02942,
+       "offset": -2e-05,
        "contact_ratio": 0.16,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.01745,
-       0.04849,
+       0.0177,
+       0.05874,
        -5e-05,
        -0.0,
        -0.7071068,
@@ -2700,20 +2980,18 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.0107,
-       "width": 0.0097,
-       "q": 0.0097,
-       "offset": 0.00046,
+       "contact_width": 0.01151,
+       "width": 0.01051,
+       "q": 0.01051,
+       "offset": 0.00072,
        "contact_ratio": 0.44,
-       "collisions": [
-        "closed finger_right:plate_1_g4"
-       ],
+       "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0195036,
-       0.0429904,
-       0.0056148,
+       0.0197535,
+       0.0530027,
+       0.0091708,
        0.0104549,
        0.8166707,
        -0.576962,
@@ -2732,20 +3010,18 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.0107,
-       "width": 0.0097,
-       "q": 0.0097,
-       "offset": -0.00046,
+       "contact_width": 0.01151,
+       "width": 0.01051,
+       "q": 0.01051,
+       "offset": -0.00072,
        "contact_ratio": 0.44,
-       "collisions": [
-        "closed finger_left:plate_1_g4"
-       ],
+       "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0195036,
-       0.0429904,
-       0.0056148,
+       0.0197535,
+       0.0530027,
+       0.0091708,
        0.8166707,
        -0.0104549,
        0.007385,
@@ -2764,20 +3040,18 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.01079,
-       "width": 0.00979,
-       "q": 0.00979,
-       "offset": 0.00026,
+       "contact_width": 0.01149,
+       "width": 0.01049,
+       "q": 0.01049,
+       "offset": 0.00047,
        "contact_ratio": 0.4,
-       "collisions": [
-        "closed finger_right:plate_1_g4"
-       ],
+       "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0195036,
-       0.0386878,
-       0.0040895,
+       0.0197535,
+       0.0483466,
+       0.0075203,
        0.0104549,
        0.8166707,
        -0.576962,
@@ -2796,20 +3070,18 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.01079,
-       "width": 0.00979,
-       "q": 0.00979,
-       "offset": -0.00026,
+       "contact_width": 0.01149,
+       "width": 0.01049,
+       "q": 0.01049,
+       "offset": -0.00047,
        "contact_ratio": 0.4,
-       "collisions": [
-        "closed finger_left:plate_1_g4"
-       ],
+       "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0195036,
-       0.0386878,
-       0.0040895,
+       0.0197535,
+       0.0483466,
+       0.0075203,
        0.8166707,
        -0.0104549,
        0.007385,
@@ -2828,20 +3100,18 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.01243,
-       "width": 0.01143,
-       "q": 0.01143,
-       "offset": -0.0011,
+       "contact_width": 0.01225,
+       "width": 0.01125,
+       "q": 0.01125,
+       "offset": -0.00109,
        "contact_ratio": 0.32,
-       "collisions": [
-        "closed finger_left:plate_1_g10"
-       ],
+       "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.0195036,
-       0.0433243,
-       0.0046733,
+       -0.0197535,
+       0.0533408,
+       0.0082173,
        0.0104549,
        0.8166707,
        -0.576962,
@@ -2860,20 +3130,18 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.01243,
-       "width": 0.01143,
-       "q": 0.01143,
-       "offset": 0.0011,
+       "contact_width": 0.01225,
+       "width": 0.01125,
+       "q": 0.01125,
+       "offset": 0.00109,
        "contact_ratio": 0.32,
-       "collisions": [
-        "closed finger_right:plate_1_g10"
-       ],
+       "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.0195036,
-       0.0433243,
-       0.0046733,
+       -0.0197535,
+       0.0533408,
+       0.0082173,
        0.8166707,
        -0.0104549,
        0.007385,
@@ -2891,41 +3159,11 @@
     "handles": [
      {
       "name": "grasp_0",
-      "source": "top-rim",
+      "source": "popcorn_1_g1: close y, approach +x",
       "requires_scene_planning": false,
-      "score": 1.6,
+      "score": 2.0,
       "approach": [
-       0.0,
-       0.0,
-       -1.0
-      ],
-      "evaluation": {
-       "feasible": true,
-       "contact_width": 0.062,
-       "width": 0.061,
-       "q": 0.061,
-       "offset": -0.0,
-       "contact_ratio": 0.6,
-       "collisions": [],
-       "reasons": []
-      },
-      "handle_xyzquat": [
-       0.0,
-       0.0,
-       0.0,
-       0.7071068,
-       0.7071068,
-       0.0,
-       0.0
-      ]
-     },
-     {
-      "name": "grasp_1",
-      "source": "top-rim",
-      "requires_scene_planning": false,
-      "score": 1.52,
-      "approach": [
-       0.0,
+       -0.0,
        0.0,
        -1.0
       ],
@@ -2935,17 +3173,167 @@
        "width": 0.041,
        "q": 0.041,
        "offset": 0.0,
-       "contact_ratio": 0.52,
+       "contact_ratio": 1.0,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       -0.02225,
+       0.0,
+       0.00025,
+       -0.0,
+       -1.0,
+       -0.0,
+       0.0
+      ]
+     },
+     {
+      "name": "grasp_1",
+      "source": "popcorn_1_g1: close y, approach +x flipped",
+      "requires_scene_planning": false,
+      "score": 2.0,
+      "approach": [
+       -0.0,
+       0.0,
+       -1.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.042,
+       "width": 0.041,
+       "q": 0.041,
+       "offset": 0.0,
+       "contact_ratio": 1.0,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       -0.02225,
+       0.0,
+       0.00025,
+       1.0,
+       0.0,
+       -0.0,
+       0.0
+      ]
+     },
+     {
+      "name": "grasp_2",
+      "source": "popcorn_1_g1: close y, approach +x",
+      "requires_scene_planning": false,
+      "score": 2.0,
+      "approach": [
+       -0.0,
+       0.0,
+       -1.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.042,
+       "width": 0.041,
+       "q": 0.041,
+       "offset": 0.0,
+       "contact_ratio": 1.0,
        "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        0.0,
        0.0,
+       0.000625,
+       -0.0,
+       -1.0,
+       -0.0,
+       0.0
+      ]
+     },
+     {
+      "name": "grasp_3",
+      "source": "popcorn_1_g1: close y, approach +x flipped",
+      "requires_scene_planning": false,
+      "score": 2.0,
+      "approach": [
+       -0.0,
+       0.0,
+       -1.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.042,
+       "width": 0.041,
+       "q": 0.041,
+       "offset": 0.0,
+       "contact_ratio": 1.0,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
        0.0,
        0.0,
+       0.000625,
        1.0,
        0.0,
+       -0.0,
+       0.0
+      ]
+     },
+     {
+      "name": "grasp_4",
+      "source": "popcorn_1_g1: close y, approach +x",
+      "requires_scene_planning": false,
+      "score": 2.0,
+      "approach": [
+       -0.0,
+       0.0,
+       -1.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.042,
+       "width": 0.041,
+       "q": 0.041,
+       "offset": 0.0,
+       "contact_ratio": 1.0,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       0.0,
+       0.0,
+       0.00025,
+       -0.0,
+       -1.0,
+       -0.0,
+       0.0
+      ]
+     },
+     {
+      "name": "grasp_5",
+      "source": "popcorn_1_g1: close y, approach +x flipped",
+      "requires_scene_planning": false,
+      "score": 2.0,
+      "approach": [
+       -0.0,
+       0.0,
+       -1.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.042,
+       "width": 0.041,
+       "q": 0.041,
+       "offset": 0.0,
+       "contact_ratio": 1.0,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       0.0,
+       0.0,
+       0.00025,
+       1.0,
+       0.0,
+       -0.0,
        0.0
       ]
      }
@@ -2981,7 +3369,7 @@
       "handle_xyzquat": [
        -0.04382,
        -0.00246,
-       0.09328,
+       0.10353,
        -0.0,
        1.0,
        0.0,
@@ -3011,7 +3399,7 @@
       "handle_xyzquat": [
        -0.04382,
        -0.0,
-       0.09328,
+       0.10353,
        0.7071068,
        0.7071068,
        0.0,
@@ -3041,7 +3429,7 @@
       "handle_xyzquat": [
        0.03113,
        -0.00246,
-       0.09328,
+       0.10353,
        -0.0,
        1.0,
        0.0,
@@ -3071,7 +3459,7 @@
       "handle_xyzquat": [
        0.03113,
        -0.0,
-       0.09328,
+       0.10353,
        0.7071068,
        0.7071068,
        0.0,
@@ -3101,7 +3489,7 @@
       "handle_xyzquat": [
        0.03113,
        -0.03584,
-       0.09328,
+       0.10353,
        0.7071068,
        0.7071068,
        0.0,
@@ -3131,7 +3519,7 @@
       "handle_xyzquat": [
        -0.04382,
        -0.03584,
-       0.09328,
+       0.10353,
        0.7071068,
        0.7071068,
        0.0,
@@ -3159,9 +3547,9 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.00764,
-       "width": 0.00664,
-       "q": 0.00664,
+       "contact_width": 0.00759,
+       "width": 0.00659,
+       "q": 0.00659,
        "offset": -0.0,
        "contact_ratio": 0.52,
        "collisions": [
@@ -3170,9 +3558,9 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0131784,
-       -0.0211658,
-       0.120839,
+       0.0132294,
+       -0.0212049,
+       0.131089,
        0.8968404,
        0.4423543,
        0.0,
@@ -3191,10 +3579,10 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.00764,
-       "width": 0.00664,
-       "q": 0.00664,
-       "offset": 0.0,
+       "contact_width": 0.00759,
+       "width": 0.00659,
+       "q": 0.00659,
+       "offset": -0.0,
        "contact_ratio": 0.52,
        "collisions": [
         "closed finger_right:red_coffee_mug_1_g4"
@@ -3202,9 +3590,9 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0166993,
-       0.0074404,
-       0.120839,
+       0.0167611,
+       0.0074581,
+       0.131089,
        0.6020717,
        0.798442,
        0.0,
@@ -3223,22 +3611,22 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.00764,
-       "width": 0.00664,
-       "q": 0.00664,
+       "contact_width": 0.00759,
+       "width": 0.00659,
+       "q": 0.00659,
        "offset": 0.0,
        "contact_ratio": 0.52,
        "collisions": [
-        "closed finger_right:red_coffee_mug_1_g5"
+        "closed finger_right:red_coffee_mug_1_g6"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.0046643,
-       0.0346704,
-       0.120839,
-       0.1585147,
-       0.9873566,
+       -0.0378764,
+       0.0298458,
+       0.131089,
+       -0.3286433,
+       0.9444541,
        0.0,
        0.0
       ]
@@ -3247,7 +3635,7 @@
       "name": "grasp_3",
       "source": "top-rim",
       "requires_scene_planning": false,
-      "score": 1.52,
+      "score": 1.48,
       "approach": [
        0.0,
        0.0,
@@ -3255,22 +3643,22 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.00764,
-       "width": 0.00664,
-       "q": 0.00664,
-       "offset": -0.0,
-       "contact_ratio": 0.52,
+       "contact_width": 0.00759,
+       "width": 0.00659,
+       "q": 0.00659,
+       "offset": 0.0,
+       "contact_ratio": 0.48,
        "collisions": [
-        "closed finger_right:red_coffee_mug_1_g6"
+        "closed finger_left:red_coffee_mug_1_g3"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.0378365,
-       0.0297954,
-       0.120839,
-       -0.3286433,
-       0.9444541,
+       -0.01551,
+       -0.0415739,
+       0.131089,
+       -0.0,
+       1.0,
        0.0,
        0.0
       ]
@@ -3287,22 +3675,22 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.00764,
-       "width": 0.00664,
-       "q": 0.00664,
+       "contact_width": 0.00759,
+       "width": 0.00659,
+       "q": 0.00659,
        "offset": -0.0,
        "contact_ratio": 0.48,
        "collisions": [
-        "closed finger_left:red_coffee_mug_1_g3"
+        "closed finger_right:red_coffee_mug_1_g5"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.01551,
-       -0.0415096,
-       0.120839,
-       -0.0,
-       1.0,
+       -0.0046442,
+       0.0347315,
+       0.131089,
+       0.1585147,
+       0.9873566,
        0.0,
        0.0
       ]
@@ -3319,10 +3707,10 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.00764,
-       "width": 0.00664,
-       "q": 0.00664,
-       "offset": 0.0,
+       "contact_width": 0.00759,
+       "width": 0.00659,
+       "q": 0.00659,
+       "offset": -0.0,
        "contact_ratio": 0.48,
        "collisions": [
         "closed finger_right:red_coffee_mug_1_g7"
@@ -3330,9 +3718,9 @@
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.0539817,
-       -0.002779,
-       0.120839,
+       -0.054046,
+       -0.0027821,
+       0.131089,
        0.7236654,
        -0.690151,
        0.0,
@@ -3360,19 +3748,17 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.0528,
-       "width": 0.0518,
-       "q": 0.0518,
-       "offset": -0.00057,
+       "contact_width": 0.05255,
+       "width": 0.05155,
+       "q": 0.05155,
+       "offset": -0.00054,
        "contact_ratio": 0.2,
-       "collisions": [
-        "closed finger_left:tomato_sauce_1_g15"
-       ],
+       "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        0.02595,
-       0.0038,
+       0.014425,
        -0.00209,
        0.7071068,
        0.0,
@@ -3392,19 +3778,17 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.0528,
-       "width": 0.0518,
-       "q": 0.0518,
-       "offset": 0.00057,
+       "contact_width": 0.05255,
+       "width": 0.05155,
+       "q": 0.05155,
+       "offset": 0.00054,
        "contact_ratio": 0.2,
-       "collisions": [
-        "closed finger_right:tomato_sauce_1_g15"
-       ],
+       "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        0.02595,
-       0.0038,
+       0.014425,
        -0.00209,
        0.0,
        0.7071068,
@@ -3414,6 +3798,66 @@
      },
      {
       "name": "grasp_2",
+      "source": "tomato_sauce_1_g2: close y, approach +z",
+      "requires_scene_planning": false,
+      "score": 1.19998,
+      "approach": [
+       0.0,
+       -1.0,
+       -0.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.05255,
+       "width": 0.05155,
+       "q": 0.05155,
+       "offset": -0.00054,
+       "contact_ratio": 0.2,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       0.02595,
+       0.00025,
+       -0.00209,
+       0.7071068,
+       0.0,
+       0.0,
+       0.7071068
+      ]
+     },
+     {
+      "name": "grasp_3",
+      "source": "tomato_sauce_1_g2: close y, approach +z flipped",
+      "requires_scene_planning": false,
+      "score": 1.19998,
+      "approach": [
+       0.0,
+       -1.0,
+       -0.0
+      ],
+      "evaluation": {
+       "feasible": true,
+       "contact_width": 0.05255,
+       "width": 0.05155,
+       "q": 0.05155,
+       "offset": 0.00054,
+       "contact_ratio": 0.2,
+       "collisions": [],
+       "reasons": []
+      },
+      "handle_xyzquat": [
+       0.02595,
+       0.00025,
+       -0.00209,
+       0.0,
+       0.7071068,
+       -0.7071068,
+       0.0
+      ]
+     },
+     {
+      "name": "grasp_4",
       "source": "tomato_sauce_1_g3: close y, approach +z",
       "requires_scene_planning": false,
       "score": 1.19998,
@@ -3424,19 +3868,17 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.05598,
-       "width": 0.05498,
-       "q": 0.05498,
-       "offset": -0.00071,
+       "contact_width": 0.05581,
+       "width": 0.05481,
+       "q": 0.05481,
+       "offset": -0.0007,
        "contact_ratio": 0.2,
-       "collisions": [
-        "closed finger_left:tomato_sauce_1_g13"
-       ],
+       "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        -0.0247,
-       0.0032,
+       0.013825,
        -0.00209,
        0.7071068,
        0.0,
@@ -3445,7 +3887,7 @@
       ]
      },
      {
-      "name": "grasp_3",
+      "name": "grasp_5",
       "source": "tomato_sauce_1_g3: close y, approach +z flipped",
       "requires_scene_planning": false,
       "score": 1.19998,
@@ -3456,88 +3898,22 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.05598,
-       "width": 0.05498,
-       "q": 0.05498,
-       "offset": 0.00071,
+       "contact_width": 0.05581,
+       "width": 0.05481,
+       "q": 0.05481,
+       "offset": 0.0007,
        "contact_ratio": 0.2,
-       "collisions": [
-        "closed finger_right:tomato_sauce_1_g13"
-       ],
+       "collisions": [],
        "reasons": []
       },
       "handle_xyzquat": [
        -0.0247,
-       0.0032,
+       0.013825,
        -0.00209,
        0.0,
        0.7071068,
        -0.7071068,
        0.0
-      ]
-     },
-     {
-      "name": "grasp_4",
-      "source": "tomato_sauce_1_g1: close x, approach -z",
-      "requires_scene_planning": false,
-      "score": 1.99998,
-      "approach": [
-       0.0,
-       -1.0,
-       0.0
-      ],
-      "evaluation": {
-       "feasible": true,
-       "contact_width": 0.06298,
-       "width": 0.06198,
-       "q": 0.06198,
-       "offset": 0.00081,
-       "contact_ratio": 1.0,
-       "collisions": [
-        "closed finger_right:tomato_sauce_1_g13"
-       ],
-       "reasons": []
-      },
-      "handle_xyzquat": [
-       -0.0,
-       0.002085,
-       -0.00235,
-       -0.0,
-       0.7071068,
-       -0.7071068,
-       0.0
-      ]
-     },
-     {
-      "name": "grasp_5",
-      "source": "tomato_sauce_1_g1: close x, approach -z flipped",
-      "requires_scene_planning": false,
-      "score": 1.99998,
-      "approach": [
-       0.0,
-       -1.0,
-       0.0
-      ],
-      "evaluation": {
-       "feasible": true,
-       "contact_width": 0.06298,
-       "width": 0.06198,
-       "q": 0.06198,
-       "offset": -0.00081,
-       "contact_ratio": 1.0,
-       "collisions": [
-        "closed finger_left:tomato_sauce_1_g13"
-       ],
-       "reasons": []
-      },
-      "handle_xyzquat": [
-       -0.0,
-       0.002085,
-       -0.00235,
-       0.7071068,
-       0.0,
-       0.0,
-       0.7071068
       ]
      }
     ]
@@ -3551,210 +3927,35 @@
     "handles": [
      {
       "name": "grasp_0",
-      "source": "white_bowl_1_g6: close x, approach +z",
-      "requires_scene_planning": true,
-      "score": 1.13976,
+      "source": "top-rim",
+      "requires_scene_planning": false,
+      "score": 1.12,
       "approach": [
-       0.85051,
-       0.16437,
-       -0.49961
+       0.0,
+       0.0,
+       -1.0
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.00569,
-       "width": 0.00469,
-       "q": 0.00469,
-       "offset": -0.00047,
-       "contact_ratio": 0.64,
-       "collisions": [
-        "closed finger_left:white_bowl_1_g22",
-        "closed finger_left:white_bowl_1_g23",
-        "closed finger_left:white_bowl_1_g24",
-        "closed finger_right:white_bowl_1_g1"
-       ],
-       "reasons": []
-      },
-      "handle_xyzquat": [
-       -0.0149749,
-       -0.0028863,
-       0.0020339,
-       -0.6644573,
-       0.5552512,
-       -0.3159863,
-       0.3877439
-      ]
-     },
-     {
-      "name": "grasp_1",
-      "source": "white_bowl_1_g6: close x, approach +z flipped",
-      "requires_scene_planning": true,
-      "score": 1.13976,
-      "approach": [
-       0.85051,
-       0.16437,
-       -0.49961
-      ],
-      "evaluation": {
-       "feasible": true,
-       "contact_width": 0.00569,
-       "width": 0.00469,
-       "q": 0.00469,
-       "offset": 0.00047,
-       "contact_ratio": 0.64,
-       "collisions": [
-        "closed finger_left:white_bowl_1_g1",
-        "closed finger_right:white_bowl_1_g22",
-        "closed finger_right:white_bowl_1_g23",
-        "closed finger_right:white_bowl_1_g24"
-       ],
-       "reasons": []
-      },
-      "handle_xyzquat": [
-       -0.0149749,
-       -0.0028863,
-       0.0020339,
-       0.5552512,
-       0.6644573,
-       0.3877439,
-       0.3159863
-      ]
-     },
-     {
-      "name": "grasp_2",
-      "source": "white_bowl_1_g6: close y, approach +z",
-      "requires_scene_planning": true,
-      "score": 0.61976,
-      "approach": [
-       0.85051,
-       0.16437,
-       -0.49961
-      ],
-      "evaluation": {
-       "feasible": true,
-       "contact_width": 0.06119,
-       "width": 0.06019,
-       "q": 0.06019,
-       "offset": 0.00034,
+       "contact_width": 0.05119,
+       "width": 0.05019,
+       "q": 0.05019,
+       "offset": 0.0,
        "contact_ratio": 0.12,
        "collisions": [
-        "closed finger_left:white_bowl_1_g26",
-        "closed finger_right:white_bowl_1_g19",
-        "closed finger_right:white_bowl_1_g20"
+        "closed finger_left:white_bowl_1_g35",
+        "closed finger_right:white_bowl_1_g21"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.0149749,
-       -0.0028863,
-       0.0020339,
-       -0.0772204,
-       0.8624641,
-       0.0507402,
-       0.4976124
-      ]
-     },
-     {
-      "name": "grasp_3",
-      "source": "white_bowl_1_g6: close y, approach +z flipped",
-      "requires_scene_planning": true,
-      "score": 0.61976,
-      "approach": [
-       0.85051,
-       0.16437,
-       -0.49961
-      ],
-      "evaluation": {
-       "feasible": true,
-       "contact_width": 0.06119,
-       "width": 0.06019,
-       "q": 0.06019,
-       "offset": -0.00034,
-       "contact_ratio": 0.12,
-       "collisions": [
-        "closed finger_left:white_bowl_1_g19",
-        "closed finger_left:white_bowl_1_g20",
-        "closed finger_right:white_bowl_1_g26"
-       ],
-       "reasons": []
-      },
-      "handle_xyzquat": [
-       -0.0149749,
-       -0.0028863,
-       0.0020339,
-       -0.8624641,
-       -0.0772204,
-       -0.4976124,
-       0.0507402
-      ]
-     },
-     {
-      "name": "grasp_4",
-      "source": "white_bowl_1_g7: close x, approach +z",
-      "requires_scene_planning": true,
-      "score": 0.77975,
-      "approach": [
-       0.6965,
-       0.51504,
-       -0.49962
-      ],
-      "evaluation": {
-       "feasible": true,
-       "contact_width": 0.00809,
-       "width": 0.00709,
-       "q": 0.00709,
-       "offset": 0.00052,
-       "contact_ratio": 0.28,
-       "collisions": [
-        "closed finger_left:white_bowl_1_g23",
-        "closed finger_left:white_bowl_1_g24",
-        "closed finger_left:white_bowl_1_g25",
-        "closed finger_right:white_bowl_1_g1"
-       ],
-       "reasons": []
-      },
-      "handle_xyzquat": [
-       -0.012265,
-       -0.0090696,
-       0.0020338,
-       -0.7707661,
-       0.3946285,
-       -0.2224483,
-       0.4480008
-      ]
-     },
-     {
-      "name": "grasp_5",
-      "source": "white_bowl_1_g7: close x, approach +z flipped",
-      "requires_scene_planning": true,
-      "score": 0.77975,
-      "approach": [
-       0.6965,
-       0.51504,
-       -0.49962
-      ],
-      "evaluation": {
-       "feasible": true,
-       "contact_width": 0.00809,
-       "width": 0.00709,
-       "q": 0.00709,
-       "offset": -0.00052,
-       "contact_ratio": 0.28,
-       "collisions": [
-        "closed finger_left:white_bowl_1_g1",
-        "closed finger_right:white_bowl_1_g23",
-        "closed finger_right:white_bowl_1_g24",
-        "closed finger_right:white_bowl_1_g25"
-       ],
-       "reasons": []
-      },
-      "handle_xyzquat": [
-       -0.012265,
-       -0.0090696,
-       0.0020338,
-       0.3946285,
-       0.7707661,
-       0.4480008,
-       0.2224483
+       -0.0138105,
+       0.0358521,
+       0.0353022,
+       0.825823,
+       -0.5639294,
+       0.0,
+       0.0
       ]
      }
     ]
@@ -3770,7 +3971,7 @@
       "name": "grasp_0",
       "source": "top-rim",
       "requires_scene_planning": false,
-      "score": 1.48,
+      "score": 1.64,
       "approach": [
        0.0,
        0.0,
@@ -3778,21 +3979,20 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.04681,
-       "width": 0.04581,
-       "q": 0.04581,
-       "offset": 0.0,
-       "contact_ratio": 0.48,
+       "contact_width": 0.04661,
+       "width": 0.04561,
+       "q": 0.04561,
+       "offset": -0.0,
+       "contact_ratio": 0.64,
        "collisions": [
-        "closed finger_left:white_yellow_mug_1_g22",
         "closed finger_right:white_yellow_mug_1_g3"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0447912,
+       0.0448753,
        0.0,
-       0.07522,
+       0.08547,
        0.7071068,
        0.7071068,
        0.0,
@@ -3803,7 +4003,7 @@
       "name": "grasp_1",
       "source": "top-rim",
       "requires_scene_planning": false,
-      "score": 1.48,
+      "score": 1.64,
       "approach": [
        0.0,
        0.0,
@@ -3811,21 +4011,20 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.04667,
-       "width": 0.04567,
-       "q": 0.04567,
-       "offset": 0.0,
-       "contact_ratio": 0.48,
+       "contact_width": 0.04649,
+       "width": 0.04549,
+       "q": 0.04549,
+       "offset": -0.0,
+       "contact_ratio": 0.64,
        "collisions": [
-        "closed finger_left:white_yellow_mug_1_g22",
         "closed finger_right:white_yellow_mug_1_g3"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0448437,
+       0.0449368,
        0.0,
-       0.0761081,
+       0.0863581,
        0.7071068,
        0.7071068,
        0.0,
@@ -3844,24 +4043,22 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.01001,
-       "width": 0.00901,
-       "q": 0.00901,
-       "offset": -0.0,
+       "contact_width": 0.00955,
+       "width": 0.00855,
+       "q": 0.00855,
+       "offset": 0.0,
        "contact_ratio": 0.48,
        "collisions": [
-        "closed finger_left:white_yellow_mug_1_g18",
-        "closed finger_right:white_yellow_mug_1_g19",
-        "closed finger_right:white_yellow_mug_1_g20"
+        "closed finger_right:white_yellow_mug_1_g5"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.006556,
-       -0.0453867,
-       0.0931147,
-       0.9907586,
-       0.135637,
+       0.025898,
+       0.0163458,
+       0.1033646,
+       0.5624469,
+       0.8268334,
        0.0,
        0.0
       ]
@@ -3870,7 +4067,7 @@
       "name": "grasp_3",
       "source": "top-rim",
       "requires_scene_planning": false,
-      "score": 1.44,
+      "score": 1.48,
       "approach": [
        0.0,
        0.0,
@@ -3878,24 +4075,24 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.00997,
-       "width": 0.00897,
-       "q": 0.00897,
-       "offset": -0.0,
-       "contact_ratio": 0.44,
+       "contact_width": 0.01005,
+       "width": 0.00905,
+       "q": 0.00905,
+       "offset": 0.0,
+       "contact_ratio": 0.48,
        "collisions": [
-        "closed finger_left:white_yellow_mug_1_g4",
-        "closed finger_right:white_yellow_mug_1_g5",
-        "closed finger_right:white_yellow_mug_1_g6"
+        "closed finger_right:white_yellow_mug_1_g11",
+        "closed finger_right:white_yellow_mug_1_g12",
+        "closed finger_right:white_yellow_mug_1_g13"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.0259041,
-       0.0163482,
-       0.0931146,
-       0.5624469,
-       0.8268334,
+       -0.0582702,
+       0.0243794,
+       0.1033646,
+       -0.4993393,
+       0.8664065,
        0.0,
        0.0
       ]
@@ -3904,7 +4101,7 @@
       "name": "grasp_4",
       "source": "top-rim",
       "requires_scene_planning": false,
-      "score": 1.44,
+      "score": 1.48,
       "approach": [
        0.0,
        0.0,
@@ -3912,25 +4109,23 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.01001,
-       "width": 0.00901,
-       "q": 0.00901,
+       "contact_width": 0.01005,
+       "width": 0.00905,
+       "q": 0.00905,
        "offset": -0.0,
-       "contact_ratio": 0.44,
+       "contact_ratio": 0.48,
        "collisions": [
-        "closed finger_left:white_yellow_mug_1_g7",
-        "closed finger_right:white_yellow_mug_1_g7",
-        "closed finger_right:white_yellow_mug_1_g8",
-        "closed finger_right:white_yellow_mug_1_g9"
+        "closed finger_right:white_yellow_mug_1_g15",
+        "closed finger_right:white_yellow_mug_1_g16"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.0078237,
-       0.0455812,
-       0.0931147,
-       0.1010217,
-       0.9948842,
+       -0.0606022,
+       -0.0203569,
+       0.1033647,
+       0.8519683,
+       -0.5235934,
        0.0,
        0.0
       ]
@@ -3939,7 +4134,7 @@
       "name": "grasp_5",
       "source": "top-rim",
       "requires_scene_planning": false,
-      "score": 1.44,
+      "score": 1.48,
       "approach": [
        0.0,
        0.0,
@@ -3947,24 +4142,22 @@
       ],
       "evaluation": {
        "feasible": true,
-       "contact_width": 0.00997,
-       "width": 0.00897,
-       "q": 0.00897,
+       "contact_width": 0.00964,
+       "width": 0.00864,
+       "q": 0.00864,
        "offset": -0.0,
-       "contact_ratio": 0.44,
+       "contact_ratio": 0.48,
        "collisions": [
-        "closed finger_left:white_yellow_mug_1_g8",
-        "closed finger_right:white_yellow_mug_1_g9",
-        "closed finger_right:white_yellow_mug_1_g10"
+        "closed finger_right:white_yellow_mug_1_g18"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       -0.0238376,
-       0.0465059,
-       0.0931147,
-       -0.0709825,
-       0.9974776,
+       -0.0225201,
+       -0.0467916,
+       0.103366,
+       0.9993668,
+       -0.0355801,
        0.0,
        0.0
       ]
@@ -4001,7 +4194,7 @@
       "handle_xyzquat": [
        0.0,
        0.0,
-       0.11545,
+       0.126075,
        -0.7071068,
        0.7071068,
        0.0,
@@ -4031,7 +4224,7 @@
       "handle_xyzquat": [
        0.0,
        0.0,
-       0.11545,
+       0.126075,
        0.7071068,
        0.7071068,
        0.0,
@@ -4061,7 +4254,7 @@
       "handle_xyzquat": [
        0.0,
        0.0,
-       0.11545,
+       0.126075,
        1.0,
        -0.0,
        0.0,
@@ -4091,7 +4284,7 @@
       "handle_xyzquat": [
        0.0,
        0.0,
-       0.11545,
+       0.126075,
        0.0,
        1.0,
        0.0,
@@ -4121,7 +4314,7 @@
       "handle_xyzquat": [
        0.0045,
        0.0,
-       0.11545,
+       0.126075,
        1.0,
        -0.0,
        0.0,
@@ -4151,7 +4344,7 @@
       "handle_xyzquat": [
        0.0045,
        0.0,
-       0.11545,
+       0.126075,
        0.0,
        1.0,
        0.0,
@@ -4190,7 +4383,7 @@
       "handle_xyzquat": [
        0.00781,
        -0.08453,
-       0.032945,
+       0.04357,
        0.9999965,
        -0.00264,
        0.0,
@@ -4220,7 +4413,7 @@
       "handle_xyzquat": [
        0.00781,
        -0.08453,
-       0.032945,
+       0.04357,
        0.00264,
        0.9999965,
        -0.0,
@@ -4250,7 +4443,7 @@
       "handle_xyzquat": [
        0.00781,
        -0.08453,
-       0.02323,
+       0.03348,
        0.9999965,
        -0.00264,
        0.0,
@@ -4272,7 +4465,7 @@
        "contact_width": 0.00464,
        "width": 0.00364,
        "q": 0.00364,
-       "offset": 0.0,
+       "offset": -0.0,
        "contact_ratio": 1.0,
        "collisions": [],
        "reasons": []
@@ -4280,7 +4473,7 @@
       "handle_xyzquat": [
        0.00781,
        -0.08453,
-       0.02323,
+       0.03348,
        0.00264,
        0.9999965,
        -0.0,
@@ -4289,12 +4482,12 @@
      },
      {
       "name": "grasp_4",
-      "source": "top-rim",
+      "source": "wooden_tray_1_g1: close x, approach -y",
       "requires_scene_planning": false,
-      "score": 1.51999,
+      "score": 1.99999,
       "approach": [
-       0.0,
-       0.0,
+       -0.0,
+       -0.0,
        -1.0
       ],
       "evaluation": {
@@ -4302,8 +4495,8 @@
        "contact_width": 0.00464,
        "width": 0.00364,
        "q": 0.00364,
-       "offset": -0.0,
-       "contact_ratio": 0.52,
+       "offset": 0.0,
+       "contact_ratio": 1.0,
        "collisions": [
         "closed finger_left:wooden_tray_1_g11"
        ],
@@ -4312,21 +4505,21 @@
       "handle_xyzquat": [
        -0.13924,
        -0.00547,
-       0.04453,
-       -0.7071068,
+       0.037855,
        0.7071068,
+       -0.7071068,
        0.0,
        0.0
       ]
      },
      {
       "name": "grasp_5",
-      "source": "top-rim",
+      "source": "wooden_tray_1_g1: close x, approach -y flipped",
       "requires_scene_planning": false,
-      "score": 1.51999,
+      "score": 1.99999,
       "approach": [
-       0.0,
-       0.0,
+       -0.0,
+       -0.0,
        -1.0
       ],
       "evaluation": {
@@ -4334,20 +4527,20 @@
        "contact_width": 0.00464,
        "width": 0.00364,
        "q": 0.00364,
-       "offset": -0.0,
-       "contact_ratio": 0.52,
+       "offset": 0.0,
+       "contact_ratio": 1.0,
        "collisions": [
-        "closed finger_right:wooden_tray_1_g12"
+        "closed finger_right:wooden_tray_1_g11"
        ],
        "reasons": []
       },
       "handle_xyzquat": [
-       0.15323,
+       -0.13924,
        -0.00547,
-       0.04453,
-       -0.7071068,
+       0.037855,
        0.7071068,
-       0.0,
+       0.7071068,
+       -0.0,
        0.0
       ]
      }

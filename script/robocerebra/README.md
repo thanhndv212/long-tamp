@@ -255,7 +255,7 @@ free arm motion per layout.
 `grasp_library.py` exports a class-covering set of cases and writes Panda handle
 frames into each object's SRDF. The recorded run is
 `results/2026-10-25-r3-grasp-handles.json`: 8 cases, 46 objects, 25 classes,
-234 handles, and no missing classes. It includes a top-rim sampler for thin
+251 handles, and no missing classes. It includes a top-rim sampler for thin
 container walls. The report marks handles whose approach was blocked by the
 current scene as `requires_scene_planning`; those are object-level candidates,
 not proven executable grasps. All candidates still need an HPP grasp-and-lift
