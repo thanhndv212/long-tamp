@@ -29,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reports robot contacts per object, and `regions` lists the regions an object is `in`
   by the benchmark's predicate.
 - `script/robocerebra/grasp_lift.py` picks and lifts one object per R3 class under the
-  benchmark's pick checker (#158 AC2): 10 of 25 classes, in
+  benchmark's pick checker (#158 AC2): 13 of 25 classes, in
   `script/robocerebra/results/2026-10-25-r3-grasp-lift.json`. A row is `unregistrable`
   when the object starts in no region it can leave (a bottle above the table region's
   band, a basket in its own), which the checker's region rule can never count as picked;
