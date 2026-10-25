@@ -1,7 +1,11 @@
 import numpy as np
 import pytest
 
-from long_tamp.eval.robocerebra_runner import evaluate_case
+from long_tamp.eval.robocerebra_runner import (
+    evaluate_case,
+    evaluate_cases,
+    merge_results,
+)
 
 
 class FakeEnv:
@@ -74,3 +78,47 @@ def test_evaluate_case_rejects_budget_overrun():
             seeds=[1],
             step_limit=1,
         )
+
+
+class Statused:
+    """An open-loop policy whose record carries a status, as HppPolicy's does."""
+
+    def __init__(self, actions, status):
+        self.actions, self.info = actions, {"status": status}
+
+    def __len__(self):
+        return len(self.actions)
+
+    def __getitem__(self, index):
+        return self.actions[index]
+
+
+def test_merge_results_joins_seeds_and_counts_supported_segments():
+    def policy(env, info, segment, limit):
+        if segment == 0:
+            return np.tile([1.0, 0, 0, 0, 0, 0, 1], (10, 1))
+        return Statused(np.empty((0, 7)), "unsupported")
+
+    parts = [
+        evaluate_cases(
+            FakeEnv(),
+            ["Ideal/case10", "Ideal/case2"],
+            policy,
+            seeds=[seed],
+            step_limit=20,
+        )
+        for seed in (1, 0)
+    ]
+    merged = merge_results(parts)
+    assert list(merged["cases"]) == ["Ideal/case2", "Ideal/case10"]
+    assert [r["seed"] for r in merged["cases"]["Ideal/case2"]["rollouts"]] == [0, 1]
+    summary = merged["summary"]
+    assert summary["rollouts_per_case"] == {"Ideal/case2": 2, "Ideal/case10": 2}
+    assert summary["segments"] == 8 and summary["unsupported_segments"] == 4
+    assert summary["supported_segment_success_rate"] == 1.0
+    assert summary["supported_segment_success_by_case"] == {
+        "Ideal/case2": "2/2",
+        "Ideal/case10": "2/2",
+    }
+    with pytest.raises(ValueError, match="seed repeated"):
+        merge_results([parts[0], parts[0]])

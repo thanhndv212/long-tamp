@@ -133,7 +133,9 @@ It takes cases (`Ideal/case1`), task types (`Ideal`) or `all`.
 
 `long_tamp.eval.evaluate_cases` and `evaluate.py` provide the rollout harness
 for planner policies. A policy callback receives `(env, case_info, segment,
-step_limit)` and returns an `(N, 7)` array of normalized `OSC_POSE` actions.
+step_limit)` and returns an `(N, 7)` array of normalized `OSC_POSE` actions, or a
+controller `controller(obs) -> (7,)` stepped closed loop from each observation
+(its `info` dict is recorded with the segment).
 The harness seeds each reset, caps each segment at 150 actions by default,
 checks the benchmark goal after every action, and enters later segments with
 the benchmark's official `resume(k)` operation. It records the seed, action
@@ -143,6 +145,20 @@ count and success for each segment and rollout, plus success rate per case.
 python script/robocerebra/evaluate.py Ideal/case1 \
     --policy my_policy:act_segment --rollouts 10 --seed 100 \
     --out results/ideal-policy.json
+```
+
+The summary adds segment-level counts next to the per-case rollout success
+rate: `resume(k)` marks earlier steps done, so a rollout can "succeed" with
+failed segments. `supported_segment_success_rate` counts the segments whose
+predicates registered within their budget, leaving out the ones the policy
+reported as `unsupported` (`supported_segment_success_by_case` per case);
+`mean_steps_used_on_success` is against the budget.
+
+Long runs can be split, one case and seed per process run in parallel, and
+joined:
+
+```bash
+python script/robocerebra/evaluate.py --merge parts/*.json --out results/ideal-policy.json
 ```
 
 The callback is the policy boundary: the harness does not substitute recorded
