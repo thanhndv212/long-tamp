@@ -22,6 +22,7 @@ Each plan is a list of :class:`~long_tamp.eval.robocerebra_tracker.Stage`
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -56,6 +57,10 @@ FINGER_OPEN = 0.04
 LIMIT_MARGIN = 0.15  # rad, kept from the arm's limits at a release
 THIN_REGION = 0.005  # m: a region half this thin is swept across, not stopped in
 SWEEP_STEP = 0.004  # m: the sweep's carrot, under the slab's thickness per step
+# HPP's refusal of a transit goal off the start's leaf, and the largest move
+# of the target onto its placement taken as settling, not as a real mismatch.
+OFF_LEAF = re.compile(r"goal configuration at rank \d+: \(([^)]*)\) does not satisfy the leaf constraint")
+SETTLE_SHIFT, SETTLE_TURN = 0.005, 0.05  # m, rad
 # robosuite mounts the Panda's fingers 6 mm nearer the hand than
 # franka_description does (panda_gripper.xml: 0.0524; the URDF: 0.0584).
 FINGER_MOUNT_OFFSET = 0.006
@@ -450,6 +455,27 @@ class SegmentPlanner:
             return True, message
         return bool(valid), message
 
+    def _settled(self, message: str | None, q: list[float]) -> list[float] | None:
+        """``q`` with the target where HPP's placement puts it, when HPP
+        refused a transit goal for leaving the start's leaf only because of
+        that: MuJoCo leaves a resting object a fraction of a millimetre sunk
+        and tilted, off the placement, and every goal HPP generates then
+        lies on another leaf than the start. ``None`` otherwise."""
+        match = OFF_LEAF.search(message or "")
+        if match is None:
+            return None
+        goal = np.array([float(v) for v in match.group(1).split(",") if v.strip()])
+        if len(goal) != len(q):
+            return None
+        out = np.asarray(q, dtype=float).copy()
+        out[self._object_index] = goal[self._object_index]
+        start, settled = self.object_pose(q), self.object_pose(out)
+        shift = np.linalg.norm(settled[:3, 3] - start[:3, 3])
+        turn = np.linalg.norm(rotation_vector(start[:3, :3].T @ settled[:3, :3]))
+        if shift > SETTLE_SHIFT or turn > SETTLE_TURN or not self._valid(out.tolist())[0]:
+            return None
+        return out.tolist()
+
     def _loop(self, q_from: list[float], q_to: list[float]) -> dict[str, Any]:
         return self.sequence.plan_loop(
             GRIPPER,
@@ -470,8 +496,10 @@ class SegmentPlanner:
         q_start, escape = self.escape(info)
         # A grasp at a joint limit (a straight elbow, reaching far) is a
         # singularity OSC cannot track into: kept only if no other plans.
-        at_limit = None
-        for handle in self.handles:
+        at_limit, settled = None, False
+        handles, index = list(self.handles), 0
+        while index < len(handles):
+            handle = handles[index]
             try:
                 grasp = self.sequence.plan_sequence(
                     [(GRIPPER, f"{self.target}/{handle}")],
@@ -483,6 +511,17 @@ class SegmentPlanner:
             except Exception as error:
                 grasp = {"success": False, "message": f"{type(error).__name__}: {error}"}
             message = grasp.get("message")
+            q_settled = None if grasp["success"] or settled else self._settled(message, q_start)
+            if q_settled is not None:
+                # Again from the settled start, the same handle first.
+                settled = True
+                info["settled"] = {"handle": handle, "message": message}
+                q_start = q_settled
+                self.q0 = [*self.q0]
+                for i in self._object_index:
+                    self.q0[i] = q_settled[i]
+                self.sequence.reset()
+                continue
             if grasp["success"] and self._near_limit(self.arm(grasp["final_config"])):
                 grasp["success"], message = False, "the grasp is at a joint limit"
                 at_limit = at_limit or (handle, grasp)
@@ -490,6 +529,7 @@ class SegmentPlanner:
             if grasp["success"]:
                 break
             self.sequence.reset()
+            index += 1
         else:
             if at_limit is None:
                 raise PlanningError(f"no handle of {self.target} plans", info)

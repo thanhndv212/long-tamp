@@ -7,6 +7,7 @@ import pytest
 
 from long_tamp.eval.robocerebra_plan import (
     PlanningError,
+    SegmentPlanner,
     held_object,
     object_corners,
     place_heights,
@@ -345,3 +346,16 @@ def test_rim_samples_pinch_a_leaning_wall_both_ways():
         assert np.allclose(grasp[:3, 0], [0, 0, -1])  # straight down
         assert abs(grasp[2, 1]) < 1e-9  # the pads close horizontally
 
+
+def test_settled_start_takes_hpps_placement_of_the_target():
+    planner = object.__new__(SegmentPlanner)
+    planner._object_index = list(range(2, 9))
+    planner._valid = lambda q: (True, "")
+    q = [0.1, 0.2, 0.5, 0.0, 0.42341, 0.0, 0.0, 0.0, 1.0]
+    goal = [0.3, 0.4, 0.5, 0.0, 0.42354, 0.0, 0.0, 0.0, 1.0]
+    message = f"goal configuration at rank 0: ({','.join(map(str, goal))},) does not satisfy the leaf constraint."
+    assert planner._settled(message, q) == [0.1, 0.2, *goal[2:]]
+    assert planner._settled("Collision between object panda/hand and table", q) is None
+    far = [0.3, 0.4, 0.5, 0.0, 0.45, 0.0, 0.0, 0.0, 1.0]
+    message = f"goal configuration at rank 0: ({','.join(map(str, far))},) does not satisfy the leaf constraint."
+    assert planner._settled(message, q) is None  # a real move, not settling
