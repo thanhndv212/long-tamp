@@ -5,6 +5,14 @@
 """
 
 from .robocerebra import RoboCerebraClient
+from .robocerebra_grasps import add_grasp_handles, object_class
 from .robocerebra_scene import ExportedScene, load_export, write_export
 
-__all__ = ["ExportedScene", "RoboCerebraClient", "load_export", "write_export"]
+__all__ = [
+    "ExportedScene",
+    "RoboCerebraClient",
+    "add_grasp_handles",
+    "object_class",
+    "load_export",
+    "write_export",
+]

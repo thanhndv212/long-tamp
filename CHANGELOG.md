@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- RoboCerebra grasp-handle library (#158, M11 R3): `long_tamp.eval.add_grasp_handles`
+  derives object-relative Panda handles from exported collision geometry, including
+  top-rim pinches for container walls. `script/robocerebra/grasp_library.py` exports
+  a case-cover set and records coverage in `script/robocerebra/results/`; handles
+  blocked by current scene clutter are explicitly marked for later HPP planning.
 - RoboCerebra scenes in HPP (#157, M11 R2). The env server's `export_scene` op turns a
   case's MuJoCo model into an environment URDF/SRDF (the LIBERO regions as contact
   surfaces), one freeflyer URDF/SRDF per object and a manifest; `long_tamp.eval`'s

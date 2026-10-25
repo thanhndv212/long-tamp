@@ -228,3 +228,25 @@ free arm motion per layout.
 - **Articulated joints** (drawers, doors) are exported in the manifest but locked at their
   current value in the environment model.
 - The issue counts 15 layouts. The 60 cases have 13 distinct sets of fixtures.
+
+## Grasp handle coverage (R3, #158)
+
+`grasp_library.py` exports a class-covering set of cases and writes Panda handle
+frames into each object's SRDF. The recorded run is
+`results/2026-10-25-r3-grasp-handles.json`: 8 cases, 46 objects, 25 classes,
+234 handles, and no missing classes. It includes a top-rim sampler for thin
+container walls. The report marks handles whose approach was blocked by the
+current scene as `requires_scene_planning`; those are object-level candidates,
+not proven executable grasps. All candidates still need an HPP grasp-and-lift
+plan before R3 can be considered complete.
+
+Run it in the HPP environment with the benchmark server available:
+
+```bash
+python script/robocerebra/grasp_library.py --cases-file /path/to/r3-cases.txt
+```
+
+R4 (#159) follows this library: translate RoboCerebra's `pick` / `In` / `On`
+goals into MissionRunner capabilities, start each official segment through
+the benchmark's `resume(k)`, and execute OSC_POSE-tracked plans within the
+150-step segment budget.
