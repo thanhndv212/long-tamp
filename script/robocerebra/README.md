@@ -276,8 +276,25 @@ frames into each object's SRDF. The recorded run is
 251 handles, and no missing classes. It includes a top-rim sampler for thin
 container walls. The report marks handles whose approach was blocked by the
 current scene as `requires_scene_planning`; those are object-level candidates,
-not proven executable grasps. All candidates still need an HPP grasp-and-lift
-plan before R3 can be considered complete.
+not proven executable grasps.
+
+`grasp_lift.py` checks them in the benchmark env (AC2): per class, its example
+case is reset with the goal `pick <instance>`, the HPP segment policy (below)
+plans a grasp and lift, and `OSC_POSE` tracks it until the pick checker passes
+or 150 steps run out. The recorded run is
+`results/2026-10-25-r3-grasp-lift.json`: **10 of 25 classes picked**
+(alphabet_soup, chefmate_8_frypan, chocolate_pudding, cookies, cream_cheese,
+popcorn, red_coffee_mug, tomato_sauce, white_yellow_mug, wine_bottle; 37 to 107
+steps). The frypan is picked in Ideal/case4 (`--at`); in case10 none of its
+handles plans. The 15 failures:
+
+| Failure | Classes |
+| --- | --- |
+| no handle plans in the scene | akita_black_bowl, black_book, butter, moka_pot, plate, rack, white_bowl |
+| lifted, but the pick never registered | basket, bbq_sauce, ketchup, milk, orange_juice |
+| the fingers stall on the object while closing in (`insert`) | glazed_rim_porcelain_ramekin, macaroni_and_cheese (also `pick suppressed`), wooden_tray |
+
+wooden_tray is intermittent: it was picked in an earlier run.
 
 Run it in the HPP environment with the benchmark server available:
 
