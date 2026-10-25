@@ -21,9 +21,9 @@ on a software renderer two 256x256 cameras cost ~0.35 s a step.
 
 Operations (``{"op": name, "args": [...]}`` → ``{"ok": true, "value": ...}``):
 
-``hello`` (``version``), ``ping``, ``bye``, ``cases()``, ``load(case)``,
+``hello`` (``version``), ``ping``, ``bye``, ``cases()``, ``load(case)``, ``set_goal(goal)``,
 ``reset(step=0, settle=None, restore_demo=False)``, ``resume(step)``,
-``step(actions)``, ``check()``, ``get_state()``,
+``step(actions)`` (with the checker's ``[Monitor]`` lines), ``check()``, ``get_state()``,
 ``set_state(sim_state, controller=None)``, ``render(cameras=None, size=256)``,
 ``demo()``, ``export_scene()`` (the scene as URDF/SRDF, ``scene_export.py``).
 
@@ -38,7 +38,9 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import glob
+import io
 import json
 import logging
 import os
@@ -152,6 +154,7 @@ def _recv_exact(sock: socket.socket, size: int) -> bytes:
 OPS = (
     "cases",
     "load",
+    "set_goal",
     "reset",
     "resume",
     "step",
@@ -255,6 +258,7 @@ class RoboCerebraEnv:
         self.env: Any = None
         self.case: str | None = None
         self.t = 0
+        self.monitor: list[str] = []  # the checker's prints since the last step
 
     def info(self) -> dict[str, Any]:
         import mujoco
@@ -367,6 +371,20 @@ class RoboCerebraEnv:
         return self.env
 
     # -- episode --
+
+    def set_goal(self, goal: dict[str, list[list[str]]]) -> dict[str, Any]:
+        """Score against ``goal`` (``{obj: [[predicate, obj, ...], ...]}``)
+        instead of the case's, from the next ``reset``: e.g. one object's
+        ``pick``, to check a grasp on any object (#158). Each predicate is
+        its own task step, in order."""
+        self._need()
+        objects = set(self.env.object_names)
+        unknown = sorted(set(goal) - objects)
+        if unknown:
+            raise ValueError(f"not in the scene: {unknown}")
+        self.goal = {obj: [[p[0].lower(), *p[1:]] for p in specs] for obj, specs in goal.items()}
+        self.goal_steps = {obj: list(range(len(specs))) for obj, specs in self.goal.items()}
+        return {"goal": self.goal, "goal_steps": self.goal_steps}
 
     def reset(
         self,
@@ -481,22 +499,36 @@ class RoboCerebraEnv:
             raise ValueError(f"actions must be (7,) or (N, 7), got {actions.shape}")
         before = dict(env._state_progress)
         completion: dict[str, Any] = {}
+        self.monitor = []
         for action in actions:
-            env.step(action.tolist())
+            with contextlib.redirect_stdout(io.StringIO()):
+                env.step(action.tolist())
             self.t += 1
             completion = self.check()
         completed = []
         for obj, count in env._state_progress.items():
             for index in range(before.get(obj, 0), count):
                 completed.append({"object": obj, "subtask": index, "spec": self.goal[obj][index]})
-        return {**completion, "completed": completed, "t": self.t, "obs": self._obs()}
+        return {
+            **completion,
+            "completed": completed,
+            "monitor": self.monitor,
+            "t": self.t,
+            "obs": self._obs(),
+        }
 
     def check(self) -> dict[str, Any]:
         """The env's ``_check_success(goal)``: per-object completion (%),
         subtasks done so far and whether all are. Stateful, as in the
         benchmark: a subtask counts once reached, in order."""
         env = self._need()
-        completion, total_completed, all_done = env._check_success(self.goal)
+        # The checker prints its verdicts ("[Monitor] ... Pick successful",
+        # "... pick suppressed: quaternion change ..."): keep them for the
+        # step's reply instead of a stdout nobody drains.
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            completion, total_completed, all_done = env._check_success(self.goal)
+        self.monitor.extend(line for line in out.getvalue().splitlines() if line.strip())
         return {
             "completion": {k: float(v) for k, v in completion.items()},
             "total_completed": int(total_completed),
@@ -584,12 +616,21 @@ class RoboCerebraEnv:
             env.sim.model._model,
             env.sim.data._data,
             objects={name: obj.root_body for name, obj in env.objects_dict.items()},
-            regions=list(env.regions),
+            regions=_goal_regions(env),
             robot_root=robot.robot_model.root_body,
             robot_joints=list(robot.robot_joints) + list(robot.gripper.joints),
         )
         export["manifest"].update(case=self.case, model=self.model, t=self.t)
         return export
+
+
+def _goal_regions(env: Any) -> list[str]:
+    """The regions a goal can name: the BDDL's, plus the fixtures' and
+    objects' own sites (``flat_stove_1_cook_region``,
+    ``basket_1_contain_region``) that ``In`` checks the same way; not the
+    ``*_init_region`` sites objects are only sampled in."""
+    sites = [name for name in getattr(env, "object_sites_dict", {}) if not name.endswith("_init_region")]
+    return list(dict.fromkeys([*env.regions, *sites]))
 
 
 def _scene_export() -> Any:

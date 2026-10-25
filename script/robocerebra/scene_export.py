@@ -231,6 +231,9 @@ def export_scene(
         # exported geoms: for checking the export against the HPP model.
         "shapes": shapes,
         "contacts": _contacts(data, names, set(exported)),
+        # The robot's links touching objects: which object is in the hand
+        # at a mid-episode start (#159).
+        "robot_contacts": _robot_contacts(model, data, names, robot, object_info),
         "skipped": skipped,
     }
     return {"files": files, "manifest": manifest}
@@ -555,6 +558,24 @@ def _contacts(data: Any, names: _Names, geoms: set[int]) -> list[dict[str, Any]]
     return [
         {"geom1": names.geom(a), "geom2": names.geom(b), "dist": dist}
         for (a, b), dist in sorted(pairs.items())
+    ]
+
+
+def _robot_contacts(
+    model: Any, data: Any, names: _Names, robot: set[int], objects: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """MuJoCo's contacts between a robot body and an object: per (link,
+    object), the deepest."""
+    owner = {names.geom_id(g): name for name, info in objects.items() for g in info["geoms"]}
+    pairs: dict[tuple[str, str], float] = {}
+    for c in data.contact[: data.ncon]:
+        for a, b in ((c.geom1, c.geom2), (c.geom2, c.geom1)):
+            body = int(model.geom_bodyid[a])
+            if body in robot and b in owner:
+                key = (names.body(body), owner[b])
+                pairs[key] = min(pairs.get(key, np.inf), float(c.dist))
+    return [
+        {"link": link, "object": obj, "dist": dist} for (link, obj), dist in sorted(pairs.items())
     ]
 
 

@@ -20,7 +20,9 @@ long_tamp's side (issue #156).
 as the benchmark's `task_runner.py`), `reset(step=0, settle=None, restore_demo=False)`,
 `resume(step)`, `step(actions)` ((7,) or (N, 7)), `check()`, `get_state()`,
 `set_state(sim_state, controller=None)`, `render(cameras=None, size=256)`, `demo()`,
-`export_scene()`.
+`export_scene()`, `set_goal(goal)` (replaces the loaded case's goal, for example
+`{"butter_1": [["pick", "butter_1"]]}` as a one-step task: the pick checker judges
+only objects in the goal).
 See the docstrings in `env_server.py`.
 
 `model="bddl"` is the benchmark's scene, built from the case's BDDL. `"demo"` is the

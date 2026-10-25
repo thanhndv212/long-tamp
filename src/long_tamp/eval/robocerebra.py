@@ -145,6 +145,11 @@ class RoboCerebraClient:
         recorded scene, for replays."""
         return self._call("load", case, model=model)
 
+    def set_goal(self, goal: dict[str, list[list[str]]]) -> dict[str, Any]:
+        """Score ``goal`` instead of the case's from the next ``reset``
+        (e.g. ``{"butter_1": [["pick", "butter_1"]]}``)."""
+        return self._call("set_goal", goal)
+
     def reset(
         self,
         step: int = 0,

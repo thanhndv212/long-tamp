@@ -287,6 +287,35 @@ def test_spawn_runs_a_server_process(server_module, tmp_path):
     assert process is None or process.poll() is not None
 
 
+class PrintingEnv:
+    """The benchmark env's checker prints its verdicts; stepping prints too."""
+
+    def __init__(self):
+        self._state_progress = {"a_1": 0}
+
+    def step(self, action):
+        print("robosuite noise")
+        self._state_progress["a_1"] = 1
+
+    def _check_success(self, goal):
+        if self._state_progress["a_1"]:
+            print("[Monitor] a_1 region changed, Pick successful")
+        return {"a_1": 50.0}, self._state_progress["a_1"], False
+
+    def _get_observations(self, force_update=False):
+        return {"robot0_eef_pos": np.zeros(3), "agentview_image": np.zeros((2, 2, 3))}
+
+
+def test_step_returns_the_checkers_monitor_lines(server_module, tmp_path, capsys):
+    env = server_module.RoboCerebraEnv(tmp_path, render=False)
+    env.env, env.goal = PrintingEnv(), {"a_1": [["pick", "a_1"], ["in", "a_1", "box"]]}
+    reply = env.step(np.zeros(7))
+    assert reply["monitor"] == ["[Monitor] a_1 region changed, Pick successful"]
+    assert reply["completed"] == [{"object": "a_1", "subtask": 0, "spec": ["pick", "a_1"]}]
+    assert "agentview_image" not in reply["obs"]
+    assert capsys.readouterr().out == ""
+
+
 def test_write_handles_replaces_the_generated_section(tmp_path):
     from long_tamp.eval.robocerebra_grasps import write_handles
 
@@ -308,3 +337,23 @@ def test_environment_contacts_flatten_per_environment():
     grouped = {"scene": ["scene/table", "scene/box_floor"], "other": ["other/shelf"]}
     assert _environment_contacts(grouped) == ["scene/table", "scene/box_floor", "other/shelf"]
     assert _environment_contacts(["scene/table"]) == ["scene/table"]
+
+
+def test_set_goal_scores_one_objects_pick(server_module, tmp_path):
+    env = server_module.RoboCerebraEnv(tmp_path, render=False)
+    env.env = PrintingEnv()
+    env.env.object_names = ["a_1", "b_1"]
+    assert env.set_goal({"b_1": [["Pick", "b_1"]]}) == {
+        "goal": {"b_1": [["pick", "b_1"]]},
+        "goal_steps": {"b_1": [0]},
+    }
+    with pytest.raises(ValueError, match="not in the scene"):
+        env.set_goal({"c_1": [["pick", "c_1"]]})
+
+
+def test_goal_regions_add_object_sites(server_module):
+    class Env:
+        regions = {"table_region": None}
+        object_sites_dict = {"table_region": 0, "stove_1_cook_region": 0, "table_stove_init_region": 0}
+
+    assert server_module._goal_regions(Env()) == ["table_region", "stove_1_cook_region"]
