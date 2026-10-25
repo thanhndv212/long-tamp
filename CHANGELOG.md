@@ -10,6 +10,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- RoboCerebra HPP segment policy (#159, M11 R4): `long_tamp.eval.robocerebra_policy:hpp_policy`
+  translates each segment's goal (`pick` → grasped, `In`/`On` → placed; `pour`, `open`,
+  `turnon` and regions missing from the export reported unsupported), detects the held
+  object at a resume from the finger contacts, plans in HPP on the segment's exported scene
+  in a forked child process (HPP's memory is returned per segment) and tracks the TCP path
+  with closed-loop `OSC_POSE` actions (`robocerebra_tracker`). Row A (Ideal, 10 seeds per
+  case): 412 / 540 supported segments (76.3%), in
+  `script/robocerebra/results/2026-10-25-r4-ideal-hpp.json`.
+- RoboCerebra evaluator: a policy callback may return a controller `controller(obs)`,
+  stepped closed loop; each segment records `steps_used`, the checker's lines and the
+  policy's info. The summary counts supported-segment success, overall and per case,
+  since the official resume lets a rollout succeed with failed segments.
+  `evaluate.py --merge` joins results run one case and seed per process.
+- RoboCerebra env server: `set_goal` scores a caller's goal instead of the case's, `step`
+  returns the checker's `[Monitor]` lines, the export lists object and fixture sites
+  (`basket_1_contain_region`, `flat_stove_1_cook_region`) as regions, and its manifest
+  reports robot contacts per object.
+- `script/robocerebra/grasp_lift.py` picks and lifts one object per R3 class under the
+  benchmark's pick checker (#158 AC2): 10 of 25 classes, in
+  `script/robocerebra/results/2026-10-25-r3-grasp-lift.json`.
 - RoboCerebra grasp-handle library (#158, M11 R3): `long_tamp.eval.add_grasp_handles`
   derives object-relative Panda handles from exported collision geometry, including
   top-rim pinches for container walls. `script/robocerebra/grasp_library.py` exports
@@ -187,6 +207,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `YamlTaskLoader` passed grouped `environment_contacts` (`{env: [env/surface, ...]}`)
+  to the factory as the environment names; it now passes the surfaces.
+- `PANDA_HAND`'s finger pads are measured on `script/twin/assets/panda_bimanual.urdf.template`
+  instead of nominal: they run from 9.0 mm behind to 9.5 mm past the TCP (before, 10 mm
+  behind it). The R3 grasp-handle record is regenerated with them (251 handles).
 - `script/screw_assembly/kill_resume.py` read the part count from the first `mission`
   event, which since the web viewer (#102) is the plan event (`ScrewAssembly4`), and
   crashed after the resumed run. It now reads the root node's event (#134).
