@@ -11,6 +11,9 @@ actions until the benchmark's pick checker passes or the step budget runs
 out. The checker passes once the object has left every region with its
 orientation within the benchmark's threshold over the last steps; it prints
 ``pick suppressed: quaternion change`` when the object turned too much.
+An object that starts in no region, or only in its own (``start_regions``),
+can never leave one: its row is ``unregistrable`` and records how high the
+object was ``lifted``, the grasp's evidence instead of the checker's.
 
     python script/robocerebra/grasp_lift.py
     python script/robocerebra/grasp_lift.py --classes butter popcorn
@@ -51,6 +54,7 @@ def grasp_lift(
     """One pick of ``instance`` from ``case``'s start, as a one-step task."""
     goal = env.set_goal({instance: [["pick", instance]]})
     obs = env.reset(step=0, seed=seed)["obs"]
+    start_regions = env.regions(instance)
     started = time.time()
     controller = policy(env, goal, 0, step_limit)
     plan_seconds = time.time() - started
@@ -64,11 +68,15 @@ def grasp_lift(
         used += 1
     info = dict(controller.info)
     info.pop("handles", None)  # in the inventory already
+    start, end = info.get("target_start"), info.get("target_end")
     return {
         "case": case,
         "instance": instance,
         "seed": seed,
         "success": bool(result["all_done"]),
+        "start_regions": start_regions,
+        "unregistrable": not any(not r.startswith(f"{instance}_") for r in start_regions),
+        "lifted": round(end[2] - start[2], 4) if start and end else None,
         "steps_used": used,
         "suppressed": [line for line in monitor if "suppressed" in line],
         "plan_seconds": round(plan_seconds, 3),
@@ -155,6 +163,7 @@ def write(out: Path, rows: dict[str, dict[str, Any]], step_limit: int) -> dict[s
             "classes": len(rows),
             "picked": len(rows) - len(failed),
             "suppressed": sorted(name for name, row in rows.items() if row.get("suppressed")),
+            "unregistrable": sorted(name for name, row in rows.items() if row.get("unregistrable")),
             "failed": failed,
         },
     }

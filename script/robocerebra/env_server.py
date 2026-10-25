@@ -159,6 +159,7 @@ OPS = (
     "resume",
     "step",
     "check",
+    "regions",
     "get_state",
     "set_state",
     "render",
@@ -536,6 +537,15 @@ class RoboCerebraEnv:
             "all_done": bool(all_done),
             "progress": {k: int(v) for k, v in env._state_progress.items()},
         }
+
+    def regions(self, obj: str) -> list[str]:
+        """The regions ``obj`` is ``in`` by the benchmark's predicate. Its
+        pick counts only when this goes from some region to none: an object
+        that starts in none (a bottle whose origin is above the table
+        region's band) or only in one it carries (a basket's own contain
+        region) can be lifted but never picked."""
+        env = self._need()
+        return [r for r in env.regions if env._eval_predicate(["in", obj, r])]
 
     # -- state --
 

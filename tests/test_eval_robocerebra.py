@@ -351,6 +351,19 @@ def test_set_goal_scores_one_objects_pick(server_module, tmp_path):
         env.set_goal({"c_1": [["pick", "c_1"]]})
 
 
+def test_regions_lists_what_the_pick_checker_sees(server_module, tmp_path):
+    class Env:
+        regions = ("table_region", "basket_1_contain_region")
+
+        def _eval_predicate(self, state):
+            return state[1] == "basket_1"
+
+    env = server_module.RoboCerebraEnv(tmp_path, render=False)
+    env.env = Env()
+    assert env.regions("basket_1") == ["table_region", "basket_1_contain_region"]
+    assert env.regions("milk_1") == []
+
+
 def test_goal_regions_add_object_sites(server_module):
     class Env:
         regions = {"table_region": None}

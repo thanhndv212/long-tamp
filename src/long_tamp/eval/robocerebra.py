@@ -179,6 +179,10 @@ class RoboCerebraClient:
     def check(self) -> dict[str, Any]:
         return self._call("check")
 
+    def regions(self, obj: str) -> list[str]:
+        """The regions ``obj`` is ``in`` now, as the pick checker sees them."""
+        return self._call("regions", obj)
+
     def get_state(self) -> dict[str, Any]:
         """``sim_state``, plus the ``controller`` goal and gripper command
         that the sim state leaves out."""
