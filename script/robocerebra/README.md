@@ -328,3 +328,44 @@ python script/robocerebra/evaluate.py Ideal/case1 --rollouts 10 \
 - Each segment record has `steps_used` against the 150-step budget, the
   checker's printed lines (`monitor`) and the plan's `policy` info (stages,
   handle, rejected place orientations, planning errors).
+
+### Row A: Ideal, HPP segment policy
+
+`results/2026-10-25-r4-ideal-hpp.json`: the 10 Ideal cases × seeds 0–9, one
+(case, seed) per process, three in parallel, merged with `--merge`. Every segment starts from the
+official `resume(k)` state and has 150 steps.
+
+| | |
+| --- | --- |
+| segments | 760 (220 unsupported) |
+| **supported segments passed** | **412 / 540 (76.3%)** |
+| mean steps used, passed segments | 63.2 of 150 |
+
+| Case | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| supported segments passed | 56/60 | 21/30 | 50/70 | 30/40 | 40/40 | 31/40 | 24/40 | 40/40 | 60/80 | 60/100 |
+| rollout success | 0.9 | 0 | 0 | 0 | 1.0 | 1.0 | 0 | 0 | 1.0 | 1.0 |
+
+Rollout success, the benchmark's metric, is not a measure of this policy: the
+resume marks earlier steps done and puts the object in the hand, so case9 and
+case10 succeed on every seed with a quarter or more of their segments failed.
+case8 passes every supported segment and still fails every seed, on its
+unsupported ones.
+
+The failures are mostly the same segment on every seed:
+
+| Segment | Seeds failed | Cause |
+| --- | --- | --- |
+| case3 0, pick plate | 10 | no handle of the plate plans |
+| case3 1, plate onto the table | 10 | no release pose in the region |
+| case4 5, frypan into the cabinet top | 10 | the held start collides (hand and frypan) |
+| case7 6, frypan onto the stove | 10 | no release pose in the region |
+| case9 0 and 9, pick white_bowl | 10 + 10 | planned, not picked; on the seeds inspected the arm stalls near an elbow singularity (0) and the fingers push the rim and the bowl slides (9) |
+| case10 4, 7, 10, carry to the table | 10 each | the carry to the crowded table does not plan |
+| case10 5, pick bbq_sauce | 10 | no handle plans |
+| case2 2 and case7 5, pick frypan | 9 and 5 | planned, but the 1.1 m transit uses most of the budget |
+| case6 1, pick butter | 6 | no handle plans |
+| case6 3, pick tomato_sauce | 3 | planned, not picked |
+
+The other 5 failures are case1's butter pick (2 seeds), popcorn pick and
+butter place, and case7's pudding pick (1 seed each).
