@@ -285,7 +285,29 @@ Run it in the HPP environment with the benchmark server available:
 python script/robocerebra/grasp_library.py --cases-file /path/to/r3-cases.txt
 ```
 
-R4 (#159) follows this library: translate RoboCerebra's `pick` / `In` / `On`
-goals into MissionRunner capabilities, start each official segment through
-the benchmark's `resume(k)`, and execute OSC_POSE-tracked plans within the
-150-step segment budget.
+## HPP segment policy (R4, #159)
+
+`long_tamp.eval.robocerebra_policy:hpp_policy` plans each segment in HPP on the
+scene exported at the segment's start and tracks the plan with `OSC_POSE`:
+
+```bash
+python script/robocerebra/evaluate.py Ideal/case1 --rollouts 10 \
+    --policy long_tamp.eval.robocerebra_policy:hpp_policy --out results/ideal-hpp.json
+```
+
+- Goals: `pick o` becomes *grasped* (the first R3 handle that plans, then a
+  straight lift); `In o r` / `On o r` become *placed* (carry the held object into
+  `r`'s box and release). `pour`, `open`, `turnon` and `On` over an object are
+  rejected as unsupported, as is a region the exported scene lacks (`rack_1`);
+  the segment then holds still with the gripper closed.
+- Each segment is planned in a forked child process (`HppPolicy(isolate=True)`,
+  the default): HPP keeps native memory from every problem it builds, and a
+  13-segment case10 rollout in one process ran out of memory.
+- The held object at a resume is the one both fingers touch (`robot_contacts`).
+- `OSC_POSE` tracks TCP poses, not joints, and HPP's configs can sit on another
+  IK branch than the robot's, so transits are shortcut along straight TCP lines
+  checked by IK seeded from the start. Resting objects sink about 1 mm into their
+  support in MuJoCo; a pick raises the target out of it before planning.
+- Each segment record has `steps_used` against the 150-step budget, the
+  checker's printed lines (`monitor`) and the plan's `policy` info (stages,
+  handle, rejected place orientations, planning errors).

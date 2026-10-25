@@ -7,6 +7,12 @@ segment's ``(N, 7)`` OSC_POSE actions or a controller ``controller(obs)`` for
 the next action. This command handles seeded resets, segment checks,
 official ``resume(k)``, and JSON output.
 
+The HPP policy (#159, row A)::
+
+    python script/robocerebra/evaluate.py --rollouts 10 \
+        --policy long_tamp.eval.robocerebra_policy:hpp_policy \
+        --out script/robocerebra/results/<date>-ideal-hpp.json
+
 Long runs can be split, one case and seed per process run in parallel, and
 joined afterwards::
 
