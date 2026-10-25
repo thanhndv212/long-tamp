@@ -114,7 +114,7 @@ def add_grasp_handles(
         for checked_obstacles in (obstacles, []):
             for grasp_pose, source in samples:
                 ev = planner.evaluate(grasp_pose, obj.primitives, checked_obstacles, full=True)
-                if source == "top-rim" and not ev.feasible:
+                if source.startswith("top-rim") and not ev.feasible:
                     # The analytic rim frame is centered on the wall's top
                     # face; shift by measured pad asymmetry before checking.
                     grasp_pose = grasp_pose.copy()
@@ -232,30 +232,30 @@ def _candidate(planner, grasp_pose, evaluation, source, score):
     )
 
 
+# A bowl's rim is a ring of thin wall boxes leaning out ~15 degrees: their
+# thickness axis tilts as much from horizontal (RoboCerebra's bowls).
+RIM_TILT = 0.35  # sin of the largest tilt of a rim's closing axis, ~20 degrees
+
+
 def _rim_samples(planner, primitives):
-    """Sample top-down pinches on thin horizontal box rims and flanges."""
+    """Sample top-down pinches, both ways round, on thin box rims and
+    flanges, horizontal or leaning (a bowl's wall)."""
     for primitive in primitives:
         if not isinstance(primitive, Box):
             continue
         half = primitive.half_extents()
         rotation = primitive.pose[:3, :3]
-        center = primitive.pose[:3, 3]
-        corners = np.array(
-            [[sx * half[0], sy * half[1], sz * half[2]]
-             for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]
-        )
-        world_corners = center + corners @ rotation.T
-        top = world_corners[:, 2].max()
-        top_center = world_corners[world_corners[:, 2] >= top - 1e-6].mean(axis=0)
+        up = int(np.argmax(np.abs(rotation[2])))
+        top_center = primitive.pose[:3, 3] + rotation[:, up] * half[up] * np.sign(rotation[2, up])
         for axis in range(3):
             closing = rotation[:, axis]
-            width = 2 * half[axis]
+            if axis == up or abs(closing[2]) > RIM_TILT:
+                continue
+            # The pads close horizontally: across a leaning wall, wider.
+            width = 2 * half[axis] / np.sqrt(1.0 - closing[2] ** 2)
             if width <= 0 or width > planner.gripper.max_width - 0.01:
                 continue
-            if abs(closing[2]) > 0.2:
-                continue
-            grasp = planner._frame((0.0, 0.0, -1.0), closing, top_center, width)
-            yield grasp, "top-rim"
+            yield from planner._emit((0.0, 0.0, -1.0), closing, top_center, width, "top-rim")
 
 
 __all__ = ["add_grasp_handles", "object_class", "write_handles"]

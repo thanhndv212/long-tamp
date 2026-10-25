@@ -326,3 +326,22 @@ def test_planning_in_a_child_returns_the_result_and_errors():
         _in_child(divmod, 1, 0)
     with pytest.raises(RuntimeError, match="exit code 3"):
         _in_child(os._exit, 3)
+
+
+def test_rim_samples_pinch_a_leaning_wall_both_ways():
+    from long_tamp.eval.robocerebra_grasps import _rim_samples
+    from long_tamp.grasping import PANDA_HAND, Box, GraspPlanner, GraspPlannerParams
+
+    # A bowl's wall: 3 mm thick along x, leaning 15 degrees out about y.
+    tilt = np.radians(15)
+    pose = np.eye(4)
+    pose[:3, :3] = [[np.cos(tilt), 0, np.sin(tilt)], [0, 1, 0], [-np.sin(tilt), 0, np.cos(tilt)]]
+    pose[:3, 3] = [0.05, 0.0, 0.03]
+    wall = Box(name="wall", pose=pose, size=(0.003, 0.02, 0.04))
+    samples = list(_rim_samples(GraspPlanner(PANDA_HAND, GraspPlannerParams()), [wall]))
+    sources = [source for _, source in samples]
+    assert sources.count("top-rim") == sources.count("top-rim flipped") >= 1
+    for grasp, _ in samples:
+        assert np.allclose(grasp[:3, 0], [0, 0, -1])  # straight down
+        assert abs(grasp[2, 1]) < 1e-9  # the pads close horizontally
+
