@@ -282,19 +282,37 @@ not proven executable grasps.
 case is reset with the goal `pick <instance>`, the HPP segment policy (below)
 plans a grasp and lift, and `OSC_POSE` tracks it until the pick checker passes
 or 150 steps run out. The recorded run is
-`results/2026-10-25-r3-grasp-lift.json`: **10 of 25 classes picked**
-(alphabet_soup, chefmate_8_frypan, chocolate_pudding, cookies, cream_cheese,
-popcorn, red_coffee_mug, tomato_sauce, white_yellow_mug, wine_bottle; 37 to 107
-steps). The frypan is picked in Ideal/case4 (`--at`); in case10 none of its
-handles plans. The 15 failures:
+`results/2026-10-25-r3-grasp-lift.json`: **13 of 25 classes picked**
+(akita_black_bowl, alphabet_soup, bbq_sauce, butter, chefmate_8_frypan,
+chocolate_pudding, cookies, cream_cheese, popcorn, red_coffee_mug,
+tomato_sauce, white_yellow_mug, wine_bottle; 37 to 107 steps). Some run at
+another instance than the inventory's example (`--at`): akita_black_bowl,
+butter and white_bowl in Ideal/case7, the frypan in Ideal/case4 (in case10
+none of its handles plans; that attempt is kept under `attempts`).
+
+The checker counts a pick when the object goes from some region to none, not
+by height. Each row records the regions the object starts in
+(`start_regions`); one that starts in none, or in its own (the basket's contain
+region travels with it), is `unregistrable`: lifting it cannot register, and
+the row's `lifted` (the object's rise) is the grasp's evidence instead. The
+bottles' origins sit just above the table region's band (z < 0.477 m), so
+basket, ketchup, milk and orange_juice are lifted 9 to 10 cm and never
+picked; bbq_sauce, 2 mm above the band, registered while the closing fingers
+pressed it into the band and out again, before any lift. The 12 failures:
 
 | Failure | Classes |
 | --- | --- |
-| no handle plans in the scene | akita_black_bowl, black_book, butter, moka_pot, plate, rack, white_bowl |
-| lifted, but the pick never registered | basket, bbq_sauce, ketchup, milk, orange_juice |
-| the fingers stall on the object while closing in (`insert`) | glazed_rim_porcelain_ramekin, macaroni_and_cheese (also `pick suppressed`), wooden_tray |
+| lifted, unregistrable | basket, ketchup, milk, orange_juice |
+| no handle plans in the scene | black_book, plate, rack |
+| grasped, lift does not plan | moka_pot (also unregistrable) |
+| grasped, slips on the lift | white_bowl |
+| the fingers stall on the object while closing in (`insert`) | glazed_rim_porcelain_ramekin, macaroni_and_cheese (`pick suppressed`, then knocked off the table), wooden_tray |
 
-wooden_tray is intermittent: it was picked in an earlier run.
+The bowls plan because the rim sampler takes walls leaning up to ~20 degrees
+(theirs lean 15), and white_bowl because the pick settles a start MuJoCo
+left 0.13 mm off HPP's placement (`settled`). The plate's rim is a near-flat
+slab no top-down pinch reaches without the hand in the table. wooden_tray is
+intermittent: it was picked in an earlier run.
 
 Run it in the HPP environment with the benchmark server available:
 
