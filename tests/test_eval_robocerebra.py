@@ -285,3 +285,11 @@ def test_spawn_runs_a_server_process(server_module, tmp_path):
         assert env.load("Ideal/case1")["case"] == "Ideal/case1"
         process = env._process
     assert process is None or process.poll() is not None
+
+
+def test_environment_contacts_flatten_per_environment():
+    from long_tamp.config.yaml_loader import _environment_contacts
+
+    grouped = {"scene": ["scene/table", "scene/box_floor"], "other": ["other/shelf"]}
+    assert _environment_contacts(grouped) == ["scene/table", "scene/box_floor", "other/shelf"]
+    assert _environment_contacts(["scene/table"]) == ["scene/table"]

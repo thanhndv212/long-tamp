@@ -138,6 +138,17 @@ def _yaml_with_grasp_goals(cls, goal_states):
     )
 
 
+def _environment_contacts(raw: dict[str, list[str]] | list[str]) -> list[str]:
+    """``environment_contacts`` as the factory's flat list of surface names.
+
+    The YAML groups them by environment (``{env: [env/surface, ...]}``); a
+    plain list is accepted too. ``list()`` of the dict would hand the factory
+    the environment names instead of their surfaces."""
+    if isinstance(raw, dict):
+        return [name for names in raw.values() for name in names]
+    return list(raw)
+
+
 # ---------------------------------------------------------------------------
 # Main loader class
 # ---------------------------------------------------------------------------
@@ -397,7 +408,9 @@ class YamlTaskLoader:
             # Freeze joints — loaded from YAML freeze_joints key
             "FREEZE_JOINT_SUBSTRINGS": list(data.get("freeze_joints", [])),
             # Environment
-            "ENVIRONMENT_CONTACTS": dict(data.get("environment_contacts", {})),
+            "ENVIRONMENT_CONTACTS": _environment_contacts(
+                data.get("environment_contacts") or {}
+            ),
             # Misc task metadata
             "TOOL_NAME": object_names[0] if object_names else "",
             "RULES": None,
