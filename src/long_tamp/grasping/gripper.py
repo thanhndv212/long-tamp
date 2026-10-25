@@ -491,16 +491,19 @@ ROBOTIQ_2F85_ROS_INDUSTRIAL = ParallelGripperModel(
 
 #: Franka Panda hand (``panda_hand_tcp``, identity ``<gripper>`` pose, so the
 #: gripper frame's +Z is the approach and +Y the closing axis). Each
-#: prismatic finger joint is half the opening -- exact; the pad and palm
-#: sizes are nominal (Franka datasheet), not measured on this repo's URDF.
+#: prismatic finger joint is half the opening -- exact. Pads from the
+#: fingertip collision box of ``script/twin/assets/panda_bimanual.urdf.template``
+#: (finger frame 45 mm behind the TCP, box z 36.0..54.5 mm, 17.5 x 15.2 mm,
+#: inner face on the joint axis): the pads run 9.0 mm behind to 9.5 mm past
+#: the TCP. The palm is nominal (Franka datasheet).
 PANDA_HAND = ParallelGripperModel(
     name="panda_hand",
     joints={"panda_finger_joint1": 0.5, "panda_finger_joint2": 0.5},
-    stroke=((0.0, 0.0, -0.01), (0.08, 0.08, -0.01)),
-    pad_length=0.02,
-    pad_width=0.018,
-    finger_thickness=0.01,
-    finger_width=0.02,
+    stroke=((0.0, 0.0, 0.00025), (0.08, 0.08, 0.00025)),
+    pad_length=0.0185,
+    pad_width=0.0175,
+    finger_thickness=0.0152,
+    finger_width=0.0175,
     palm_front=-0.045,
     palm_size=(0.06, 0.2, 0.06),
     # gripper x = -canonical z, gripper y = canonical y, gripper z = canonical x
