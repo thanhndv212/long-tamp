@@ -127,6 +127,27 @@ python script/robocerebra/replay_demo.py Ideal --out script/robocerebra/results/
 
 It takes cases (`Ideal/case1`), task types (`Ideal`) or `all`.
 
+## Segmented policy evaluation
+
+`long_tamp.eval.evaluate_cases` and `evaluate.py` provide the rollout harness
+for planner policies. A policy callback receives `(env, case_info, segment,
+step_limit)` and returns an `(N, 7)` array of normalized `OSC_POSE` actions.
+The harness seeds each reset, caps each segment at 150 actions by default,
+checks the benchmark goal after every action, and enters later segments with
+the benchmark's official `resume(k)` operation. It records the seed, action
+count and success for each segment and rollout, plus success rate per case.
+
+```bash
+python script/robocerebra/evaluate.py Ideal/case1 \
+    --policy my_policy:act_segment --rollouts 10 --seed 100 \
+    --out results/ideal-policy.json
+```
+
+The callback is the policy boundary: the harness does not substitute recorded
+demo actions for a planner. A completed benchmark result must use a callback
+that plans and executes the goal predicates through the project MissionRunner
+and report the resulting per-case rollout artifact.
+
 ## Replay results
 
 `results/2026-10-17-r1-replay-ideal-demo.json`: the 10 Ideal cases, `model="demo"`,

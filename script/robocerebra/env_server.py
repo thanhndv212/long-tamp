@@ -369,7 +369,11 @@ class RoboCerebraEnv:
     # -- episode --
 
     def reset(
-        self, step: int = 0, settle: int | None = None, restore_demo: bool = False
+        self,
+        step: int = 0,
+        settle: int | None = None,
+        restore_demo: bool = False,
+        seed: int | None = None,
     ) -> dict[str, Any]:
         """Start an episode at ``step``, after ``env.reset()``.
 
@@ -391,6 +395,8 @@ class RoboCerebraEnv:
         env = self._need()
         if not 0 <= step < len(self.spans):
             raise ValueError(f"step {step} not in [0, {len(self.spans)})")
+        if seed is not None:
+            env.seed(int(seed))
         env.reset()
         self.t = 0
         if step == 0:

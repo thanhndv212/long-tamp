@@ -52,11 +52,12 @@ class StubEnv:
         self.goal = {"a_1": [["pick", "a_1"], ["in", "a_1", "box"]], "b_1": [["pick", "b_1"]]}
         return {"case": case, "steps": ["pick a", "place a", "pick b"], "goal": self.goal}
 
-    def reset(self, step=0, settle=None, restore_demo=False):
+    def reset(self, step=0, settle=None, restore_demo=False, seed=None):
         self.progress = {"a_1": min(step, 2), "b_1": 0}
         self.x, self.t = float(step), 0
         self.restored = restore_demo
-        return {"step": step, **self.check(), "obs": {"x": np.array([self.x])}}
+        self.seed = seed
+        return {"step": step, "seed": seed, **self.check(), "obs": {"x": np.array([self.x])}}
 
     def resume(self, step):
         # Mid-episode: progress and t carry over, the state jumps.
@@ -175,6 +176,9 @@ def test_drives_a_case_end_to_end(server_module):
         assert info["steps"][0] == "pick a"
         start = env.reset(step=0)
         assert start["total_completed"] == 0
+        assert env.reset(step=0, seed=123)["seed"] == 123
+        assert env._call("check")["total_completed"] == 0
+        assert env._call("reset", step=0, seed=456)["total_completed"] == 0
         result = env.step(np.tile([1.0, 0, 0, 0, 0, 0, -1], (2, 1)))
         assert result["t"] == 2 and result["total_completed"] == 2
         assert [c["subtask"] for c in result["completed"]] == [0, 1]
@@ -273,7 +277,11 @@ def test_spawn_runs_a_server_process(server_module, tmp_path):
         "s.serve(StubEnv(), port=a.port, once=a.once, "
         "ready=lambda port: print(f'READY {port}', flush=True))\n"
     )
-    with RoboCerebraClient.spawn([sys.executable, str(stub)], startup_timeout=60) as env:
+    with RoboCerebraClient.spawn(
+        [sys.executable, str(stub)],
+        startup_timeout=60,
+        env={"PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")},
+    ) as env:
         assert env.load("Ideal/case1")["case"] == "Ideal/case1"
         process = env._process
     assert process is None or process.poll() is not None
