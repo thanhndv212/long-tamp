@@ -283,7 +283,7 @@ kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--bo
   <div class="top-inner">
     <div class="brand">
       <h1>long_tamp architecture tour</h1>
-      <span class="ver">reviewed against <code>c23a995</code>, after 0.8.0 · companion to <a href="architecture/">the Architecture page</a></span>
+      <span class="ver">reviewed against <code>cbb1a88</code>, M8 mission domains · companion to <a href="architecture/">the Architecture page</a></span>
     </div>
     <nav class="tabs" role="tablist" aria-label="Chapters" id="tabs"></nav>
   </div>
@@ -596,11 +596,13 @@ const STAGES = [
 
 /* ---------- 2. Package map ---------- */
 const PKG = {
+  "mission": { zone: "mission", job: "Mission domains: one interface for everything specific to a robot and task (capabilities, plan step → grasp sequence, scene, backends), and the generic runner that takes any domain through plan, refine, execute, repair and supervise. Also the operator chat tools, the mission UI launcher and a template domain with no HPP. The domain builds the scene, so this package never imports HPP.", types: "MissionDomain, BaseMissionDomain, MissionRunner, MissionChat, check_domain, TemplateDomain", deps: ["tasks", "task_planning", "execution", "ai", "viewer"], doc: "usage/write-your-own-mission/" },
   "task_planning": { zone: "mission", job: "The plan format and everything around it: capabilities, validation, PDDL export and task planners, repair, the BT.CPP compiler, the event stream, and the goal writer, reviewer and supervisor roles.", types: "TaskPlan, CapabilityRegistry, TaskPlanningSession, run_plan, to_pddl, FastDownwardPlanner, plan_execute_repair, compile_behavior_tree", deps: ["ai", "grasping"], doc: "usage/task-planning-pddl/" },
   "execution": { zone: "mission", job: "Runs a plan: plans each step, then sends its motion to a backend under BUSY retries, heartbeats and a duration-scaled deadline. Drift check, plan-ahead, concurrent arms, pause/stop, the step watchdog.", types: "PlanExecutor, ExecutionBackend, run_command, ExecutionControl, ProcessBackend, StepWatchdog", deps: ["task_planning", "ai"], doc: "usage/execution/" },
   "sim": { zone: "mission", job: "Exports the planning scene to MuJoCo and runs planned paths there with a tracking controller, welded or contact grasps, and skill controllers.", types: "export_mjcf, MuJoCoBackend", deps: ["execution", "task_planning", "backends", "config"], doc: "usage/simulation-mujoco/" },
   "ai": { zone: "mission", job: "One gateway to Anthropic- or OpenAI-compatible models, typed roles (propose, check, feed back, fall back), and the operator chat with gated tools.", types: "make_client, refine, ModelRole, ChatSession", deps: [], doc: "usage/ai-models/" },
   "viewer": { zone: "mission", job: "The web mission viewer: replay any run as one HTML file, or serve it live with the plan monitor, controls and chat.", types: "ViewerServer, write_replay, ChatBridge, ViewerConfig", deps: ["task_planning"], doc: "usage/viewer/" },
+  "eval": { zone: "mission", job: "Benchmark adapters: a client for the RoboCerebra MuJoCo env (its own process and Python, over the remote backend's wire format) and its scenes exported to URDF/SRDF for HPP.", types: "RoboCerebraClient, write_export, load_export", deps: ["execution"] },
   "tasks": { zone: "motion", job: "Plans chains of grasp, release and hand-over phases as one path. Lookahead, block recovery, checkpoints, and the Refiner that the mission stack calls.", types: "GraspSequencePlanner, run_block_with_recovery, Refiner, GraspSequenceRefiner, MissionCheckpoint", deps: ["planning", "logging", "utils", "visualization", "cli", "execution"], doc: "usage/refiner/" },
   "planning": { zone: "motion", job: "Backend-agnostic primitives: load a scene, build constraints and per-phase graphs, generate configurations, record and replay paths.", types: "SceneBuilder, ConstraintBuilder, GraphBuilder, SequentialConstraintGraphFactory, GraspStateTracker, ConfigGenerator, PathRecorder", deps: ["backends", "config", "logging", "utils"], doc: "usage/standalone-usage/" },
   "backends": { zone: "motion", job: "The only place pyhpp is imported. Fails only when used, so everything pure-Python installs without HPP.", types: "BackendBase, PyHPPBackend, HAS_PYHPP", deps: ["logging", "utils", "planning", "visualization"], doc: "INSTALL/" },
@@ -618,7 +620,7 @@ const LAZY = { "backends": ["planning", "visualization"], "tasks": ["execution"]
   const btns = {};
   for (const z of ["mission", "seam", "motion", "support"]) {
     if (z === "seam") {
-      root.appendChild(el("div", { class: "seam-box" }, `<b>Refiner</b>: a plan step in, a path or failure facts out. Missions wire it up in their own adapter.`));
+      root.appendChild(el("div", { class: "seam-box" }, `<b>Refiner</b>: a plan step in, a path or failure facts out. A mission domain wires it up: its <code>setup()</code> builds the scene, its <code>step_for()</code> says what to refine.`));
       continue;
     }
     const box = el("div", { class: "zone-box" }, `<h4>${zones[z]}</h4>`);
@@ -941,17 +943,24 @@ const ROUNDS = [
 
 /* ---------- 8. Extend ---------- */
 const EXT = [
-  ["A mission", "A YAML scene, a capability registry and a session adapter whose capabilities call the motion stack. Register a factory in <code>host.py</code> to run it from C++.",
-`# an illustrative capability, not the screw assembly's own
-registry = CapabilityRegistry()
-registry.register(
-    CapabilityDescriptor(
-        "rack", "1.0", {"arm": str, "tool": str},
-        preconditions=("holds(?arm, ?tool)",),
-        effects=("holds(fixtures/rack_hold, ?tool)",),
-    ),
-    rack_tool,  # your callable: plans the motion
-)`],
+  ["A mission", "A <code>MissionDomain</code>: its capabilities, what each plan step refines to, and the scene. <code>BaseMissionDomain</code> answers the rest (PDDL export, vocabulary, repair policy); the generic runner, chat and UI run it. Copy <code>long_tamp.mission.template</code> to start.",
+`# an illustrative domain, not the screw assembly's own
+class MyDomain(BaseMissionDomain):
+    name = "my-cell"
+
+    def descriptors(self):  # capabilities, with preconditions and effects
+        return {"rack": CapabilityDescriptor(
+            "rack", "1.0", {"arm": str, "tool": str},
+            preconditions=("holds(?arm, ?tool)",),
+            effects=("holds(fixtures/rack_hold, ?tool)",))}
+
+    def step_for(self, capability, parameters):
+        ...  # a RefinementStep: the grasp sequence to plan
+
+    def setup(self, seed=None, log_dir="auto"):
+        ...  # build the HPP scene: MissionScene(task, planner, q_init)
+
+# python -m long_tamp.mission ui --domain my_cell:MyDomain`],
   ["An execution backend", "Three polled methods. No threads needed, so a ROS action client, a simulator loop or a stub all fit. Wrap it in <code>ProcessBackend</code> to give it its own process.",
 `class MyBackend:  # execution.contract.ExecutionBackend
     def start(self, command) -> ExecutionStatus: ...
