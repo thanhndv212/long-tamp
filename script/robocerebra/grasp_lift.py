@@ -150,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--out",
-        default=str(HERE / "results" / "2026-10-25-r3-grasp-lift.json"),
+        default=str(HERE / "results" / "2026-10-26-r3-grasp-lift.json"),
         help="JSON result path",
     )
     args = parser.parse_args(argv)

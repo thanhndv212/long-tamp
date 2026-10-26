@@ -282,37 +282,54 @@ not proven executable grasps.
 case is reset with the goal `pick <instance>`, the HPP segment policy (below)
 plans a grasp and lift, and `OSC_POSE` tracks it until the pick checker passes
 or 150 steps run out. The recorded run is
-`results/2026-10-25-r3-grasp-lift.json`: **13 of 25 classes picked**
+`results/2026-10-26-r3-grasp-lift.json`: **14 of 25 classes picked**
 (akita_black_bowl, alphabet_soup, bbq_sauce, butter, chefmate_8_frypan,
 chocolate_pudding, cookies, cream_cheese, popcorn, red_coffee_mug,
-tomato_sauce, white_yellow_mug, wine_bottle; 37 to 107 steps). Some run at
-another instance than the inventory's example (`--at`): akita_black_bowl,
-butter and white_bowl in Ideal/case7, the frypan in Ideal/case4 (in case10
-none of its handles plans; that attempt is kept under `attempts`).
+tomato_sauce, white_yellow_mug, wine_bottle, wooden_tray; 42 to 107 steps),
+and **4 more held** (below): 18 of 25 grasped and lifted without failing the
+checker's rotation test. Some run at another instance than the inventory's
+example (`--at`): akita_black_bowl, butter and white_bowl in Ideal/case7, the
+frypan in Ideal/case4 (in case10 none of its handles plans; that attempt is
+kept under `attempts`).
 
-The checker counts a pick when the object goes from some region to none, not
-by height. Each row records the regions the object starts in
+Every row records the object's pose from the observations: `lifted`, how much
+higher it ended than it started, and `rotation`, the checker's own test (the
+change of its quaternion over 40 steps, failing above 0.1) at its worst over
+the rollout. The checker counts a pick when the object goes from some region
+to none, not by height. Each row records the regions the object starts in
 (`start_regions`); one that starts in none, or in its own (the basket's contain
-region travels with it), is `unregistrable`: lifting it cannot register, and
-the row's `lifted` (the object's rise) is the grasp's evidence instead. The
-bottles' origins sit just above the table region's band (z < 0.477 m), so
-basket, ketchup, milk and orange_juice are lifted 9 to 10 cm and never
-picked; bbq_sauce, 2 mm above the band, registered while the closing fingers
-pressed it into the band and out again, before any lift. The 12 failures:
+region travels with it), is `unregistrable`: lifting it cannot register. Such
+a row is `held` when the object rose at least 5 cm with `rotation` under the
+threshold: the grasp and lift worked, as far as the benchmark can tell without
+its region test. The bottles' origins sit just above the table region's band
+(z < 0.477 m): basket, ketchup, milk and orange_juice are held, lifted 9 to 10
+cm with `rotation` at most 0.034. bbq_sauce, 2 mm above the band, registered
+while the closing fingers pressed it into the band and out again, before any
+lift. The 7 failures:
 
 | Failure | Classes |
 | --- | --- |
-| lifted, unregistrable | basket, ketchup, milk, orange_juice |
 | no handle plans in the scene | black_book, plate, rack |
+| every grasp needs a joint at its limit under OSC | glazed_rim_porcelain_ramekin, macaroni_and_cheese |
 | grasped, lift does not plan | moka_pot (also unregistrable) |
 | grasped, slips on the lift | white_bowl |
-| the fingers stall on the object while closing in (`insert`) | glazed_rim_porcelain_ramekin, macaroni_and_cheese (`pick suppressed`, then knocked off the table), wooden_tray |
+
+OSC moves the arm toward each hand pose by the shortest joint motion, so it
+does not follow HPP's joint path: from the start posture it stays on another
+branch of the arm's redundancy, where the same hand pose can need a joint past
+its limit. Before, the arm then stalled 4 to 8 cm short with the joint at its
+stop (wooden_tray's wrist). The pick now rolls OSC out by IK pose by pose along
+the tracked path and takes a handle whose rollout stays 0.05 rad inside the
+limits, planning the lift from where the rollout ends. The ramekin and the
+macaroni box sit 20 cm in front of the robot's base, where every approach
+folds the elbow to its stop on the start branch; HPP reaches them only with
+the shoulder and upper arm twisted (j1 and j3 near ±1.5), a branch `OSC_POSE`
+actions cannot move the arm to.
 
 The bowls plan because the rim sampler takes walls leaning up to ~20 degrees
 (theirs lean 15), and white_bowl because the pick settles a start MuJoCo
 left 0.13 mm off HPP's placement (`settled`). The plate's rim is a near-flat
-slab no top-down pinch reaches without the hand in the table. wooden_tray is
-intermittent: it was picked in an earlier run.
+slab no top-down pinch reaches without the hand in the table.
 
 Run it in the HPP environment with the benchmark server available:
 
