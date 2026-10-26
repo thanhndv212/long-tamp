@@ -29,11 +29,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reports robot contacts per object, and `regions` lists the regions an object is `in`
   by the benchmark's predicate.
 - `script/robocerebra/grasp_lift.py` picks and lifts one object per R3 class under the
-  benchmark's pick checker (#158 AC2): 13 of 25 classes, in
-  `script/robocerebra/results/2026-10-25-r3-grasp-lift.json`. A row is `unregistrable`
+  benchmark's pick checker (#158 AC2): 14 of 25 classes picked and 4 more held, in
+  `script/robocerebra/results/2026-10-26-r3-grasp-lift.json`. A row is `unregistrable`
   when the object starts in no region it can leave (a bottle above the table region's
   band, a basket in its own), which the checker's region rule can never count as picked;
-  it records how high the object was `lifted` instead.
+  such a row is `held` when the object's observed rise (`lifted`) is at least 5 cm and
+  its `rotation`, the checker's quaternion test, stays under the threshold.
+- RoboCerebra pick planning keeps a handle only if `OSC_POSE` can track it: the tracked
+  path is rolled out by IK from the observed arm, which must stay 0.05 rad inside the
+  joint limits, and the lift is planned from where the rollout ends. A grasp HPP reached
+  on another branch of the arm's redundancy stalled before with a joint at its stop.
 - RoboCerebra grasp-handle library (#158, M11 R3): `long_tamp.eval.add_grasp_handles`
   derives object-relative Panda handles from exported collision geometry, including
   top-rim pinches for container walls. `script/robocerebra/grasp_library.py` exports
