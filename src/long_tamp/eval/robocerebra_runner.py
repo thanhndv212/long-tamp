@@ -200,9 +200,9 @@ def summarize(rows: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "unsupported_segments": len(unsupported),
         "supported_segments": len(supported),
         "supported_segment_success": len(passed),
-        "supported_segment_success_rate": round(len(passed) / len(supported), 4)
-        if supported
-        else 0.0,
+        "supported_segment_success_rate": (
+            round(len(passed) / len(supported), 4) if supported else 0.0
+        ),
         "supported_segment_success_by_case": by_case,
         "mean_steps_used_on_success": (
             round(sum(s["steps_used"] for s in passed) / len(passed), 1)

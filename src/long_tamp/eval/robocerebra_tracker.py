@@ -75,9 +75,13 @@ def rotation_vector(R: np.ndarray) -> np.ndarray:
     return angle * axis / (2.0 * np.sin(angle))
 
 
-def pose_error(target: np.ndarray, current: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def pose_error(
+    target: np.ndarray, current: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
     """World-frame translation and rotation vector from ``current`` to ``target``."""
-    return target[:3, 3] - current[:3, 3], rotation_vector(target[:3, :3] @ current[:3, :3].T)
+    return target[:3, 3] - current[:3, 3], rotation_vector(
+        target[:3, :3] @ current[:3, :3].T
+    )
 
 
 def resample(poses: np.ndarray, pos_step: float, rot_step: float) -> np.ndarray:
@@ -150,19 +154,31 @@ class OscTracker:
     def __call__(self, obs: dict[str, Any]) -> np.ndarray:
         current = obs_pose(obs)
         if self.done:
-            return self._action(self._waypoints[-1][-1], current, self.stages[-1].gripper)
+            return self._action(
+                self._waypoints[-1][-1], current, self.stages[-1].gripper
+            )
         stage = self.stages[self.stage]
         waypoints = self._waypoints[self.stage]
         last = len(waypoints) - 1
-        while self._index < last and self._within(waypoints[self._index], current, self._steps[self.stage]):
+        while self._index < last and self._within(
+            waypoints[self._index], current, self._steps[self.stage]
+        ):
             self._index += 1
         target = waypoints[self._index]
         if self._index == last:
             self._at_end += 1
-            if self._converged(target, current, stage.tol) or self._at_end > self.patience:
+            if (
+                self._converged(target, current, stage.tol)
+                or self._at_end > self.patience
+            ):
                 self._dwelt += 1
                 if self._dwelt > stage.dwell:
-                    self.log.append({"stage": stage.name, "end_error": self._errors(target, current)})
+                    self.log.append(
+                        {
+                            "stage": stage.name,
+                            "end_error": self._errors(target, current),
+                        }
+                    )
                     self._next_stage()
                     return self._action(target, current, stage.gripper)
             return self._action(target, current, stage.gripper, self._boost())
@@ -181,17 +197,29 @@ class OscTracker:
         dp, dr = pose_error(target, current)
         return np.linalg.norm(dp) < step and np.linalg.norm(dr) < self.rot_step
 
-    def _converged(self, target: np.ndarray, current: np.ndarray, tol: float | None) -> bool:
+    def _converged(
+        self, target: np.ndarray, current: np.ndarray, tol: float | None
+    ) -> bool:
         dp, dr = pose_error(target, current)
-        return np.linalg.norm(dp) < (tol or self.pos_tol) and np.linalg.norm(dr) < self.rot_tol
+        return (
+            np.linalg.norm(dp) < (tol or self.pos_tol)
+            and np.linalg.norm(dr) < self.rot_tol
+        )
 
     @staticmethod
     def _errors(target: np.ndarray, current: np.ndarray) -> list[float]:
         dp, dr = pose_error(target, current)
-        return [round(float(np.linalg.norm(dp)), 4), round(float(np.linalg.norm(dr)), 4)]
+        return [
+            round(float(np.linalg.norm(dp)), 4),
+            round(float(np.linalg.norm(dr)), 4),
+        ]
 
     def _action(
-        self, target: np.ndarray, current: np.ndarray, gripper: float, boost: float = 1.0
+        self,
+        target: np.ndarray,
+        current: np.ndarray,
+        gripper: float,
+        boost: float = 1.0,
     ) -> np.ndarray:
         dp, dr = pose_error(target, current)
         gain = self.gain * boost
@@ -216,4 +244,11 @@ def _quat_matrix(x: float, y: float, z: float, w: float) -> np.ndarray:
     )
 
 
-__all__ = ["OscTracker", "Stage", "obs_pose", "pose_error", "resample", "rotation_vector"]
+__all__ = [
+    "OscTracker",
+    "Stage",
+    "obs_pose",
+    "pose_error",
+    "resample",
+    "rotation_vector",
+]

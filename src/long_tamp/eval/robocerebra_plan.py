@@ -59,7 +59,9 @@ THIN_REGION = 0.005  # m: a region half this thin is swept across, not stopped i
 SWEEP_STEP = 0.004  # m: the sweep's carrot, under the slab's thickness per step
 # HPP's refusal of a transit goal off the start's leaf, and the largest move
 # of the target onto its placement taken as settling, not as a real mismatch.
-OFF_LEAF = re.compile(r"goal configuration at rank \d+: \(([^)]*)\) does not satisfy the leaf constraint")
+OFF_LEAF = re.compile(
+    r"goal configuration at rank \d+: \(([^)]*)\) does not satisfy the leaf constraint"
+)
 SETTLE_SHIFT, SETTLE_TURN = 0.005, 0.05  # m, rad
 # robosuite mounts the Panda's fingers 6 mm nearer the hand than
 # franka_description does (panda_gripper.xml: 0.0524; the URDF: 0.0584).
@@ -73,9 +75,9 @@ def held_object(manifest: dict[str, Any]) -> str | None:
     touching: dict[str, set[str]] = {}
     for contact in manifest.get("robot_contacts", []):
         side = (
-            "left" if contact["link"] in LEFT_FINGER
-            else "right" if contact["link"] in RIGHT_FINGER
-            else None
+            "left"
+            if contact["link"] in LEFT_FINGER
+            else "right" if contact["link"] in RIGHT_FINGER else None
         )
         if side:
             touching.setdefault(contact["object"], set()).add(side)
@@ -108,8 +110,14 @@ class PandaKinematics:
         self.data = self.model.createData()
         self.frame = self.model.getFrameId(TCP_LINK)
         self.base = xyzquat_to_pose(base_xyzquat)
-        self.arm_q = [self.model.joints[self.model.getJointId(f"panda_joint{k}")].idx_q for k in range(1, 8)]
-        self.arm_v = [self.model.joints[self.model.getJointId(f"panda_joint{k}")].idx_v for k in range(1, 8)]
+        self.arm_q = [
+            self.model.joints[self.model.getJointId(f"panda_joint{k}")].idx_q
+            for k in range(1, 8)
+        ]
+        self.arm_v = [
+            self.model.joints[self.model.getJointId(f"panda_joint{k}")].idx_v
+            for k in range(1, 8)
+        ]
         self.lower = np.array([ARM_BOUNDS[k][0] for k in range(1, 8)])
         self.upper = np.array([ARM_BOUNDS[k][1] for k in range(1, 8)])
 
@@ -121,11 +129,17 @@ class PandaKinematics:
     def tcp(self, arm: np.ndarray) -> np.ndarray:
         """World pose of the TCP at arm joints ``arm`` (7,)."""
         pin = self._pin
-        pin.framesForwardKinematics(self.model, self.data, self._q(np.asarray(arm, dtype=float)))
+        pin.framesForwardKinematics(
+            self.model, self.data, self._q(np.asarray(arm, dtype=float))
+        )
         return self.base @ self.data.oMf[self.frame].homogeneous
 
     def ik(
-        self, arm0: np.ndarray, target: np.ndarray, iterations: int = 300, tol: float = 1e-5
+        self,
+        arm0: np.ndarray,
+        target: np.ndarray,
+        iterations: int = 300,
+        tol: float = 1e-5,
     ) -> np.ndarray | None:
         """Arm joints putting the TCP at world pose ``target``, from ``arm0``
         (damped least squares); ``None`` if it does not converge in bounds."""
@@ -138,7 +152,9 @@ class PandaKinematics:
             error = pin.log6(self.data.oMf[self.frame].actInv(goal)).vector
             if np.linalg.norm(error) < tol:
                 return arm
-            J = pin.computeFrameJacobian(self.model, self.data, q, self.frame, pin.LOCAL)[:, self.arm_v]
+            J = pin.computeFrameJacobian(
+                self.model, self.data, q, self.frame, pin.LOCAL
+            )[:, self.arm_v]
             step = J.T @ np.linalg.solve(J @ J.T + 1e-6 * np.eye(6), error)
             norm = np.linalg.norm(step)
             if norm > 0.3:  # a large reorientation: keep the linearization local
@@ -178,16 +194,25 @@ class SegmentPlanner:
         if held:
             T_obj = xyzquat_to_pose(scene.object_config(target))
             handle = inverse(T_obj) @ self.tcp0
-            write_handles(scene.file_paths()["objects"][target]["srdf"], [_handle_xml(HELD, handle)])
+            write_handles(
+                scene.file_paths()["objects"][target]["srdf"],
+                [_handle_xml(HELD, handle)],
+            )
             self.handles = [HELD]
             # The fingers as they close on the object, a little wider.
             width = abs(joints.get("gripper0_finger_joint1", FINGER_OPEN))
             finger = min(FINGER_OPEN, width + 0.002)
         else:
-            rows = scene.manifest.get("grasp_handles", {}).get(target, {}).get("handles", [])
+            rows = (
+                scene.manifest.get("grasp_handles", {})
+                .get(target, {})
+                .get("handles", [])
+            )
             self.handles = [row["name"] for row in rows]
             if not self.handles:
-                raise ValueError(f"{target} has no grasp handles: run add_grasp_handles first")
+                raise ValueError(
+                    f"{target} has no grasp handles: run add_grasp_handles first"
+                )
             finger = FINGER_OPEN
         self._setup(robot_urdf, robot_srdf, finger)
 
@@ -202,17 +227,33 @@ class SegmentPlanner:
         env = scene.environment_name
         paths = scene.file_paths()
         joints = [
-            {"joint": f"panda/panda_joint{k}", "initial": float(self.arm0[k - 1]), "bounds": list(ARM_BOUNDS[k])}
+            {
+                "joint": f"panda/panda_joint{k}",
+                "initial": float(self.arm0[k - 1]),
+                "bounds": list(ARM_BOUNDS[k]),
+            }
             for k in range(1, 8)
         ] + [
-            {"joint": f"panda/panda_finger_joint{k}", "initial": finger, "bounds": [0.0, FINGER_OPEN]}
+            {
+                "joint": f"panda/panda_finger_joint{k}",
+                "initial": finger,
+                "bounds": [0.0, FINGER_OPEN],
+            }
             for k in (1, 2)
         ]
-        freeze = ["panda_finger_joint"] + [f"{n}/root_joint" for n in scene.objects if n != target]
+        freeze = ["panda_finger_joint"] + [
+            f"{n}/root_joint" for n in scene.objects if n != target
+        ]
         config = {
             "task": "robocerebra",
             "paths": {
-                "robot": {"panda": {"urdf": robot_urdf, "srdf": robot_srdf, "pose": scene.robot_pose("robot0_link0")}},
+                "robot": {
+                    "panda": {
+                        "urdf": robot_urdf,
+                        "srdf": robot_srdf,
+                        "pose": scene.robot_pose("robot0_link0"),
+                    }
+                },
                 "environment": {env: paths["environment"][env]["urdf"]},
                 "objects": paths["objects"],
             },
@@ -227,7 +268,9 @@ class SegmentPlanner:
             "objects": {
                 name: {
                     "initial_pose_xyzquat": scene.object_config(name),
-                    "handles": [f"{name}/{h}" for h in self.handles] if name == target else [],
+                    "handles": (
+                        [f"{name}/{h}" for h in self.handles] if name == target else []
+                    ),
                     "contact_surfaces": [f"{name}/bottom"] if name == target else [],
                 }
                 for name in scene.objects
@@ -269,7 +312,10 @@ class SegmentPlanner:
             graph_constraints=self.task._graph_constraints,
         )
         model = self.task.planner.model()
-        self._arm_index = [model.joints[model.getJointId(f"panda/panda_joint{k}")].idx_q for k in range(1, 8)]
+        self._arm_index = [
+            model.joints[model.getJointId(f"panda/panda_joint{k}")].idx_q
+            for k in range(1, 8)
+        ]
         root = model.joints[model.getJointId(f"{target}/root_joint")].idx_q
         self._object_index = list(range(root, root + 7))
         self.q0 = list(self.task.q_init)
@@ -303,7 +349,9 @@ class SegmentPlanner:
         out[self._object_index] = pose_to_xyzquat(moved)
         return out.tolist()
 
-    def escape(self, info: dict[str, Any], step: float = 0.01, max_rise: float = 0.15) -> tuple[list[float], Stage | None]:
+    def escape(
+        self, info: dict[str, Any], step: float = 0.01, max_rise: float = 0.15
+    ) -> tuple[list[float], Stage | None]:
         """A collision-free configuration to plan from: the segment start,
         or, when that collides (a resumed demo state can leave the hand in a
         box, and the URDF's fingers reach 6 mm further than the sim's), the
@@ -322,10 +370,22 @@ class SegmentPlanner:
             q = move(self.q0, T)
             if q is not None and self._valid(q)[0]:
                 info["escape"] = round(float(rise), 3)
-                return q, Stage("escape", np.array([self.tcp0, T]), gripper=1.0 if self.held else -1.0)
-        raise PlanningError(f"the start collides ({message}) and rising does not clear it", info)
+                return q, Stage(
+                    "escape",
+                    np.array([self.tcp0, T]),
+                    gripper=1.0 if self.held else -1.0,
+                )
+        raise PlanningError(
+            f"the start collides ({message}) and rising does not clear it", info
+        )
 
-    def _unsink(self, info: dict[str, Any], message: str, step: float = 0.001, max_rise: float = 0.01) -> tuple[bool, str]:
+    def _unsink(
+        self,
+        info: dict[str, Any],
+        message: str,
+        step: float = 0.001,
+        max_rise: float = 0.01,
+    ) -> tuple[bool, str]:
         """Raise the target out of its support at the start: MuJoCo's soft
         contacts leave a resting object a millimetre or so inside it, which
         HPP sees as a collision. Updates :attr:`q0`; returns its validity."""
@@ -340,7 +400,9 @@ class SegmentPlanner:
                 return valid, raised
         return False, message
 
-    def config_paths(self, phases: list[dict[str, Any]], samples: int = 120) -> list[np.ndarray]:
+    def config_paths(
+        self, phases: list[dict[str, Any]], samples: int = 120
+    ) -> list[np.ndarray]:
         """Configurations along each planned path of ``phases`` (one array per edge)."""
         out = []
         for phase in phases:
@@ -360,7 +422,9 @@ class SegmentPlanner:
                     out.append(np.array(configs))
         return out
 
-    def tcp_paths(self, phases: list[dict[str, Any]], samples: int = 120) -> list[np.ndarray]:
+    def tcp_paths(
+        self, phases: list[dict[str, Any]], samples: int = 120
+    ) -> list[np.ndarray]:
         """TCP poses along each planned path of ``phases`` (one array per edge)."""
         return [self.tcps(configs) for configs in self.config_paths(phases, samples)]
 
@@ -391,7 +455,12 @@ class SegmentPlanner:
         return np.array(kept)
 
     def _line(
-        self, q_from: np.ndarray, q_to: np.ndarray, problem: Any, step: float = 0.01, turn: float = 0.05
+        self,
+        q_from: np.ndarray,
+        q_to: np.ndarray,
+        problem: Any,
+        step: float = 0.01,
+        turn: float = 0.05,
     ) -> list[np.ndarray] | None:
         """Configurations moving the TCP on a straight line (and the shortest
         rotation) from ``q_from``'s pose to ``q_to``'s, every ``step`` m and
@@ -407,16 +476,25 @@ class SegmentPlanner:
         out, q = [np.asarray(q_from, dtype=float)], list(q_from)
         for t in np.linspace(0.0, 1.0, count + 1)[1:]:
             T = np.eye(4)
-            T[:3, :3] = Ta[:3, :3] @ (_axis_angle(rotation / angle, t * angle) if angle > 1e-9 else np.eye(3))
+            T[:3, :3] = Ta[:3, :3] @ (
+                _axis_angle(rotation / angle, t * angle) if angle > 1e-9 else np.eye(3)
+            )
             T[:3, 3] = Ta[:3, 3] + t * shift
             q = move(q, T)
-            if q is None or self._near_limit(self.arm(q)) or not self._judge(problem, q)[0]:
+            if (
+                q is None
+                or self._near_limit(self.arm(q))
+                or not self._judge(problem, q)[0]
+            ):
                 return None
             out.append(np.asarray(q, dtype=float))
         return out
 
     def _near_limit(self, arm: np.ndarray) -> bool:
-        return bool(np.any(arm < self.kin.lower + LIMIT_MARGIN) or np.any(arm > self.kin.upper - LIMIT_MARGIN))
+        return bool(
+            np.any(arm < self.kin.lower + LIMIT_MARGIN)
+            or np.any(arm > self.kin.upper - LIMIT_MARGIN)
+        )
 
     @contextmanager
     def _validations(self) -> Iterator[Any]:
@@ -426,7 +504,10 @@ class SegmentPlanner:
         resting contacts make invalid."""
         problem = self.task.planner.problem
         validations = problem.configValidation()
-        added = hasattr(validations, "numberConfigValidations") and validations.numberConfigValidations() == 0
+        added = (
+            hasattr(validations, "numberConfigValidations")
+            and validations.numberConfigValidations() == 0
+        )
         if added:
             problem.addConfigValidation("CollisionValidation")
             problem.addConfigValidation("JointBoundValidation")
@@ -449,8 +530,10 @@ class SegmentPlanner:
         motion of ours changes."""
         valid, message = problem.isConfigValid(np.asarray(q, dtype=float))
         message = str(message)
-        if not valid and message.startswith("Collision") and not any(
-            name in message for name in ("panda/", f"{self.target}/")
+        if (
+            not valid
+            and message.startswith("Collision")
+            and not any(name in message for name in ("panda/", f"{self.target}/"))
         ):
             return True, message
         return bool(valid), message
@@ -472,7 +555,11 @@ class SegmentPlanner:
         start, settled = self.object_pose(q), self.object_pose(out)
         shift = np.linalg.norm(settled[:3, 3] - start[:3, 3])
         turn = np.linalg.norm(rotation_vector(start[:3, :3].T @ settled[:3, :3]))
-        if shift > SETTLE_SHIFT or turn > SETTLE_TURN or not self._valid(out.tolist())[0]:
+        if (
+            shift > SETTLE_SHIFT
+            or turn > SETTLE_TURN
+            or not self._valid(out.tolist())[0]
+        ):
             return None
         return out.tolist()
 
@@ -509,9 +596,14 @@ class SegmentPlanner:
                     max_iterations_per_edge=self.max_iterations,
                 )
             except Exception as error:
-                grasp = {"success": False, "message": f"{type(error).__name__}: {error}"}
+                grasp = {
+                    "success": False,
+                    "message": f"{type(error).__name__}: {error}",
+                }
             message = grasp.get("message")
-            q_settled = None if grasp["success"] or settled else self._settled(message, q_start)
+            q_settled = (
+                None if grasp["success"] or settled else self._settled(message, q_start)
+            )
             if q_settled is not None:
                 # Again from the settled start, the same handle first.
                 settled = True
@@ -525,7 +617,9 @@ class SegmentPlanner:
             if grasp["success"] and self._near_limit(self.arm(grasp["final_config"])):
                 grasp["success"], message = False, "the grasp is at a joint limit"
                 at_limit = at_limit or (handle, grasp)
-            info["tried"].append({"handle": handle, "success": grasp["success"], "message": message})
+            info["tried"].append(
+                {"handle": handle, "success": grasp["success"], "message": message}
+            )
             if grasp["success"]:
                 break
             self.sequence.reset()
@@ -553,7 +647,9 @@ class SegmentPlanner:
             loop = self._loop(q_grasp, q_lift)
             info["lift_message"] = loop.get("message")
             if loop["success"]:
-                lifted, lift_path = height, np.concatenate(self.tcp_paths(loop["phase_results"]))
+                lifted, lift_path = height, np.concatenate(
+                    self.tcp_paths(loop["phase_results"])
+                )
                 break
         if lift_path is None:
             raise PlanningError(f"lifting {self.target} does not plan", info)
@@ -591,19 +687,29 @@ class SegmentPlanner:
         """
         if not self.held:
             raise ValueError("plan_place needs the target in the hand (held=True)")
-        info: dict[str, Any] = {"target": self.target, "region": region["region"], "rejected": {}}
+        info: dict[str, Any] = {
+            "target": self.target,
+            "region": region["region"],
+            "rejected": {},
+        }
         start = time.time()
         q_start, escape = self.escape(info)
         tcp_start = self.kin.tcp(self.arm(q_start))
         object_in_tcp = inverse(tcp_start) @ self.object_pose(q_start)
-        corners = object_corners(self.scene.manifest["objects"][self.target].get("bottom"))
+        corners = object_corners(
+            self.scene.manifest["objects"][self.target].get("bottom")
+        )
         found = None
         for name, rotation in place_orientations(tcp_start):
             # The object square to the world: a grasp's tilt goes to the
             # hand, not into how high the object stands.
             obj = tcp_start @ object_in_tcp
             obj[:3, :3] = square(rotation @ obj[:3, :3])
-            below = -float((obj[:3, :3] @ corners.T)[2].min()) if corners is not None else 0.03
+            below = (
+                -float((obj[:3, :3] @ corners.T)[2].min())
+                if corners is not None
+                else 0.03
+            )
             heights = place_heights(region, below, drop)
             if heights is None:
                 info["rejected"][name] = "rests out of the region's z range"
@@ -627,7 +733,9 @@ class SegmentPlanner:
             if found:
                 break
         if found is None:
-            raise PlanningError(f"no release pose for {self.target} in {region['region']}", info)
+            raise PlanningError(
+                f"no release pose for {self.target} in {region['region']}", info
+            )
         name, position, goal, (q_pre, q_place) = found
         info.update(orientation=name, object_goal=position)
         with self._validations() as problem:
@@ -639,9 +747,13 @@ class SegmentPlanner:
             loop = self._loop(q_start, q_pre)
             if not loop["success"]:
                 info["message"] = loop.get("message")
-                raise PlanningError(f"carrying {self.target} to {region['region']} does not plan", info)
+                raise PlanningError(
+                    f"carrying {self.target} to {region['region']} does not plan", info
+                )
             info["carry"] = "planned"
-            carry = self.tcps(self.shortcut(np.concatenate(self.config_paths(loop["phase_results"]))))
+            carry = self.tcps(
+                self.shortcut(np.concatenate(self.config_paths(loop["phase_results"])))
+            )
         pre = self.kin.tcp(self.arm(q_pre))
         line = np.array([pre, goal])
         stages = [
@@ -661,7 +773,13 @@ class SegmentPlanner:
             stages.insert(0, escape)
         return SegmentPlan(stages, self.q0, self.tcp0, info)
 
-    def _sweep(self, q: list[float], goal: np.ndarray, region: dict[str, Any], reach: float = 0.02) -> np.ndarray | None:
+    def _sweep(
+        self,
+        q: list[float],
+        goal: np.ndarray,
+        region: dict[str, Any],
+        reach: float = 0.02,
+    ) -> np.ndarray | None:
         """For a region thinner than the hand can stop in (a storage box's
         side wall: a slab a few mm thick), TCP poses sweeping the object
         across it and back, ``reach`` each way: the benchmark checks every
@@ -706,6 +824,7 @@ class SegmentPlanner:
                 return None, message
             configs.append(q)
         return (configs[0], configs[-1]), ""
+
 
 def tcp_to_eef(tcp_start: np.ndarray, eef_start: np.ndarray) -> np.ndarray:
     """The tracker's offset from the planned TCP to the observed end
@@ -779,11 +898,15 @@ def place_positions(
         horizontal = horizontal / np.linalg.norm(horizontal)
         # How far the center may move back along -approach in the box.
         reach = min(
-            (half[i] - margin) / abs(horizontal[i]) for i in range(2) if abs(horizontal[i]) > 1e-6
+            (half[i] - margin) / abs(horizontal[i])
+            for i in range(2)
+            if abs(horizontal[i]) > 1e-6
         )
         offsets += list(np.arange(step, reach + 1e-9, step))
     heights_ = np.arange(heights[0], heights[1] + 1e-9, step)
-    return [(center - offset * horizontal, float(z)) for offset in offsets for z in heights_]
+    return [
+        (center - offset * horizontal, float(z)) for offset in offsets for z in heights_
+    ]
 
 
 def place_orientations(tcp: np.ndarray) -> list[tuple[str, np.ndarray]]:
@@ -792,11 +915,21 @@ def place_orientations(tcp: np.ndarray) -> list[tuple[str, np.ndarray]]:
     each of +-x, +-y, at each quarter turn about that axis."""
     out = [("held", np.eye(3))]
     approach = tcp[:3, 2]
-    for name, direction in (("+x", [1, 0, 0]), ("-x", [-1, 0, 0]), ("+y", [0, 1, 0]), ("-y", [0, -1, 0])):
+    for name, direction in (
+        ("+x", [1, 0, 0]),
+        ("-x", [-1, 0, 0]),
+        ("+y", [0, 1, 0]),
+        ("-y", [0, -1, 0]),
+    ):
         direction = np.asarray(direction, dtype=float)
         align = _rotation_between(approach, direction)
         for quarter in range(4):
-            out.append((f"{name}/{90 * quarter}", _axis_angle(direction, np.pi / 2 * quarter) @ align))
+            out.append(
+                (
+                    f"{name}/{90 * quarter}",
+                    _axis_angle(direction, np.pi / 2 * quarter) @ align,
+                )
+            )
     return out
 
 
@@ -863,7 +996,9 @@ def robot_files(root: str | Path) -> tuple[str, str]:
     root = Path(root).resolve()
     text = (root / "panda_bimanual.urdf.template").read_text()
     text = text.replace("{{PANDA_MESH_DIR}}", str(root / "panda" / "meshes"))
-    with tempfile.NamedTemporaryFile("w", suffix=".urdf", prefix="panda_rc_", delete=False) as f:
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".urdf", prefix="panda_rc_", delete=False
+    ) as f:
         f.write(text)
     return f.name, str(root / "panda_bimanual.srdf")
 
