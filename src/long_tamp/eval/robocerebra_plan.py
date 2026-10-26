@@ -55,6 +55,7 @@ ARM_BOUNDS = {
 }
 FINGER_OPEN = 0.04
 LIMIT_MARGIN = 0.15  # rad, kept from the arm's limits at a release
+TRACK_MARGIN = 0.05  # rad, kept from the arm's limits while OSC tracks a grasp
 THIN_REGION = 0.005  # m: a region half this thin is swept across, not stopped in
 SWEEP_STEP = 0.004  # m: the sweep's carrot, under the slab's thickness per step
 # HPP's refusal of a transit goal off the start's leaf, and the largest move
@@ -490,10 +491,27 @@ class SegmentPlanner:
             out.append(np.asarray(q, dtype=float))
         return out
 
-    def _near_limit(self, arm: np.ndarray) -> bool:
+    def _tracked(self, q_start: list[float], tcps: np.ndarray) -> np.ndarray | None:
+        """The arm joints OSC ends at following TCP poses ``tcps`` from
+        ``q_start``; ``None`` if it cannot.
+
+        OSC moves the arm by the shortest joint motion toward each TCP pose,
+        not along the planned joints: from another branch of the arm's
+        redundancy, the same hand pose can need a joint past its limit. IK
+        pose by pose from the start arm is that motion; it fails if a pose
+        is not reached or a joint comes within :data:`TRACK_MARGIN` of a
+        limit."""
+        arm = self.arm(q_start)
+        for T in tcps:
+            arm = self.kin.ik(arm, T, iterations=100, tol=1e-4)
+            if arm is None or self._near_limit(arm, TRACK_MARGIN):
+                return None
+        return arm
+
+    def _near_limit(self, arm: np.ndarray, margin: float = LIMIT_MARGIN) -> bool:
         return bool(
-            np.any(arm < self.kin.lower + LIMIT_MARGIN)
-            or np.any(arm > self.kin.upper - LIMIT_MARGIN)
+            np.any(arm < self.kin.lower + margin)
+            or np.any(arm > self.kin.upper - margin)
         )
 
     @contextmanager
@@ -581,8 +599,8 @@ class SegmentPlanner:
         info: dict[str, Any] = {"target": self.target, "tried": []}
         start = time.time()
         q_start, escape = self.escape(info)
-        # A grasp at a joint limit (a straight elbow, reaching far) is a
-        # singularity OSC cannot track into: kept only if no other plans.
+        # A grasp OSC cannot track without a joint at its limit is kept
+        # only if no other plans.
         at_limit, settled = None, False
         handles, index = list(self.handles), 0
         while index < len(handles):
@@ -614,9 +632,33 @@ class SegmentPlanner:
                     self.q0[i] = q_settled[i]
                 self.sequence.reset()
                 continue
-            if grasp["success"] and self._near_limit(self.arm(grasp["final_config"])):
-                grasp["success"], message = False, "the grasp is at a joint limit"
-                at_limit = at_limit or (handle, grasp)
+            if grasp["success"]:
+                # The last edge goes from pregrasp to grasp along the approach
+                # axis: tracked closely, so the fingers do not cut the corner
+                # into the object. The edges before it are shortcut.
+                *transit, insert = self.config_paths(grasp["phase_results"])
+                transit = (
+                    self.tcps(self.shortcut(np.concatenate(transit)))
+                    if transit
+                    else None
+                )
+                insert = self.tcps(insert)
+                grasp["tcp"] = transit, insert
+                arm = self._tracked(
+                    q_start,
+                    insert if transit is None else np.concatenate([transit, insert]),
+                )
+                if arm is None:
+                    grasp["success"], message = False, "the grasp is at a joint limit"
+                    at_limit = at_limit or (handle, grasp)
+                else:
+                    # The lift starts where OSC leaves the arm, solved to
+                    # the grasp constraint's precision.
+                    q = np.asarray(grasp["final_config"], dtype=float)
+                    q[self._arm_index] = arm
+                    q = self.reached(q.tolist(), insert[-1])
+                    if q is not None:
+                        grasp["final_config"] = q
             info["tried"].append(
                 {"handle": handle, "success": grasp["success"], "message": message}
             )
@@ -632,10 +674,7 @@ class SegmentPlanner:
             info["at_limit"] = True
         info["handle"] = handle
         q_grasp = list(grasp["final_config"])
-        # The last edge goes from pregrasp to grasp along the approach axis:
-        # tracked closely, so the fingers do not cut the corner into the object.
-        *transit, insert = self.config_paths(grasp["phase_results"])
-        insert = self.tcps(insert)
+        transit, insert = grasp["tcp"]
         tcp_grasp = self.kin.tcp(self.arm(q_grasp))
         lifted, q_lift, lift_path = None, None, None
         for height in (lift, 0.75 * lift, 1.25 * lift):
@@ -659,9 +698,8 @@ class SegmentPlanner:
             Stage("close", insert[-1:], gripper=1.0, dwell=9),
             Stage("lift", lift_path, gripper=1.0, step=0.03),
         ]
-        if transit:
-            transit = self.shortcut(np.concatenate(transit))
-            stages.insert(0, Stage("transit", self.tcps(transit), gripper=-1.0))
+        if transit is not None:
+            stages.insert(0, Stage("transit", transit, gripper=-1.0))
         if escape:
             stages.insert(0, escape)
         return SegmentPlan(stages, self.q0, self.tcp0, info)
