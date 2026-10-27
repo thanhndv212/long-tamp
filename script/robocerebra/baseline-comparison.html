@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RoboCerebra: HPP segment policy vs published baselines</title>
+<style>
+.viz-root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --series-learned: #2a78d6;
+  --series-gt: #1baf7a;
+  --series-ours: #eb6834;
+  --good: #0ca30c;
+  --critical: #d03b3b;
+  --neutral-fill: #c3c2b7;
+  --seq-0: #f0efec;
+  --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #6da7ec; --seq-4: #3987e5;
+  --seq-5: #256abf; --seq-6: #184f95; --seq-7: #0d366b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #898781;
+    --grid: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10);
+    --series-learned: #3987e5; --series-gt: #199e70; --series-ours: #d95926;
+    --neutral-fill: #52514e; --seq-0: #383835;
+  }
+}
+:root[data-theme="dark"] .viz-root {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface-1: #1a1a19;
+  --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #898781;
+  --grid: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10);
+  --series-learned: #3987e5; --series-gt: #199e70; --series-ours: #d95926;
+  --neutral-fill: #52514e; --seq-0: #383835;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+.viz-root {
+  background: var(--page); color: var(--text-primary);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  min-height: 100vh; padding: 40px 20px 80px;
+}
+main { max-width: 1040px; margin: 0 auto; }
+h1 { font-size: 28px; line-height: 1.2; margin: 0 0 8px; font-weight: 650; }
+h2 { font-size: 20px; margin: 48px 0 6px; font-weight: 620; }
+h3 { font-size: 16px; margin: 24px 0 6px; font-weight: 600; }
+p, li { color: var(--text-secondary); max-width: 78ch; }
+strong { color: var(--text-primary); }
+a { color: inherit; text-underline-offset: 2px; }
+.lede { font-size: 17px; }
+.meta { color: var(--text-muted); font-size: 13px; }
+.card {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px 24px; margin-top: 16px;
+}
+.toolbar { display: flex; justify-content: flex-end; }
+.toolbar button {
+  font: inherit; font-size: 13px; color: var(--text-secondary);
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 8px; padding: 4px 10px; cursor: pointer;
+}
+
+/* Hero + tiles */
+.tiles { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 16px; margin-top: 24px; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+.tile .label { font-size: 13px; color: var(--text-secondary); }
+.tile .value { font-size: 34px; font-weight: 620; line-height: 1.15; margin: 6px 0 4px; }
+.tile.hero .value { font-size: 52px; }
+.tile .note { font-size: 13px; color: var(--text-muted); }
+.key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+
+/* Legend */
+.legend { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 13px; color: var(--text-secondary); margin: 8px 0 14px; }
+.legend span { display: inline-flex; align-items: center; }
+
+/* Bar chart */
+.bars { position: relative; }
+.bar-group-title { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin: 14px 0 4px; }
+.bar-row { display: grid; grid-template-columns: 300px 1fr; align-items: center; min-height: 28px; }
+.bar-name { font-size: 13px; color: var(--text-secondary); padding-right: 12px; text-align: right; }
+.bar-track { position: relative; height: 28px; }
+.bar-hit { position: absolute; inset: 0; cursor: default; outline: none; }
+.bar-hit:focus-visible { outline: 2px solid var(--text-secondary); outline-offset: 1px; border-radius: 4px; }
+.bar {
+  position: absolute; left: 0; top: 6px; height: 16px;
+  border-radius: 0 4px 4px 0; transition: filter .12s;
+}
+.bar-hit:hover .bar, .bar-hit:focus .bar { filter: brightness(1.12); }
+.bar-value { position: absolute; top: 4px; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--text-primary); white-space: nowrap; }
+.axis { display: grid; grid-template-columns: 300px 1fr; margin-top: 6px; }
+.axis-ticks { position: relative; height: 18px; border-top: 1px solid var(--baseline); }
+.axis-ticks span { position: absolute; top: 2px; transform: translateX(-50%); white-space: nowrap; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.gridlines { position: absolute; top: 0; bottom: 24px; left: 300px; right: 0; pointer-events: none; }
+.gridlines i { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--grid); }
+.refline { position: absolute; top: 0; bottom: 24px; width: 1px; background: var(--text-muted); pointer-events: none; }
+.refline span { position: absolute; top: -2px; left: 6px; font-size: 12px; color: var(--text-muted); white-space: nowrap; background: var(--surface-1); padding: 0 4px; }
+
+/* Heat table */
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { color: var(--text-muted); font-weight: 600; font-size: 12px; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.heat td.cell { text-align: center; font-variant-numeric: tabular-nums; border: 2px solid var(--surface-1); border-radius: 4px; min-width: 58px; }
+.heat td.cell:focus-visible { outline: 2px solid var(--text-secondary); }
+.heat td.empty { color: var(--text-muted); font-size: 12px; }
+.heat tr.ours td.name { font-weight: 600; color: var(--text-primary); }
+.scale { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); margin-top: 10px; }
+.scale .ramp { display: flex; }
+.scale .ramp i { width: 28px; height: 10px; }
+
+/* Stacked per-case */
+.stack-row { display: grid; grid-template-columns: 80px 1fr 110px; align-items: center; height: 30px; }
+.stack-name { font-size: 13px; color: var(--text-secondary); }
+.stack { display: flex; gap: 2px; height: 16px; }
+.stack div { height: 100%; outline: none; }
+.stack div:first-child { border-radius: 4px 0 0 4px; }
+.stack div:last-child { border-radius: 0 4px 4px 0; }
+.stack div:hover, .stack div:focus { filter: brightness(1.12); }
+.stack-rate { font-size: 13px; text-align: right; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+/* Fairness matrix */
+.fair td:first-child { font-weight: 600; color: var(--text-primary); width: 150px; }
+.pill { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; color: var(--text-primary); }
+.verdict { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.verdict .card { margin: 0; }
+.verdict h3 { margin-top: 0; }
+details summary { cursor: pointer; font-size: 13px; color: var(--text-secondary); margin-top: 14px; }
+.sources li { font-size: 13px; }
+
+/* Tooltip */
+.tip {
+  position: fixed; pointer-events: none; z-index: 10; display: none;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12); padding: 8px 10px; font-size: 13px; max-width: 320px;
+}
+.tip .v { font-size: 16px; font-weight: 620; color: var(--text-primary); }
+.tip .k { color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+.tip .k i { width: 12px; height: 2px; display: inline-block; }
+.tip .n { color: var(--text-muted); margin-top: 4px; }
+
+@media (max-width: 760px) {
+  .tiles, .verdict { grid-template-columns: 1fr; }
+  .bar-row, .axis { grid-template-columns: 150px 1fr; }
+  .gridlines { left: 150px; }
+}
+</style>
+</head>
+<body>
+<div class="viz-root">
+<main>
+  <div class="toolbar"><button id="theme" type="button">Toggle dark mode</button></div>
+  <h1>RoboCerebra: our HPP segment policy against the published baselines</h1>
+  <p class="meta">long-tamp · #158 / #159 · 26 Oct 2026 · Ideal setting only on our side</p>
+  <p class="lede">On the Ideal setting, our HPP policy completes <strong>54.2 %</strong> of all
+    benchmark segments. The best published method, SparkVLA, scores 46.4 %, and the best
+    published run that is handed the ground-truth plan scores 31.2 %. <strong>This is not
+    a like-for-like win.</strong> Our policy reads the simulator's exact object poses, is
+    given each subtask's goal, and restarts every segment from the benchmark's official
+    resume state. The VLAs see only camera images and run each task uninterrupted. Read
+    the numbers below as "what a model-based planner reaches with privileged state",
+    not as a leaderboard entry.</p>
+
+  <section class="tiles" aria-label="Headline numbers">
+    <div class="tile hero">
+      <div class="label"><span class="key" style="background:var(--series-ours)"></span>Ours, HPP policy: all Ideal segments passed</div>
+      <div class="value">54.2 %</div>
+      <div class="note">412 of 760 segments. The 220 segments we can't attempt count as failures.</div>
+    </div>
+    <div class="tile">
+      <div class="label"><span class="key" style="background:var(--series-gt)"></span>Best published run given the ground-truth plan</div>
+      <div class="value">31.2 %</div>
+      <div class="note">OpenVLA following the ground-truth plan (RoboCerebra Table 4) †</div>
+    </div>
+    <div class="tile">
+      <div class="label"><span class="key" style="background:var(--series-learned)"></span>Best published method</div>
+      <div class="value">46.4 %</div>
+      <div class="note">SparkVLA, π0.5 planner + executor (Aug 2026) ‡</div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <h2>1 · Ideal-setting success</h2>
+  <p>Every bar is a success rate in % on the Ideal setting, the only one we have run. The
+    published bars use the paper's Eq. 1: the share of each task's key object-state
+    changes that hold. Our bars count benchmark segments, a close but not identical unit
+    (see §4). The grey line marks the replayed human demonstrations, which complete 73.7 %
+    of subtasks (56 of 76). That is a reference point, not a hard ceiling: even the
+    recorded demonstration states miss some of their own goals, and a policy scored per
+    segment can complete subtasks the demonstration missed.</p>
+  <div class="card">
+    <div class="legend" id="bar-legend"></div>
+    <div class="bars" id="bars"></div>
+    <details><summary>Table view</summary><div id="bar-table"></div></details>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2>2 · Every setting</h2>
+  <p>RoboCerebra has six settings:
+    <strong>Ran.</strong> (random disturbance),
+    <strong>Obs.</strong> (observation mismatch),
+    <strong>Exp.</strong> and <strong>Exe.</strong> (memory exploration and memory execution),
+    <strong>Mix</strong>, and <strong>Ideal</strong> (no disturbance, the easiest).
+    For the planner + VLA rows and the ground-truth-plan rows, Ideal is the best or
+    near-best setting, and Exp. or Mix is the worst. The memory-aware methods (Mem-0,
+    SparkVLA) do best on Exp. instead. Our planner has run only Ideal. It plans each segment once
+    and then tracks the plan without replanning, so it would likely degrade under
+    disturbance. Treat its one cell as an Ideal-only number, not as an average.</p>
+  <div class="card">
+    <div id="heat"></div>
+    <div class="scale"><span>0 %</span><span class="ramp" id="ramp"></span><span>80 %</span></div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2>3 · Where our segments go</h2>
+  <p>The 10 Ideal cases × 10 seeds give 760 segments. Each bar splits one case's segments
+    into those that passed, those that failed, and those the policy declines.
+    Declined goals are <code>pour</code>, <code>open</code>, <code>turnon</code>,
+    <code>On</code> over an object, and regions the exported scene lacks. The VLAs
+    attempt every segment, so the honest headline counts declined segments as failures
+    (54.2 %). Counting only supported segments gives 76.3 %; that answers a different
+    question.</p>
+  <div class="card">
+    <div class="legend">
+      <span><span class="key" style="background:var(--good)"></span>✓ Passed</span>
+      <span><span class="key" style="background:var(--critical)"></span>✗ Failed (attempted)</span>
+      <span><span class="key" style="background:var(--neutral-fill)"></span>– Unsupported (not attempted)</span>
+    </div>
+    <div style="display:grid;grid-template-columns:80px 1fr 110px;font-size:12px;color:var(--text-muted)"><span>Case</span><span>Segments × 10 seeds</span><span style="text-align:right">Passed / all</span></div>
+    <div id="stack"></div>
+    <details><summary>Table view</summary><div id="stack-table"></div></details>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2>4 · What differs, and which way it pushes the numbers</h2>
+  <p>Each row is one difference between the published protocol and ours. The last column
+    says whether the difference makes <em>our</em> number look better (▲ inflates ours),
+    worse (▼ deflates ours), or neither (=).</p>
+  <div class="card">
+    <table class="fair">
+      <thead><tr><th>Aspect</th><th>Published baselines</th><th>Our HPP segment policy</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td>What the robot sees</td>
+          <td>Camera images and the robot's own joint and gripper state.</td>
+          <td>The simulator's exact object poses and meshes. The scene is exported to HPP at
+            the start of each segment.</td>
+          <td><span class="pill">▲ inflates ours, strongly</span></td></tr>
+        <tr><td>Task input</td>
+          <td>A natural-language instruction. A VLM planner splits it into steps, except in
+            the ground-truth-plan rows, which are handed the annotated steps.</td>
+          <td>The annotated goal predicates for each segment (<code>pick o</code>,
+            <code>In o r</code>, <code>On o r</code>), like the ground-truth-plan rows.</td>
+          <td><span class="pill">▲ against VLM-planner rows</span><br><span class="pill">= against ground-truth-plan rows</span></td></tr>
+        <tr><td>Episode</td>
+          <td>One uninterrupted rollout per task, so a failed step can ruin every later step.</td>
+          <td>Every segment starts from the benchmark's official <code>resume(k)</code>
+            state, so earlier failures never carry forward.</td>
+          <td><span class="pill">▲ inflates ours</span></td></tr>
+        <tr><td>Coverage</td>
+          <td>Attempts every subtask type.</td>
+          <td>Declines <code>pour</code>, <code>open</code>, <code>turnon</code>,
+            <code>On</code> over an object, and missing regions: 220 of 760 segments (29 %).</td>
+          <td><span class="pill">= if counted as failures (54.2 %)</span><br><span class="pill">▲ if excluded (76.3 %)</span></td></tr>
+        <tr><td>Metric</td>
+          <td>Eq. 1: the fraction of a task's key object-state changes that a simulator
+            predicate confirms, averaged over tasks.</td>
+          <td>The fraction of segments where the benchmark's own subtask checker fires.
+            A segment and a state change usually coincide, but not always.</td>
+          <td><span class="pill">= close; not identical</span></td></tr>
+        <tr><td>Settings</td>
+          <td>All six. Avg mixes in the hard Memory and Mix settings.</td>
+          <td>Ideal only, the easiest setting.</td>
+          <td><span class="pill">▲ if set against their Avg</span></td></tr>
+        <tr><td>Trials</td>
+          <td>60 tasks × 10 trials; 10 tasks × 10 trials per setting.</td>
+          <td>The 10 Ideal cases × seeds 0–9: 100 rollouts.</td>
+          <td><span class="pill">= same sample size</span></td></tr>
+        <tr><td>Step budget</td>
+          <td>Not stated in the paper.</td>
+          <td>150 control steps per segment. Passed segments use 63 steps on average.</td>
+          <td><span class="pill">? unknown</span></td></tr>
+        <tr><td>Action interface</td>
+          <td>Delta end-effector actions through robosuite's operational-space controller
+            (LIBERO stack).</td>
+          <td>The same <code>OSC_POSE</code> delta actions, tracking HPP's planned tool
+            poses. No direct joint control.</td>
+          <td><span class="pill">= same interface</span></td></tr>
+        <tr><td>Prior knowledge</td>
+          <td>Learned from RoboCerebra or LIBERO demonstrations; no object models.</td>
+          <td>No learning. Uses hand-built grasp handles per object class, object meshes and
+            a motion planner.</td>
+          <td><span class="pill">≈ different paradigm</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>5 · Which comparisons hold up</h2>
+  <div class="verdict">
+    <div class="card">
+      <h3>Reasonable, with caveats</h3>
+      <p><strong>Ours (54.2 %) against the ground-truth-plan runs (26.6–31.2 %).</strong>
+        Both sides are given the plan, so the remaining gap comes from the controller. Ours
+        still has exact state and resumes each segment, so treat 54.2 % as an upper bound
+        for a state-based planner, not as a matched score.</p>
+    </div>
+    <div class="card">
+      <h3>Not fair</h3>
+      <p><strong>Ours against SparkVLA (46.4 %), HPE (21.1 %) or any VLM-planner row.</strong>
+        Those systems work out the plan from language and pixels. Ours is given the plan and
+        the true poses. Beating them on Ideal says nothing about the harder problem they
+        solve.</p>
+    </div>
+    <div class="card">
+      <h3>Not comparable</h3>
+      <p><strong>Our 76.3 % (supported segments only) or 49 % (rollout success) against anyone.</strong>
+        The first leaves out 29 % of segments. The second uses the benchmark's all-done flag
+        after resumes have already marked earlier steps done: case9 and case10 succeed on
+        every seed with a quarter or more of their segments failed.</p>
+    </div>
+  </div>
+
+  <h3>To make the comparison fair</h3>
+  <ol>
+    <li><strong>Run uninterrupted episodes.</strong> Drop <code>resume(k)</code>, chain the
+      segments, and score with Eq. 1. This is the biggest single correction.</li>
+    <li><strong>Count every declined segment as a failure</strong>, or add the missing
+      skills (<code>open</code>, <code>turnon</code>, <code>pour</code>).</li>
+    <li><strong>Run all six settings</strong>, so there is an Avg to set beside theirs.
+      Ran. and Obs. need replanning when objects move.</li>
+    <li><strong>Add a perception-in-the-loop variant</strong> that estimates object poses
+      from the cameras instead of reading the simulator. That would make it a matched
+      comparison with the ground-truth-plan rows.</li>
+    <li><strong>Check the † numbers</strong> against the paper's PDF before citing them.</li>
+  </ol>
+
+  <h2>Sources and notes</h2>
+  <ul class="sources">
+    <li><a href="https://arxiv.org/abs/2506.06677">RoboCerebra, arXiv 2506.06677</a> (NeurIPS 2025 D&amp;B). Table 3 was read from the arXiv HTML page text.
+      <strong>†</strong> The Table 4 and 6 rows (ground-truth plan, π0-fast) come from a machine extraction of that page, not from the page text. Verify them against the PDF.</li>
+    <li><a href="https://arxiv.org/abs/2608.16172">SparkVLA, arXiv 2608.16172</a>, Table 1.
+      <strong>‡</strong> The extracted table lost its column headers. The columns were placed by matching its HPE row, which repeats RoboCerebra's Table 3 value for value.</li>
+    <li><a href="https://arxiv.org/abs/2608.09516">HarnessWAM, arXiv 2608.09516</a>. The abstract reports Ideal only.</li>
+    <li>Ours: <code>results/2026-10-25-r4-ideal-hpp.json</code> (row A) and <code>results/2026-10-17-r1-replay-ideal-demo.json</code> (demo replay, 56/76 subtasks).</li>
+  </ul>
+</main>
+<div class="tip" id="tip" role="tooltip"></div>
+</div>
+
+<script>
+const GROUPS = [
+  { id: "learned", name: "Published · plans from language and pixels", color: "--series-learned" },
+  { id: "gt",      name: "Published · given the ground-truth plan",    color: "--series-gt" },
+  { id: "ours",    name: "Ours · HPP segment policy (exact state, given goals, resumed)", color: "--series-ours" },
+];
+// Ideal-setting success, %
+const IDEAL = [
+  { g: "learned", name: "OpenVLA (LIBERO-trained)", v: 4.05, src: "RoboCerebra Table 3" },
+  { g: "learned", name: "OpenVLA, fine-tuned", v: 7.84, src: "RoboCerebra Table 3" },
+  { g: "learned", name: "π0.5 alone", v: 10.53, src: "SparkVLA Table 1 ‡" },
+  { g: "learned", name: "GPT-4o planner + π0-fast", v: 19.47, src: "RoboCerebra Table 6 †" },
+  { g: "learned", name: "Mem-0 (reproduced)", v: 19.74, src: "SparkVLA Table 1 ‡" },
+  { g: "learned", name: "HPE, the official baseline", v: 21.10, src: "RoboCerebra Table 3" },
+  { g: "learned", name: "GPT-4o planner + OpenVLA", v: 21.92, src: "RoboCerebra Table 3" },
+  { g: "learned", name: "HarnessWAM", v: 23.7, src: "HarnessWAM abstract" },
+  { g: "learned", name: "SparkVLA", v: 46.38, src: "SparkVLA Table 1 ‡" },
+  { g: "gt", name: "Ground-truth plan + π0-fast", v: 26.58, src: "RoboCerebra Table 6 †" },
+  { g: "gt", name: "Ground-truth plan + OpenVLA", v: 31.23, src: "RoboCerebra Tables 4, 6 †" },
+  { g: "ours", name: "Rollout success (inflated by resume)", v: 49.0, src: "row A; mean of per-case rollout success", note: "Not comparable: resumes mark earlier steps done." },
+  { g: "ours", name: "All segments passed (headline)", v: 54.2, src: "row A, 412 / 760", note: "Unsupported segments count as failures." },
+  { g: "ours", name: "Supported segments passed", v: 76.3, src: "row A, 412 / 540", note: "Leaves out 29 % of segments; not comparable." },
+];
+const DEMO = 73.7;
+const SETTINGS = ["Avg", "Ran.", "Obs.", "Exp.", "Exe.", "Mix", "Ideal"];
+const HEAT = [
+  ["OpenVLA (LIBERO-trained)", "RoboCerebra T3", [2.00, 4.59, 1.35, 0.18, 1.86, 0.00, 4.05]],
+  ["OpenVLA, fine-tuned", "RoboCerebra T3", [4.57, 7.84, 8.65, 1.06, 2.06, 0.00, 7.84]],
+  ["π0.5 alone", "SparkVLA T1 ‡", [12.29, 11.84, 9.09, 12.61, 10.58, 17.71, 10.53]],
+  ["GPT-4o + π0-fast", "RoboCerebra T6 †", [15.15, 18.95, 20.00, 10.59, 11.73, 10.18, 19.47]],
+  ["GPT-4o + OpenVLA", "RoboCerebra T3", [16.04, 18.63, 19.45, 8.04, 16.69, 11.48, 21.92]],
+  ["HPE (official baseline)", "RoboCerebra T3", [16.55, 18.63, 19.18, 9.06, 17.83, 13.21, 21.10]],
+  ["Mem-0 (reproduced)", "SparkVLA T1 ‡", [20.29, 18.42, 18.42, 25.21, 18.27, 19.81, 19.74]],
+  ["HarnessWAM", "abstract", [null, null, null, null, null, null, 23.7]],
+  ["Ground-truth plan + π0-fast", "RoboCerebra T6 †", [23.04, 23.68, 26.36, 18.15, 16.92, 26.55, 26.58]],
+  ["Ground-truth plan + OpenVLA", "RoboCerebra T4/6 †", [25.16, 26.85, 30.68, 19.47, 23.48, 19.26, 31.23]],
+  ["SparkVLA", "SparkVLA T1 ‡", [47.12, 33.13, 43.87, 60.30, 43.58, 48.52, 46.38]],
+  ["Ours: HPP, all segments", "row A", [null, null, null, null, null, null, 54.2], true],
+];
+// [case, passed, failed, unsupported, segments per rollout, rollout success]
+const CASES = [
+  [1, 56, 4, 0, 6, 0.9], [2, 21, 9, 10, 4, 0], [3, 50, 20, 30, 10, 0], [4, 30, 10, 20, 6, 0],
+  [5, 40, 0, 20, 6, 1], [6, 31, 9, 20, 6, 1], [7, 24, 16, 30, 7, 0], [8, 40, 0, 30, 7, 0],
+  [9, 60, 20, 30, 11, 1], [10, 60, 40, 30, 13, 1],
+];
+
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const tip = document.getElementById("tip");
+function showTip(target, value, key, color, note) {
+  tip.replaceChildren();
+  tip.append(el("div", "v", value));
+  const k = el("div", "k"); if (color) { const i = el("i"); i.style.background = `var(${color})`; k.append(i); } k.append(key); tip.append(k);
+  if (note) tip.append(el("div", "n", note));
+  tip.style.display = "block";
+  const r = target.getBoundingClientRect(), t = tip.getBoundingClientRect();
+  let x = r.left + r.width / 2 - t.width / 2, y = r.top - t.height - 8;
+  if (y < 8) y = r.bottom + 8;
+  tip.style.left = Math.max(8, Math.min(x, innerWidth - t.width - 8)) + "px";
+  tip.style.top = y + "px";
+}
+const hideTip = () => { tip.style.display = "none"; };
+function hover(node, fn) {
+  node.tabIndex = 0;
+  node.addEventListener("pointerenter", fn); node.addEventListener("focus", fn);
+  node.addEventListener("pointerleave", hideTip); node.addEventListener("blur", hideTip);
+}
+
+// ---- 1. Bars
+(function () {
+  const legend = document.getElementById("bar-legend");
+  for (const g of GROUPS) { const s = el("span"); const k = el("span", "key"); k.style.background = `var(${g.color})`; s.append(k, g.name); legend.append(s); }
+  const host = document.getElementById("bars"), MAX = 100;
+  const grid = el("div", "gridlines");
+  for (const t of [0, 20, 40, 60, 80, 100]) { const i = el("i"); i.style.left = t + "%"; grid.append(i); }
+  host.append(grid);
+  for (const g of GROUPS) {
+    host.append(el("div", "bar-group-title", g.name));
+    for (const d of IDEAL.filter(d => d.g === g.id)) {
+      const row = el("div", "bar-row");
+      row.append(el("div", "bar-name", d.name));
+      const track = el("div", "bar-track"), hit = el("div", "bar-hit"), bar = el("div", "bar");
+      bar.style.width = (d.v / MAX * 100) + "%"; bar.style.background = `var(${g.color})`;
+      const val = el("span", "bar-value", d.v.toFixed(1) + " %"); val.style.left = `calc(${d.v / MAX * 100}% + 6px)`;
+      hit.append(bar, val); track.append(hit); row.append(track); host.append(row);
+      hover(hit, () => showTip(hit, d.v.toFixed(2) + " %", d.name, g.color, d.src + (d.note ? " · " + d.note : "")));
+    }
+  }
+  const axis = el("div", "axis"); axis.append(el("div")); const ticks = el("div", "axis-ticks");
+  for (const t of [0, 20, 40, 60, 80, 100]) { const s = el("span", null, t + " %"); s.style.left = t + "%"; ticks.append(s); }
+  axis.append(ticks); host.append(axis);
+  // demo-replay reference line, positioned after layout
+  const ref = el("div", "refline"); ref.append(el("span", null, `demo replay ${DEMO} %`)); host.append(ref);
+  const place = () => { const w = ticks.getBoundingClientRect().width, off = ticks.getBoundingClientRect().left - host.getBoundingClientRect().left; ref.style.left = (off + w * DEMO / 100) + "px"; };
+  place(); addEventListener("resize", place);
+  // table view
+  const tbl = el("table"); const h = tbl.createTHead().insertRow();
+  for (const t of ["Method", "Group", "Ideal %", "Source"]) h.append(el("th", t === "Ideal %" ? "num" : null, t));
+  const b = tbl.createTBody();
+  for (const d of IDEAL) { const r = b.insertRow(); r.append(el("td", null, d.name), el("td", null, GROUPS.find(g => g.id === d.g).name), el("td", "num", d.v.toFixed(2)), el("td", null, d.src)); }
+  document.getElementById("bar-table").append(tbl);
+})();
+
+// ---- 2. Heat table
+(function () {
+  const steps = ["--seq-1", "--seq-2", "--seq-3", "--seq-4", "--seq-5", "--seq-6", "--seq-7"];
+  const bin = v => Math.min(steps.length - 1, Math.floor(v / 80 * steps.length));
+  const ramp = document.getElementById("ramp");
+  for (const s of steps) { const i = el("i"); i.style.background = `var(${s})`; ramp.append(i); }
+  const tbl = el("table", "heat"); const h = tbl.createTHead().insertRow();
+  h.append(el("th", null, "Method"), el("th", null, "Source"));
+  for (const s of SETTINGS) h.append(el("th", "num", s));
+  const body = tbl.createTBody();
+  for (const [name, src, vals, ours] of HEAT) {
+    const r = body.insertRow(); if (ours) r.className = "ours";
+    r.append(el("td", "name", name), el("td", null, src));
+    vals.forEach((v, i) => {
+      if (v == null) { r.append(el("td", "cell empty", ours ? "not run" : "–")); return; }
+      const b = bin(v), c = el("td", "cell", v.toFixed(1));
+      c.style.background = `var(${steps[b]})`;
+      c.style.color = b >= 3 ? "#ffffff" : "#0b0b0b";
+      if (ours) c.style.boxShadow = "inset 0 0 0 2px var(--series-ours)";
+      r.append(c);
+      hover(c, () => showTip(c, v.toFixed(2) + " %", `${name} · ${SETTINGS[i]}`, null, src));
+    });
+  }
+  document.getElementById("heat").append(tbl);
+})();
+
+// ---- 3. Stacked per-case
+(function () {
+  const host = document.getElementById("stack"), MAX = 130;
+  const parts = [["passed", "--good", "✓ passed"], ["failed", "--critical", "✗ failed"], ["unsupported", "--neutral-fill", "– unsupported"]];
+  for (const [c, p, f, u, segs, rs] of CASES) {
+    const row = el("div", "stack-row"); row.append(el("div", "stack-name", "case" + c));
+    const st = el("div", "stack"); st.style.width = ((p + f + u) / MAX * 100) + "%";
+    [p, f, u].forEach((n, i) => {
+      if (!n) return;
+      const d = el("div"); d.style.flex = n; d.style.background = `var(${parts[i][1]})`;
+      st.append(d);
+      hover(d, () => showTip(d, `${n} / ${p + f + u} segments`, `case${c} · ${parts[i][2]}`, parts[i][1], `${segs} segments × 10 seeds · rollout success ${rs}`));
+    });
+    row.append(st, el("div", "stack-rate", `${p} / ${p + f + u}`));
+    host.append(row);
+  }
+  const tbl = el("table"); const h = tbl.createTHead().insertRow();
+  for (const t of ["Case", "Segments", "Passed", "Failed", "Unsupported", "Rollout success"]) h.append(el("th", t === "Case" ? null : "num", t));
+  const b = tbl.createTBody(); let P = 0, F = 0, U = 0;
+  for (const [c, p, f, u, segs, rs] of CASES) { P += p; F += f; U += u; const r = b.insertRow(); r.append(el("td", null, "case" + c), el("td", "num", `${segs} × 10`), el("td", "num", p), el("td", "num", f), el("td", "num", u), el("td", "num", rs.toFixed(1))); }
+  const r = b.insertRow(); r.append(el("td", null, "All"), el("td", "num", "760"), el("td", "num", P), el("td", "num", F), el("td", "num", U), el("td", "num", "0.49"));
+  document.getElementById("stack-table").append(tbl);
+})();
+
+document.getElementById("theme").addEventListener("click", () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark";
+});
+</script>
+</body>
+</html>
