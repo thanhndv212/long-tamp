@@ -1,0 +1,3 @@
+# Capture output; build_html.py copies what the page needs into results/r3-grasp-gallery/
+out/
+out_video/
