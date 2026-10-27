@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- RoboCerebra R3 grasp-lift gallery (#158 AC2, work in progress):
+  `script/robocerebra/gallery/` reruns `grasp_lift.py`'s pick per class with the cameras
+  rendered (screenshots, and a frame at every 20 Hz control step encoded to 30 fps
+  real-time video) and builds `script/robocerebra/results/r3-grasp-gallery/index.html`,
+  which sets each class's recorded verdict beside the rerun's. The rerun of 2026-10-27
+  matches the recorded run on all 25 classes.
 - RoboCerebra HPP segment policy (#159, M11 R4): `long_tamp.eval.robocerebra_policy:hpp_policy`
   translates each segment's goal (`pick` → grasped, `In`/`On` → placed; `pour`, `open`,
   `turnon` and regions missing from the export reported unsupported), detects the held
