@@ -171,15 +171,15 @@ brings one new library feature, articulated objects (#161).
 ```mermaid
 flowchart LR
   M7[M7 remote backend<br/>#125]
-  M8[M8 mission runtime]
+  M8[M8 mission runtime ✓]
   M9[M9 perceived world state]
   M10[M10 open VLM/VLA<br/>incl. #145 goal writer]
   CAM["#151 sim camera"]
   SIM["#152 SO-101 stacking in sim"]
-  R1["#156 env server"]
-  R2["#157 scene exporter"]
-  R3["#158 grasps"]
-  R4["#159 Ideal subset"]
+  R1["#156 env server ✓"]
+  R2["#157 scene exporter ✓"]
+  R3["#158 grasps (14/25)"]
+  R4["#159 Ideal subset ✓"]
   R5["#160 pour"]
   R6["#161 articulated objects"]
   R7["#162 disturbance, mismatch, mix"]
@@ -222,6 +222,10 @@ flowchart LR
   classDef bench fill:#bbdefb,stroke:#0d47a1,stroke-width:2px,color:#000
   class S1,S2,S3,S4,S5,S6 hw
   class R1,R2,R3,R4,R5,R6,R7,R8,X bench
+  classDef done fill:#c8e6c9,stroke:#1b5e20,stroke-width:3px,color:#000
+  classDef partial fill:#f1f8e9,stroke:#1b5e20,stroke-width:2px,stroke-dasharray:5 3,color:#000
+  class M8,R1,R2,R4 done
+  class M7,R3 partial
   linkStyle 16,17,18,22,23,25 stroke:#e65100,stroke-width:3px
   linkStyle 0,1,2,3,5,6,7,10,11,12,13,26 stroke:#0d47a1,stroke-width:3px
 ```
@@ -230,6 +234,8 @@ Orange: the real-hardware path on the SO-101 (soarm_tamp S1–S6, see its
 [delivery plan](https://github.com/thanhndv212/soarm_tamp/blob/main/docs/roadmap.md#delivery-plan)).
 Blue: the simulated benchmark path (RoboCerebra, #156–#163, closing M11 with #154).
 Uncoloured nodes are the library milestones and sim pieces both paths build on.
+Green with ✓: done. Pale green, dashed: partly done (M7 waits on its real-robot exit run,
+#158 has handles for every class, but the pick checker passes for 14 of 25).
 
 ## M7 — Hardware execution: remote backends and grippers (0.9.0)
 
@@ -243,10 +249,13 @@ Run missions on a robot driven from another host (a container and a USB-attached
 - [x] [#128](https://github.com/thanhndv212/long-tamp/issues/128) Repair from grasp_missed
 - [x] [#129](https://github.com/thanhndv212/long-tamp/issues/129) Run long_tamp on your robot
 - [ ] [#130](https://github.com/thanhndv212/long-tamp/issues/130) M7 exit test, a mission through RemoteBackend on a real robot
+      (the MuJoCo half passed in #171; the SO-101 run is left)
 
 **Exit test:** a mission runs through `RemoteBackend` on the SO-101 (cube pick-and-place, 10 runs, soarm_tamp S1) and the screw assembly runs through it in MuJoCo.
 
 ## M8 — Mission runtime as a library (0.10.0)
+
+**Done; milestone closed 2026-10-27, not yet released.**
 
 [Milestone 8](https://github.com/thanhndv212/long-tamp/milestone/8)
 
@@ -312,17 +321,19 @@ LIBERO-Long and LIBERO-Plus. Published numbers to compare against: GT plan + Ope
 HPE 16.55; the best reported is SparkVLA's 47.12, under a protocol that may differ. No
 planner-based entry has been published. #153 is split into:
 
-- [ ] [#156](https://github.com/thanhndv212/long-tamp/issues/156) R1 Env server behind the remote backend protocol (needs #125)
-- [ ] [#157](https://github.com/thanhndv212/long-tamp/issues/157) R2 MuJoCo model → URDF/SRDF scene exporter
+- [x] [#156](https://github.com/thanhndv212/long-tamp/issues/156) R1 Env server behind the remote backend protocol (needs #125)
+- [x] [#157](https://github.com/thanhndv212/long-tamp/issues/157) R2 MuJoCo model → URDF/SRDF scene exporter
 - [ ] [#158](https://github.com/thanhndv212/long-tamp/issues/158) R3 Grasp handle library for the benchmark's object classes
-- [ ] [#159](https://github.com/thanhndv212/long-tamp/issues/159) R4 Goal translator, in-hand start state, OSC_POSE tracker; Ideal subset (needs M8)
+      (handles for all 25 classes; 14 of 25 picked and 4 more held but unregistrable, PR #180)
+- [x] [#159](https://github.com/thanhndv212/long-tamp/issues/159) R4 Goal translator, in-hand start state, OSC_POSE tracker; Ideal subset (needs M8)
 - [ ] [#160](https://github.com/thanhndv212/long-tamp/issues/160) R5 Pour action
 - [ ] [#161](https://github.com/thanhndv212/long-tamp/issues/161) R6 Articulated objects: drawers, doors, knobs
 - [ ] [#162](https://github.com/thanhndv212/long-tamp/issues/162) R7 Disturbance, mismatch and mix conditions (needs #151, #145)
 - [ ] [#163](https://github.com/thanhndv212/long-tamp/issues/163) R8 Continuous variant and results tables
 
 The first number to publish is the Ideal condition on pick/in/on subtasks (#156 → #159, about
-68% of subtasks). Articulated objects (#161) are the critical path to the full table.
+68% of subtasks). Row A is in: 412 of 540 supported segments (76.3%) over 10 Ideal cases ×
+10 seeds (`script/robocerebra/results/2026-10-25-r4-ideal-hpp.json`). Articulated objects (#161) are the critical path to the full table.
 
 **Exit test:** 20 SO-101 sim missions from language instructions with the simulated camera and injected disturbances complete or escalate cleanly; RoboCerebra results for all six conditions committed with seeds (privileged state, simulated camera, continuous variant); a recorded video.
 
