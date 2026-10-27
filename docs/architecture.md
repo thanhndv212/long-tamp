@@ -4,9 +4,10 @@ title: Architecture
 
 # Architecture
 
-**Last reviewed against source:** 2026-10-05, commit `c23a995` (after 0.8.0). If a module
-isn't mentioned here, check `git log --since=2026-10-05 -- src/long_tamp` before assuming
-it's missing rather than undocumented.
+**Last reviewed against source:** 2026-10-26, commit `cbb1a88` (M8 mission domains, M11
+RoboCerebra exporter). If a module isn't mentioned here, check
+`git log --since=2026-10-26 -- src/long_tamp` before assuming it's missing rather than
+undocumented.
 
 !!! tip "Interactive tour"
     The same story as this page, with diagrams you can step through: follow one mission
@@ -66,6 +67,7 @@ The code splits along the line between **symbols** and **geometry**
 flowchart TB
     subgraph mission["Mission stack: symbols"]
         direction TB
+        mission_pkg["mission/<br/>domains, runner, chat, UI"]
         tp["task_planning/<br/>goals, plans, checks, events"]
         execution["execution/<br/>run plans on a backend"]
         ai["ai/<br/>model gateway, roles"]
@@ -79,6 +81,9 @@ flowchart TB
         planning["planning/<br/>scenes, constraints, graphs"]
         backends["backends/<br/>PyHPPBackend"]
     end
+    mission_pkg --> execution
+    mission_pkg --> tp
+    mission_pkg -. "domain's scene" .-> tasks
     execution --> tp
     tp -.-> ai
     sim --> execution
@@ -93,9 +98,15 @@ flowchart TB
     style tasks fill:#81a1c1,stroke:#2e3440,color:#fff
 ```
 
-A mission connects the two in its own adapter, outside the library: its capabilities call
-`GraspSequencePlanner.grasp()` / `.release()` or a `Refiner`. The screw assembly's adapter
-is `script/screw_assembly/screw_bt_session.py`.
+A mission connects the two through a **mission domain** ([ADR-0011](adr/0011-mission-domain.md)):
+a class, outside the library, that answers everything specific to one robot and task
+(capabilities, how a plan step becomes a grasp sequence, the scene, the backends). The
+generic `MissionRunner` ([ADR-0012](adr/0012-mission-runner.md)) runs any domain on the
+same planner → refiner → executor → repair → supervisor loop, and `mission/` never
+imports HPP itself: the domain's `setup()` builds the scene. The screw assembly's domain is
+`script/screw_assembly/screw_mission.py`; the smallest complete one, with no HPP, is
+`long_tamp.mission.template`. What the screw assembly still keeps to itself is listed in
+[what the library runs, what a mission supplies](#what-the-library-runs-what-a-mission-supplies).
 
 ## Following one mission
 
@@ -236,12 +247,68 @@ What the imports look like (checked at the review commit):
 - `execution/` depends on `task_planning/` (events, `run_plan`, skills), never on
   `planning/` or `backends/`. Motion reaches it as opaque commands.
 - `sim/` implements `execution/`'s contract; `viewer/` only reads events.
+- `mission/` imports `tasks/` (the refiner, checkpoints, `task_planning`), `execution/`,
+  `ai/` and `viewer/`, never `planning/` or `backends/`: the domain's `setup()` builds the
+  HPP scene. `eval/` imports only `execution/` (the remote backend's wire format).
 - Motion stack: `tasks` → `planning` → `backends`. Known lazy exceptions: `backends/pyhpp.py`
   imports `planning.constraints` and `visualization` inside functions; `tasks/` imports
   `execution.activity` to report progress while planning.
 - `backends/` is the only place `pyhpp` is imported, behind `try/except ImportError`
   (`HAS_PYHPP`). The pure-Python tier installs and runs without HPP; HPP, TOPPRA, Unified
   Planning, MuJoCo and model SDKs are extras (`hpp`, `toppra`, `planning`, `sim`, `ai`).
+
+## What the library runs, what a mission supplies
+
+The screw assembly came first, as one script, and the library grew out of it. M8
+(#131–#136) moved the mission loop into `long_tamp.mission`, and a second domain with no
+HPP (`mission.template`) runs on the same code. This is where the line stood at the review
+commit.
+
+**Moved into the library.** The screw script now only calls these:
+
+| What | Now in | Issue |
+|---|---|---|
+| The mission loop: run a plan, repair, supervise, goal from an instruction | `mission.runner.MissionRunner` (`run_mission`, `run_with_repair`, `run_supervised`, `plan_from_goal`, `understand_instruction`) | #132, #134 |
+| The robot- and task-specific part, behind one interface, with generic defaults (PDDL export, vocabulary, skeleton → plan, repair policy, missed-grasp retry) | `MissionDomain`, `BaseMissionDomain`, `check_domain` | #131 |
+| Operator chat tools, the mission UI page and the launcher that restarts on Reset | `mission.chat`, `mission.ui` (`python -m long_tamp.mission ui --domain …`); `mission_ui.py` is a 40-line wrapper | #133 |
+| The 3D scene in its own process, fed with simulated states | `visualization.SceneProcess`, `MissionViewer` | #106 |
+| Failure injection specs, the trajectory file, the run summary | `parse_injection`, `write_trajectory`, `execution_summary`, `fact_count`, `metric_max` | #132 |
+| Object-level goals (`grasped`, `placed_at`) | `mission.goals` | #131 |
+| The simulator and execution layer: MJCF export, `MuJoCoBackend`, `QposMap`, `GripTable`, process and remote backends, drift check, plan-ahead, parallel arms, watchdog, grasp verification | `sim/`, `execution/` (generic from the start) | M4–M7 |
+
+**Generic, but still in the script.** The candidates to port next:
+
+| What | Where it lives | What porting it takes |
+|---|---|---|
+| The headless mission command: `--replan`, `--resume`, `--inject-failure/-drift/-miss`, `--instruction … --supervise`, `--summary`, `--check`, `--plan-ahead`, `--concurrent`, `--remote`, `--grasp contact`, `--sim-record` | `task_screw_assembly.main()`, about 450 lines | a `python -m long_tamp.mission run --domain …` next to `ui` and `serve` (which only run the chat-driven mission) |
+| Seeding HPP's shooter (libc `srand`), pinocchio, NumPy and `random` | `seed_everything` | a library helper; every HPP mission needs it to be reproducible |
+| Fault injection around a backend: bump a joint, move an object, just before a step | `DriftInjector`, `MissInjector` | `execution/` wrappers; they use only `disturb` / `displace`, which `MuJoCoBackend` has |
+| MuJoCo grasp wiring: the grip table, weld or contact grasps, finger pads | `grip_table`, `weld_grasps`, `contact_grasps`, `robotiq_pads` | a `sim/` helper from a `FingerClosureTable` and the gripper models (the pad size is already on `GripperModel`) |
+| Replanning from the observed world, keeping carried objects as planned; opening hands | `observed_start`, `screw_mission.opened_config` | `BaseMissionDomain` defaults; today they find hands by the Robotiq joint names |
+| Moving one arm to a named pose with what it holds | `run_home_move`, `home_target` | a `Move` refinement in `tasks/` with named poses from the task YAML (they are `build_scene` constants now) |
+| The `mock` / `playback` / `mujoco` backends for an HPP scene | `task_screw_assembly.make_backend` | a `BaseMissionDomain` helper for any domain with an HPP scene and an MJCF export |
+| Replaying a run: Viser with finger overlay, MuJoCo's viewer on a recorded simulation | `replay.py`, `view_mujoco.py` | `long_tamp.viewer` / `sim` commands; the library already writes `trajectory.json` and the recording |
+| Batches and release gates | `run_batch.sh`, `summarize.py --gate`, `kill_resume.py`, `concurrency_ab.py`, `autonomy_batch.py` | a batch command with per-domain gates; the scripts name screw steps and thresholds |
+
+**The screw assembly's own.** These stay in `script/screw_assembly/`, as every mission keeps
+its own:
+
+| File | What it holds |
+|---|---|
+| `build_scene.py`, `config/`, `assets/` | the cell: URDF/SRDF for parts, driver, jig and clamps, the task YAML |
+| `screw_domain.py` | capabilities (`grasp`, `release`, `clamp_and_screw`, `rack`, `home`), static facts, clamp seats, the hand-written plan, step expansion, repair policy |
+| `screw_mission.py` | `ScrewAssemblyDomain`, the reference `MissionDomain`; maps the driver tip's insertion edge to the screw skill |
+| `scenarios.py` | the V4 start states (driver held, part clamped, …) |
+| `screw_bt_session.py` | the session the C++ host's `create_screw_session` builds |
+
+**Screw-specific code inside the library.** The opposite direction, worth moving out:
+
+- `sim/skills.py`: the `ScrewDriving` controller and its `SCREW` spec, exported from
+  `long_tamp.sim`. The skill machinery (`SkillSpec`, `SkillCommand`) is generic; this
+  controller belongs to the cell.
+- `tasks/task_planning/host.py`: `create_screw_session` (and the two TWIN factories) put
+  `script/…` on `sys.path` and import from it, so they work only from a source checkout.
+- `examples/behaviortree/src/screw_assembly_plugin.cpp`: an example, where it belongs.
 
 ## Module map
 
@@ -250,9 +317,11 @@ What the imports look like (checked at the review commit):
 | `backends/` | the one HPP binding | `BackendBase`, `PyHPPBackend`, `create_planner` | [Install](INSTALL.md) |
 | `planning/` | scenes, constraints, graphs, configs, path recording | `SceneBuilder`, `ConstraintBuilder`, `GraphBuilder`, `SequentialConstraintGraphFactory`, `GraspStateTracker`, `ConfigGenerator`, `PathRecorder` | [Standalone usage](usage/standalone-usage.md) |
 | `tasks/` | multi-phase grasp sequences, recovery, the refiner | `GraspSequencePlanner`, `run_block_with_recovery`, `Refiner`, `GraspSequenceRefiner`, `MissionCheckpoint`, `ManipulationTask` | [Refiner](usage/refiner.md) |
+| `mission/` | mission domains and the generic loop around them, operator chat, mission UI | `MissionDomain`, `BaseMissionDomain`, `MissionRunner`, `MissionChat`, `check_domain`, `TemplateDomain` | [Write your own mission](usage/write-your-own-mission.md), [ADR-0011](adr/0011-mission-domain.md), [ADR-0012](adr/0012-mission-runner.md) |
 | `tasks/task_planning/` | plan format, validation, task planners, repair, BT compiler, events, model roles | `TaskPlan`, `CapabilityRegistry`, `TaskPlanningSession`, `run_plan`, `to_pddl`, `FastDownwardPlanner`, `plan_execute_repair`, `compile_behavior_tree`, `SkillSpec` | [Task planning](usage/task-planning-pddl.md), [Events](usage/events.md), [Skills](usage/skills.md) |
 | `execution/` | run plans and motion on a backend | `PlanExecutor`, `ExecutionBackend` contract, `run_command`, `ExecutionControl`, `ProcessBackend`, `RemoteBackend`, `GripperActuation`, `ExpectedGrasp`, `StepWatchdog` | [Execution](usage/execution.md) |
 | `sim/` | MuJoCo scene export and backend | `export_mjcf`, `MuJoCoBackend` | [Simulation](usage/simulation-mujoco.md) |
+| `eval/` | benchmark adapters: the RoboCerebra env client and its scene export | `RoboCerebraClient`, `write_export`, `load_export` | |
 | `ai/` | model gateway, roles, operator chat | `make_client`, `refine`, `ModelRole`, `ChatSession` | [AI models](usage/ai-models.md) |
 | `viewer/` | web mission viewer, live or replay | `ViewerServer`, `write_replay`, `ChatBridge`, `ViewerConfig` | [Mission viewer](usage/viewer.md) |
 | `grasping/` | where to grasp, how far fingers close | `GraspPlanner`, `GripperModel`, `ParallelGripperModel`, `RotaryJawGripperModel`, `FingerClosureTable` | |
@@ -274,6 +343,11 @@ Missions live in `script/`, built from the library, never inside it.
   (V3 batch), `scenarios.py` and `kill_resume.py` (V4), `concurrency_ab.py`,
   `autonomy_batch.py` (M6). Robot models come from Universal Robots' and PickNik's official
   descriptions.
+- **Template domain** (`long_tamp.mission.template`): two objects, one arm, three regions,
+  kinematic, no HPP. The whole mission loop on a scene you can read in one sitting; the
+  [tutorial](usage/write-your-own-mission.md) walks through it.
+- **RoboCerebra** (`script/robocerebra/`, `long_tamp.eval`): a long-horizon benchmark in
+  MuJoCo; its scenes are exported to URDF/SRDF and planned with HPP (M11).
 - **TWIN lift ball** (`script/twin/`), **IKEA LACK table** (`script/ikea_table_prototype/`),
   **grasp planning** (`script/grasp_planning/`), and `script/templates/` for a new task.
 
@@ -281,9 +355,12 @@ Validation levels V0–V4 and which change needs which: [Validation](development
 
 ## Extension points
 
-- **A mission:** a YAML scene, a capability registry, and a session adapter whose
-  capabilities call `grasp()` / `release()` or a `Refiner`. Register a factory in `host.py`
-  to run it from a C++ host.
+- **A mission:** a `MissionDomain` (subclass `BaseMissionDomain`): its capabilities,
+  `step_for` (a plan step → a grasp sequence to refine), `setup` (the scene), and
+  optionally backends, a live scene, scenarios and repair rules. `check_domain` lists what
+  is missing; `python -m long_tamp.mission ui --domain module:factory` runs it. See
+  [Write your own mission](usage/write-your-own-mission.md). Register a factory in
+  `host.py` to run it from a C++ host.
 - **A task planner:** anything that returns a `TaskPlan` document (the `TaskPlanner`
   protocol for PDDL-style planners). It passes the same validation.
 - **An execution backend:** `start` / `poll` / `cancel` from `execution.contract`; wrap it
