@@ -404,3 +404,55 @@ The failures are mostly the same segment on every seed:
 
 The other 5 failures are case1's butter pick (2 seeds), popcorn pick and
 butter place, and case7's pudding pick (1 seed each).
+
+### Published results on RoboCerebra
+
+The paper's metric differs from ours. Its success rate (Eq. 1) is the share of a
+task's key object-state transitions that hold, checked by simulator predicates.
+It is averaged over 60 tasks × 10 trials, and the paper gives no step budget.
+All published methods pair a planner with a learned VLA controller and run each
+task in one go, without resuming. Success, % (best Ideal in bold):
+
+| Method | Source | Avg | Mix | Ideal |
+| --- | --- | --- | --- | --- |
+| OpenVLA, LIBERO-trained | [RoboCerebra] Table 3 | 2.00 | 0.00 | 4.05 |
+| OpenVLA fine-tuned on RoboCerebra | Table 3 | 4.57 | 0.00 | 7.84 |
+| GPT-4o planner + OpenVLA | Table 3 | 16.04 | 11.48 | 21.92 |
+| Hierarchical framework (HPE), the official baseline | Table 3 | 16.55 | 13.21 | 21.10 |
+| GPT-4o planner + π0-fast | Table 6 † | 15.15 | 10.18 | 19.47 |
+| Ground-truth plan + OpenVLA | Tables 4, 6 † | 25.16 | 19.26 | 31.23 |
+| Ground-truth plan + π0-fast | Table 6 † | 23.04 | 26.55 | 26.58 |
+| π0.5 alone | [SparkVLA] Table 1 ‡ | 12.29 | 17.71 | 10.53 |
+| Mem-0, reproduced | [SparkVLA] Table 1 ‡ | 20.29 | 19.81 | 19.74 |
+| HarnessWAM: VLM task graph + world-action model | [HarnessWAM] abstract | – | – | 23.7 |
+| SparkVLA: π0.5 planner + π0.5 executor | [SparkVLA] Table 1 ‡ | **47.12** | 48.52 | **46.38** |
+
+† The rows for Tables 4 and 6 come from a machine extraction of the arXiv HTML,
+not the page text. Check them against the PDF before citing.
+‡ The columns are mapped by SparkVLA's HPE row, which repeats Table 3.
+
+Our Ideal numbers, from row A and the demo replay:
+
+| | Ideal |
+| --- | --- |
+| HPP policy, supported segments passed | 412 / 540 (76.3%) |
+| HPP policy, all segments passed (unsupported counted as failed) | 412 / 760 (54.2%) |
+| HPP policy, rollout success (mean over cases) | 49% |
+| Demo replay, subtasks completed | 56 / 76 (73.7%) |
+
+These numbers don't compare like-for-like:
+
+- **Inputs.** The HPP policy reads each segment's goal predicates and the exact
+  scene state, so it should be compared with the ground-truth-plan rows, not the
+  VLM-planner rows. The VLAs work from camera images.
+- **Resuming.** Every one of our segments starts from the official `resume(k)`
+  state, so an early failure doesn't carry into later segments. The published
+  rollouts run each task through without stopping.
+- **Unit.** Our unit is a segment, and theirs is a key state transition. The two
+  usually coincide, but not always.
+- **Coverage.** We have only run Ideal; Mix and the Memory settings are still to
+  do.
+
+[RoboCerebra]: https://arxiv.org/abs/2506.06677
+[SparkVLA]: https://arxiv.org/abs/2608.16172
+[HarnessWAM]: https://arxiv.org/abs/2608.09516
