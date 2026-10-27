@@ -305,14 +305,16 @@ its region test. The bottles' origins sit just above the table region's band
 (z < 0.477 m): basket, ketchup, milk and orange_juice are held, lifted 9 to 10
 cm with `rotation` at most 0.034. bbq_sauce, 2 mm above the band, registered
 while the closing fingers pressed it into the band and out again, before any
-lift. The 7 failures:
+lift. Screenshots and a real-time video of every class are in
+[`results/r3-grasp-gallery/`](results/r3-grasp-gallery/index.html) (work in progress, rebuilt
+with [`gallery/`](gallery/README.md)). The 7 failures:
 
 | Failure | Classes |
 | --- | --- |
 | no handle plans in the scene | black_book, plate, rack |
 | every grasp needs a joint at its limit under OSC | glazed_rim_porcelain_ramekin, macaroni_and_cheese |
 | grasped, lift does not plan | moka_pot (also unregistrable) |
-| grasped, slips on the lift | white_bowl |
+| fingers close on air short of the rim; the bowl never moves (in case4 it lifted but tilted 0.25) | white_bowl |
 
 OSC moves the arm toward each hand pose by the shortest joint motion, so it
 does not follow HPP's joint path: from the start posture it stays on another
