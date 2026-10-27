@@ -54,7 +54,8 @@ closures.closed_values("ur10_right/gripper", "driver/h_grip")  # {"ur10_right/ro
   `ROBOTIQ_2F85`'s stroke table (driving value → pad gap and pad depth) and the envelope
   of the knuckles between the pads come from forward kinematics of
   `../ikea_table_prototype/generated/ur10_robotiq.urdf` (`calibrate_from_urdf`). Palm, pads
-  and linkage are boxes. `PANDA_HAND`'s joint mapping is exact, its sizes nominal.
+  and linkage are boxes. `PANDA_HAND`'s joint mapping is exact, its pads measured on
+  `../twin/assets/panda_bimanual.urdf.template`, its palm nominal.
 - **Closing.** A grid of rays across each pad, along the closing axis. The TCP is held
   rigidly at the handle, so both fingers close symmetrically and stop when the first one
   touches: an off-centre grasp leaves the other finger short (`offset`), and is rejected

@@ -20,7 +20,9 @@ long_tamp's side (issue #156).
 as the benchmark's `task_runner.py`), `reset(step=0, settle=None, restore_demo=False)`,
 `resume(step)`, `step(actions)` ((7,) or (N, 7)), `check()`, `get_state()`,
 `set_state(sim_state, controller=None)`, `render(cameras=None, size=256)`, `demo()`,
-`export_scene()`.
+`export_scene()`, `set_goal(goal)` (replaces the loaded case's goal, for example
+`{"butter_1": [["pick", "butter_1"]]}` as a one-step task: the pick checker judges
+only objects in the goal).
 See the docstrings in `env_server.py`.
 
 `model="bddl"` is the benchmark's scene, built from the case's BDDL. `"demo"` is the
@@ -127,6 +129,43 @@ python script/robocerebra/replay_demo.py Ideal --out script/robocerebra/results/
 
 It takes cases (`Ideal/case1`), task types (`Ideal`) or `all`.
 
+## Segmented policy evaluation
+
+`long_tamp.eval.evaluate_cases` and `evaluate.py` provide the rollout harness
+for planner policies. A policy callback receives `(env, case_info, segment,
+step_limit)` and returns an `(N, 7)` array of normalized `OSC_POSE` actions, or a
+controller `controller(obs) -> (7,)` stepped closed loop from each observation
+(its `info` dict is recorded with the segment).
+The harness seeds each reset, caps each segment at 150 actions by default,
+checks the benchmark goal after every action, and enters later segments with
+the benchmark's official `resume(k)` operation. It records the seed, action
+count and success for each segment and rollout, plus success rate per case.
+
+```bash
+python script/robocerebra/evaluate.py Ideal/case1 \
+    --policy my_policy:act_segment --rollouts 10 --seed 100 \
+    --out results/ideal-policy.json
+```
+
+The summary adds segment-level counts next to the per-case rollout success
+rate: `resume(k)` marks earlier steps done, so a rollout can "succeed" with
+failed segments. `supported_segment_success_rate` counts the segments whose
+predicates registered within their budget, leaving out the ones the policy
+reported as `unsupported` (`supported_segment_success_by_case` per case);
+`mean_steps_used_on_success` is against the budget.
+
+Long runs can be split, one case and seed per process run in parallel, and
+joined:
+
+```bash
+python script/robocerebra/evaluate.py --merge parts/*.json --out results/ideal-policy.json
+```
+
+The callback is the policy boundary: the harness does not substitute recorded
+demo actions for a planner. A completed benchmark result must use a callback
+that plans and executes the goal predicates through the project MissionRunner
+and report the resulting per-case rollout artifact.
+
 ## Replay results
 
 `results/2026-10-17-r1-replay-ideal-demo.json`: the 10 Ideal cases, `model="demo"`,
@@ -228,3 +267,140 @@ free arm motion per layout.
 - **Articulated joints** (drawers, doors) are exported in the manifest but locked at their
   current value in the environment model.
 - The issue counts 15 layouts. The 60 cases have 13 distinct sets of fixtures.
+
+## Grasp handle coverage (R3, #158)
+
+`grasp_library.py` exports a class-covering set of cases and writes Panda handle
+frames into each object's SRDF. The recorded run is
+`results/2026-10-25-r3-grasp-handles.json`: 8 cases, 46 objects, 25 classes,
+251 handles, and no missing classes. It includes a top-rim sampler for thin
+container walls. The report marks handles whose approach was blocked by the
+current scene as `requires_scene_planning`; those are object-level candidates,
+not proven executable grasps.
+
+`grasp_lift.py` checks them in the benchmark env (AC2): per class, its example
+case is reset with the goal `pick <instance>`, the HPP segment policy (below)
+plans a grasp and lift, and `OSC_POSE` tracks it until the pick checker passes
+or 150 steps run out. The recorded run is
+`results/2026-10-26-r3-grasp-lift.json`: **14 of 25 classes picked**
+(akita_black_bowl, alphabet_soup, bbq_sauce, butter, chefmate_8_frypan,
+chocolate_pudding, cookies, cream_cheese, popcorn, red_coffee_mug,
+tomato_sauce, white_yellow_mug, wine_bottle, wooden_tray; 42 to 107 steps),
+and **4 more held** (below): 18 of 25 grasped and lifted without failing the
+checker's rotation test. Some run at another instance than the inventory's
+example (`--at`): akita_black_bowl, butter and white_bowl in Ideal/case7, the
+frypan in Ideal/case4 (in case10 none of its handles plans; that attempt is
+kept under `attempts`).
+
+Every row records the object's pose from the observations: `lifted`, how much
+higher it ended than it started, and `rotation`, the checker's own test (the
+change of its quaternion over 40 steps, failing above 0.1) at its worst over
+the rollout. The checker counts a pick when the object goes from some region
+to none, not by height. Each row records the regions the object starts in
+(`start_regions`); one that starts in none, or in its own (the basket's contain
+region travels with it), is `unregistrable`: lifting it cannot register. Such
+a row is `held` when the object rose at least 5 cm with `rotation` under the
+threshold: the grasp and lift worked, as far as the benchmark can tell without
+its region test. The bottles' origins sit just above the table region's band
+(z < 0.477 m): basket, ketchup, milk and orange_juice are held, lifted 9 to 10
+cm with `rotation` at most 0.034. bbq_sauce, 2 mm above the band, registered
+while the closing fingers pressed it into the band and out again, before any
+lift. The 7 failures:
+
+| Failure | Classes |
+| --- | --- |
+| no handle plans in the scene | black_book, plate, rack |
+| every grasp needs a joint at its limit under OSC | glazed_rim_porcelain_ramekin, macaroni_and_cheese |
+| grasped, lift does not plan | moka_pot (also unregistrable) |
+| grasped, slips on the lift | white_bowl |
+
+OSC moves the arm toward each hand pose by the shortest joint motion, so it
+does not follow HPP's joint path: from the start posture it stays on another
+branch of the arm's redundancy, where the same hand pose can need a joint past
+its limit. Before, the arm then stalled 4 to 8 cm short with the joint at its
+stop (wooden_tray's wrist). The pick now rolls OSC out by IK pose by pose along
+the tracked path and takes a handle whose rollout stays 0.05 rad inside the
+limits, planning the lift from where the rollout ends. The ramekin and the
+macaroni box sit 20 cm in front of the robot's base, where every approach
+folds the elbow to its stop on the start branch; HPP reaches them only with
+the shoulder and upper arm twisted (j1 and j3 near ±1.5), a branch `OSC_POSE`
+actions cannot move the arm to.
+
+The bowls plan because the rim sampler takes walls leaning up to ~20 degrees
+(theirs lean 15), and white_bowl because the pick settles a start MuJoCo
+left 0.13 mm off HPP's placement (`settled`). The plate's rim is a near-flat
+slab no top-down pinch reaches without the hand in the table.
+
+Run it in the HPP environment with the benchmark server available:
+
+```bash
+python script/robocerebra/grasp_library.py --cases-file /path/to/r3-cases.txt
+```
+
+## HPP segment policy (R4, #159)
+
+`long_tamp.eval.robocerebra_policy:hpp_policy` plans each segment in HPP on the
+scene exported at the segment's start and tracks the plan with `OSC_POSE`:
+
+```bash
+python script/robocerebra/evaluate.py Ideal/case1 --rollouts 10 \
+    --policy long_tamp.eval.robocerebra_policy:hpp_policy --out results/ideal-hpp.json
+```
+
+- Goals: `pick o` becomes *grasped* (the first R3 handle that plans, then a
+  straight lift); `In o r` / `On o r` become *placed* (carry the held object into
+  `r`'s box and release). `pour`, `open`, `turnon` and `On` over an object are
+  rejected as unsupported, as is a region the exported scene lacks (`rack_1`);
+  the segment then holds still with the gripper closed.
+- Each segment is planned in a forked child process (`HppPolicy(isolate=True)`,
+  the default): HPP keeps native memory from every problem it builds, and a
+  13-segment case10 rollout in one process ran out of memory.
+- The held object at a resume is the one both fingers touch (`robot_contacts`).
+- `OSC_POSE` tracks TCP poses, not joints, and HPP's configs can sit on another
+  IK branch than the robot's, so transits are shortcut along straight TCP lines
+  checked by IK seeded from the start. Resting objects sink about 1 mm into their
+  support in MuJoCo; a pick raises the target out of it before planning.
+- Each segment record has `steps_used` against the 150-step budget, the
+  checker's printed lines (`monitor`) and the plan's `policy` info (stages,
+  handle, rejected place orientations, planning errors).
+
+### Row A: Ideal, HPP segment policy
+
+`results/2026-10-25-r4-ideal-hpp.json`: the 10 Ideal cases × seeds 0–9, one
+(case, seed) per process, three in parallel, merged with `--merge`. Every segment starts from the
+official `resume(k)` state and has 150 steps.
+
+| | |
+| --- | --- |
+| segments | 760 (220 unsupported) |
+| **supported segments passed** | **412 / 540 (76.3%)** |
+| mean steps used, passed segments | 63.2 of 150 |
+
+| Case | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| supported segments passed | 56/60 | 21/30 | 50/70 | 30/40 | 40/40 | 31/40 | 24/40 | 40/40 | 60/80 | 60/100 |
+| rollout success | 0.9 | 0 | 0 | 0 | 1.0 | 1.0 | 0 | 0 | 1.0 | 1.0 |
+
+Rollout success, the benchmark's metric, is not a measure of this policy: the
+resume marks earlier steps done and puts the object in the hand, so case9 and
+case10 succeed on every seed with a quarter or more of their segments failed.
+case8 passes every supported segment and still fails every seed, on its
+unsupported ones.
+
+The failures are mostly the same segment on every seed:
+
+| Segment | Seeds failed | Cause |
+| --- | --- | --- |
+| case3 0, pick plate | 10 | no handle of the plate plans |
+| case3 1, plate onto the table | 10 | no release pose in the region |
+| case4 5, frypan into the cabinet top | 10 | the held start collides (hand and frypan) |
+| case7 6, frypan onto the stove | 10 | no release pose in the region |
+| case9 0 and 9, pick white_bowl | 10 + 10 | planned, not picked; on the seeds inspected the arm stalls near an elbow singularity (0) and the fingers push the rim and the bowl slides (9) |
+| case10 4, 7, 10, carry to the table | 10 each | the carry to the crowded table does not plan |
+| case10 5, pick bbq_sauce | 10 | no handle plans |
+| case2 2 and case7 5, pick frypan | 9 and 5 | planned, but the 1.1 m transit uses most of the budget |
+| case6 1, pick butter | 6 | no handle plans |
+| case6 3, pick tomato_sauce | 3 | planned, not picked |
+
+The other 5 failures are case1's butter pick (2 seeds), popcorn pick and
+butter place, and case7's pudding pick (1 seed each).

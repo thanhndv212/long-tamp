@@ -1,0 +1,2403 @@
+{
+ "protocol": "reset(step=0, seed); goal = pick <instance>; HppPolicy pick + lift; OSC_POSE",
+ "step_limit": 150,
+ "classes": {
+  "akita_black_bowl": {
+   "case": "Ideal/case7",
+   "instance": "akita_black_bowl_1",
+   "seed": 0,
+   "success": true,
+   "start_regions": [
+    "coffee_table_table_region"
+   ],
+   "unregistrable": false,
+   "lifted": 0.061,
+   "rotation": 0.0221,
+   "held": false,
+   "steps_used": 67,
+   "suppressed": [],
+   "plan_seconds": 15.98,
+   "monitor": [
+    "[Monitor] akita_black_bowl_1 region changed from ['coffee_table_table_region'] to ['None'], Pick successful",
+    "[Monitor] akita_black_bowl_1: Completed subtask `pick akita_black_bowl_1` (1/1) \u2705"
+   ],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "akita_black_bowl_1"
+     ]
+    ],
+    "held": null,
+    "target": "akita_black_bowl_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": true,
+      "message": null
+     }
+    ],
+    "unsink": {
+     "collision": "Collision between object environment/coffee_table_0 and akita_black_bowl_1/base_link_35",
+     "rise": 0.001
+    },
+    "handle": "grasp_0",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.1,
+    "plan_time": 11.742,
+    "status": "planned",
+    "plan_seconds": 15.98,
+    "target_start": [
+     -0.1121,
+     -0.0785,
+     0.4224
+    ],
+    "target_end": [
+     -0.1205,
+     -0.079,
+     0.4759
+    ],
+    "stage": "lift",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0022,
+       0.0481
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.0009,
+       0.0042
+      ]
+     },
+     {
+      "stage": "close",
+      "end_error": [
+       0.0035,
+       0.0087
+      ]
+     }
+    ]
+   },
+   "attempts": [
+    {
+     "case": "Memory_Execution/case9",
+     "instance": "akita_black_bowl_1",
+     "seed": 0,
+     "success": false,
+     "start_regions": [
+      "coffee_table_table_region"
+     ],
+     "unregistrable": false,
+     "lifted": 0.0,
+     "rotation": 0.0026,
+     "held": false,
+     "steps_used": 150,
+     "suppressed": [],
+     "plan_seconds": 53.818,
+     "monitor": [],
+     "policy": {
+      "goals": [
+       [
+        "pick",
+        "akita_black_bowl_1"
+       ]
+      ],
+      "held": null,
+      "target": "akita_black_bowl_1",
+      "tried": [
+       {
+        "handle": "grasp_0",
+        "success": true,
+        "message": null
+       }
+      ],
+      "unsink": {
+       "collision": "Collision between object environment/coffee_table_0 and akita_black_bowl_1/base_link_35",
+       "rise": 0.001
+      },
+      "handle": "grasp_0",
+      "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+      "lift": 0.1,
+      "plan_time": 48.993,
+      "status": "planned",
+      "plan_seconds": 53.818,
+      "target_start": [
+       0.2034,
+       -0.0968,
+       0.4224
+      ],
+      "target_end": [
+       0.2034,
+       -0.0968,
+       0.4224
+      ],
+      "stage": "lift",
+      "stages": [
+       {
+        "stage": "transit",
+        "end_error": [
+         0.0033,
+         0.044
+        ]
+       },
+       {
+        "stage": "insert",
+        "end_error": [
+         0.0005,
+         0.0013
+        ]
+       },
+       {
+        "stage": "close",
+        "end_error": [
+         0.0003,
+         0.0007
+        ]
+       },
+       {
+        "stage": "lift",
+        "end_error": [
+         0.0046,
+         0.0007
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "alphabet_soup": {
+   "case": "Memory_Execution/case9",
+   "instance": "alphabet_soup_1",
+   "seed": 0,
+   "success": true,
+   "start_regions": [
+    "coffee_table_table_region"
+   ],
+   "unregistrable": false,
+   "lifted": 0.023,
+   "rotation": 0.0645,
+   "held": false,
+   "steps_used": 79,
+   "suppressed": [],
+   "plan_seconds": 75.675,
+   "monitor": [
+    "[Monitor] alphabet_soup_1 region changed from ['coffee_table_table_region'] to ['None'], Pick successful",
+    "[Monitor] alphabet_soup_1: Completed subtask `pick alphabet_soup_1` (1/1) \u2705"
+   ],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "alphabet_soup_1"
+     ]
+    ],
+    "held": null,
+    "target": "alphabet_soup_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": true,
+      "message": null
+     }
+    ],
+    "handle": "grasp_0",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.1,
+    "plan_time": 72.546,
+    "status": "planned",
+    "plan_seconds": 75.675,
+    "target_start": [
+     0.208,
+     0.0925,
+     0.4624
+    ],
+    "target_end": [
+     0.2181,
+     0.0925,
+     0.4754
+    ],
+    "stage": "lift",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0016,
+       0.0405
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.0012,
+       0.0028
+      ]
+     },
+     {
+      "stage": "close",
+      "end_error": [
+       0.0004,
+       0.0015
+      ]
+     }
+    ]
+   }
+  },
+  "basket": {
+   "case": "Ideal/case10",
+   "instance": "basket_1",
+   "seed": 0,
+   "success": false,
+   "start_regions": [
+    "basket_1_contain_region",
+    "coffee_table_table_region"
+   ],
+   "unregistrable": true,
+   "lifted": 0.0913,
+   "rotation": 0.0327,
+   "held": true,
+   "steps_used": 150,
+   "suppressed": [],
+   "plan_seconds": 99.269,
+   "monitor": [],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "basket_1"
+     ]
+    ],
+    "held": null,
+    "target": "basket_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": true,
+      "message": null
+     }
+    ],
+    "unsink": {
+     "collision": "Collision between object environment/coffee_table_0 and basket_1/base_link_0",
+     "rise": 0.001
+    },
+    "handle": "grasp_0",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.1,
+    "plan_time": 97.66,
+    "status": "planned",
+    "plan_seconds": 99.269,
+    "target_start": [
+     -0.1233,
+     0.552,
+     0.4194
+    ],
+    "target_end": [
+     -0.1237,
+     0.5357,
+     0.5107
+    ],
+    "stage": "lift",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0031,
+       0.0067
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.0019,
+       0.0056
+      ]
+     },
+     {
+      "stage": "close",
+      "end_error": [
+       0.0018,
+       0.0052
+      ]
+     },
+     {
+      "stage": "lift",
+      "end_error": [
+       0.0024,
+       0.0049
+      ]
+     }
+    ]
+   }
+  },
+  "bbq_sauce": {
+   "case": "Ideal/case10",
+   "instance": "bbq_sauce_1",
+   "seed": 0,
+   "success": true,
+   "start_regions": [],
+   "unregistrable": true,
+   "lifted": -0.0016,
+   "rotation": 0.0033,
+   "held": false,
+   "steps_used": 42,
+   "suppressed": [],
+   "plan_seconds": 104.183,
+   "monitor": [
+    "[Monitor] bbq_sauce_1 region changed from ['coffee_table_table_region'] to ['None'], Pick successful",
+    "[Monitor] bbq_sauce_1: Completed subtask `pick bbq_sauce_1` (1/1) \u2705"
+   ],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "bbq_sauce_1"
+     ]
+    ],
+    "held": null,
+    "target": "bbq_sauce_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": true,
+      "message": null
+     }
+    ],
+    "handle": "grasp_0",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.1,
+    "plan_time": 101.651,
+    "status": "planned",
+    "plan_seconds": 104.183,
+    "target_start": [
+     0.0479,
+     -0.1768,
+     0.4786
+    ],
+    "target_end": [
+     0.0476,
+     -0.1767,
+     0.4769
+    ],
+    "stage": "close",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0025,
+       0.0409
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.001,
+       0.0033
+      ]
+     }
+    ]
+   }
+  },
+  "black_book": {
+   "case": "Ideal/case1",
+   "instance": "black_book_1",
+   "seed": 0,
+   "success": false,
+   "start_regions": [
+    "coffee_table_table_region"
+   ],
+   "unregistrable": false,
+   "lifted": 0.0,
+   "rotation": 0.0,
+   "held": false,
+   "steps_used": 150,
+   "suppressed": [],
+   "plan_seconds": 127.536,
+   "monitor": [],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "black_book_1"
+     ]
+    ],
+    "held": null,
+    "status": "planning failed",
+    "error": "no handle of black_book_1 plans",
+    "target": "black_book_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 1: Target generation failed: Failed to generate valid target via edge 'panda/gripper > black_book_1/grasp_0 | f_01': q_target=None"
+     },
+     {
+      "handle": "grasp_1",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 1: Target generation failed: Failed to generate valid target via edge 'panda/gripper > black_book_1/grasp_1 | f_01': q_target=None"
+     },
+     {
+      "handle": "grasp_2",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 2: Target generation failed: Failed to generate valid target via edge 'panda/gripper > black_book_1/grasp_2 | f_12': q_target=None"
+     },
+     {
+      "handle": "grasp_3",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 2: Target generation failed: Failed to generate valid target via edge 'panda/gripper > black_book_1/grasp_3 | f_12': q_target=None"
+     },
+     {
+      "handle": "grasp_4",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 1: Target generation failed: Failed to generate valid target via edge 'panda/gripper > black_book_1/grasp_4 | f_01': q_target=None"
+     },
+     {
+      "handle": "grasp_5",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 1: Target generation failed: Failed to generate valid target via edge 'panda/gripper > black_book_1/grasp_5 | f_01': q_target=None"
+     }
+    ],
+    "unsink": {
+     "collision": "Collision between object environment/coffee_table_0 and black_book_1/base_link_0",
+     "rise": 0.001
+    },
+    "plan_seconds": 127.536,
+    "target_start": [
+     -0.2997,
+     -0.0026,
+     0.4218
+    ],
+    "target_end": [
+     -0.2997,
+     -0.0026,
+     0.4218
+    ]
+   }
+  },
+  "butter": {
+   "case": "Ideal/case7",
+   "instance": "butter_1",
+   "seed": 0,
+   "success": true,
+   "start_regions": [
+    "coffee_table_table_region"
+   ],
+   "unregistrable": false,
+   "lifted": 0.0444,
+   "rotation": 0.0177,
+   "held": false,
+   "steps_used": 78,
+   "suppressed": [],
+   "plan_seconds": 28.154,
+   "monitor": [
+    "[Monitor] butter_1 region changed from ['coffee_table_table_region'] to ['None'], Pick successful",
+    "[Monitor] butter_1: Completed subtask `pick butter_1` (1/1) \u2705"
+   ],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "butter_1"
+     ]
+    ],
+    "held": null,
+    "target": "butter_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": true,
+      "message": null
+     }
+    ],
+    "handle": "grasp_0",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.1,
+    "plan_time": 27.698,
+    "status": "planned",
+    "plan_seconds": 28.154,
+    "target_start": [
+     -0.1944,
+     0.3347,
+     0.4327
+    ],
+    "target_end": [
+     -0.1963,
+     0.3313,
+     0.4716
+    ],
+    "stage": "lift",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0032,
+       0.0086
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.0015,
+       0.0036
+      ]
+     },
+     {
+      "stage": "close",
+      "end_error": [
+       0.0031,
+       0.0067
+      ]
+     }
+    ]
+   },
+   "attempts": [
+    {
+     "case": "Memory_Execution/case9",
+     "instance": "butter_1",
+     "seed": 0,
+     "success": false,
+     "start_regions": [
+      "white_cabinet_1_top_region",
+      "white_cabinet_1_middle_region"
+     ],
+     "unregistrable": false,
+     "lifted": 0.0,
+     "rotation": 0.0004,
+     "held": false,
+     "steps_used": 150,
+     "suppressed": [],
+     "plan_seconds": 331.652,
+     "monitor": [],
+     "policy": {
+      "goals": [
+       [
+        "pick",
+        "butter_1"
+       ]
+      ],
+      "held": null,
+      "status": "planning failed",
+      "error": "no handle of butter_1 plans",
+      "target": "butter_1",
+      "tried": [
+       {
+        "handle": "grasp_0",
+        "success": false,
+        "message": "RuntimeError: Phase 1, edge 2: Planning failed for 'panda/gripper > butter_1/grasp_0 | f_12': TransitionPlanner.computePath failed for transit edge panda/gripper > butter_1/grasp_0 | f_12: Collision between object panda/panda_hand_0 and environment/white_cabinet_1_base_8"
+       },
+       {
+        "handle": "grasp_1",
+        "success": false,
+        "message": "RuntimeError: Phase 1, edge 2: Planning failed for 'panda/gripper > butter_1/grasp_1 | f_12': TransitionPlanner.computePath failed for transit edge panda/gripper > butter_1/grasp_1 | f_12: Collision between object panda/panda_hand_0 and environment/white_cabinet_1_base_8"
+       },
+       {
+        "handle": "grasp_2",
+        "success": false,
+        "message": "RuntimeError: Phase 1, edge 2: Planning failed for 'panda/gripper > butter_1/grasp_2 | f_12': TransitionPlanner.computePath failed for transit edge panda/gripper > butter_1/grasp_2 | f_12: Collision between object panda/panda_hand_0 and environment/white_cabinet_1_base_8"
+       },
+       {
+        "handle": "grasp_3",
+        "success": false,
+        "message": "RuntimeError: Phase 1, edge 2: Target generation failed: Failed to generate valid target via edge 'panda/gripper > butter_1/grasp_3 | f_12': q_target=None"
+       },
+       {
+        "handle": "grasp_4",
+        "success": false,
+        "message": "RuntimeError: Phase 1, edge 2: Planning failed for 'panda/gripper > butter_1/grasp_4 | f_12': TransitionPlanner.computePath failed for transit edge panda/gripper > butter_1/grasp_4 | f_12: Collision between object panda/panda_hand_0 and environment/white_cabinet_1_base_8"
+       },
+       {
+        "handle": "grasp_5",
+        "success": false,
+        "message": "RuntimeError: Phase 1, edge 2: Planning failed for 'panda/gripper > butter_1/grasp_5 | f_12': TransitionPlanner.computePath failed for transit edge panda/gripper > butter_1/grasp_5 | f_12: Collision between object panda/panda_hand_0 and environment/white_cabinet_1_base_8"
+       }
+      ],
+      "plan_seconds": 331.651,
+      "target_start": [
+       -0.0094,
+       -0.5559,
+       0.6089
+      ],
+      "target_end": [
+       -0.0094,
+       -0.5559,
+       0.6089
+      ]
+     }
+    }
+   ]
+  },
+  "chefmate_8_frypan": {
+   "case": "Ideal/case4",
+   "instance": "chefmate_8_frypan_1",
+   "seed": 0,
+   "success": true,
+   "start_regions": [
+    "coffee_table_table_region"
+   ],
+   "unregistrable": false,
+   "lifted": 0.0542,
+   "rotation": 0.0278,
+   "held": false,
+   "steps_used": 75,
+   "suppressed": [],
+   "plan_seconds": 12.42,
+   "monitor": [
+    "[Monitor] chefmate_8_frypan_1 region changed from ['coffee_table_table_region'] to ['None'], Pick successful",
+    "[Monitor] chefmate_8_frypan_1: Completed subtask `pick chefmate_8_frypan_1` (1/1) \u2705"
+   ],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "chefmate_8_frypan_1"
+     ]
+    ],
+    "held": null,
+    "target": "chefmate_8_frypan_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": true,
+      "message": null
+     }
+    ],
+    "unsink": {
+     "collision": "Collision between object environment/coffee_table_0 and chefmate_8_frypan_1/base_link_3",
+     "rise": 0.001
+    },
+    "handle": "grasp_0",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.1,
+    "plan_time": 9.919,
+    "status": "planned",
+    "plan_seconds": 12.42,
+    "target_start": [
+     -0.0045,
+     -0.5525,
+     0.4232
+    ],
+    "target_end": [
+     -0.0035,
+     -0.5511,
+     0.4703
+    ],
+    "stage": "lift",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0031,
+       0.0063
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.0023,
+       0.0033
+      ]
+     },
+     {
+      "stage": "close",
+      "end_error": [
+       0.0005,
+       0.0019
+      ]
+     }
+    ]
+   },
+   "attempts": [
+    {
+     "case": "Ideal/case10",
+     "instance": "chefmate_8_frypan_1",
+     "seed": 0,
+     "success": false,
+     "start_regions": [
+      "coffee_table_table_region"
+     ],
+     "unregistrable": false,
+     "lifted": 0.0,
+     "rotation": 0.0,
+     "held": false,
+     "steps_used": 150,
+     "suppressed": [],
+     "plan_seconds": 286.924,
+     "monitor": [],
+     "policy": {
+      "goals": [
+       [
+        "pick",
+        "chefmate_8_frypan_1"
+       ]
+      ],
+      "held": null,
+      "status": "planning failed",
+      "error": "no handle of chefmate_8_frypan_1 plans",
+      "target": "chefmate_8_frypan_1",
+      "tried": [
+       {
+        "handle": "grasp_0",
+        "success": false,
+        "message": "RuntimeError: Phase 1, edge 1: Target generation failed: Failed to generate valid target via edge 'panda/gripper > chefmate_8_frypan_1/grasp_0 | f_01': q_target=None"
+       },
+       {
+        "handle": "grasp_1",
+        "success": false,
+        "message": "RuntimeError: Phase 1, edge 1: Target generation failed: Failed to generate valid target via edge 'panda/gripper > chefmate_8_frypan_1/grasp_1 | f_01': q_target=None"
+       },
+       {
+        "handle": "grasp_2",
+        "success": false,
+        "message": "RuntimeError: Phase 1, edge 1: Target generation failed: Failed to generate valid target via edge 'panda/gripper > chefmate_8_frypan_1/grasp_2 | f_01': q_target=None"
+       },
+       {
+        "handle": "grasp_3",
+        "success": false,
+        "message": "RuntimeError: Phase 1, edge 1: Target generation failed: Failed to generate valid target via edge 'panda/gripper > chefmate_8_frypan_1/grasp_3 | f_01': q_target=None"
+       },
+       {
+        "handle": "grasp_4",
+        "success": false,
+        "message": "RuntimeError: Phase 1, edge 1: Target generation failed: Failed to generate valid target via edge 'panda/gripper > chefmate_8_frypan_1/grasp_4 | f_01': q_target=None"
+       },
+       {
+        "handle": "grasp_5",
+        "success": false,
+        "message": "RuntimeError: Phase 1, edge 1: Target generation failed: Failed to generate valid target via edge 'panda/gripper > chefmate_8_frypan_1/grasp_5 | f_01': q_target=None"
+       }
+      ],
+      "plan_seconds": 286.924,
+      "target_start": [
+       0.1187,
+       0.5494,
+       0.4232
+      ],
+      "target_end": [
+       0.1187,
+       0.5494,
+       0.4232
+      ]
+     }
+    }
+   ]
+  },
+  "chocolate_pudding": {
+   "case": "Ideal/case5",
+   "instance": "chocolate_pudding_1",
+   "seed": 0,
+   "success": true,
+   "start_regions": [
+    "wooden_cabinet_1_top_side",
+    "wooden_cabinet_1_top_region"
+   ],
+   "unregistrable": false,
+   "lifted": 0.0377,
+   "rotation": 0.0152,
+   "held": false,
+   "steps_used": 107,
+   "suppressed": [],
+   "plan_seconds": 21.39,
+   "monitor": [
+    "[Monitor] chocolate_pudding_1 region changed from ['wooden_cabinet_1_top_side', 'wooden_cabinet_1_top_region'] to ['None'], Pick successful",
+    "[Monitor] chocolate_pudding_1: Completed subtask `pick chocolate_pudding_1` (1/1) \u2705"
+   ],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "chocolate_pudding_1"
+     ]
+    ],
+    "held": null,
+    "target": "chocolate_pudding_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 1: Target generation failed: Failed to generate valid target via edge 'panda/gripper > chocolate_pudding_1/grasp_0 | f_01': q_target=None"
+     },
+     {
+      "handle": "grasp_1",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 1: Target generation failed: Failed to generate valid target via edge 'panda/gripper > chocolate_pudding_1/grasp_1 | f_01': q_target=None"
+     },
+     {
+      "handle": "grasp_2",
+      "success": true,
+      "message": null
+     }
+    ],
+    "unsink": {
+     "collision": "Collision between object environment/wooden_cabinet_1_base_8 and chocolate_pudding_1/base_link_0",
+     "rise": 0.001
+    },
+    "handle": "grasp_2",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.1,
+    "plan_time": 21.014,
+    "status": "planned",
+    "plan_seconds": 21.39,
+    "target_start": [
+     -0.0086,
+     -0.5673,
+     0.6771
+    ],
+    "target_end": [
+     -0.0093,
+     -0.5729,
+     0.706
+    ],
+    "stage": "lift",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0044,
+       0.009
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.0114,
+       0.0509
+      ]
+     },
+     {
+      "stage": "close",
+      "end_error": [
+       0.0116,
+       0.0507
+      ]
+     }
+    ]
+   }
+  },
+  "cookies": {
+   "case": "Ideal/case10",
+   "instance": "cookies_1",
+   "seed": 0,
+   "success": true,
+   "start_regions": [
+    "coffee_table_table_region"
+   ],
+   "unregistrable": false,
+   "lifted": 0.0451,
+   "rotation": 0.002,
+   "held": false,
+   "steps_used": 42,
+   "suppressed": [],
+   "plan_seconds": 108.555,
+   "monitor": [
+    "[Monitor] cookies_1 region changed from ['coffee_table_table_region'] to ['None'], Pick successful",
+    "[Monitor] cookies_1: Completed subtask `pick cookies_1` (1/1) \u2705"
+   ],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "cookies_1"
+     ]
+    ],
+    "held": null,
+    "target": "cookies_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": true,
+      "message": null
+     }
+    ],
+    "handle": "grasp_0",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.1,
+    "plan_time": 107.777,
+    "status": "planned",
+    "plan_seconds": 108.555,
+    "target_start": [
+     -0.1454,
+     0.0838,
+     0.4334
+    ],
+    "target_end": [
+     -0.1439,
+     0.0838,
+     0.4703
+    ],
+    "stage": "lift",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0047,
+       0.0147
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.001,
+       0.003
+      ]
+     },
+     {
+      "stage": "close",
+      "end_error": [
+       0.0007,
+       0.0016
+      ]
+     }
+    ]
+   }
+  },
+  "cream_cheese": {
+   "case": "Ideal/case1",
+   "instance": "cream_cheese_1",
+   "seed": 0,
+   "success": true,
+   "start_regions": [
+    "coffee_table_table_region"
+   ],
+   "unregistrable": false,
+   "lifted": 0.0493,
+   "rotation": 0.0201,
+   "held": false,
+   "steps_used": 69,
+   "suppressed": [],
+   "plan_seconds": 0.456,
+   "monitor": [
+    "[Monitor] cream_cheese_1 region changed from ['coffee_table_table_region'] to ['None'], Pick successful",
+    "[Monitor] cream_cheese_1: Completed subtask `pick cream_cheese_1` (1/1) \u2705"
+   ],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "cream_cheese_1"
+     ]
+    ],
+    "held": null,
+    "target": "cream_cheese_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": true,
+      "message": null
+     }
+    ],
+    "handle": "grasp_0",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.1,
+    "plan_time": 0.359,
+    "status": "planned",
+    "plan_seconds": 0.456,
+    "target_start": [
+     -0.1325,
+     0.2112,
+     0.4329
+    ],
+    "target_end": [
+     -0.1331,
+     0.211,
+     0.4757
+    ],
+    "stage": "lift",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0043,
+       0.0089
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.0005,
+       0.0021
+      ]
+     },
+     {
+      "stage": "close",
+      "end_error": [
+       0.0025,
+       0.0054
+      ]
+     }
+    ]
+   }
+  },
+  "glazed_rim_porcelain_ramekin": {
+   "case": "Ideal/case10",
+   "instance": "glazed_rim_porcelain_ramekin_1",
+   "seed": 0,
+   "success": false,
+   "start_regions": [
+    "coffee_table_table_region"
+   ],
+   "unregistrable": false,
+   "lifted": 0.0,
+   "rotation": 0.0,
+   "held": false,
+   "steps_used": 150,
+   "suppressed": [],
+   "plan_seconds": 228.765,
+   "monitor": [],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "glazed_rim_porcelain_ramekin_1"
+     ]
+    ],
+    "held": null,
+    "status": "planning failed",
+    "error": "lifting glazed_rim_porcelain_ramekin_1 does not plan",
+    "target": "glazed_rim_porcelain_ramekin_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": false,
+      "message": "the grasp is at a joint limit"
+     },
+     {
+      "handle": "grasp_1",
+      "success": false,
+      "message": "the grasp is at a joint limit"
+     },
+     {
+      "handle": "grasp_2",
+      "success": false,
+      "message": "the grasp is at a joint limit"
+     },
+     {
+      "handle": "grasp_3",
+      "success": false,
+      "message": "the grasp is at a joint limit"
+     },
+     {
+      "handle": "grasp_4",
+      "success": false,
+      "message": "the grasp is at a joint limit"
+     },
+     {
+      "handle": "grasp_5",
+      "success": false,
+      "message": "the grasp is at a joint limit"
+     }
+    ],
+    "at_limit": true,
+    "handle": "grasp_0",
+    "plan_seconds": 228.765,
+    "target_start": [
+     -0.2999,
+     0.0038,
+     0.4233
+    ],
+    "target_end": [
+     -0.2999,
+     0.0038,
+     0.4233
+    ]
+   }
+  },
+  "ketchup": {
+   "case": "Ideal/case5",
+   "instance": "ketchup_1",
+   "seed": 0,
+   "success": false,
+   "start_regions": [],
+   "unregistrable": true,
+   "lifted": 0.1021,
+   "rotation": 0.0337,
+   "held": true,
+   "steps_used": 150,
+   "suppressed": [],
+   "plan_seconds": 4.42,
+   "monitor": [],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "ketchup_1"
+     ]
+    ],
+    "held": null,
+    "target": "ketchup_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": true,
+      "message": null
+     }
+    ],
+    "handle": "grasp_0",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.1,
+    "plan_time": 2.801,
+    "status": "planned",
+    "plan_seconds": 4.42,
+    "target_start": [
+     -0.2969,
+     0.0043,
+     0.4964
+    ],
+    "target_end": [
+     -0.2971,
+     0.0023,
+     0.5985
+    ],
+    "stage": "lift",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0041,
+       0.0204
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.0014,
+       0.0056
+      ]
+     },
+     {
+      "stage": "close",
+      "end_error": [
+       0.0004,
+       0.0015
+      ]
+     },
+     {
+      "stage": "lift",
+      "end_error": [
+       0.0034,
+       0.0079
+      ]
+     }
+    ]
+   }
+  },
+  "macaroni_and_cheese": {
+   "case": "Memory_Exploration/case3",
+   "instance": "macaroni_and_cheese_1",
+   "seed": 0,
+   "success": false,
+   "start_regions": [],
+   "unregistrable": true,
+   "lifted": -0.424,
+   "rotation": 1.4142,
+   "held": false,
+   "steps_used": 150,
+   "suppressed": [
+    "[Monitor] macaroni_and_cheese_1 pick suppressed: quaternion change 1.303 exceeds threshold 0.1"
+   ],
+   "plan_seconds": 149.918,
+   "monitor": [
+    "[Monitor] macaroni_and_cheese_1 pick suppressed: quaternion change 1.303 exceeds threshold 0.1"
+   ],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "macaroni_and_cheese_1"
+     ]
+    ],
+    "held": null,
+    "target": "macaroni_and_cheese_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": false,
+      "message": "the grasp is at a joint limit"
+     },
+     {
+      "handle": "grasp_1",
+      "success": false,
+      "message": "the grasp is at a joint limit"
+     },
+     {
+      "handle": "grasp_2",
+      "success": false,
+      "message": "the grasp is at a joint limit"
+     },
+     {
+      "handle": "grasp_3",
+      "success": false,
+      "message": "the grasp is at a joint limit"
+     },
+     {
+      "handle": "grasp_4",
+      "success": false,
+      "message": "the grasp is at a joint limit"
+     },
+     {
+      "handle": "grasp_5",
+      "success": false,
+      "message": "the grasp is at a joint limit"
+     }
+    ],
+    "at_limit": true,
+    "handle": "grasp_0",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.07500000000000001,
+    "plan_time": 149.526,
+    "status": "planned",
+    "plan_seconds": 149.918,
+    "target_start": [
+     -0.2999,
+     0.0025,
+     0.4821
+    ],
+    "target_end": [
+     -0.3985,
+     0.0044,
+     0.0582
+    ],
+    "stage": "insert",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0398,
+       0.0394
+      ]
+     }
+    ]
+   }
+  },
+  "milk": {
+   "case": "Memory_Execution/case9",
+   "instance": "milk_1",
+   "seed": 0,
+   "success": false,
+   "start_regions": [],
+   "unregistrable": true,
+   "lifted": 0.1017,
+   "rotation": 0.0055,
+   "held": true,
+   "steps_used": 150,
+   "suppressed": [],
+   "plan_seconds": 95.67,
+   "monitor": [],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "milk_1"
+     ]
+    ],
+    "held": null,
+    "target": "milk_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": true,
+      "message": null
+     }
+    ],
+    "handle": "grasp_0",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.1,
+    "plan_time": 93.416,
+    "status": "planned",
+    "plan_seconds": 95.67,
+    "target_start": [
+     -0.0129,
+     0.1946,
+     0.4937
+    ],
+    "target_end": [
+     -0.0109,
+     0.1946,
+     0.5954
+    ],
+    "stage": "lift",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0034,
+       0.0062
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.001,
+       0.0034
+      ]
+     },
+     {
+      "stage": "close",
+      "end_error": [
+       0.0009,
+       0.0026
+      ]
+     },
+     {
+      "stage": "lift",
+      "end_error": [
+       0.0018,
+       0.0037
+      ]
+     }
+    ]
+   }
+  },
+  "moka_pot": {
+   "case": "Memory_Execution/case9",
+   "instance": "moka_pot_1",
+   "seed": 0,
+   "success": false,
+   "start_regions": [],
+   "unregistrable": true,
+   "lifted": 0.0,
+   "rotation": 0.0,
+   "held": false,
+   "steps_used": 150,
+   "suppressed": [],
+   "plan_seconds": 313.777,
+   "monitor": [],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "moka_pot_1"
+     ]
+    ],
+    "held": null,
+    "status": "planning failed",
+    "error": "lifting moka_pot_1 does not plan",
+    "target": "moka_pot_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 2: Target generation failed: Failed to generate valid target via edge 'panda/gripper > moka_pot_1/grasp_0 | f_12': q_target=None"
+     },
+     {
+      "handle": "grasp_1",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 2: Target generation failed: Failed to generate valid target via edge 'panda/gripper > moka_pot_1/grasp_1 | f_12': q_target=None"
+     },
+     {
+      "handle": "grasp_2",
+      "success": false,
+      "message": "the grasp is at a joint limit"
+     },
+     {
+      "handle": "grasp_3",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 2: Target generation failed: Failed to generate valid target via edge 'panda/gripper > moka_pot_1/grasp_3 | f_12': q_target=None"
+     },
+     {
+      "handle": "grasp_4",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 2: Target generation failed: Failed to generate valid target via edge 'panda/gripper > moka_pot_1/grasp_4 | f_12': q_target=None"
+     },
+     {
+      "handle": "grasp_5",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 2: Target generation failed: Failed to generate valid target via edge 'panda/gripper > moka_pot_1/grasp_5 | f_12': q_target=None"
+     }
+    ],
+    "at_limit": true,
+    "handle": "grasp_2",
+    "plan_seconds": 313.777,
+    "target_start": [
+     -0.2991,
+     0.0029,
+     0.4901
+    ],
+    "target_end": [
+     -0.2991,
+     0.0029,
+     0.4901
+    ]
+   }
+  },
+  "orange_juice": {
+   "case": "Memory_Exploration/case6",
+   "instance": "orange_juice_1",
+   "seed": 0,
+   "success": false,
+   "start_regions": [],
+   "unregistrable": true,
+   "lifted": 0.1003,
+   "rotation": 0.0064,
+   "held": true,
+   "steps_used": 150,
+   "suppressed": [],
+   "plan_seconds": 5.554,
+   "monitor": [],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "orange_juice_1"
+     ]
+    ],
+    "held": null,
+    "target": "orange_juice_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": true,
+      "message": null
+     }
+    ],
+    "handle": "grasp_0",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.1,
+    "plan_time": 4.508,
+    "status": "planned",
+    "plan_seconds": 5.554,
+    "target_start": [
+     -0.2051,
+     -0.2409,
+     0.4937
+    ],
+    "target_end": [
+     -0.2046,
+     -0.2406,
+     0.594
+    ],
+    "stage": "lift",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0042,
+       0.012
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.0015,
+       0.0047
+      ]
+     },
+     {
+      "stage": "close",
+      "end_error": [
+       0.0007,
+       0.0021
+      ]
+     },
+     {
+      "stage": "lift",
+      "end_error": [
+       0.0026,
+       0.007
+      ]
+     }
+    ]
+   }
+  },
+  "plate": {
+   "case": "Ideal/case5",
+   "instance": "plate_1",
+   "seed": 0,
+   "success": false,
+   "start_regions": [
+    "coffee_table_table_region"
+   ],
+   "unregistrable": false,
+   "lifted": 0.0,
+   "rotation": 0.0,
+   "held": false,
+   "steps_used": 150,
+   "suppressed": [],
+   "plan_seconds": 11.473,
+   "monitor": [],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "plate_1"
+     ]
+    ],
+    "held": null,
+    "status": "planning failed",
+    "error": "no handle of plate_1 plans",
+    "target": "plate_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 1: Planning failed for 'panda/gripper > plate_1/grasp_0 | f_01': TransitionPlanner.computePath failed for waypoint edge panda/gripper > plate_1/grasp_0 | f_01: Collision between object panda/panda_link7_0 and environment/coffee_table_0"
+     },
+     {
+      "handle": "grasp_1",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 1: Planning failed for 'panda/gripper > plate_1/grasp_1 | f_01': TransitionPlanner.computePath failed for waypoint edge panda/gripper > plate_1/grasp_1 | f_01: Collision between object panda/panda_hand_0 and environment/coffee_table_0"
+     },
+     {
+      "handle": "grasp_2",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 1: Planning failed for 'panda/gripper > plate_1/grasp_2 | f_01': TransitionPlanner.computePath failed for waypoint edge panda/gripper > plate_1/grasp_2 | f_01: Collision between object panda/panda_link7_0 and environment/coffee_table_0"
+     },
+     {
+      "handle": "grasp_3",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 1: Planning failed for 'panda/gripper > plate_1/grasp_3 | f_01': TransitionPlanner.computePath failed for waypoint edge panda/gripper > plate_1/grasp_3 | f_01: Collision between object panda/panda_link6_0 and environment/coffee_table_0"
+     },
+     {
+      "handle": "grasp_4",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 1: Planning failed for 'panda/gripper > plate_1/grasp_4 | f_01': TransitionPlanner.computePath failed for waypoint edge panda/gripper > plate_1/grasp_4 | f_01: Collision between object panda/panda_link7_0 and environment/coffee_table_0"
+     },
+     {
+      "handle": "grasp_5",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 1: Planning failed for 'panda/gripper > plate_1/grasp_5 | f_01': TransitionPlanner.computePath failed for waypoint edge panda/gripper > plate_1/grasp_5 | f_01: Collision between object panda/panda_link5_0 and environment/coffee_table_0"
+     }
+    ],
+    "plan_seconds": 11.473,
+    "target_start": [
+     -0.0099,
+     0.322,
+     0.4265
+    ],
+    "target_end": [
+     -0.0099,
+     0.322,
+     0.4265
+    ]
+   }
+  },
+  "popcorn": {
+   "case": "Memory_Execution/case9",
+   "instance": "popcorn_1",
+   "seed": 0,
+   "success": true,
+   "start_regions": [
+    "coffee_table_table_region"
+   ],
+   "unregistrable": false,
+   "lifted": 0.0454,
+   "rotation": 0.005,
+   "held": false,
+   "steps_used": 48,
+   "suppressed": [],
+   "plan_seconds": 193.091,
+   "monitor": [
+    "[Monitor] popcorn_1 region changed from ['coffee_table_table_region'] to ['None'], Pick successful",
+    "[Monitor] popcorn_1: Completed subtask `pick popcorn_1` (1/1) \u2705"
+   ],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "popcorn_1"
+     ]
+    ],
+    "held": null,
+    "target": "popcorn_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": true,
+      "message": null
+     }
+    ],
+    "handle": "grasp_0",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.125,
+    "plan_time": 191.975,
+    "status": "planned",
+    "plan_seconds": 193.091,
+    "target_start": [
+     0.1039,
+     -0.0017,
+     0.434
+    ],
+    "target_end": [
+     0.1103,
+     -0.002,
+     0.4694
+    ],
+    "stage": "lift",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0048,
+       0.003
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.0005,
+       0.001
+      ]
+     },
+     {
+      "stage": "close",
+      "end_error": [
+       0.0007,
+       0.0019
+      ]
+     }
+    ]
+   }
+  },
+  "rack": {
+   "case": "Ideal/case2",
+   "instance": "rack_1",
+   "seed": 0,
+   "success": false,
+   "start_regions": [
+    "coffee_table_table_region"
+   ],
+   "unregistrable": false,
+   "lifted": 0.0,
+   "rotation": 0.0,
+   "held": false,
+   "steps_used": 150,
+   "suppressed": [],
+   "plan_seconds": 39.949,
+   "monitor": [],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "rack_1"
+     ]
+    ],
+    "held": null,
+    "status": "planning failed",
+    "error": "no handle of rack_1 plans",
+    "target": "rack_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 1: Target generation failed: Failed to generate valid target via edge 'panda/gripper > rack_1/grasp_0 | f_01': q_target=None"
+     },
+     {
+      "handle": "grasp_1",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 1: Target generation failed: Failed to generate valid target via edge 'panda/gripper > rack_1/grasp_1 | f_01': q_target=None"
+     },
+     {
+      "handle": "grasp_2",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 1: Target generation failed: Failed to generate valid target via edge 'panda/gripper > rack_1/grasp_2 | f_01': q_target=None"
+     },
+     {
+      "handle": "grasp_3",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 1: Target generation failed: Failed to generate valid target via edge 'panda/gripper > rack_1/grasp_3 | f_01': q_target=None"
+     },
+     {
+      "handle": "grasp_4",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 1: Target generation failed: Failed to generate valid target via edge 'panda/gripper > rack_1/grasp_4 | f_01': q_target=None"
+     },
+     {
+      "handle": "grasp_5",
+      "success": false,
+      "message": "RuntimeError: Phase 1, edge 1: Target generation failed: Failed to generate valid target via edge 'panda/gripper > rack_1/grasp_5 | f_01': q_target=None"
+     }
+    ],
+    "plan_seconds": 39.949,
+    "target_start": [
+     0.1401,
+     -0.5524,
+     0.4413
+    ],
+    "target_end": [
+     0.1401,
+     -0.5524,
+     0.4413
+    ]
+   }
+  },
+  "red_coffee_mug": {
+   "case": "Ideal/case10",
+   "instance": "red_coffee_mug_1",
+   "seed": 0,
+   "success": true,
+   "start_regions": [
+    "coffee_table_table_region"
+   ],
+   "unregistrable": false,
+   "lifted": 0.0537,
+   "rotation": 0.0157,
+   "held": false,
+   "steps_used": 56,
+   "suppressed": [],
+   "plan_seconds": 92.923,
+   "monitor": [
+    "[Monitor] red_coffee_mug_1 region changed from ['coffee_table_table_region'] to ['None'], Pick successful",
+    "[Monitor] red_coffee_mug_1: Completed subtask `pick red_coffee_mug_1` (1/1) \u2705"
+   ],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "red_coffee_mug_1"
+     ]
+    ],
+    "held": null,
+    "target": "red_coffee_mug_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": true,
+      "message": null
+     }
+    ],
+    "handle": "grasp_0",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.1,
+    "plan_time": 89.981,
+    "status": "planned",
+    "plan_seconds": 92.923,
+    "target_start": [
+     -0.1803,
+     -0.2128,
+     0.4258
+    ],
+    "target_end": [
+     -0.1801,
+     -0.2163,
+     0.4712
+    ],
+    "stage": "lift",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0022,
+       0.0063
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.0013,
+       0.0041
+      ]
+     },
+     {
+      "stage": "close",
+      "end_error": [
+       0.0007,
+       0.002
+      ]
+     }
+    ]
+   }
+  },
+  "tomato_sauce": {
+   "case": "Ideal/case10",
+   "instance": "tomato_sauce_1",
+   "seed": 0,
+   "success": true,
+   "start_regions": [
+    "coffee_table_table_region"
+   ],
+   "unregistrable": false,
+   "lifted": 0.0216,
+   "rotation": 0.0332,
+   "held": false,
+   "steps_used": 80,
+   "suppressed": [],
+   "plan_seconds": 80.149,
+   "monitor": [
+    "[Monitor] tomato_sauce_1 region changed from ['coffee_table_table_region'] to ['None'], Pick successful",
+    "[Monitor] tomato_sauce_1: Completed subtask `pick tomato_sauce_1` (1/1) \u2705"
+   ],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "tomato_sauce_1"
+     ]
+    ],
+    "held": null,
+    "target": "tomato_sauce_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": true,
+      "message": null
+     }
+    ],
+    "handle": "grasp_0",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.1,
+    "plan_time": 76.949,
+    "status": "planned",
+    "plan_seconds": 80.149,
+    "target_start": [
+     -0.0667,
+     -0.0667,
+     0.4624
+    ],
+    "target_end": [
+     -0.0586,
+     -0.0662,
+     0.4757
+    ],
+    "stage": "lift",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0023,
+       0.0266
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.0006,
+       0.0031
+      ]
+     },
+     {
+      "stage": "close",
+      "end_error": [
+       0.0018,
+       0.0043
+      ]
+     }
+    ]
+   }
+  },
+  "white_bowl": {
+   "case": "Ideal/case7",
+   "instance": "white_bowl_1",
+   "seed": 0,
+   "success": false,
+   "start_regions": [
+    "coffee_table_table_region"
+   ],
+   "unregistrable": false,
+   "lifted": 0.0,
+   "rotation": 0.0,
+   "held": false,
+   "steps_used": 150,
+   "suppressed": [],
+   "plan_seconds": 37.227,
+   "monitor": [],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "white_bowl_1"
+     ]
+    ],
+    "held": null,
+    "target": "white_bowl_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": true,
+      "message": null
+     }
+    ],
+    "settled": {
+     "handle": "grasp_0",
+     "message": "RuntimeError: Phase 1, edge 2: Planning failed for 'panda/gripper > white_bowl_1/grasp_0 | f_12': TransitionPlanner.computePath failed for transit edge panda/gripper > white_bowl_1/grasp_0 | f_12: hpp::manipulation::TransitionPlanner::computePath: goal configuration at rank 0: (-1.9675371792010747374,-0.69885637853497906136,2.3040312519924843748,-2.2191350065421504567,0.93847813311817274151,2.5073299302572342739,1.9930843655755858812,0.040000000000000000833,0.040000000000000000833,-0.11207696597533770011,-0.078539632528887765028,0.42240414916675766976,-2.7755319606181026411e-05,3.3351599497459524178e-06,0.70710677843609415216,0.70710678338441024238,-0.19439932599255962953,0.33472174650700853293,0.43268095466049094622,-3.6431132009630221351e-18,2.4866820300564519354e-17,1,-4.3635205530571398979e-33,0.00072719746080856617447,-0.55125749865607587274,0.42317095766489259967,-7.8296877244652364415e-05,8.4325257297550835784e-05,0.70710713847793660314,0.70710641453206624085,-0.031061722875220163648,-0.23408212399155858829,0.4370509542940625991,1.3250793776471862568e-12,9.1935415859564977045e-19,0.99999999999999988898,-1.518879793930373625e-22,-0.3022141273251685023,-0.0025376468873785822458,0.43337095408813891551,2.3890745096173558083e-17,2.2543771828342785399e-17,0.70710678118654757274,0.70710678118654746172,0.036098734637343976583,0.13905850555000223712,0.42353999999999997206,0,0,0.70710678118654757274,0.70710678118654746172,) does not satisfy the leaf constraint."
+    },
+    "handle": "grasp_0",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.1,
+    "plan_time": 33.323,
+    "status": "planned",
+    "plan_seconds": 37.227,
+    "target_start": [
+     0.0361,
+     0.1391,
+     0.4234
+    ],
+    "target_end": [
+     0.0361,
+     0.1391,
+     0.4234
+    ],
+    "stage": "lift",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0042,
+       0.017
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.0008,
+       0.0027
+      ]
+     },
+     {
+      "stage": "close",
+      "end_error": [
+       0.0006,
+       0.0014
+      ]
+     },
+     {
+      "stage": "lift",
+      "end_error": [
+       0.0011,
+       0.0021
+      ]
+     }
+    ]
+   },
+   "attempts": [
+    {
+     "case": "Ideal/case4",
+     "instance": "white_bowl_1",
+     "seed": 0,
+     "success": false,
+     "start_regions": [
+      "coffee_table_table_region"
+     ],
+     "unregistrable": false,
+     "lifted": 0.1069,
+     "rotation": 0.2672,
+     "held": false,
+     "steps_used": 150,
+     "suppressed": [
+      "[Monitor] white_bowl_1 pick suppressed: quaternion change 0.253 exceeds threshold 0.1"
+     ],
+     "plan_seconds": 70.247,
+     "monitor": [
+      "[Monitor] white_bowl_1 pick suppressed: quaternion change 0.253 exceeds threshold 0.1"
+     ],
+     "policy": {
+      "goals": [
+       [
+        "pick",
+        "white_bowl_1"
+       ]
+      ],
+      "held": null,
+      "target": "white_bowl_1",
+      "tried": [
+       {
+        "handle": "grasp_0",
+        "success": false,
+        "message": "the grasp is at a joint limit"
+       },
+       {
+        "handle": "grasp_1",
+        "success": false,
+        "message": "the grasp is at a joint limit"
+       },
+       {
+        "handle": "grasp_2",
+        "success": false,
+        "message": "the grasp is at a joint limit"
+       },
+       {
+        "handle": "grasp_3",
+        "success": false,
+        "message": "the grasp is at a joint limit"
+       },
+       {
+        "handle": "grasp_4",
+        "success": true,
+        "message": null
+       }
+      ],
+      "settled": {
+       "handle": "grasp_0",
+       "message": "RuntimeError: Phase 1, edge 2: Planning failed for 'panda/gripper > white_bowl_1/grasp_0 | f_12': TransitionPlanner.computePath failed for transit edge panda/gripper > white_bowl_1/grasp_0 | f_12: hpp::manipulation::TransitionPlanner::computePath: goal configuration at rank 0: (2.4113511829003235754,-0.35161494732577214251,-2.8972999999999999865,-2.5093143107784734447,2.8574658993532606743,3.4433056899919241012,-1.0138277065083898254,0.040000000000000000833,0.040000000000000000833,-0.004544945787542402707,-0.55250337222717960106,0.42317095766489259967,-7.8296877244650209563e-05,8.4325257297554535624e-05,0.70710713847793660314,0.70710641453206624085,0.081264768859924743638,0.074146320920668917775,0.43290695455915079171,-1.0260113903623184869e-18,2.3603157046131888072e-17,1,7.0850248309722562821e-34,-0.30185973302717089561,0.00015329001519456911815,0.49010585377885323988,2.0696017327926381189e-07,-4.6096488925561650011e-06,0.99999999998935418244,-4.885155059404133859e-09,0.2099777589855753579,0.0065866359149947574514,0.43397095403613467068,-7.2107444761052879369e-18,1.8628864705603157266e-17,1,-6.85618721825836863e-32,-0.22643007353976610241,-0.15335143604735423928,0.42353999999999997206,0,0,0.70710678118654757274,0.70710678118654746172,) does not satisfy the leaf constraint."
+      },
+      "handle": "grasp_4",
+      "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+      "lift": 0.1,
+      "plan_time": 67.014,
+      "status": "planned",
+      "plan_seconds": 70.247,
+      "target_start": [
+       -0.2264,
+       -0.1534,
+       0.4234
+      ],
+      "target_end": [
+       -0.2224,
+       -0.158,
+       0.5303
+      ],
+      "stage": "lift",
+      "stages": [
+       {
+        "stage": "transit",
+        "end_error": [
+         0.0015,
+         0.0034
+        ]
+       },
+       {
+        "stage": "insert",
+        "end_error": [
+         0.0025,
+         0.0051
+        ]
+       },
+       {
+        "stage": "close",
+        "end_error": [
+         0.0557,
+         0.0227
+        ]
+       },
+       {
+        "stage": "lift",
+        "end_error": [
+         0.0048,
+         0.0135
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "white_yellow_mug": {
+   "case": "Ideal/case10",
+   "instance": "white_yellow_mug_1",
+   "seed": 0,
+   "success": true,
+   "start_regions": [
+    "coffee_table_table_region"
+   ],
+   "unregistrable": false,
+   "lifted": 0.0617,
+   "rotation": 0.006,
+   "held": false,
+   "steps_used": 50,
+   "suppressed": [],
+   "plan_seconds": 79.396,
+   "monitor": [
+    "[Monitor] white_yellow_mug_1 region changed from ['coffee_table_table_region'] to ['None'], Pick successful",
+    "[Monitor] white_yellow_mug_1: Completed subtask `pick white_yellow_mug_1` (1/1) \u2705"
+   ],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "white_yellow_mug_1"
+     ]
+    ],
+    "held": null,
+    "target": "white_yellow_mug_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": true,
+      "message": null
+     }
+    ],
+    "handle": "grasp_0",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.1,
+    "plan_time": 74.715,
+    "status": "planned",
+    "plan_seconds": 79.396,
+    "target_start": [
+     0.0346,
+     0.2494,
+     0.4241
+    ],
+    "target_end": [
+     0.0372,
+     0.2509,
+     0.4768
+    ],
+    "stage": "lift",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0023,
+       0.0057
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.0011,
+       0.0032
+      ]
+     },
+     {
+      "stage": "close",
+      "end_error": [
+       0.001,
+       0.0028
+      ]
+     }
+    ]
+   }
+  },
+  "wine_bottle": {
+   "case": "Ideal/case10",
+   "instance": "wine_bottle_1",
+   "seed": 0,
+   "success": true,
+   "start_regions": [
+    "coffee_table_table_region"
+   ],
+   "unregistrable": false,
+   "lifted": 0.0611,
+   "rotation": 0.0053,
+   "held": false,
+   "steps_used": 58,
+   "suppressed": [],
+   "plan_seconds": 100.991,
+   "monitor": [
+    "[Monitor] wine_bottle_1 region changed from ['coffee_table_table_region'] to ['None'], Pick successful",
+    "[Monitor] wine_bottle_1: Completed subtask `pick wine_bottle_1` (1/1) \u2705"
+   ],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "wine_bottle_1"
+     ]
+    ],
+    "held": null,
+    "target": "wine_bottle_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": true,
+      "message": null
+     }
+    ],
+    "handle": "grasp_0",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.1,
+    "plan_time": 97.081,
+    "status": "planned",
+    "plan_seconds": 100.991,
+    "target_start": [
+     -0.1607,
+     0.2396,
+     0.4229
+    ],
+    "target_end": [
+     -0.1588,
+     0.2401,
+     0.4757
+    ],
+    "stage": "lift",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0022,
+       0.0185
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.0008,
+       0.0034
+      ]
+     },
+     {
+      "stage": "close",
+      "end_error": [
+       0.0006,
+       0.0014
+      ]
+     }
+    ]
+   }
+  },
+  "wooden_tray": {
+   "case": "Ideal/case10",
+   "instance": "wooden_tray_1",
+   "seed": 0,
+   "success": true,
+   "start_regions": [
+    "coffee_table_table_region"
+   ],
+   "unregistrable": false,
+   "lifted": 0.0593,
+   "rotation": 0.0067,
+   "held": false,
+   "steps_used": 77,
+   "suppressed": [],
+   "plan_seconds": 186.55,
+   "monitor": [
+    "[Monitor] wooden_tray_1 region changed from ['coffee_table_table_region'] to ['None'], Pick successful",
+    "[Monitor] wooden_tray_1: Completed subtask `pick wooden_tray_1` (1/1) \u2705"
+   ],
+   "policy": {
+    "goals": [
+     [
+      "pick",
+      "wooden_tray_1"
+     ]
+    ],
+    "held": null,
+    "target": "wooden_tray_1",
+    "tried": [
+     {
+      "handle": "grasp_0",
+      "success": false,
+      "message": "the grasp is at a joint limit"
+     },
+     {
+      "handle": "grasp_1",
+      "success": true,
+      "message": null
+     }
+    ],
+    "handle": "grasp_1",
+    "lift_message": "Loop motion planned for 'panda/gripper' to explicit target",
+    "lift": 0.1,
+    "plan_time": 183.603,
+    "status": "planned",
+    "plan_seconds": 186.55,
+    "target_start": [
+     -0.0038,
+     -0.5535,
+     0.4246
+    ],
+    "target_end": [
+     -0.0036,
+     -0.5551,
+     0.4748
+    ],
+    "stage": "lift",
+    "stages": [
+     {
+      "stage": "transit",
+      "end_error": [
+       0.0041,
+       0.0094
+      ]
+     },
+     {
+      "stage": "insert",
+      "end_error": [
+       0.0023,
+       0.0042
+      ]
+     },
+     {
+      "stage": "close",
+      "end_error": [
+       0.0023,
+       0.0067
+      ]
+     }
+    ]
+   },
+   "attempts": [
+    {
+     "case": "Ideal/case10",
+     "instance": "wooden_tray_1",
+     "seed": 0,
+     "success": false,
+     "start_regions": [
+      "coffee_table_table_region"
+     ],
+     "unregistrable": false,
+     "lifted": 0.0,
+     "rotation": 0.0,
+     "held": false,
+     "steps_used": 150,
+     "suppressed": [],
+     "plan_seconds": 268.437,
+     "monitor": [],
+     "policy": {
+      "goals": [
+       [
+        "pick",
+        "wooden_tray_1"
+       ]
+      ],
+      "held": null,
+      "status": "planning failed",
+      "error": "lifting wooden_tray_1 does not plan",
+      "target": "wooden_tray_1",
+      "tried": [
+       {
+        "handle": "grasp_0",
+        "success": false,
+        "message": "the grasp is at a joint limit"
+       },
+       {
+        "handle": "grasp_1",
+        "success": true,
+        "message": null
+       }
+      ],
+      "handle": "grasp_1",
+      "lift_message": "plan_loop('panda/gripper') failed after 10 attempts: TransitionPlanner.computePath failed for transit edge Loop | 0-0: Initial configuration (-0.54491185087811944143,0.79206551184814899536,-0.23974554516950338789,-1.6371990197667964928,0.25255733439419436603,2.3987206906727527311,-0.11212430578119911284,0.040000000000000000833,0.040000000000000000833,-0.12333678734114139619,0.55202678020701512196,0.41940312460065543032,-0.001693423793176433061,0.0016930414107074187591,0.70710475546234474731,0.70710475230278002634,0.047876904555907269512,-0.1768006570197941385,0.4786109546700005879,1.4911544409530149801e-17,1.514191402151244682e-17,0.70710678118654757274,0.70710678118654746172,0.11872503315691096404,0.54944642740516491664,0.42317095766489259967,-7.8296877244649667462e-05,8.4325257297556094165e-05,0.70710713847793660314,0.70710641453206624085,-0.14542186628264081039,0.083780536353436380059,0.43337095408813891551,2.0255346259425557905e-17,2.7761160088393837474e-17,0.70710678118654757274,0.70710678118654746172,-0.29987489061765731924,0.0038222371538660622828,0.42334136910669961651,-6.6864829061010511264e-08,1.636779176924541013e-07,0.70710677735254201526,0.70710678502053103678,-0.18028025780667716882,-0.21277964477312064084,0.42583010423141098855,1.2861821316779416073e-05,1.1700876162268466027e-05,-0.70710593369445895462,0.70710762846383623526,-0.06673986079845335706,-0.066726430581838427902,0.46238407298994588235,0.0022655829667502977963,0.70756764340346933739,0.70663835280593756405,-0.0022661610695255034534,0.034635078814249493917,0.24942377539071064474,0.42409115296038263354,1.5303843012806939996e-05,2.2247660275678593283e-05,-0.70710729448414433307,0.70710626737297943567,-0.16073834362460953651,0.23955753113412156519,0.42286095414074259535,-1.2452363592926544408e-05,7.784428647825965974e-07,0.99999999992216626055,1.3866596784629066692e-08,-0.0038257633697099183157,-0.55346386787398949014,0.42508266154699997363,0,0,-0.99999999994005617232,1.0949316890440652372e-05,) does not satisfy the constraints of the problem.",
+      "plan_seconds": 268.436,
+      "target_start": [
+       -0.0038,
+       -0.5535,
+       0.4246
+      ],
+      "target_end": [
+       -0.0038,
+       -0.5535,
+       0.4246
+      ]
+     }
+    }
+   ]
+  }
+ },
+ "summary": {
+  "classes": 25,
+  "picked": 14,
+  "suppressed": [
+   "macaroni_and_cheese"
+  ],
+  "unregistrable": [
+   "basket",
+   "bbq_sauce",
+   "ketchup",
+   "macaroni_and_cheese",
+   "milk",
+   "moka_pot",
+   "orange_juice"
+  ],
+  "held": [
+   "basket",
+   "ketchup",
+   "milk",
+   "orange_juice"
+  ],
+  "failed": [
+   "basket",
+   "black_book",
+   "glazed_rim_porcelain_ramekin",
+   "ketchup",
+   "macaroni_and_cheese",
+   "milk",
+   "moka_pot",
+   "orange_juice",
+   "plate",
+   "rack",
+   "white_bowl"
+  ]
+ }
+}

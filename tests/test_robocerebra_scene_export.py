@@ -206,3 +206,18 @@ def test_scene_builder_loads_an_environment_srdf():
         "name": "env", "urdf_path": "e.urdf", "pose": None, "srdf_path": "e.srdf"
     }
     assert second.kwargs == {"name": "ground", "urdf_path": "g.urdf", "pose": None}
+
+
+def test_robot_contacts_name_the_touched_object(exporter):
+    import mujoco
+
+    # The robot's box overlaps the cube by 1 cm (and rests in the table).
+    model = mujoco.MjModel.from_xml_string(
+        MJCF.replace('name="robot0_base" pos="-0.5 0 0.4"', 'name="robot0_base" pos="-0.27 0 0.4499"')
+    )
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    manifest = exporter.export_scene(model, data, regions=["table_region"])["manifest"]
+    (contact,) = manifest["robot_contacts"]
+    assert contact["link"] == "robot0_base" and contact["object"] == "cube"
+    assert contact["dist"] == pytest.approx(-0.01, abs=1e-3)

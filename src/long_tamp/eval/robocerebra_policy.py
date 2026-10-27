@@ -1,0 +1,336 @@
+"""An HPP policy for RoboCerebra's segmented protocol (#159, row A "Ideal").
+
+Per task segment, :class:`HppPolicy` reads the segment's goal predicates
+from the case's ``goal.json`` (as the env server loads it), exports the
+scene as it stands, plans the segment in HPP
+(:class:`~long_tamp.eval.robocerebra_plan.SegmentPlanner`) and returns a
+:class:`SegmentController`, which tracks the plan with ``OSC_POSE`` actions
+(:class:`~long_tamp.eval.robocerebra_tracker.OscTracker`) from each
+observation. :func:`~long_tamp.eval.robocerebra_runner.evaluate_case` steps
+it under the benchmark's budget and resume.
+
+Predicates map onto what the planner does:
+
+``pick``
+    ``grasped``: grasp one of the object's generated handles and lift it.
+``in`` / ``on``
+    ``placed``: the object is in the hand (the official resume puts the
+    demo's state at the segment start); carry it over the region, release.
+
+Anything else (``pour``, ``open``, ``turnon``) is rejected: the segment holds
+still with the gripper closed, so an object a later segment resumes in the
+hand is not dropped while the gripper command ramps (robosuite keeps the
+gripper command across the resume).
+
+HPP keeps native memory from every problem it builds, so a long run in one
+process grows by a few hundred MB a segment; by default each segment is
+planned in a forked child process (``isolate``), which returns the plan.
+"""
+
+from __future__ import annotations
+
+import logging
+import multiprocessing
+import os
+import tempfile
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+from .robocerebra_plan import PlanningError, tcp_to_eef
+from .robocerebra_tracker import OscTracker, Stage, obs_pose
+
+logger = logging.getLogger(__name__)
+
+PREDICATES = {"pick": "grasped", "in": "placed", "on": "placed"}
+ASSETS = Path(__file__).resolve().parents[3] / "script" / "twin" / "assets"
+
+
+class UnsupportedGoal(ValueError):
+    """A goal predicate the planner has no translation for."""
+
+
+@dataclass(frozen=True)
+class SegmentGoal:
+    """One goal predicate in planner terms: ``grasped`` an object, or
+    ``placed`` it in ``region`` (a region name of the exported manifest)."""
+
+    kind: str
+    obj: str
+    region: str | None = None
+
+    @classmethod
+    def from_spec(cls, spec: list[str]) -> SegmentGoal:
+        """Translate one ``goal.json`` predicate, e.g. ``["in", obj, region]``."""
+        name = str(spec[0]).lower()
+        if name not in PREDICATES:
+            raise UnsupportedGoal(
+                f"predicate {spec[0]!r} is not supported ({list(spec)})"
+            )
+        kind = PREDICATES[name]
+        if kind == "grasped":
+            if len(spec) != 2:
+                raise UnsupportedGoal(f"pick takes one object: {list(spec)}")
+            return cls(kind, str(spec[1]))
+        if len(spec) != 3:
+            raise UnsupportedGoal(f"{name} takes an object and a region: {list(spec)}")
+        return cls(kind, str(spec[1]), str(spec[2]))
+
+
+def segment_specs(info: dict[str, Any], segment: int) -> list[list[str]]:
+    """The goal predicates annotated for task step ``segment`` (``load``'s
+    ``goal`` and ``goal_steps``: per object, its predicates and their steps)."""
+    specs = []
+    for obj, steps in info.get("goal_steps", {}).items():
+        for index, step in enumerate(steps):
+            if step == segment:
+                specs.append(list(info["goal"][obj][index]))
+    return specs
+
+
+@dataclass
+class SegmentController:
+    """Closed-loop actions for one segment: ``controller(obs) -> (7,)``.
+
+    Tracks ``stages`` from the first observation, which fixes the planner
+    TCP's offset to the observed end effector (same joints at the segment
+    start). With no stages (planning failed, or the goal is unsupported) it
+    holds still, gripper ``hold_gripper``. ``info`` goes into the runner's
+    record of the segment, with the target's observed position at the first
+    and the latest step (``target_start`` / ``target_end``).
+    """
+
+    stages: list[Stage] | None
+    tcp_start: np.ndarray | None = None
+    info: dict[str, Any] = field(default_factory=dict)
+    hold_gripper: float = 1.0
+    tracker: OscTracker | None = field(default=None, init=False)
+
+    def __call__(self, obs: dict[str, Any]) -> np.ndarray:
+        position = obs.get(f"{self.info.get('target')}_pos")
+        if position is not None:
+            position = [round(float(v), 4) for v in position]
+            self.info.setdefault("target_start", position)
+            self.info["target_end"] = position
+        if not self.stages:
+            action = np.zeros(7)
+            action[3] = 1e-6  # nonzero: re-anchors OSC's orientation goal
+            action[6] = self.hold_gripper
+            return action
+        if self.tracker is None:
+            self.tracker = OscTracker(
+                self.stages, tcp_to_eef(self.tcp_start, obs_pose(obs))
+            )
+        action = self.tracker(obs)
+        self.info["stage"] = self.tracker.stage_name
+        self.info["stages"] = self.tracker.log
+        return action
+
+
+class HppPolicy:
+    """``policy(env, info, segment, step_limit) -> SegmentController``.
+
+    Plans one segment from the scene the env server exports at its start.
+    Only the segment's first predicate is planned; the others are recorded.
+    With ``isolate``, the planning runs in a forked child process.
+    """
+
+    def __init__(
+        self,
+        assets: str | Path = ASSETS,
+        work_dir: str | Path | None = None,
+        timeout: float = 20.0,
+        max_iterations: int = 3000,
+        lift: float = 0.10,
+        isolate: bool = True,
+    ) -> None:
+        self.assets = Path(assets)
+        self.work_dir = (
+            Path(work_dir) if work_dir else Path(tempfile.mkdtemp(prefix="rc_policy_"))
+        )
+        self.timeout = timeout
+        self.max_iterations = max_iterations
+        self.lift = lift
+        self.isolate = isolate
+        self._robot: tuple[str, str] | None = None
+
+    def __call__(
+        self, env: Any, info: dict[str, Any], segment: int, step_limit: int
+    ) -> SegmentController:
+        specs = segment_specs(info, segment)
+        record: dict[str, Any] = {"goals": specs}
+        if not specs:
+            record["status"] = "no goal"
+            return SegmentController(None, info=record)
+        if len(specs) > 1:
+            record["unplanned"] = specs[1:]
+        try:
+            goal = SegmentGoal.from_spec(specs[0])
+        except UnsupportedGoal as error:
+            record.update(status="unsupported", error=str(error))
+            return SegmentController(None, info=record)
+        start = time.time()
+        try:
+            plan = self._plan(env, goal, segment, record)
+        except UnsupportedGoal as error:  # the scene has no such region
+            record.update(status="unsupported", error=str(error))
+            return SegmentController(None, info=record)
+        except Exception as error:
+            record.update(
+                status="planning failed", error=f"{type(error).__name__}: {error}"
+            )
+            record.update(getattr(error, "info", {}))
+            record["plan_seconds"] = round(time.time() - start, 3)
+            logger.warning("segment %d %s: %s", segment, specs[0], error)
+            return SegmentController(None, info=record)
+        record.update(
+            plan.info, status="planned", plan_seconds=round(time.time() - start, 3)
+        )
+        return SegmentController(plan.stages, plan.tcp_start, record)
+
+    def _plan(
+        self, env: Any, goal: SegmentGoal, segment: int, record: dict[str, Any]
+    ) -> Any:
+        from .robocerebra_plan import held_object, robot_files
+
+        if self._robot is None:
+            self._robot = robot_files(self.assets)
+        urdf, srdf = self._robot
+        scene = env.export_scene(self.work_dir / f"s{segment}")
+        held = held_object(scene.manifest)
+        record["held"] = held
+        if goal.kind == "grasped":
+            if held is not None:
+                raise RuntimeError(f"{held} is already in the hand")
+            region = None
+        else:
+            if held != goal.obj:
+                raise RuntimeError(f"{goal.obj} is not in the hand (holding {held})")
+            regions = {
+                region["region"]: region for region in scene.manifest.get("regions", [])
+            }
+            if goal.region not in regions:
+                raise UnsupportedGoal(f"no region {goal.region!r} in the scene")
+            region = regions[goal.region]
+        args = (
+            scene.root,
+            urdf,
+            srdf,
+            goal.obj,
+            region,
+            self.timeout,
+            self.max_iterations,
+            self.lift,
+        )
+        plan, handles = _in_child(_solve, *args) if self.isolate else _solve(*args)
+        if handles is not None:
+            record["handles"] = handles
+        return plan
+
+
+def _solve(
+    scene_dir: Path,
+    urdf: str,
+    srdf: str,
+    target: str,
+    region: dict[str, Any] | None,
+    timeout: float,
+    max_iterations: int,
+    lift: float,
+) -> tuple[Any, Any]:
+    """Plan a pick of ``target`` (no ``region``) or its place into ``region``
+    on the exported scene: the plan and, for a pick, the handles generated."""
+    from .robocerebra_grasps import add_grasp_handles
+    from .robocerebra_plan import SegmentPlanner
+    from .robocerebra_scene import load_export
+
+    scene = load_export(scene_dir)
+    if region is None:
+        handles = add_grasp_handles(scene, objects=[target]).get(target)
+        planner = SegmentPlanner(
+            scene, urdf, srdf, target, timeout=timeout, max_iterations=max_iterations
+        )
+        return planner.plan_pick(lift=lift), handles
+    planner = SegmentPlanner(
+        scene,
+        urdf,
+        srdf,
+        target,
+        held=True,
+        timeout=timeout,
+        max_iterations=max_iterations,
+    )
+    return planner.plan_place(region), None
+
+
+def _in_child(function: Any, *args: Any) -> Any:
+    """``function(*args)`` in a forked process, so the memory it takes goes
+    with the process. Exceptions come back as their message (and a
+    :class:`PlanningError`'s ``info``)."""
+    context = multiprocessing.get_context("fork")
+    receiver, sender = context.Pipe(duplex=False)
+    process = context.Process(
+        target=_child_main, args=(sender, function, args), daemon=True
+    )
+    process.start()
+    sender.close()
+    try:
+        kind, payload = receiver.recv()
+    except EOFError:
+        process.join()
+        raise RuntimeError(
+            f"the planning process died (exit code {process.exitcode})"
+        ) from None
+    finally:
+        receiver.close()
+    process.join()
+    if kind == "ok":
+        return payload
+    name, message, info = payload
+    if info is not None:
+        raise PlanningError(message, info)
+    raise RuntimeError(f"{name}: {message}")
+
+
+def _child_main(sender: Any, function: Any, args: tuple[Any, ...]) -> None:
+    try:
+        result = ("ok", function(*args))
+    except BaseException as error:
+        result = (
+            "error",
+            (type(error).__name__, str(error), getattr(error, "info", None)),
+        )
+    try:
+        sender.send(result)
+    finally:
+        sender.close()
+        # Skip interpreter teardown: HPP's destructors are slow and the
+        # parent's atexit handlers and open files are not this process's.
+        os._exit(0)
+
+
+_DEFAULT: HppPolicy | None = None
+
+
+def hpp_policy(
+    env: Any, info: dict[str, Any], segment: int, step_limit: int
+) -> SegmentController:
+    """:class:`HppPolicy` with its defaults, for ``evaluate.py --policy``."""
+    global _DEFAULT
+    if _DEFAULT is None:
+        _DEFAULT = HppPolicy()
+    return _DEFAULT(env, info, segment, step_limit)
+
+
+__all__ = [
+    "PREDICATES",
+    "HppPolicy",
+    "SegmentController",
+    "SegmentGoal",
+    "UnsupportedGoal",
+    "hpp_policy",
+    "segment_specs",
+]

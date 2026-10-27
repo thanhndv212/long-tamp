@@ -10,6 +10,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- RoboCerebra HPP segment policy (#159, M11 R4): `long_tamp.eval.robocerebra_policy:hpp_policy`
+  translates each segment's goal (`pick` → grasped, `In`/`On` → placed; `pour`, `open`,
+  `turnon` and regions missing from the export reported unsupported), detects the held
+  object at a resume from the finger contacts, plans in HPP on the segment's exported scene
+  in a forked child process (HPP's memory is returned per segment) and tracks the TCP path
+  with closed-loop `OSC_POSE` actions (`robocerebra_tracker`). Row A (Ideal, 10 seeds per
+  case): 412 / 540 supported segments (76.3%), in
+  `script/robocerebra/results/2026-10-25-r4-ideal-hpp.json`.
+- RoboCerebra evaluator: a policy callback may return a controller `controller(obs)`,
+  stepped closed loop; each segment records `steps_used`, the checker's lines and the
+  policy's info. The summary counts supported-segment success, overall and per case,
+  since the official resume lets a rollout succeed with failed segments.
+  `evaluate.py --merge` joins results run one case and seed per process.
+- RoboCerebra env server: `set_goal` scores a caller's goal instead of the case's, `step`
+  returns the checker's `[Monitor]` lines, the export lists object and fixture sites
+  (`basket_1_contain_region`, `flat_stove_1_cook_region`) as regions, its manifest
+  reports robot contacts per object, and `regions` lists the regions an object is `in`
+  by the benchmark's predicate.
+- `script/robocerebra/grasp_lift.py` picks and lifts one object per R3 class under the
+  benchmark's pick checker (#158 AC2): 14 of 25 classes picked and 4 more held, in
+  `script/robocerebra/results/2026-10-26-r3-grasp-lift.json`. A row is `unregistrable`
+  when the object starts in no region it can leave (a bottle above the table region's
+  band, a basket in its own), which the checker's region rule can never count as picked;
+  such a row is `held` when the object's observed rise (`lifted`) is at least 5 cm and
+  its `rotation`, the checker's quaternion test, stays under the threshold.
+- RoboCerebra pick planning keeps a handle only if `OSC_POSE` can track it: the tracked
+  path is rolled out by IK from the observed arm, which must stay 0.05 rad inside the
+  joint limits, and the lift is planned from where the rollout ends. A grasp HPP reached
+  on another branch of the arm's redundancy stalled before with a joint at its stop.
+- RoboCerebra grasp-handle library (#158, M11 R3): `long_tamp.eval.add_grasp_handles`
+  derives object-relative Panda handles from exported collision geometry, including
+  top-rim pinches for container walls. `script/robocerebra/grasp_library.py` exports
+  a case-cover set and records coverage in `script/robocerebra/results/`; handles
+  blocked by current scene clutter are explicitly marked for later HPP planning.
 - RoboCerebra scenes in HPP (#157, M11 R2). The env server's `export_scene` op turns a
   case's MuJoCo model into an environment URDF/SRDF (the LIBERO regions as contact
   surfaces), one freeflyer URDF/SRDF per object and a manifest; `long_tamp.eval`'s
@@ -182,6 +216,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `YamlTaskLoader` passed grouped `environment_contacts` (`{env: [env/surface, ...]}`)
+  to the factory as the environment names; it now passes the surfaces.
+- `PANDA_HAND`'s finger pads are measured on `script/twin/assets/panda_bimanual.urdf.template`
+  instead of nominal: they run from 9.0 mm behind to 9.5 mm past the TCP (before, 10 mm
+  behind it). The R3 grasp-handle record is regenerated with them (251 handles).
+- `add_grasp_handles` skipped the rims of RoboCerebra's bowls, whose wall boxes lean out
+  ~15 degrees, leaving only side pinches into the table. Top-rim pinches now take closing
+  axes tilted up to ~20 degrees, centre on the box's top face and come both ways round.
+- RoboCerebra picks of an object MuJoCo left slightly sunk and tilted failed for every
+  handle ("does not satisfy the leaf constraint"): HPP's grasp goals project it onto its
+  placement, another leaf than the start. `plan_pick` now settles the start onto HPP's
+  projection (at most 5 mm, 0.05 rad) and retries.
 - `script/screw_assembly/kill_resume.py` read the part count from the first `mission`
   event, which since the web viewer (#102) is the plan event (`ScrewAssembly4`), and
   crashed after the resumed run. It now reads the root node's event (#134).

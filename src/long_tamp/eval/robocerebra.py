@@ -145,8 +145,17 @@ class RoboCerebraClient:
         recorded scene, for replays."""
         return self._call("load", case, model=model)
 
+    def set_goal(self, goal: dict[str, list[list[str]]]) -> dict[str, Any]:
+        """Score ``goal`` instead of the case's from the next ``reset``
+        (e.g. ``{"butter_1": [["pick", "butter_1"]]}``)."""
+        return self._call("set_goal", goal)
+
     def reset(
-        self, step: int = 0, settle: int | None = None, restore_demo: bool = False
+        self,
+        step: int = 0,
+        settle: int | None = None,
+        restore_demo: bool = False,
+        seed: int | None = None,
     ) -> dict[str, Any]:
         """Start an episode at benchmark step ``step``: step 0 as the
         benchmark does; ``k > 0`` fresh from the demo's state at its start.
@@ -155,6 +164,8 @@ class RoboCerebraClient:
         kwargs: dict[str, Any] = {"step": step, "settle": settle}
         if restore_demo:
             kwargs["restore_demo"] = True
+        if seed is not None:
+            kwargs["seed"] = int(seed)
         return self._call("reset", **kwargs)
 
     def resume(self, step: int) -> dict[str, Any]:
@@ -167,6 +178,10 @@ class RoboCerebraClient:
 
     def check(self) -> dict[str, Any]:
         return self._call("check")
+
+    def regions(self, obj: str) -> list[str]:
+        """The regions ``obj`` is ``in`` now, as the pick checker sees them."""
+        return self._call("regions", obj)
 
     def get_state(self) -> dict[str, Any]:
         """``sim_state``, plus the ``controller`` goal and gripper command
