@@ -224,7 +224,7 @@ flowchart LR
   class R1,R2,R3,R4,R5,R6,R7,R8,X bench
   classDef done fill:#c8e6c9,stroke:#1b5e20,stroke-width:3px,color:#000
   classDef partial fill:#f1f8e9,stroke:#1b5e20,stroke-width:2px,stroke-dasharray:5 3,color:#000
-  class M8,R1,R2,R4 done
+  class M8,R1,R2,R4,R5 done
   class M7,R3 partial
   linkStyle 16,17,18,22,23,25 stroke:#e65100,stroke-width:3px
   linkStyle 0,1,2,3,5,6,7,10,11,12,13,26 stroke:#0d47a1,stroke-width:3px
@@ -326,14 +326,16 @@ planner-based entry has been published. #153 is split into:
 - [ ] [#158](https://github.com/thanhndv212/long-tamp/issues/158) R3 Grasp handle library for the benchmark's object classes
       (handles for all 25 classes; 14 of 25 picked and 4 more held but unregistrable, PR #180)
 - [x] [#159](https://github.com/thanhndv212/long-tamp/issues/159) R4 Goal translator, in-hand start state, OSC_POSE tracker; Ideal subset (needs M8)
-- [ ] [#160](https://github.com/thanhndv212/long-tamp/issues/160) R5 Pour action
+- [x] [#160](https://github.com/thanhndv212/long-tamp/issues/160) R5 Pour action
 - [ ] [#161](https://github.com/thanhndv212/long-tamp/issues/161) R6 Articulated objects: drawers, doors, knobs
 - [ ] [#162](https://github.com/thanhndv212/long-tamp/issues/162) R7 Disturbance, mismatch and mix conditions (needs #151, #145)
 - [ ] [#163](https://github.com/thanhndv212/long-tamp/issues/163) R8 Continuous variant and results tables
 
 The first number to publish is the Ideal condition on pick/in/on subtasks (#156 → #159, about
 68% of subtasks). Row A is in: 412 of 540 supported segments (76.3%) over 10 Ideal cases ×
-10 seeds (`script/robocerebra/results/2026-10-25-r4-ideal-hpp.json`). Articulated objects (#161) are the critical path to the full table.
+10 seeds (`script/robocerebra/results/2026-10-25-r4-ideal-hpp.json`). With pour (#160) the
+supported share is 93.4% and 595 of 710 supported segments pass (83.8%), pour 162 of 170
+(`script/robocerebra/results/2026-10-28-r5-ideal-hpp-pour.json`). Articulated objects (#161) are the critical path to the full table.
 
 **Exit test:** 20 SO-101 sim missions from language instructions with the simulated camera and injected disturbances complete or escalate cleanly; RoboCerebra results for all six conditions committed with seeds (privileged state, simulated camera, continuous variant); a recorded video.
 

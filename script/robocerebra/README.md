@@ -383,26 +383,41 @@ python script/robocerebra/evaluate.py Ideal/case1 --rollouts 10 \
 
 ### Row A: Ideal, HPP segment policy
 
-`results/2026-10-25-r4-ideal-hpp.json`: the 10 Ideal cases × seeds 0–9, one
-(case, seed) per process, three in parallel, merged with `--merge`. Every segment starts from the
-official `resume(k)` state and has 150 steps.
+`results/2026-10-28-r5-ideal-hpp-pour.json` (with pour, R5): the 10 Ideal cases
+× seeds 0–9, one (case, seed) per process, three in parallel, merged with
+`--merge`. Every segment starts from the official `resume(k)` state and has 150
+steps. The R4 column is `results/2026-10-25-r4-ideal-hpp.json`, the same
+protocol before pour.
 
-| | |
-| --- | --- |
-| segments | 760 (220 unsupported) |
-| **supported segments passed** | **412 / 540 (76.3%)** |
-| mean steps used, passed segments | 63.2 of 150 |
+| | R4 | R5 (pour) |
+| --- | --- | --- |
+| segments | 760 (220 unsupported) | 760 (50 unsupported) |
+| supported share | 71.1% | 93.4% |
+| **supported segments passed** | **412 / 540 (76.3%)** | **595 / 710 (83.8%)** |
+| all segments passed | 412 / 760 (54.2%) | 595 / 760 (78.3%) |
+| pour segments passed | – | 162 / 170 (95.3%) |
+| mean steps used, passed segments | 63.2 of 150 | 59.7 of 150 |
 
 | Case | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| supported segments passed | 56/60 | 21/30 | 50/70 | 30/40 | 40/40 | 31/40 | 24/40 | 40/40 | 60/80 | 60/100 |
-| rollout success | 0.9 | 0 | 0 | 0 | 1.0 | 1.0 | 0 | 0 | 1.0 | 1.0 |
+| supported segments passed, R4 | 56/60 | 21/30 | 50/70 | 30/40 | 40/40 | 31/40 | 24/40 | 40/40 | 60/80 | 60/100 |
+| supported segments passed, R5 | 57/60 | 30/30 | 80/100 | 50/60 | 60/60 | 42/50 | 44/60 | 60/60 | 90/100 | 82/130 |
+| rollout success, R4 | 0.9 | 0 | 0 | 0 | 1.0 | 1.0 | 0 | 0 | 1.0 | 1.0 |
+| rollout success, R5 | 0.9 | 0 | 1.0 | 0 | 1.0 | 1.0 | 0 | 1.0 | 1.0 | 1.0 |
 
 Rollout success, the benchmark's metric, is not a measure of this policy: the
-resume marks earlier steps done and puts the object in the hand, so case9 and
-case10 succeed on every seed with a quarter or more of their segments failed.
-case8 passes every supported segment and still fails every seed, on its
-unsupported ones.
+resume marks earlier steps done and puts the object in the hand, so case3 and
+case10 succeed on every seed with a fifth or more of their segments failed.
+case2 passes every supported segment and still fails every seed, on its
+unsupported one. The 50 unsupported segments are `open` (case6, case8, case9),
+`turnon` (case7) and case2's `rack_1` region, missing from the export.
+
+Pour passes in 162 of 170 segments, in 44.7 steps on average (the checker's
+40-step window fills at 38–39). 142 tilt about the hand's x axis, 10 about z and
+10 about y; 142 carry on a straight line and 20 needed a planned carry. The 8
+failures are all case10 segment 3, tomato sauce to the frypan: the pour plans
+on every seed, but the 0.5 m carry takes the whole budget before the tilt (the
+two seeds that pass use 64 and 118 steps).
 
 The failures are mostly the same segment on every seed:
 
@@ -412,15 +427,16 @@ The failures are mostly the same segment on every seed:
 | case3 1, plate onto the table | 10 | no release pose in the region |
 | case4 5, frypan into the cabinet top | 10 | the held start collides (hand and frypan) |
 | case7 6, frypan onto the stove | 10 | no release pose in the region |
-| case9 0 and 9, pick white_bowl | 10 + 10 | planned, not picked; on the seeds inspected the arm stalls near an elbow singularity (0) and the fingers push the rim and the bowl slides (9) |
+| case9 9, pick white_bowl | 10 | planned, not picked (fails in the lift) |
 | case10 4, 7, 10, carry to the table | 10 each | the carry to the crowded table does not plan |
-| case10 5, pick bbq_sauce | 10 | no handle plans |
-| case2 2 and case7 5, pick frypan | 9 and 5 | planned, but the 1.1 m transit uses most of the budget |
+| case10 5, pick bbq_sauce | 10 | planned, not picked (fails in the lift) |
+| case10 3, pour tomato sauce into the frypan | 8 | planned, the carry uses the budget |
 | case6 1, pick butter | 6 | no handle plans |
-| case6 3, pick tomato_sauce | 3 | planned, not picked |
+| case7 5, pick frypan | 6 | planned, but the 1.1 m transit uses most of the budget |
+| case6 3, pick tomato_sauce | 2 | planned, not picked |
 
-The other 5 failures are case1's butter pick (2 seeds), popcorn pick and
-butter place, and case7's pudding pick (1 seed each).
+The other 3 failures are case1's popcorn pick, butter pick and butter place
+(1 seed each).
 
 ### Published results on RoboCerebra
 
@@ -452,9 +468,9 @@ Our Ideal numbers, from row A and the demo replay:
 
 | | Ideal |
 | --- | --- |
-| HPP policy, supported segments passed | 412 / 540 (76.3%) |
-| HPP policy, all segments passed (unsupported counted as failed) | 412 / 760 (54.2%) |
-| HPP policy, rollout success (mean over cases) | 49% |
+| HPP policy, supported segments passed | 595 / 710 (83.8%) |
+| HPP policy, all segments passed (unsupported counted as failed) | 595 / 760 (78.3%) |
+| HPP policy, rollout success (mean over cases) | 69% |
 | Demo replay, subtasks completed | 56 / 76 (73.7%) |
 
 These numbers don't compare like-for-like:
