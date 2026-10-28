@@ -6,6 +6,8 @@ import numpy as np
 import pytest
 
 from long_tamp.eval.robocerebra_plan import (
+    POUR_ANGLES,
+    POUR_REACH,
     PlanningError,
     SegmentPlanner,
     held_object,
@@ -13,6 +15,8 @@ from long_tamp.eval.robocerebra_plan import (
     place_heights,
     place_orientations,
     place_positions,
+    pour_positions,
+    pour_tilts,
     square,
 )
 from long_tamp.eval.robocerebra_policy import (
@@ -205,6 +209,32 @@ def test_place_orientations_turn_approach_horizontal():
         )
 
 
+def test_pour_positions_stay_in_the_checkers_reach():
+    center = np.array([0.0, 0.0, 0.5])
+    positions = pour_positions(center, np.array([0.3, 0.0, 0.6]), z=0.6)
+    assert np.allclose(positions[0], [0.0, 0.0, 0.6])
+    # Backed off towards where the object comes from, never past the reach.
+    assert {round(p[0], 3) for p in positions} == {0.0, 0.05, 0.1}
+    assert all(np.linalg.norm(p - center) < POUR_REACH for p in positions)
+    # Too high over the receiver: nothing within reach.
+    assert pour_positions(center, center, z=0.8) == []
+
+
+def test_pour_tilts_turn_about_the_tcp_enough_for_the_checker():
+    tcp = pose(0.1, 0.2, 0.3)
+    tcp[:3, :3] = np.diag([1.0, -1.0, -1.0])  # top-down
+    tilts = pour_tilts(tcp)
+    assert [axis for axis, _, _ in tilts[:6]] == ["x"] * 6
+    assert len(tilts) == 3 * len(POUR_ANGLES) * 2
+    for axis, angle, T in tilts:
+        assert np.allclose(T[:3, 3], tcp[:3, 3])
+        turn = rotation_vector(tcp[:3, :3].T @ T[:3, :3])
+        assert np.linalg.norm(turn) == pytest.approx(abs(angle))
+        assert np.allclose(np.abs(turn) / abs(angle), np.eye(3)["xyz".index(axis)])
+        # The checker's quaternion change, 2 sin(angle / 4), clears 0.2.
+        assert 2 * np.sin(abs(angle) / 4) > 0.2
+
+
 def test_square_snaps_to_world_axes():
     from long_tamp.eval.robocerebra_plan import _axis_angle
 
@@ -224,7 +254,10 @@ def test_segment_goal_translation():
         "placed", "butter_1", "box_left"
     )
     assert SegmentGoal.from_spec(["on", "a", "b"]).kind == "placed"
-    for spec in (["open", "drawer_1"], ["pick", "a", "b"], ["in", "a"]):
+    assert SegmentGoal.from_spec(["pour", "cookies_1", "plate_1"]) == SegmentGoal(
+        "poured", "cookies_1", receiver="plate_1"
+    )
+    for spec in (["open", "drawer_1"], ["pick", "a", "b"], ["in", "a"], ["pour", "a"]):
         with pytest.raises(UnsupportedGoal):
             SegmentGoal.from_spec(spec)
 
@@ -254,6 +287,49 @@ def test_policy_reports_a_missing_region_as_unsupported(monkeypatch):
     controller = policy(None, info, 0, 150)
     assert controller.info["status"] == "unsupported"
     assert controller.info["error"] == "no region 'rack_1' in the scene"
+
+
+def test_policy_plans_a_pour_over_the_receiver(monkeypatch, tmp_path):
+    import long_tamp.eval.robocerebra_plan as plan_module
+    import long_tamp.eval.robocerebra_policy as policy_module
+
+    class Scene:
+        def __init__(self):
+            self.root = tmp_path
+            self.manifest = {"objects": {"cookies_1": {}, "plate_1": {}}}
+
+    class Env:
+        def export_scene(self, out):
+            return Scene()
+
+    calls = []
+
+    def solve(*args):
+        calls.append(args)
+        return plan_module.SegmentPlan([], [], np.eye(4), {"pour": "over"}), None
+
+    monkeypatch.setattr(policy_module, "_solve", solve)
+    monkeypatch.setattr(plan_module, "held_object", lambda manifest: "cookies_1")
+    monkeypatch.setattr(plan_module, "robot_files", lambda assets: ("u", "s"))
+    policy = HppPolicy(work_dir=tmp_path, isolate=False)
+    info = {
+        "goal": {
+            "cookies_1": [
+                ["pour", "cookies_1", "plate_1"],
+                ["pour", "cookies_1", "bowl_9"],
+            ]
+        },
+        "goal_steps": {"cookies_1": [0, 1]},
+    }
+    controller = policy(Env(), info, 0, 150)
+    assert controller.info["status"] == "planned"
+    assert controller.info["pour"] == "over"
+    assert calls[0][3] == "cookies_1" and calls[0][4] is None
+    assert calls[0][-1] == "plate_1"
+    # A receiver the scene does not have is unsupported, not a failed plan.
+    controller = policy(Env(), info, 1, 150)
+    assert controller.info["status"] == "unsupported"
+    assert controller.info["error"] == "no object 'bowl_9' in the scene"
 
 
 def test_controller_records_the_targets_path():
@@ -336,7 +412,11 @@ def test_rim_samples_pinch_a_leaning_wall_both_ways():
     # A bowl's wall: 3 mm thick along x, leaning 15 degrees out about y.
     tilt = np.radians(15)
     pose = np.eye(4)
-    pose[:3, :3] = [[np.cos(tilt), 0, np.sin(tilt)], [0, 1, 0], [-np.sin(tilt), 0, np.cos(tilt)]]
+    pose[:3, :3] = [
+        [np.cos(tilt), 0, np.sin(tilt)],
+        [0, 1, 0],
+        [-np.sin(tilt), 0, np.cos(tilt)],
+    ]
     pose[:3, 3] = [0.05, 0.0, 0.03]
     wall = Box(name="wall", pose=pose, size=(0.003, 0.02, 0.04))
     samples = list(_rim_samples(GraspPlanner(PANDA_HAND, GraspPlannerParams()), [wall]))

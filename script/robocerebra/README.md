@@ -351,9 +351,24 @@ python script/robocerebra/evaluate.py Ideal/case1 --rollouts 10 \
 
 - Goals: `pick o` becomes *grasped* (the first R3 handle that plans, then a
   straight lift); `In o r` / `On o r` become *placed* (carry the held object into
-  `r`'s box and release). `pour`, `open`, `turnon` and `On` over an object are
-  rejected as unsupported, as is a region the exported scene lacks (`rack_1`);
-  the segment then holds still with the gripper closed.
+  `r`'s box and release); `pour o v` becomes *poured* (below). `open`, `close`,
+  `turnon` and `On` over an object are rejected as unsupported, as is a region
+  the exported scene lacks (`rack_1`); the segment then holds still with the
+  gripper closed.
+- Pour (R5, #160). LIBERO's checker passes a pour when, within its last 40
+  steps, the two objects' origins came within 0.3 m and the poured object's
+  quaternion moved by more than 0.1 (0.2 in some scene classes); nothing
+  needs to fall out. Every pour in the benchmark follows the pick of the
+  same object, so the resume starts it in the hand, as a place does. The
+  plan carries it upright over the receiver (its center first, then backed
+  off towards the start, turned about the vertical where a leaning grasp is
+  out of reach unturned), tilts the hand 60, 45 or 30 degrees (2 sin(a/4) =
+  0.52 to 0.26 on the checker's measure) and turns it back. The tilt is about
+  the hand's x axis first, across the fingers' closing direction, so gravity
+  twists the object against both finger pads rather than about the line
+  between them. If no carry plans and the object starts within 0.25 m of
+  the receiver, it tilts in place. Many goals the instructions call "place
+  X into the bowl" are `pour` predicates in `goal.json`.
 - Each segment is planned in a forked child process (`HppPolicy(isolate=True)`,
   the default): HPP keeps native memory from every problem it builds, and a
   13-segment case10 rollout in one process ran out of memory.
