@@ -16,8 +16,12 @@ Predicates map onto what the planner does:
 ``in`` / ``on``
     ``placed``: the object is in the hand (the official resume puts the
     demo's state at the segment start); carry it over the region, release.
+``pour``
+    ``poured``: the object is in the hand, as for a place (a pour always
+    follows the pick of what it pours); carry it over the receiving object,
+    tilt it and turn it back.
 
-Anything else (``pour``, ``open``, ``turnon``) is rejected: the segment holds
+Anything else (``open``, ``close``, ``turnon``) is rejected: the segment holds
 still with the gripper closed, so an object a later segment resumes in the
 hand is not dropped while the gripper command ramps (robosuite keeps the
 gripper command across the resume).
@@ -45,7 +49,7 @@ from .robocerebra_tracker import OscTracker, Stage, obs_pose
 
 logger = logging.getLogger(__name__)
 
-PREDICATES = {"pick": "grasped", "in": "placed", "on": "placed"}
+PREDICATES = {"pick": "grasped", "in": "placed", "on": "placed", "pour": "poured"}
 ASSETS = Path(__file__).resolve().parents[3] / "script" / "twin" / "assets"
 
 
@@ -55,12 +59,14 @@ class UnsupportedGoal(ValueError):
 
 @dataclass(frozen=True)
 class SegmentGoal:
-    """One goal predicate in planner terms: ``grasped`` an object, or
-    ``placed`` it in ``region`` (a region name of the exported manifest)."""
+    """One goal predicate in planner terms: ``grasped`` an object,
+    ``placed`` it in ``region`` (a region name of the exported manifest),
+    or ``poured`` it over ``receiver`` (an object name)."""
 
     kind: str
     obj: str
     region: str | None = None
+    receiver: str | None = None
 
     @classmethod
     def from_spec(cls, spec: list[str]) -> SegmentGoal:
@@ -75,6 +81,10 @@ class SegmentGoal:
             if len(spec) != 2:
                 raise UnsupportedGoal(f"pick takes one object: {list(spec)}")
             return cls(kind, str(spec[1]))
+        if kind == "poured":
+            if len(spec) != 3:
+                raise UnsupportedGoal(f"pour takes two objects: {list(spec)}")
+            return cls(kind, str(spec[1]), receiver=str(spec[2]))
         if len(spec) != 3:
             raise UnsupportedGoal(f"{name} takes an object and a region: {list(spec)}")
         return cls(kind, str(spec[1]), str(spec[2]))
@@ -206,9 +216,13 @@ class HppPolicy:
             if held is not None:
                 raise RuntimeError(f"{held} is already in the hand")
             region = None
+        elif held != goal.obj:
+            raise RuntimeError(f"{goal.obj} is not in the hand (holding {held})")
+        elif goal.kind == "poured":
+            if goal.receiver not in scene.manifest.get("objects", {}):
+                raise UnsupportedGoal(f"no object {goal.receiver!r} in the scene")
+            region = None
         else:
-            if held != goal.obj:
-                raise RuntimeError(f"{goal.obj} is not in the hand (holding {held})")
             regions = {
                 region["region"]: region for region in scene.manifest.get("regions", [])
             }
@@ -224,6 +238,7 @@ class HppPolicy:
             self.timeout,
             self.max_iterations,
             self.lift,
+            goal.receiver,
         )
         plan, handles = _in_child(_solve, *args) if self.isolate else _solve(*args)
         if handles is not None:
@@ -240,15 +255,17 @@ def _solve(
     timeout: float,
     max_iterations: int,
     lift: float,
+    receiver: str | None = None,
 ) -> tuple[Any, Any]:
-    """Plan a pick of ``target`` (no ``region``) or its place into ``region``
-    on the exported scene: the plan and, for a pick, the handles generated."""
+    """Plan a pick of ``target`` (no ``region`` nor ``receiver``), its place
+    into ``region`` or its pour over ``receiver`` on the exported scene: the
+    plan and, for a pick, the handles generated."""
     from .robocerebra_grasps import add_grasp_handles
     from .robocerebra_plan import SegmentPlanner
     from .robocerebra_scene import load_export
 
     scene = load_export(scene_dir)
-    if region is None:
+    if region is None and receiver is None:
         handles = add_grasp_handles(scene, objects=[target]).get(target)
         planner = SegmentPlanner(
             scene, urdf, srdf, target, timeout=timeout, max_iterations=max_iterations
@@ -263,6 +280,8 @@ def _solve(
         timeout=timeout,
         max_iterations=max_iterations,
     )
+    if receiver is not None:
+        return planner.plan_pour(receiver), None
     return planner.plan_place(region), None
 
 
