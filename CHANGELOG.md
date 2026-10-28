@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- RoboCerebra pour action (#160, M11 R5): `SegmentPlanner.plan_pour` carries the held
+  object upright over the receiver (centre first, then backed off towards the start and
+  turned about the vertical) within the checker's 0.3 m reach, and tilts it 60, 45 or 30
+  degrees about the TCP, about the hand's x axis first; the segment policy translates
+  `pour o v` to *poured*. Row A (Ideal, 10 seeds per case): 162 / 170 pour segments, the
+  supported share 71% → 93% and 595 / 710 supported segments (83.8%), in
+  `script/robocerebra/results/2026-10-28-r5-ideal-hpp-pour.json`.
 - RoboCerebra R3 grasp-lift gallery (#158 AC2, work in progress):
   `script/robocerebra/gallery/` reruns `grasp_lift.py`'s pick per class with the cameras
   rendered (screenshots, and a frame at every 20 Hz control step encoded to 30 fps
