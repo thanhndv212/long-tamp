@@ -330,12 +330,16 @@ planner-based entry has been published. #153 is split into:
 - [ ] [#161](https://github.com/thanhndv212/long-tamp/issues/161) R6 Articulated objects: drawers, doors, knobs
 - [ ] [#162](https://github.com/thanhndv212/long-tamp/issues/162) R7 Disturbance, mismatch and mix conditions (needs #151, #145)
 - [ ] [#163](https://github.com/thanhndv212/long-tamp/issues/163) R8 Continuous variant and results tables
+      (row C on Ideal in: 61.4% by Eq. 1; the other conditions wait on #162)
 
 The first number to publish is the Ideal condition on pick/in/on subtasks (#156 → #159, about
 68% of subtasks). Row A is in: 412 of 540 supported segments (76.3%) over 10 Ideal cases ×
 10 seeds (`script/robocerebra/results/2026-10-25-r4-ideal-hpp.json`). With pour (#160) the
 supported share is 93.4% and 603 of 710 supported segments pass (84.9%), every pour among them
-(`script/robocerebra/results/2026-10-29-r5-ideal-hpp-pour.json`). Articulated objects (#161) are the critical path to the full table.
+(`script/robocerebra/results/2026-10-29-r5-ideal-hpp-pour.json`). Run through without the resume,
+as the published methods run (row C, #163), the policy completes 61.4% of the Ideal tasks' key
+state changes by the paper's Eq. 1, and 8 of 100 rollouts complete every step
+(`script/robocerebra/results/2026-10-29-r8-ideal-hpp-continuous.json`). Articulated objects (#161) are the critical path to the full table.
 
 **Exit test:** 20 SO-101 sim missions from language instructions with the simulated camera and injected disturbances complete or escalate cleanly; RoboCerebra results for all six conditions committed with seeds (privileged state, simulated camera, continuous variant); a recorded video.
 
