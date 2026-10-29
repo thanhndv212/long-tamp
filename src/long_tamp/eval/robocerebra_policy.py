@@ -236,7 +236,7 @@ class HppPolicy:
             return SegmentController(None, info=record)
         start = time.time()
         try:
-            plan = self._plan(env, goal, segment, record)
+            plan = self.plan(env, goal, f"s{segment}", record)
             if plan is None:
                 return ReleaseController(info=record)
         except UnsupportedGoal as error:  # the scene has no such region
@@ -255,17 +255,20 @@ class HppPolicy:
         )
         return SegmentController(plan.stages, plan.tcp_start, record)
 
-    def _plan(
-        self, env: Any, goal: SegmentGoal, segment: int, record: dict[str, Any]
+    def plan(
+        self, env: Any, goal: SegmentGoal, name: str, record: dict[str, Any]
     ) -> Any:
-        """The segment's plan, or ``None`` to release what the hand holds."""
+        """The plan reaching ``goal`` from the scene as it stands (exported
+        under ``name``), or ``None`` to release what the hand holds (with
+        ``recover`` only). ``record`` receives what the hand held and the
+        handles generated."""
         from .robocerebra_plan import held_object, robot_files
 
         if self._robot is None:
             self._robot = robot_files(self.assets)
         urdf, srdf = self._robot
         self._calls += 1  # a fresh directory per call: a segment may replan
-        scene = env.export_scene(self.work_dir / f"s{segment}-{self._calls}")
+        scene = env.export_scene(self.work_dir / f"{name}-{self._calls}")
         held = held_object(scene.manifest)
         record["held"] = held
         if self.recover and held is not None and held != goal.obj:

@@ -26,22 +26,44 @@ not hold. The goal is every object's counter at the end of its chain, cut
 before the first goal the domain has no capability for (``open``,
 ``turnon``: #161): the checker never counts past it.
 
-This module is the symbolic half; the geometry and execution (the
-``SegmentPlanner`` refining each step, the OSC tracker running it) follow.
+Each step is refined by the HPP planner of rows A to C
+(:meth:`HppPolicy.plan <long_tamp.eval.robocerebra_policy.HppPolicy.plan>`,
+on a fresh scene export) and runs on :class:`RoboCerebraBackend`, which
+steps its OSC tracker in the env and fails the step when the checker did
+not count its goal. :func:`evaluate_mission_case` runs a case as one
+mission (row D): ``MissionRunner.run_with_repair`` replans from the
+observed world after every failure, and an object whose step keeps failing
+is given up on. The whole rollout shares one budget, 150 env steps per
+annotated task step, instead of 150 a segment.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+import time
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Any
 
-from long_tamp.mission.domain import BaseMissionDomain
+import numpy as np
+
+from long_tamp.execution import ExecutionCommand, ExecutionStatus, Feedback
+
+from long_tamp.mission.domain import BaseMissionDomain, MissionScene, Move
 from long_tamp.mission.goals import grasped
+from long_tamp.mission.template import KinematicPlanner
 from long_tamp.tasks.task_planning.capabilities import CapabilityDescriptor
 from long_tamp.tasks.task_planning.language import Vocabulary
 from long_tamp.tasks.task_planning.predicates import Atom
+from long_tamp.tasks.task_planning.world_state import CompositeWorldState
 
-from .robocerebra_plan import GRIPPER
+from .robocerebra_plan import GRIPPER, held_object
+from .robocerebra_policy import (
+    HppPolicy,
+    ReleaseController,
+    SegmentController,
+    SegmentGoal,
+    UnsupportedGoal,
+)
 
 #: ``goal.json`` predicate -> the capability that reaches it.
 GOAL_CAPABILITIES = {"pick": "pick", "in": "place", "on": "place", "pour": "pour"}
@@ -131,16 +153,11 @@ class RoboCerebraDomain(BaseMissionDomain):
 
     def descriptors(self) -> dict[str, CapabilityDescriptor]:
         advance = ("progress(?object, ?next)", "not progress(?object, ?stage)")
-        reached = ("progress(?object, ?stage)", "next(?stage, ?next)")
         pick = CapabilityDescriptor(
             "pick",
             "1.0",
             {"gripper": str, "object": str, "stage": str, "next": str},
-            preconditions=(
-                "not grasped(?gripper, _)",
-                "goal_pick(?object, ?stage)",
-                *reached,
-            ),
+            preconditions=("not grasped(?gripper, _)", "progress(?object, ?stage)"),
             effects=("grasped(?gripper, ?object)", *advance),
             writes=("grasp_state",),
             restartable=True,
@@ -149,11 +166,7 @@ class RoboCerebraDomain(BaseMissionDomain):
             "place",
             "1.0",
             {"gripper": str, "object": str, "region": str, "stage": str, "next": str},
-            preconditions=(
-                "grasped(?gripper, ?object)",
-                "goal_place(?object, ?stage, ?region)",
-                *reached,
-            ),
+            preconditions=("grasped(?gripper, ?object)", "progress(?object, ?stage)"),
             effects=("not grasped(?gripper, ?object)", *advance),
             writes=("grasp_state",),
             restartable=True,
@@ -168,11 +181,7 @@ class RoboCerebraDomain(BaseMissionDomain):
                 "stage": str,
                 "next": str,
             },
-            preconditions=(
-                "grasped(?gripper, ?object)",
-                "goal_pour(?object, ?stage, ?receiver)",
-                *reached,
-            ),
+            preconditions=("grasped(?gripper, ?object)", "progress(?object, ?stage)"),
             effects=advance,
             writes=("object_pose",),
             restartable=True,
@@ -181,11 +190,7 @@ class RoboCerebraDomain(BaseMissionDomain):
             "regrasp",
             "1.0",
             {"gripper": str, "object": str, "stage": str},
-            preconditions=(
-                "not grasped(?gripper, _)",
-                "progress(?object, ?stage)",
-                "not rest(?object, ?stage)",
-            ),
+            preconditions=("not grasped(?gripper, _)", "progress(?object, ?stage)"),
             effects=("grasped(?gripper, ?object)",),
             writes=("grasp_state",),
             restartable=True,
@@ -194,11 +199,7 @@ class RoboCerebraDomain(BaseMissionDomain):
             "putdown",
             "1.0",
             {"gripper": str, "object": str, "stage": str},
-            preconditions=(
-                "grasped(?gripper, ?object)",
-                "progress(?object, ?stage)",
-                "rest(?object, ?stage)",
-            ),
+            preconditions=("grasped(?gripper, ?object)", "progress(?object, ?stage)"),
             effects=("not grasped(?gripper, ?object)",),
             writes=("grasp_state",),
             restartable=True,
@@ -235,15 +236,15 @@ class RoboCerebraDomain(BaseMissionDomain):
         facts += [f"rest({obj}, {stage(0)})" for obj in self.others]
         for obj, specs in self.chains.items():
             if obj in self.given_up:
+                # No goals left: the hand only puts it down.
                 facts += [f"rest({obj}, {stage(k)})" for k in range(len(specs) + 1)]
-            else:
-                facts.append(f"rest({obj}, {stage(len(specs))})")
+                continue
+            facts.append(f"rest({obj}, {stage(len(specs))})")
             for k, spec in enumerate(specs):
                 capability = GOAL_CAPABILITIES[spec[0]]
                 if capability == "pick":
                     facts.append(f"goal_pick({obj}, {stage(k)})")
-                    if obj not in self.given_up:
-                        facts.append(f"rest({obj}, {stage(k)})")
+                    facts.append(f"rest({obj}, {stage(k)})")
                 elif capability == "place":
                     facts.append(f"goal_place({obj}, {stage(k)}, {spec[2]})")
                 else:
@@ -251,13 +252,16 @@ class RoboCerebraDomain(BaseMissionDomain):
         return tuple(facts)
 
     def static_preconditions(self) -> dict[str, tuple[str, ...]]:
-        hand = ("gripper(?gripper)",)
+        """The chains, which no step changes: the planner's only (the
+        capabilities' run-time preconditions are what the world says)."""
+        hand = "gripper(?gripper)"
+        step = "next(?stage, ?next)"
         return {
-            "pick": hand,
-            "place": hand,
-            "pour": hand,
-            "regrasp": hand,
-            "putdown": hand,
+            "pick": (hand, "goal_pick(?object, ?stage)", step),
+            "place": (hand, "goal_place(?object, ?stage, ?region)", step),
+            "pour": (hand, "goal_pour(?object, ?stage, ?receiver)", step),
+            "regrasp": (hand, "not rest(?object, ?stage)"),
+            "putdown": (hand, "rest(?object, ?stage)"),
         }
 
     def default_goal(self) -> list[str]:
@@ -311,6 +315,12 @@ class RoboCerebraDomain(BaseMissionDomain):
         ]
         return [(capability, parameters, f"{capability} {' '.join(shown)}")]
 
+    def step_for(self, capability: str, parameters: Mapping[str, Any]) -> Move:
+        """A motion the HPP policy plans when the step runs (``plan_move``)."""
+        binding = {k: v for k, v in parameters.items() if k != "block"}
+        label = self.expand_step(0, capability, dict(binding), {})[0][2]
+        return Move(label, {"capability": capability, "parameters": binding})
+
     # -- repair --------------------------------------------------------------
 
     def repair_policy(self, failure: Mapping[str, Any]) -> list[Any]:
@@ -319,11 +329,375 @@ class RoboCerebraDomain(BaseMissionDomain):
         the repair (the geometry samples again)."""
         return []
 
+    def retry(self, failure: Mapping[str, Any]) -> bool:
+        """Plan again from the world as observed, unless the budget is spent
+        or the scene has no way to reach the step (``unsupported``)."""
+        return not any(
+            f.startswith(("budget_spent(", "unsupported(")) for f in failure["facts"]
+        )
+
+    # -- geometry and execution ----------------------------------------------
+
+    def world_state(self, scene: MissionScene, recorded: Any) -> Any:
+        """The env's counters and what the fingers hold, as atoms."""
+        world: EnvWorld = scene.extras["world"]
+        known = set(self.objects())
+
+        def observed() -> list[str]:
+            held = world.held()
+            return observed_atoms(
+                world.progress(), held if held in known else None, self.gripper
+            )
+
+        return CompositeWorldState(observed, recorded)
+
+    def plan_move(
+        self,
+        scene: MissionScene,
+        move: Move,
+        q: Sequence[float],
+        verbose: bool = True,
+    ) -> dict[str, Any]:
+        """Plan the step from the scene as it stands: HPP for a pick, place
+        or pour (a ``regrasp`` is a pick that the checker does not count),
+        a :class:`ReleaseController` for a ``putdown``. The one path is an
+        :class:`EnvMotion` saying what the step must leave behind."""
+        world: EnvWorld = scene.extras["world"]
+        capability = move.spec["capability"]
+        parameters = move.spec["parameters"]
+        obj = str(parameters["object"])
+        record: dict[str, Any] = {"step": move.label}
+        expect: dict[str, Any]
+        if capability == "putdown":
+            motion = EnvMotion(ReleaseController(info=record), {"released": obj})
+            return _planned(motion, "release where the hand is", q)
+        if capability in ("pick", "regrasp"):
+            goal = SegmentGoal("grasped", obj)
+        elif capability == "place":
+            goal = SegmentGoal("placed", obj, str(parameters["region"]))
+        else:
+            goal = SegmentGoal("poured", obj, receiver=str(parameters["receiver"]))
+        if capability == "regrasp":
+            expect = {"held": obj}
+        else:
+            expect = {"progress": (obj, int(str(parameters["next"])[1:]))}
+        policy: HppPolicy = scene.extras["policy"]
+        name = move.label.replace(" ", "_").replace("/", "_")
+        started = time.time()
+        try:
+            plan = policy.plan(world.env, goal, name, record)
+        except UnsupportedGoal as error:
+            return _unplanned(f"unsupported({obj})", str(error), q, record)
+        except Exception as error:
+            record.update(getattr(error, "info", {}))
+            return _unplanned(
+                f"refinement_failed({name})",
+                f"{type(error).__name__}: {error}",
+                q,
+                record,
+            )
+        record.update(plan.info, plan_seconds=round(time.time() - started, 3))
+        controller = SegmentController(plan.stages, plan.tcp_start, record)
+        return _planned(EnvMotion(controller, expect), "planned", q)
+
+
+def _planned(motion: EnvMotion, message: str, q: Sequence[float]) -> dict[str, Any]:
+    return {
+        "success": True,
+        "final_config": list(q),
+        "resumes": 0,
+        "replans": 0,
+        "message": message,
+        "phase_results": [{"paths": [motion], "edges": [None]}],
+    }
+
+
+def _unplanned(
+    fact: str, message: str, q: Sequence[float], record: dict[str, Any]
+) -> dict[str, Any]:
+    return {
+        "success": False,
+        "final_config": list(q),
+        "resumes": 0,
+        "replans": 0,
+        "message": message,
+        "facts": [fact],
+        "info": record,
+    }
+
+
+@dataclass
+class EnvWorld:
+    """The env as the mission sees it: the checker's counters and the
+    object both fingers touch, read again only after the env stepped, and
+    the env steps left of the rollout's ``budget``."""
+
+    env: Any
+    budget: int
+    obs: dict[str, Any] = field(default_factory=dict)
+    used: int = 0
+    result: dict[str, Any] | None = None
+    _progress: dict[str, int] | None = field(default=None, repr=False)
+    _held: tuple[str | None] | None = field(default=None, repr=False)
+
+    @property
+    def left(self) -> int:
+        return self.budget - self.used
+
+    def progress(self) -> dict[str, int]:
+        if self._progress is None:
+            self.result = self.env.check()
+            self._progress = dict(self.result["progress"])
+        return dict(self._progress)
+
+    def held(self) -> str | None:
+        if self._held is None:
+            self._held = (held_object(self.env.export_scene()["manifest"]),)
+        return self._held[0]
+
+    @property
+    def all_done(self) -> bool:
+        self.progress()
+        return bool(self.result and self.result["all_done"])
+
+    def step(self, action: Any) -> dict[str, Any]:
+        """One env step, within the budget."""
+        if self.left <= 0:
+            raise RuntimeError("the rollout's budget is spent")
+        result = self.env.step(np.asarray(action, dtype=float))
+        self.used += 1
+        self.obs = result.get("obs", self.obs)
+        self.result = result
+        self._progress = dict(result["progress"])
+        self._held = None
+        return result
+
+
+@dataclass
+class EnvMotion:
+    """A planned step for the env: the controller, and what must hold once
+    it is done (``progress``: an object's counter reached; ``held``: the
+    object in the hand; ``released``: not in it)."""
+
+    controller: Callable[[dict[str, Any]], Any]
+    expect: Mapping[str, Any]
+
+    def length(self) -> None:
+        """No duration: the backend sends a heartbeat every few env steps."""
+        return None
+
+
+class RoboCerebraBackend:
+    """Runs :class:`EnvMotion` commands in the env (the execution
+    contract): ``chunk`` env steps a poll, until the controller is done, the
+    case is done or the budget is spent. A step that ends without what it
+    must leave behind fails with ``goal_missed(object, sK)`` or
+    ``grasp_missed(gripper, object)``, which the mission replans from."""
+
+    def __init__(self, world: EnvWorld, chunk: int = 10, gripper: str = GRIPPER):
+        self.world = world
+        self.chunk = chunk
+        self.gripper = gripper
+        self.motion: EnvMotion | None = None
+        self.steps = 0
+        #: One record per command: its step, env steps and outcome.
+        self.log: list[dict[str, Any]] = []
+
+    def start(self, command: ExecutionCommand) -> ExecutionStatus:
+        self.motion = command.payload
+        self.steps = 0
+        self.log.append({"step": command.step_id, "steps_used": 0})
+        return ExecutionStatus.RUNNING
+
+    def poll(self) -> tuple[ExecutionStatus, Feedback | None]:
+        motion = self.motion
+        if motion is None:
+            return ExecutionStatus.BUSY, None
+        world, controller = self.world, motion.controller
+        for _ in range(self.chunk):
+            if getattr(controller, "done", True) or world.all_done:
+                return self._finish()
+            if world.left <= 0:
+                return self._end(
+                    ExecutionStatus.FAILURE, "budget spent", ("budget_spent()",)
+                )
+            world.step(controller(world.obs))
+            self.steps += 1
+        self.log[-1]["steps_used"] = self.steps
+        return ExecutionStatus.RUNNING, Feedback(message=f"{self.steps} env steps")
+
+    def cancel(self) -> None:
+        if self.motion is not None:
+            self._end(ExecutionStatus.FAILURE, "cancelled")
+
+    def _finish(self) -> tuple[ExecutionStatus, Feedback]:
+        assert self.motion is not None
+        expect, world = self.motion.expect, self.world
+        missed: tuple[str, ...] = ()
+        if "progress" in expect:
+            obj, k = expect["progress"]
+            if world.progress().get(obj, 0) < k:
+                missed = (f"goal_missed({obj}, {stage(k - 1)})",)
+        elif "held" in expect and world.held() != expect["held"]:
+            missed = (f"grasp_missed({self.gripper}, {expect['held']})",)
+        elif "released" in expect and world.held() == expect["released"]:
+            missed = (f"still_held({self.gripper}, {expect['released']})",)
+        if missed:
+            return self._end(ExecutionStatus.FAILURE, "missed", missed)
+        return self._end(ExecutionStatus.SUCCESS, "done")
+
+    def _end(
+        self, status: ExecutionStatus, message: str, facts: tuple[str, ...] = ()
+    ) -> tuple[ExecutionStatus, Feedback]:
+        assert self.motion is not None
+        info = getattr(self.motion.controller, "info", {})
+        self.log[-1].update(
+            steps_used=self.steps,
+            status=status.value,
+            message=message,
+            facts=list(facts),
+            **({"policy": dict(info)} if info else {}),
+        )
+        self.motion = None
+        return status, Feedback(message=message, facts=facts)
+
+
+def mission_scene(env: Any, policy: HppPolicy, budget: int) -> MissionScene:
+    """The scene the mission runs in: the env (``extras["world"]``) and the
+    policy refining each step; no configuration of its own (the env holds
+    the robot's)."""
+    world = EnvWorld(env, budget)
+    return MissionScene(
+        task=None,
+        planner=KinematicPlanner(),
+        q_init=[],
+        extras={"world": world, "policy": policy},
+    )
+
+
+def run_mission_case(
+    env: Any,
+    info: Mapping[str, Any],
+    seed: int,
+    policy: HppPolicy,
+    *,
+    step_factor: int = 150,
+    retries: int = 2,
+    runner_factory: Callable[..., Any] | None = None,
+) -> dict[str, Any]:
+    """One rollout of a loaded case as one mission (row D).
+
+    Reset as :func:`~long_tamp.eval.robocerebra_runner.evaluate_case` does,
+    then plan the whole goal from the observed world and run it with
+    ``run_with_repair``: a failed step is planned again from where the
+    world is, up to ``retries`` times; past that its object is given up on
+    and the rest of the goal is planned again, until nothing is left, the
+    case is done or the ``step_factor`` x task steps budget is spent.
+    """
+    from long_tamp.mission.runner import MissionRunner
+
+    obs = env.reset(step=0, seed=int(seed)).get("obs") or {}
+    domain = RoboCerebraDomain.from_info(info)
+    budget = step_factor * len(info["steps"])
+    scene = mission_scene(env, policy, budget)
+    world: EnvWorld = scene.extras["world"]
+    world.obs = obs
+    backend = RoboCerebraBackend(world, gripper=domain.gripper)
+    make = runner_factory or MissionRunner
+    runner = make(domain, scene, verbose=False)
+    rounds: list[dict[str, Any]] = []
+    started = time.time()
+    goals = sum(len(specs) for specs in domain.chains.values())
+    while domain.goal() and world.left > 0 and not world.all_done:
+        result = runner.run_with_repair(
+            None,
+            rounds=goals * (retries + 1) + 1,
+            mission={"backend": backend},
+            goal=domain.goal(),
+            retries=retries,
+        )
+        failure = result.get("failure") or {}
+        rounds.append(
+            {
+                "success": result["success"],
+                "message": result["repair_message"],
+                "task_replans": result["task_replans"],
+                "retries": result["retries"],
+                "failure": failure or None,
+                "blocks": result["blocks"],
+            }
+        )
+        if result["success"]:
+            break
+        obj = failure.get("parameters", {}).get("object")
+        if obj not in domain.chains or obj in domain.given_up:
+            break  # nothing left to give up on
+        domain.give_up(obj)
+    final = env.check()
+    total = final["total"]
+    return {
+        "seed": int(seed),
+        "success": bool(final["all_done"]),
+        "total_completed": final["total_completed"],
+        "total": total,
+        "completed_share": (
+            round(final["total_completed"] / total, 4) if total else 0.0
+        ),
+        "segments": [],
+        "mission": {
+            "budget": budget,
+            "steps_used": world.used,
+            "seconds": round(time.time() - started, 2),
+            "given_up": sorted(domain.given_up),
+            "unsupported": domain.unsupported(),
+            "rounds": rounds,
+            "executions": backend.log,
+        },
+    }
+
+
+def evaluate_mission_case(
+    env: Any,
+    case: str,
+    *,
+    seeds: Sequence[int],
+    policy: HppPolicy | None = None,
+    step_factor: int = 150,
+    retries: int = 2,
+) -> dict[str, Any]:
+    """:func:`run_mission_case` over ``seeds``, as an ``evaluate_case`` row
+    (``protocol: "mission"``) that ``summarize`` and ``merge_results`` take."""
+    info = env.load(case)
+    policy = policy or HppPolicy()
+    rollouts = [
+        run_mission_case(
+            env, info, seed, policy, step_factor=step_factor, retries=retries
+        )
+        for seed in seeds
+    ]
+    return {
+        "case": case,
+        "model": info.get("model", "bddl"),
+        "step_limit": step_factor,
+        "resume": False,
+        "protocol": "mission",
+        "rollouts": rollouts,
+        "success_rate": (
+            sum(r["success"] for r in rollouts) / len(rollouts) if rollouts else 0.0
+        ),
+    }
+
 
 __all__ = [
     "GOAL_CAPABILITIES",
+    "EnvMotion",
+    "EnvWorld",
+    "RoboCerebraBackend",
     "RoboCerebraDomain",
     "chains",
+    "evaluate_mission_case",
+    "mission_scene",
     "observed_atoms",
+    "run_mission_case",
     "stage",
 ]

@@ -9,10 +9,12 @@ Ideal case's own ``goal.json`` is planned too.
 from __future__ import annotations
 
 import json
+import types
 import os
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from long_tamp.eval.robocerebra_mission import (
@@ -195,3 +197,232 @@ def test_every_ideal_case_plans_its_supported_goals(case):
     goals = [label for label in done if label.split()[0] in ("pick", "place", "pour")]
     assert len(goals) == sum(len(specs) for specs in domain.chains.values()), done
     assert all(label.split()[0] != "regrasp" for label in done), done
+
+
+# -- the mission in an env -----------------------------------------------------
+#
+# A fake env counts each object's goals as the checker does, and the fake
+# policy's "plans" act on it directly once their controller has run, so the
+# mission loop (plan, run, check, replan, give up) runs without the
+# benchmark or HPP.
+
+
+class FakeEnv:
+    def __init__(self, goal, steps=10):
+        self.goal = {
+            o: [[str(s[0]).lower(), *s[1:]] for s in v] for o, v in goal.items()
+        }
+        self.info = {
+            "case": "Ideal/fake",
+            "goal": goal,
+            "steps": [f"step {k}" for k in range(steps)],
+            "objects": sorted(goal),
+        }
+        self.reset()
+
+    def load(self, case):
+        return self.info
+
+    def reset(self, step=0, seed=0):
+        self.progress = {obj: 0 for obj in self.goal}
+        self.held = None
+        self.t = 0
+        return {"obs": {"robot0_eef_pos": [0.0, 0.0, 0.0]}}
+
+    def next_goal(self, obj):
+        k = self.progress[obj]
+        return self.goal[obj][k] if k < len(self.goal[obj]) else None
+
+    def check(self):
+        done = sum(self.progress.values())
+        total = sum(len(v) for v in self.goal.values())
+        return {
+            "progress": dict(self.progress),
+            "total_completed": done,
+            "total": total,
+            "all_done": done == total,
+        }
+
+    def step(self, action):
+        if action[6] < 0:
+            self.held = None  # the gripper opens
+        self.t += 1
+        return {**self.check(), "obs": {"robot0_eef_pos": [0.0, 0.0, 0.0]}}
+
+    def export_scene(self, out_dir=None):
+        from long_tamp.eval.robocerebra_plan import LEFT_FINGER, RIGHT_FINGER
+
+        contacts = (
+            [
+                {"link": LEFT_FINGER[0], "object": self.held},
+                {"link": RIGHT_FINGER[0], "object": self.held},
+            ]
+            if self.held
+            else []
+        )
+        return {"manifest": {"robot_contacts": contacts}}
+
+
+class FakeController:
+    """Runs ``steps`` env steps, then applies its effect to the env."""
+
+    def __init__(self, effect, tcp_start=None, info=None, steps=3):
+        self.effect, self.info, self.left = effect, info or {}, steps
+
+    @property
+    def done(self):
+        return self.left == 0
+
+    def __call__(self, obs):
+        self.left -= 1
+        if self.left == 0 and self.effect is not None:
+            self.effect()
+        return np.zeros(7)
+
+
+class FakePolicy:
+    """Plans every goal; ``fail`` says how many times a ``(kind, object)``
+    plan runs without effect (-1: always), ``unsupported`` which raise."""
+
+    def __init__(self, env, fail=None, unsupported=()):
+        self.env, self.fail, self.unsupported = env, dict(fail or {}), set(unsupported)
+        self.calls = []
+
+    def plan(self, env, goal, name, record):
+        from long_tamp.eval.robocerebra_policy import UnsupportedGoal
+
+        self.calls.append((goal.kind, goal.obj))
+        key = (goal.kind, goal.obj)
+        if key in self.unsupported:
+            raise UnsupportedGoal(f"no region {goal.region!r} in the scene")
+        effect = None if self._fails(key) else (lambda: self._apply(goal))
+        return types.SimpleNamespace(stages=effect, tcp_start=None, info={})
+
+    def _fails(self, key):
+        left = self.fail.get(key, 0)
+        if left:
+            self.fail[key] = left - 1
+        return left != 0
+
+    def _apply(self, goal):
+        env, nxt = self.env, self.env.next_goal(goal.obj)
+        if goal.kind == "grasped":
+            env.held = goal.obj
+            counts = nxt is not None and nxt[0] == "pick"
+        elif goal.kind == "placed":
+            counts = env.held == goal.obj and nxt == ["in", goal.obj, goal.region]
+            env.held = None
+        else:
+            counts = env.held == goal.obj and nxt == ["pour", goal.obj, goal.receiver]
+        if counts:
+            env.progress[goal.obj] += 1
+
+
+@pytest.fixture
+def fake(monkeypatch):
+    from long_tamp.eval import robocerebra_mission
+
+    _task_planner_or_skip()
+    monkeypatch.setattr(robocerebra_mission, "SegmentController", FakeController)
+
+    def run(goal, seed=0, **options):
+        env = FakeEnv(goal)
+        policy = FakePolicy(
+            env, options.pop("fail", None), options.pop("unsupported", ())
+        )
+        row = robocerebra_mission.run_mission_case(
+            env, env.info, seed, policy, **options
+        )
+        return env, policy, row
+
+    return run
+
+
+def test_a_case_runs_as_one_mission(fake):
+    env, policy, row = fake(CASE3)
+    assert row["success"] and row["completed_share"] == 1.0
+    mission = row["mission"]
+    assert mission["given_up"] == [] and len(mission["rounds"]) == 1
+    assert mission["rounds"][0]["task_replans"] == 0
+    # Every goal planned once, in its object's order.
+    goals = [c for c in policy.calls]
+    assert len(goals) == sum(len(v) for v in CASE3.values()), goals
+    assert mission["steps_used"] <= mission["budget"] == 150 * 10
+
+
+def test_a_missed_goal_is_planned_again_from_the_observed_world(fake):
+    env, policy, row = fake(CASE3, fail={("poured", "popcorn_1"): 1})
+    assert row["success"], row["mission"]
+    first = row["mission"]["rounds"][0]
+    assert first["retries"] == 1
+    missed = [e for e in row["mission"]["executions"] if e["status"] == "failure"]
+    assert [e["facts"] for e in missed] == [["goal_missed(popcorn_1, s1)"]]
+
+
+def test_a_dropped_object_is_regrasped(fake, monkeypatch):
+    # The pick counts, but the cookies fall right after it: the counter
+    # stays, so the replan grasps them again without a pick.
+    original, dropped = FakePolicy._apply, []
+
+    def drop_once(self, goal):
+        original(self, goal)
+        if goal.kind == "grasped" and goal.obj == "cookies_1" and not dropped:
+            dropped.append(goal)
+            self.env.held = None
+
+    monkeypatch.setattr(FakePolicy, "_apply", drop_once)
+    env, policy, row = fake(CASE9)
+    # Every supported goal (the bowl's stop at the microwave's open).
+    assert row["total_completed"] == 5, row["mission"]
+    steps = [e["step"] for e in row["mission"]["executions"]]
+    assert "regrasp cookies_1" in steps, steps
+    assert steps.count("pick cookies_1") == 1, steps
+
+
+def test_an_object_that_keeps_failing_is_given_up_on(fake):
+    env, policy, row = fake(CASE3, fail={("poured", "popcorn_1"): -1})
+    mission = row["mission"]
+    assert mission["given_up"] == ["popcorn_1"]
+    assert not row["success"]
+    # Everything else is done, the popcorn's place too is lost.
+    assert row["total_completed"] == row["total"] - 2
+    # It was put down to free the hand for the others.
+    assert "putdown popcorn_1" in [e["step"] for e in mission["executions"]]
+    pours = [c for c in policy.calls if c == ("poured", "popcorn_1")]
+    assert len(pours) == 3  # the first try and two retries
+
+
+def test_an_unsupported_region_is_given_up_on_without_retries(fake):
+    env, policy, row = fake(CASE3, unsupported=[("placed", "plate_1")])
+    mission = row["mission"]
+    assert "plate_1" in mission["given_up"]
+    assert policy.calls.count(("placed", "plate_1")) == 1
+
+
+def test_the_budget_is_shared_by_the_whole_rollout(fake):
+    env, policy, row = fake(CASE3, step_factor=1)
+    mission = row["mission"]
+    assert mission["budget"] == 10
+    assert mission["steps_used"] == 10
+    assert not row["success"]
+    facts = [f for e in mission["executions"] for f in e.get("facts", [])]
+    assert "budget_spent()" in facts
+
+
+def test_mission_rows_summarize_and_refuse_to_merge_with_segments(fake, monkeypatch):
+    from long_tamp.eval import robocerebra_mission
+    from long_tamp.eval.robocerebra_runner import merge_results, summarize
+
+    env = FakeEnv(CASE3)
+    row = robocerebra_mission.evaluate_mission_case(
+        env, "Ideal/case3", seeds=[0, 1], policy=FakePolicy(env)
+    )
+    assert row["protocol"] == "mission" and row["success_rate"] == 1.0
+    summary = summarize({"Ideal/case3": row})
+    assert summary["completed_share"] == 1.0
+    assert summary["mission_rollouts"] == 2 and summary["objects_given_up"] == 0
+    segmented = {**row, "protocol": None}
+    with pytest.raises(ValueError, match="mission runs mixed"):
+        merge_results(
+            [{"cases": {"Ideal/case3": row}}, {"cases": {"Ideal/case3": segmented}}]
+        )
