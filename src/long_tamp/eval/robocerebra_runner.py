@@ -274,11 +274,31 @@ def summarize(rows: dict[str, dict[str, Any]]) -> dict[str, Any]:
             round(len(passed) / len(supported), 4) if supported else 0.0
         ),
         "supported_segment_success_by_case": by_case,
+        **_mission_summary(rows),
         "mean_steps_used_on_success": (
             round(sum(_success_step(s) for s in passed) / len(passed), 1)
             if passed
             else None
         ),
+    }
+
+
+def _mission_summary(rows: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """For mission rollouts (row D, no segments): the env steps used of the
+    shared budget, the objects given up on, the step retries."""
+    missions = [
+        rollout["mission"]
+        for row in rows.values()
+        for rollout in row["rollouts"]
+        if "mission" in rollout
+    ]
+    if not missions:
+        return {}
+    return {
+        "mission_rollouts": len(missions),
+        "mean_budget_used": _mean([m["steps_used"] / m["budget"] for m in missions]),
+        "objects_given_up": sum(len(m["given_up"]) for m in missions),
+        "step_retries": sum(r["retries"] for m in missions for r in m["rounds"]),
     }
 
 
@@ -302,6 +322,8 @@ def merge_results(parts: Sequence[dict[str, Any]]) -> dict[str, Any]:
                 raise ValueError(f"{case}: step limits differ")
             if merged.get("resume", True) != row.get("resume", True):
                 raise ValueError(f"{case}: resumed and continuous runs mixed")
+            if merged.get("protocol") != row.get("protocol"):
+                raise ValueError(f"{case}: per-segment and mission runs mixed")
             merged["rollouts"].extend(row["rollouts"])
     for case, row in rows.items():
         seeds = [rollout["seed"] for rollout in row["rollouts"]]
