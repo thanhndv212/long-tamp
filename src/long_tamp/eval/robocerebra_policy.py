@@ -26,6 +26,13 @@ still with the gripper closed, so an object a later segment resumes in the
 hand is not dropped while the gripper command ramps (robosuite keeps the
 gripper command across the resume).
 
+With ``recover`` (row C, the continuous variant, where no resume repairs
+the scene between segments) the policy plans the next action towards the
+goal from the scene as it is: an object in the hand that the goal does not
+want is released (:class:`ReleaseController`), and an object to place or
+pour that is not in the hand is picked first. The runner calls the policy
+again when that controller is done, within the segment's budget.
+
 HPP keeps native memory from every problem it builds, so a long run in one
 process grows by a few hundred MB a segment; by default each segment is
 planned in a forked child process (``isolate``), which returns the plan.
@@ -45,7 +52,7 @@ from typing import Any
 import numpy as np
 
 from .robocerebra_plan import PlanningError, tcp_to_eef
-from .robocerebra_tracker import OscTracker, Stage, obs_pose
+from .robocerebra_tracker import POS_SCALE, OscTracker, Stage, obs_pose
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +126,11 @@ class SegmentController:
     hold_gripper: float = 1.0
     tracker: OscTracker | None = field(default=None, init=False)
 
+    @property
+    def done(self) -> bool:
+        """Whether every stage has run (holding still counts as done)."""
+        return not self.stages or (self.tracker is not None and self.tracker.done)
+
     def __call__(self, obs: dict[str, Any]) -> np.ndarray:
         position = obs.get(f"{self.info.get('target')}_pos")
         if position is not None:
@@ -140,12 +152,49 @@ class SegmentController:
         return action
 
 
+@dataclass
+class ReleaseController:
+    """Open the gripper where the hand is, then rise ``lift`` metres: drops
+    an object the goal does not want in the hand. Closed loop on the
+    observed end effector; ``done`` once risen, or after ``max_steps``."""
+
+    info: dict[str, Any] = field(default_factory=dict)
+    open_steps: int = 10
+    lift: float = 0.12
+    max_steps: int = 40
+    steps: int = field(default=0, init=False)
+    start: np.ndarray | None = field(default=None, init=False)
+    risen: bool = field(default=False, init=False)
+
+    @property
+    def done(self) -> bool:
+        return self.risen or self.steps >= self.max_steps
+
+    def __call__(self, obs: dict[str, Any]) -> np.ndarray:
+        position = np.asarray(obs["robot0_eef_pos"], dtype=float)
+        if self.start is None:
+            self.start = position.copy()
+        goal = self.start.copy()
+        if self.steps >= self.open_steps:
+            goal[2] += self.lift
+            self.risen = position[2] >= goal[2] - 0.01
+        self.steps += 1
+        action = np.zeros(7)
+        action[:3] = np.clip((goal - position) / POS_SCALE, -1.0, 1.0)
+        action[3] = 1e-6  # nonzero: re-anchors OSC's orientation goal
+        action[6] = -1.0
+        self.info["stage"] = "release" if self.steps <= self.open_steps else "rise"
+        return action
+
+
 class HppPolicy:
     """``policy(env, info, segment, step_limit) -> SegmentController``.
 
     Plans one segment from the scene the env server exports at its start.
     Only the segment's first predicate is planned; the others are recorded.
-    With ``isolate``, the planning runs in a forked child process.
+    With ``isolate``, the planning runs in a forked child process. With
+    ``recover``, a hand holding the wrong object (or none, for a place or
+    pour) is put right first: see the module notes.
     """
 
     def __init__(
@@ -156,6 +205,7 @@ class HppPolicy:
         max_iterations: int = 3000,
         lift: float = 0.10,
         isolate: bool = True,
+        recover: bool = False,
     ) -> None:
         self.assets = Path(assets)
         self.work_dir = (
@@ -165,11 +215,13 @@ class HppPolicy:
         self.max_iterations = max_iterations
         self.lift = lift
         self.isolate = isolate
+        self.recover = recover
+        self._calls = 0
         self._robot: tuple[str, str] | None = None
 
     def __call__(
         self, env: Any, info: dict[str, Any], segment: int, step_limit: int
-    ) -> SegmentController:
+    ) -> SegmentController | ReleaseController:
         specs = segment_specs(info, segment)
         record: dict[str, Any] = {"goals": specs}
         if not specs:
@@ -185,6 +237,8 @@ class HppPolicy:
         start = time.time()
         try:
             plan = self._plan(env, goal, segment, record)
+            if plan is None:
+                return ReleaseController(info=record)
         except UnsupportedGoal as error:  # the scene has no such region
             record.update(status="unsupported", error=str(error))
             return SegmentController(None, info=record)
@@ -204,14 +258,22 @@ class HppPolicy:
     def _plan(
         self, env: Any, goal: SegmentGoal, segment: int, record: dict[str, Any]
     ) -> Any:
+        """The segment's plan, or ``None`` to release what the hand holds."""
         from .robocerebra_plan import held_object, robot_files
 
         if self._robot is None:
             self._robot = robot_files(self.assets)
         urdf, srdf = self._robot
-        scene = env.export_scene(self.work_dir / f"s{segment}")
+        self._calls += 1  # a fresh directory per call: a segment may replan
+        scene = env.export_scene(self.work_dir / f"s{segment}-{self._calls}")
         held = held_object(scene.manifest)
         record["held"] = held
+        if self.recover and held is not None and held != goal.obj:
+            record.update(status="release", recovery=f"release {held}")
+            return None
+        if self.recover and goal.kind != "grasped" and held is None:
+            record["recovery"] = f"pick {goal.obj}"
+            goal = SegmentGoal("grasped", goal.obj)
         if goal.kind == "grasped":
             if held is not None:
                 raise RuntimeError(f"{held} is already in the hand")
@@ -344,12 +406,28 @@ def hpp_policy(
     return _DEFAULT(env, info, segment, step_limit)
 
 
+_CONTINUOUS: HppPolicy | None = None
+
+
+def hpp_policy_continuous(
+    env: Any, info: dict[str, Any], segment: int, step_limit: int
+) -> SegmentController | ReleaseController:
+    """:class:`HppPolicy` with ``recover``, for row C (``evaluate.py
+    --continuous``)."""
+    global _CONTINUOUS
+    if _CONTINUOUS is None:
+        _CONTINUOUS = HppPolicy(recover=True)
+    return _CONTINUOUS(env, info, segment, step_limit)
+
+
 __all__ = [
     "PREDICATES",
     "HppPolicy",
+    "ReleaseController",
     "SegmentController",
     "SegmentGoal",
     "UnsupportedGoal",
     "hpp_policy",
+    "hpp_policy_continuous",
     "segment_specs",
 ]
