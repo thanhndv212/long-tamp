@@ -334,8 +334,8 @@ planner-based entry has been published. #153 is split into:
 The first number to publish is the Ideal condition on pick/in/on subtasks (#156 → #159, about
 68% of subtasks). Row A is in: 412 of 540 supported segments (76.3%) over 10 Ideal cases ×
 10 seeds (`script/robocerebra/results/2026-10-25-r4-ideal-hpp.json`). With pour (#160) the
-supported share is 93.4% and 595 of 710 supported segments pass (83.8%), pour 162 of 170
-(`script/robocerebra/results/2026-10-28-r5-ideal-hpp-pour.json`). Articulated objects (#161) are the critical path to the full table.
+supported share is 93.4% and 603 of 710 supported segments pass (84.9%), every pour among them
+(`script/robocerebra/results/2026-10-29-r5-ideal-hpp-pour.json`). Articulated objects (#161) are the critical path to the full table.
 
 **Exit test:** 20 SO-101 sim missions from language instructions with the simulated camera and injected disturbances complete or escalate cleanly; RoboCerebra results for all six conditions committed with seeds (privileged state, simulated camera, continuous variant); a recorded video.
 
