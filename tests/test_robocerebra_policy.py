@@ -10,6 +10,7 @@ from long_tamp.eval.robocerebra_plan import (
     POUR_REACH,
     PlanningError,
     SegmentPlanner,
+    collision_corners,
     held_object,
     object_corners,
     place_heights,
@@ -218,6 +219,19 @@ def test_pour_positions_stay_in_the_checkers_reach():
     assert all(np.linalg.norm(p - center) < POUR_REACH for p in positions)
     # Too high over the receiver: nothing within reach.
     assert pour_positions(center, center, z=0.8) == []
+
+
+def test_collision_corners_reach_the_top_of_a_vessel_based_at_its_origin(tmp_path):
+    # A frypan: its pan rests at the origin, its handle rises to 6 cm.
+    urdf = tmp_path / "pan.urdf"
+    urdf.write_text("""<robot name="pan"><link name="base_link">
+  <collision><origin xyz="0 0 0.01"/><geometry><box size="0.2 0.2 0.02"/></geometry></collision>
+  <collision><origin xyz="0.15 0 0.04"/><geometry><cylinder radius="0.01" length="0.04"/></geometry></collision>
+</link></robot>""")
+    corners = collision_corners(urdf)
+    assert corners[:, 2].min() == pytest.approx(0.0)
+    assert corners[:, 2].max() == pytest.approx(0.06)
+    assert corners[:, 0].max() == pytest.approx(0.16)
 
 
 def test_pour_tilts_turn_about_the_tcp_enough_for_the_checker():
