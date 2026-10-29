@@ -13,6 +13,9 @@ The HPP policy (#159, row A)::
         --policy long_tamp.eval.robocerebra_policy:hpp_policy \
         --out script/robocerebra/results/<date>-ideal-hpp.json
 
+Row C, the continuous variant (#163), runs each rollout through without
+``resume(k)``: add ``--continuous``.
+
 Long runs can be split, one case and seed per process run in parallel, and
 joined afterwards::
 
@@ -59,6 +62,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rollouts", type=int, default=10)
     parser.add_argument("--seed", type=int, default=0, help="first rollout seed")
     parser.add_argument("--step-limit", type=int, default=150)
+    parser.add_argument(
+        "--continuous",
+        action="store_true",
+        help="no resume(k) between segments (row C)",
+    )
     parser.add_argument("--env-sh", default="~/devel/hpp/robocerebra/env.sh")
     parser.add_argument(
         "--bench", default=os.environ.get("RC_BENCH"), help="RoboCerebra_Bench (default: env.sh's RC_BENCH)"
@@ -70,6 +78,9 @@ def main(argv: list[str] | None = None) -> int:
         policies = sorted({part.get("policy") for part in parts})
         if len(policies) != 1:
             parser.error(f"the results come from different policies: {policies}")
+        protocols = sorted({part.get("protocol") for part in parts})
+        if len(protocols) != 1:
+            parser.error(f"the results come from different protocols: {protocols}")
         result = merge_results(parts)
         result["policy"] = policies[0]
         result["seeds"] = sorted({seed for part in parts for seed in part.get("seeds", [])})
@@ -86,11 +97,17 @@ def main(argv: list[str] | None = None) -> int:
     with RoboCerebraClient.spawn(command) as env:
         cases = cases or [case for case in env.cases() if case.startswith("Ideal/")]
         result: dict[str, Any] = evaluate_cases(
-            env, cases, policy, seeds=seeds, step_limit=args.step_limit
+            env,
+            cases,
+            policy,
+            seeds=seeds,
+            step_limit=args.step_limit,
+            resume=not args.continuous,
         )
     result["policy"] = args.policy
     result["seeds"] = seeds
-    result["protocol"] = "reset(seed); per-segment policy; resume(k); OSC_POSE"
+    between = "no resume" if args.continuous else "resume(k)"
+    result["protocol"] = f"reset(seed); per-segment policy; {between}; OSC_POSE"
     return _write(result, Path(args.out))
 
 
