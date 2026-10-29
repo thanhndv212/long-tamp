@@ -38,7 +38,11 @@ import numpy as np
 import yaml
 
 from long_tamp.grasping import pose_to_xyzquat, xyzquat_to_pose
-from long_tamp.grasping.geometry import inverse, matrix_to_quat_xyzw
+from long_tamp.grasping.geometry import (
+    inverse,
+    load_urdf_primitives,
+    matrix_to_quat_xyzw,
+)
 
 from .robocerebra_grasps import write_handles
 from .robocerebra_scene import ExportedScene
@@ -861,7 +865,11 @@ class SegmentPlanner:
         obj_start = self.object_pose(q_start)
         vessel = xyzquat_to_pose(self.scene.object_config(receiver))
         manifest = self.scene.manifest["objects"]
-        top = _extent(vessel, object_corners(manifest[receiver].get("bottom")), 1)
+        top = _extent(
+            vessel,
+            collision_corners(self.scene.file_paths()["objects"][receiver]["urdf"]),
+            1,
+        )
         below = float(obj_start[2, 3]) - _extent(
             obj_start, object_corners(manifest[self.target].get("bottom")), -1
         )
@@ -1044,6 +1052,19 @@ def object_corners(bottom: list[list[float]] | None) -> np.ndarray | None:
         return None
     points = np.asarray(bottom, dtype=float)
     return np.vstack([points, points * [1.0, 1.0, -1.0]])
+
+
+def collision_corners(urdf: str | Path) -> np.ndarray:
+    """The corners of an object's collision primitives' boxes, in its
+    frame. Unlike :func:`object_corners` it does not assume the object is
+    centered on its origin: a bowl's or a frypan's sits at its base."""
+    corners = []
+    signs = np.array(np.meshgrid([-1, 1], [-1, 1], [-1, 1])).reshape(3, -1).T
+    for primitive in load_urdf_primitives(urdf):
+        local = signs * primitive.half_extents()
+        pose = np.asarray(primitive.pose, dtype=float)
+        corners.append(local @ pose[:3, :3].T + pose[:3, 3])
+    return np.vstack(corners)
 
 
 def place_heights(
@@ -1257,6 +1278,7 @@ __all__ = [
     "PlanningError",
     "SegmentPlan",
     "SegmentPlanner",
+    "collision_corners",
     "held_object",
     "object_corners",
     "place_heights",
