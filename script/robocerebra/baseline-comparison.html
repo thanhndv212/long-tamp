@@ -161,8 +161,8 @@ details summary { cursor: pointer; font-size: 13px; color: var(--text-secondary)
 <main>
   <div class="toolbar"><button id="theme" type="button">Toggle dark mode</button></div>
   <h1>RoboCerebra: our HPP segment policy against the published baselines</h1>
-  <p class="meta">long-tamp · #158 / #159 · 26 Oct 2026 · Ideal setting only on our side</p>
-  <p class="lede">On the Ideal setting, our HPP policy completes <strong>54.2 %</strong> of all
+  <p class="meta">long-tamp · #159 / #160 · 29 Oct 2026 · Ideal setting only on our side</p>
+  <p class="lede">On the Ideal setting, our HPP policy completes <strong>79.3 %</strong> of all
     benchmark segments. The best published method, SparkVLA, scores 46.4 %, and the best
     published run that is handed the ground-truth plan scores 31.2 %. <strong>This is not
     a like-for-like win.</strong> Our policy reads the simulator's exact object poses, is
@@ -174,8 +174,8 @@ details summary { cursor: pointer; font-size: 13px; color: var(--text-secondary)
   <section class="tiles" aria-label="Headline numbers">
     <div class="tile hero">
       <div class="label"><span class="key" style="background:var(--series-ours)"></span>Ours, HPP policy: all Ideal segments passed</div>
-      <div class="value">54.2 %</div>
-      <div class="note">412 of 760 segments. The 220 segments we can't attempt count as failures.</div>
+      <div class="value">79.3 %</div>
+      <div class="note">603 of 760 segments. The 50 segments we can't attempt count as failures.</div>
     </div>
     <div class="tile">
       <div class="label"><span class="key" style="background:var(--series-gt)"></span>Best published run given the ground-truth plan</div>
@@ -225,10 +225,10 @@ details summary { cursor: pointer; font-size: 13px; color: var(--text-secondary)
   <h2>3 · Where our segments go</h2>
   <p>The 10 Ideal cases × 10 seeds give 760 segments. Each bar splits one case's segments
     into those that passed, those that failed, and those the policy declines.
-    Declined goals are <code>pour</code>, <code>open</code>, <code>turnon</code>,
+    Declined goals are <code>open</code>, <code>turnon</code>,
     <code>On</code> over an object, and regions the exported scene lacks. The VLAs
     attempt every segment, so the honest headline counts declined segments as failures
-    (54.2 %). Counting only supported segments gives 76.3 %; that answers a different
+    (79.3 %). Counting only supported segments gives 84.9 %; that answers a different
     question.</p>
   <div class="card">
     <div class="legend">
@@ -259,7 +259,7 @@ details summary { cursor: pointer; font-size: 13px; color: var(--text-secondary)
           <td>A natural-language instruction. A VLM planner splits it into steps, except in
             the ground-truth-plan rows, which are handed the annotated steps.</td>
           <td>The annotated goal predicates for each segment (<code>pick o</code>,
-            <code>In o r</code>, <code>On o r</code>), like the ground-truth-plan rows.</td>
+            <code>In o r</code>, <code>On o r</code>, <code>pour o v</code>), like the ground-truth-plan rows.</td>
           <td><span class="pill">▲ against VLM-planner rows</span><br><span class="pill">= against ground-truth-plan rows</span></td></tr>
         <tr><td>Episode</td>
           <td>One uninterrupted rollout per task, so a failed step can ruin every later step.</td>
@@ -268,9 +268,9 @@ details summary { cursor: pointer; font-size: 13px; color: var(--text-secondary)
           <td><span class="pill">▲ inflates ours</span></td></tr>
         <tr><td>Coverage</td>
           <td>Attempts every subtask type.</td>
-          <td>Declines <code>pour</code>, <code>open</code>, <code>turnon</code>,
-            <code>On</code> over an object, and missing regions: 220 of 760 segments (29 %).</td>
-          <td><span class="pill">= if counted as failures (54.2 %)</span><br><span class="pill">▲ if excluded (76.3 %)</span></td></tr>
+          <td>Declines <code>open</code>, <code>turnon</code>,
+            <code>On</code> over an object, and missing regions: 50 of 760 segments (7 %).</td>
+          <td><span class="pill">= if counted as failures (79.3 %)</span><br><span class="pill">▲ if excluded (84.9 %)</span></td></tr>
         <tr><td>Metric</td>
           <td>Eq. 1: the fraction of a task's key object-state changes that a simulator
             predicate confirms, averaged over tasks.</td>
@@ -287,7 +287,7 @@ details summary { cursor: pointer; font-size: 13px; color: var(--text-secondary)
           <td><span class="pill">= same sample size</span></td></tr>
         <tr><td>Step budget</td>
           <td>Not stated in the paper.</td>
-          <td>150 control steps per segment. Passed segments use 63 steps on average.</td>
+          <td>150 control steps per segment. Passed segments use 59 steps on average.</td>
           <td><span class="pill">? unknown</span></td></tr>
         <tr><td>Action interface</td>
           <td>Delta end-effector actions through robosuite's operational-space controller
@@ -308,9 +308,9 @@ details summary { cursor: pointer; font-size: 13px; color: var(--text-secondary)
   <div class="verdict">
     <div class="card">
       <h3>Reasonable, with caveats</h3>
-      <p><strong>Ours (54.2 %) against the ground-truth-plan runs (26.6–31.2 %).</strong>
+      <p><strong>Ours (79.3 %) against the ground-truth-plan runs (26.6–31.2 %).</strong>
         Both sides are given the plan, so the remaining gap comes from the controller. Ours
-        still has exact state and resumes each segment, so treat 54.2 % as an upper bound
+        still has exact state and resumes each segment, so treat 79.3 % as an upper bound
         for a state-based planner, not as a matched score.</p>
     </div>
     <div class="card">
@@ -322,10 +322,10 @@ details summary { cursor: pointer; font-size: 13px; color: var(--text-secondary)
     </div>
     <div class="card">
       <h3>Not comparable</h3>
-      <p><strong>Our 76.3 % (supported segments only) or 49 % (rollout success) against anyone.</strong>
-        The first leaves out 29 % of segments. The second uses the benchmark's all-done flag
-        after resumes have already marked earlier steps done: case9 and case10 succeed on
-        every seed with a quarter or more of their segments failed.</p>
+      <p><strong>Our 84.9 % (supported segments only) or 69 % (rollout success) against anyone.</strong>
+        The first leaves out 7 % of segments. The second uses the benchmark's all-done flag
+        after resumes have already marked earlier steps done: case3 and case10 succeed on
+        every seed with a fifth or more of their segments failed.</p>
     </div>
   </div>
 
@@ -334,7 +334,7 @@ details summary { cursor: pointer; font-size: 13px; color: var(--text-secondary)
     <li><strong>Run uninterrupted episodes.</strong> Drop <code>resume(k)</code>, chain the
       segments, and score with Eq. 1. This is the biggest single correction.</li>
     <li><strong>Count every declined segment as a failure</strong>, or add the missing
-      skills (<code>open</code>, <code>turnon</code>, <code>pour</code>).</li>
+      skills (<code>open</code>, <code>turnon</code>).</li>
     <li><strong>Run all six settings</strong>, so there is an Avg to set beside theirs.
       Ran. and Obs. need replanning when objects move.</li>
     <li><strong>Add a perception-in-the-loop variant</strong> that estimates object poses
@@ -350,7 +350,7 @@ details summary { cursor: pointer; font-size: 13px; color: var(--text-secondary)
     <li><a href="https://arxiv.org/abs/2608.16172">SparkVLA, arXiv 2608.16172</a>, Table 1.
       <strong>‡</strong> The extracted table lost its column headers. The columns were placed by matching its HPE row, which repeats RoboCerebra's Table 3 value for value.</li>
     <li><a href="https://arxiv.org/abs/2608.09516">HarnessWAM, arXiv 2608.09516</a>. The abstract reports Ideal only.</li>
-    <li>Ours: <code>results/2026-10-25-r4-ideal-hpp.json</code> (row A) and <code>results/2026-10-17-r1-replay-ideal-demo.json</code> (demo replay, 56/76 subtasks).</li>
+    <li>Ours: <code>results/2026-10-29-r5-ideal-hpp-pour.json</code> (row A, with pour; R4 before it: <code>results/2026-10-25-r4-ideal-hpp.json</code>) and <code>results/2026-10-17-r1-replay-ideal-demo.json</code> (demo replay, 56/76 subtasks).</li>
   </ul>
 </main>
 <div class="tip" id="tip" role="tooltip"></div>
@@ -375,9 +375,9 @@ const IDEAL = [
   { g: "learned", name: "SparkVLA", v: 46.38, src: "SparkVLA Table 1 ‡" },
   { g: "gt", name: "Ground-truth plan + π0-fast", v: 26.58, src: "RoboCerebra Table 6 †" },
   { g: "gt", name: "Ground-truth plan + OpenVLA", v: 31.23, src: "RoboCerebra Tables 4, 6 †" },
-  { g: "ours", name: "Rollout success (inflated by resume)", v: 49.0, src: "row A; mean of per-case rollout success", note: "Not comparable: resumes mark earlier steps done." },
-  { g: "ours", name: "All segments passed (headline)", v: 54.2, src: "row A, 412 / 760", note: "Unsupported segments count as failures." },
-  { g: "ours", name: "Supported segments passed", v: 76.3, src: "row A, 412 / 540", note: "Leaves out 29 % of segments; not comparable." },
+  { g: "ours", name: "Rollout success (inflated by resume)", v: 69.0, src: "row A; mean of per-case rollout success", note: "Not comparable: resumes mark earlier steps done." },
+  { g: "ours", name: "All segments passed (headline)", v: 79.3, src: "row A, 603 / 760", note: "Unsupported segments count as failures." },
+  { g: "ours", name: "Supported segments passed", v: 84.9, src: "row A, 603 / 710", note: "Leaves out 7 % of segments; not comparable." },
 ];
 const DEMO = 73.7;
 const SETTINGS = ["Avg", "Ran.", "Obs.", "Exp.", "Exe.", "Mix", "Ideal"];
@@ -393,13 +393,13 @@ const HEAT = [
   ["Ground-truth plan + π0-fast", "RoboCerebra T6 †", [23.04, 23.68, 26.36, 18.15, 16.92, 26.55, 26.58]],
   ["Ground-truth plan + OpenVLA", "RoboCerebra T4/6 †", [25.16, 26.85, 30.68, 19.47, 23.48, 19.26, 31.23]],
   ["SparkVLA", "SparkVLA T1 ‡", [47.12, 33.13, 43.87, 60.30, 43.58, 48.52, 46.38]],
-  ["Ours: HPP, all segments", "row A", [null, null, null, null, null, null, 54.2], true],
+  ["Ours: HPP, all segments", "row A", [null, null, null, null, null, null, 79.3], true],
 ];
 // [case, passed, failed, unsupported, segments per rollout, rollout success]
 const CASES = [
-  [1, 56, 4, 0, 6, 0.9], [2, 21, 9, 10, 4, 0], [3, 50, 20, 30, 10, 0], [4, 30, 10, 20, 6, 0],
-  [5, 40, 0, 20, 6, 1], [6, 31, 9, 20, 6, 1], [7, 24, 16, 30, 7, 0], [8, 40, 0, 30, 7, 0],
-  [9, 60, 20, 30, 11, 1], [10, 60, 40, 30, 13, 1],
+  [1, 57, 3, 0, 6, 0.9], [2, 30, 0, 10, 4, 0], [3, 80, 20, 0, 10, 1], [4, 50, 10, 0, 6, 0],
+  [5, 60, 0, 0, 6, 1], [6, 42, 8, 10, 6, 1], [7, 44, 16, 10, 7, 0], [8, 60, 0, 10, 7, 1],
+  [9, 90, 10, 10, 11, 1], [10, 90, 40, 0, 13, 1],
 ];
 
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -504,7 +504,7 @@ function hover(node, fn) {
   for (const t of ["Case", "Segments", "Passed", "Failed", "Unsupported", "Rollout success"]) h.append(el("th", t === "Case" ? null : "num", t));
   const b = tbl.createTBody(); let P = 0, F = 0, U = 0;
   for (const [c, p, f, u, segs, rs] of CASES) { P += p; F += f; U += u; const r = b.insertRow(); r.append(el("td", null, "case" + c), el("td", "num", `${segs} × 10`), el("td", "num", p), el("td", "num", f), el("td", "num", u), el("td", "num", rs.toFixed(1))); }
-  const r = b.insertRow(); r.append(el("td", null, "All"), el("td", "num", "760"), el("td", "num", P), el("td", "num", F), el("td", "num", U), el("td", "num", "0.49"));
+  const r = b.insertRow(); r.append(el("td", null, "All"), el("td", "num", "760"), el("td", "num", P), el("td", "num", F), el("td", "num", U), el("td", "num", "0.69"));
   document.getElementById("stack-table").append(tbl);
 })();
 

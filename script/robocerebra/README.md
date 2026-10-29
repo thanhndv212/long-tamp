@@ -383,7 +383,7 @@ python script/robocerebra/evaluate.py Ideal/case1 --rollouts 10 \
 
 ### Row A: Ideal, HPP segment policy
 
-`results/2026-10-28-r5-ideal-hpp-pour.json` (with pour, R5): the 10 Ideal cases
+`results/2026-10-29-r5-ideal-hpp-pour.json` (with pour, R5): the 10 Ideal cases
 × seeds 0–9, one (case, seed) per process, three in parallel, merged with
 `--merge`. Every segment starts from the official `resume(k)` state and has 150
 steps. The R4 column is `results/2026-10-25-r4-ideal-hpp.json`, the same
@@ -393,15 +393,15 @@ protocol before pour.
 | --- | --- | --- |
 | segments | 760 (220 unsupported) | 760 (50 unsupported) |
 | supported share | 71.1% | 93.4% |
-| **supported segments passed** | **412 / 540 (76.3%)** | **595 / 710 (83.8%)** |
-| all segments passed | 412 / 760 (54.2%) | 595 / 760 (78.3%) |
-| pour segments passed | – | 162 / 170 (95.3%) |
-| mean steps used, passed segments | 63.2 of 150 | 59.7 of 150 |
+| **supported segments passed** | **412 / 540 (76.3%)** | **603 / 710 (84.9%)** |
+| all segments passed | 412 / 760 (54.2%) | 603 / 760 (79.3%) |
+| pour segments passed | – | 170 / 170 |
+| mean steps used, passed segments | 63.2 of 150 | 59.0 of 150 |
 
 | Case | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | supported segments passed, R4 | 56/60 | 21/30 | 50/70 | 30/40 | 40/40 | 31/40 | 24/40 | 40/40 | 60/80 | 60/100 |
-| supported segments passed, R5 | 57/60 | 30/30 | 80/100 | 50/60 | 60/60 | 42/50 | 44/60 | 60/60 | 90/100 | 82/130 |
+| supported segments passed, R5 | 57/60 | 30/30 | 80/100 | 50/60 | 60/60 | 42/50 | 44/60 | 60/60 | 90/100 | 90/130 |
 | rollout success, R4 | 0.9 | 0 | 0 | 0 | 1.0 | 1.0 | 0 | 0 | 1.0 | 1.0 |
 | rollout success, R5 | 0.9 | 0 | 1.0 | 0 | 1.0 | 1.0 | 0 | 1.0 | 1.0 | 1.0 |
 
@@ -412,14 +412,14 @@ case2 passes every supported segment and still fails every seed, on its
 unsupported one. The 50 unsupported segments are `open` (case6, case8, case9),
 `turnon` (case7) and case2's `rack_1` region, missing from the export.
 
-Pour passes in 162 of 170 segments, in 44.7 steps on average (the checker's
-40-step window fills at 38–39). 142 tilt about the hand's x axis, 10 about z and
-10 about y; 142 carry on a straight line and 20 needed a planned carry. The 8
-failures are all case10 segment 3, tomato sauce to the frypan: the pour plans
-on every seed, but the 0.5 m carry takes the whole budget before the tilt (the
-two seeds that pass use 64 and 118 steps).
+Every pour passes, in 42.9 steps on average and 76 at most (the checker's
+40-step window fills at 38–39): all tilt about the hand's x axis after a
+straight carry. The pour pose clears the receiver's top measured from its
+collision geometry; an earlier run that took it from the manifest's bottom
+face, mirrored through the origin, aimed bowls and the frypan 3–14 cm low,
+and case10's tomato sauce clipped a mug on the way down on 8 seeds.
 
-The failures are mostly the same segment on every seed:
+The failures are the same segment on every seed, mostly:
 
 | Segment | Seeds failed | Cause |
 | --- | --- | --- |
@@ -430,7 +430,6 @@ The failures are mostly the same segment on every seed:
 | case9 9, pick white_bowl | 10 | planned, not picked (fails in the lift) |
 | case10 4, 7, 10, carry to the table | 10 each | the carry to the crowded table does not plan |
 | case10 5, pick bbq_sauce | 10 | planned, not picked (fails in the lift) |
-| case10 3, pour tomato sauce into the frypan | 8 | planned, the carry uses the budget |
 | case6 1, pick butter | 6 | no handle plans |
 | case7 5, pick frypan | 6 | planned, but the 1.1 m transit uses most of the budget |
 | case6 3, pick tomato_sauce | 2 | planned, not picked |
@@ -468,8 +467,8 @@ Our Ideal numbers, from row A and the demo replay:
 
 | | Ideal |
 | --- | --- |
-| HPP policy, supported segments passed | 595 / 710 (83.8%) |
-| HPP policy, all segments passed (unsupported counted as failed) | 595 / 760 (78.3%) |
+| HPP policy, supported segments passed | 603 / 710 (84.9%) |
+| HPP policy, all segments passed (unsupported counted as failed) | 603 / 760 (79.3%) |
 | HPP policy, rollout success (mean over cases) | 69% |
 | Demo replay, subtasks completed | 56 / 76 (73.7%) |
 
