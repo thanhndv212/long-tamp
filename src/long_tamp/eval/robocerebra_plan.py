@@ -747,10 +747,11 @@ class SegmentPlanner:
         hand fits from ``drop`` above where it comes to rest
         (:func:`place_heights`), and as near the center as the hand fits
         (:func:`place_positions`). The hand is tried as it holds the object first,
-        then turned to approach horizontally from each side (a storage
-        box's compartment opens sideways), in :func:`place_orientations`'
-        order; one with the fingers closing vertically only after all the
-        others (``info["fingers"]``). The carry ends ``approach`` back
+        upright and turned about the vertical, then turned to approach
+        horizontally from each side (a storage box's compartment opens
+        sideways), in :func:`place_orientations`' order; one with the
+        fingers closing vertically only after all the others
+        (``info["fingers"]``). The carry ends ``approach`` back
         along the approach axis; a straight move inserts the object,
         releases it, and backs out the same way.
         """
@@ -789,9 +790,6 @@ class SegmentPlanner:
             # no other way to hold it.
             group = vertical if abs(hand[2, 1]) > 0.5 else candidates
             group.append((name, obj, heights, hand))
-        # A rim pinch keeps the object upright as held, turned if need be,
-        # before standing it on its side.
-        vertical.sort(key=lambda candidate: not candidate[0].startswith("held"))
         found = None
         for name, obj, heights, hand in candidates + vertical:
             approach_axis = hand[:3, 2]
@@ -1241,12 +1239,16 @@ def _extent(pose: np.ndarray, corners: np.ndarray | None, sign: int) -> float:
 
 def place_orientations(tcp: np.ndarray) -> list[tuple[str, np.ndarray]]:
     """World rotations to try for the hand at a release: none (as it
-    holds the object), then turning its approach axis horizontal towards
-    each of +-x, +-y, at each quarter turn about that axis; last, as it
-    holds the object turned about the vertical by a quarter, a half and
-    three quarters (the hand on the near side of a wide object whose far
-    side is out of reach)."""
+    holds the object), then as it holds it turned about the vertical by a
+    quarter, a half and three quarters (the object still upright, the hand
+    on its near side when the far side is out of reach), then turning its
+    approach axis horizontal towards each of +-x, +-y, at each quarter turn
+    about that axis."""
     out = [("held", np.eye(3))]
+    for quarter in (1, 2, 3):
+        out.append(
+            (f"held/{90 * quarter}", _axis_angle(np.eye(3)[2], np.pi / 2 * quarter))
+        )
     approach = tcp[:3, 2]
     for name, direction in (
         ("+x", [1, 0, 0]),
@@ -1263,10 +1265,6 @@ def place_orientations(tcp: np.ndarray) -> list[tuple[str, np.ndarray]]:
                     _axis_angle(direction, np.pi / 2 * quarter) @ align,
                 )
             )
-    for quarter in (1, 2, 3):
-        out.append(
-            (f"held/{90 * quarter}", _axis_angle(np.eye(3)[2], np.pi / 2 * quarter))
-        )
     return out
 
 

@@ -207,8 +207,9 @@ def test_place_orientations_turn_approach_horizontal():
     options = dict(place_orientations(tcp))
     assert len(options) == 20 and np.allclose(options["held"], np.eye(3))
     assert np.allclose(options["-y/0"] @ tcp[:3, 2], [0.0, -1.0, 0.0])
-    # The held turns come last, about the vertical only.
-    assert [name for name, _ in place_orientations(tcp)[-3:]] == [
+    # The held turns come right after held, about the vertical only.
+    assert [name for name, _ in place_orientations(tcp)[:4]] == [
+        "held",
         "held/90",
         "held/180",
         "held/270",
