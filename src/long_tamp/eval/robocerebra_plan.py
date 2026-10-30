@@ -66,6 +66,9 @@ LIMIT_MARGIN = 0.15  # rad, kept from the arm's limits at a release
 TRACK_MARGIN = 0.05  # rad, kept from the arm's limits while OSC tracks a grasp
 THIN_REGION = 0.005  # m: a region half this thin is swept across, not stopped in
 SWEEP_STEP = 0.004  # m: the sweep's carrot, under the slab's thickness per step
+# LIBERO's object On wants the origins within 3 cm across: release within
+# this of the receiver's origin, leaving room to settle.
+ONTOP_REACH = 0.02
 # HPP's refusal of a transit goal off the start's leaf, and the largest move
 # of the target onto its placement taken as settling, not as a real mismatch.
 OFF_LEAF = re.compile(
@@ -1084,6 +1087,46 @@ def collision_corners(urdf: str | Path) -> np.ndarray:
     return np.vstack(corners)
 
 
+def object_top_region(
+    name: str, urdf: str | Path, pose: np.ndarray, reach: float = ONTOP_REACH
+) -> dict[str, Any]:
+    """A region, in the manifest's ``regions`` terms, for ``On o name`` over
+    an object at ``pose``: what LIBERO's object ``check_ontop`` tests, ``o``
+    in contact with it, its origin no lower and within 3 cm across of
+    ``name``'s. The box is ``reach`` square about ``name``'s origin; it
+    supports at the highest collision face under that origin (a rack's
+    plate, between its pegs), up to its highest face anywhere (the pegs'
+    tops): an object too wide to go between rests on those."""
+    pose = np.asarray(pose, dtype=float)
+    origin = pose[:3, 3]
+    signs = np.array(np.meshgrid([-1, 1], [-1, 1], [-1, 1])).reshape(3, -1).T
+    tops, under = [], []
+    for primitive in load_urdf_primitives(urdf):
+        local = np.asarray(primitive.pose, dtype=float)
+        corners = (signs * primitive.half_extents()) @ local[:3, :3].T + local[:3, 3]
+        world = corners @ pose[:3, :3].T + origin
+        top = float(world[:, 2].max())
+        tops.append(top)
+        lo, hi = world[:, :2].min(axis=0), world[:, :2].max(axis=0)
+        if np.all(lo <= origin[:2]) and np.all(origin[:2] <= hi):
+            under.append(top)
+    if not tops:
+        raise ValueError(f"{name} has no collision geometry")
+    top = max(tops)
+    return {
+        "region": name,
+        "object": name,
+        "box": {
+            "center": [float(origin[0]), float(origin[1]), top],
+            "half_extents": [reach, reach, 0.0],
+            "z_range": [float(origin[2]), top + 0.30],
+        },
+        "support_geom": name,
+        "height": max(under) if under else top,
+        "top": top,
+    }
+
+
 def place_heights(
     region: dict[str, Any], below: float, drop: float, rise: float = 0.06
 ) -> tuple[float, float] | None:
@@ -1095,6 +1138,8 @@ def place_heights(
     and it is released ``drop`` to ``drop + rise`` above that. A region
     with no support (a storage box's side wall: a thin vertical slab) only
     counts while the object is held there, so the origin stays in range.
+    A region with a ``top`` above its support (an object's,
+    :func:`object_top_region`) is tried up to resting there too.
     """
     lo, hi = region["box"]["z_range"]
     margin = 0.005
@@ -1103,7 +1148,8 @@ def place_heights(
     rest = region.get("height", lo) + below
     if rest > hi:  # no margin: an object resting upright only tips lower
         return None
-    return max(rest + drop, lo + margin), rest + drop + rise
+    top = max(rest, region.get("top", lo) + below)
+    return max(rest + drop, lo + margin), top + drop + rise
 
 
 def place_positions(
