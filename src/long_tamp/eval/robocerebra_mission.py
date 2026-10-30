@@ -59,6 +59,7 @@ from long_tamp.tasks.task_planning.world_state import CompositeWorldState
 from .robocerebra_plan import GRIPPER, held_object
 from .robocerebra_policy import (
     HppPolicy,
+    LookaheadFailed,
     ReleaseController,
     SegmentController,
     SegmentGoal,
@@ -125,6 +126,7 @@ class RoboCerebraDomain(BaseMissionDomain):
         case: str = "robocerebra",
         gripper: str = GRIPPER,
         others: Iterable[str] = (),
+        lookahead: bool = True,
     ) -> None:
         self.case = case
         self.gripper = gripper
@@ -134,20 +136,55 @@ class RoboCerebraDomain(BaseMissionDomain):
         self.others = tuple(o for o in others if o not in self.full_goal)
         #: The objects given up on (``give_up``).
         self.given_up: set[str] = set()
+        #: Whether a pick checks the place or pour after it (``plan_move``).
+        self.lookahead = lookahead
+        #: The objects left for last (``defer``), and those whose pick is
+        #: no longer checked (``resume``).
+        self.deferred: set[str] = set()
+        self.unchecked: set[str] = set()
 
     @classmethod
-    def from_info(cls, info: Mapping[str, Any]) -> RoboCerebraDomain:
+    def from_info(
+        cls, info: Mapping[str, Any], lookahead: bool = True
+    ) -> RoboCerebraDomain:
         """From the env server's ``load`` reply."""
         return cls(
             info["goal"],
             case=str(info.get("case", "robocerebra")),
             others=info.get("objects", ()),
+            lookahead=lookahead,
         )
 
     def give_up(self, obj: str) -> None:
         """Stop planning ``obj``'s goals: they leave the goal, and the
         object may be put down wherever its chain stands."""
         self.given_up.add(obj)
+
+    def defer(self, obj: str) -> None:
+        """Leave ``obj`` out of the goal until the others are done or given
+        up on (its pick plans, the place after it does not, from here)."""
+        self.deferred.add(obj)
+
+    def resume(self) -> bool:
+        """Put the deferred objects back in the goal, their picks no longer
+        checked: a pick still counts, and the object is put down last.
+        False when none was deferred."""
+        if not self.deferred:
+            return False
+        self.unchecked |= self.deferred
+        self.deferred.clear()
+        return True
+
+    def then(self, obj: str, at: str) -> SegmentGoal | None:
+        """The place or pour after ``obj``'s pick at stage ``at``, if its
+        pick is to be checked against it (``lookahead``)."""
+        if not self.lookahead or obj in self.unchecked:
+            return None
+        specs = self.chains.get(obj, [])
+        k = int(at[1:]) + 1
+        if k >= len(specs) or GOAL_CAPABILITIES[specs[k][0]] == "pick":
+            return None
+        return SegmentGoal.from_spec(specs[k])
 
     # -- symbolic --------------------------------------------------------------
 
@@ -269,8 +306,8 @@ class RoboCerebraDomain(BaseMissionDomain):
 
     def goal(self, without: Iterable[str] = ()) -> list[str]:
         """Every object's counter at the end of its chain, but for the
-        objects given up on and those ``without``."""
-        skip = self.given_up | set(without)
+        objects given up on, deferred, and ``without``."""
+        skip = self.given_up | self.deferred | set(without)
         return [
             f"progress({obj}, {stage(len(specs))})"
             for obj, specs in self.chains.items()
@@ -332,10 +369,16 @@ class RoboCerebraDomain(BaseMissionDomain):
     def retry(self, failure: Mapping[str, Any]) -> bool:
         """Plan again from the world as observed after an execution miss (a
         stalled grasp, a goal not reached). A step that did not plan
-        (``refinement_failed``) is not retried: the planner is given the same
-        geometry again, and in row D none of 235 such retries planned. Nor is
-        one past the budget or with no way to reach it (``unsupported``)."""
-        final = ("budget_spent(", "unsupported(", "refinement_failed(")
+        (``refinement_failed``, ``lookahead_failed``) is not retried: the
+        planner is given the same geometry again, and in row D none of 235
+        such retries planned. Nor is one past the budget or with no way to
+        reach it (``unsupported``)."""
+        final = (
+            "budget_spent(",
+            "unsupported(",
+            "refinement_failed(",
+            "lookahead_failed(",
+        )
         return not any(f.startswith(final) for f in failure["facts"])
 
     # -- geometry and execution ----------------------------------------------
@@ -363,7 +406,9 @@ class RoboCerebraDomain(BaseMissionDomain):
         """Plan the step from the scene as it stands: HPP for a pick, place
         or pour (a ``regrasp`` is a pick that the checker does not count),
         a :class:`ReleaseController` for a ``putdown``. The one path is an
-        :class:`EnvMotion` saying what the step must leave behind."""
+        :class:`EnvMotion` saying what the step must leave behind. A pick
+        is checked against the place or pour after it (:meth:`then`); when
+        that does not plan, the step fails with ``lookahead_failed``."""
         world: EnvWorld = scene.extras["world"]
         capability = move.spec["capability"]
         parameters = move.spec["parameters"]
@@ -383,13 +428,21 @@ class RoboCerebraDomain(BaseMissionDomain):
             expect = {"held": obj}
         else:
             expect = {"progress": (obj, int(str(parameters["next"])[1:]))}
+        then = None
+        if capability == "pick":
+            then = self.then(obj, str(parameters["stage"]))
         policy: HppPolicy = scene.extras["policy"]
         name = move.label.replace(" ", "_").replace("/", "_")
         started = time.time()
         try:
-            plan = policy.plan(world.env, goal, name, record)
+            plan = policy.plan(world.env, goal, name, record, then=then)
         except UnsupportedGoal as error:
             result = _unplanned(f"unsupported({obj})", str(error), q, record)
+        except LookaheadFailed as error:
+            record.update(error.info)
+            result = _unplanned(
+                f"lookahead_failed({obj})", f"LookaheadFailed: {error}", q, record
+            )
         except Exception as error:
             record.update(getattr(error, "info", {}))
             result = _unplanned(
@@ -608,6 +661,7 @@ def run_mission_case(
     *,
     step_factor: int = 150,
     retries: int = 2,
+    lookahead: bool = True,
     runner_factory: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
     """One rollout of a loaded case as one mission (row D).
@@ -618,11 +672,15 @@ def run_mission_case(
     world is, up to ``retries`` times; past that its object is given up on
     and the rest of the goal is planned again, until nothing is left, the
     case is done or the ``step_factor`` x task steps budget is spent.
+
+    With ``lookahead``, an object whose pick plans but whose place or pour
+    after it does not is deferred: the others go first, then it is picked
+    without the check (the pick counts) and put down when its place fails.
     """
     from long_tamp.mission.runner import MissionRunner
 
     obs = env.reset(step=0, seed=int(seed)).get("obs") or {}
-    domain = RoboCerebraDomain.from_info(info)
+    domain = RoboCerebraDomain.from_info(info, lookahead=lookahead)
     budget = step_factor * len(info["steps"])
     scene = mission_scene(env, policy, budget)
     world: EnvWorld = scene.extras["world"]
@@ -633,7 +691,12 @@ def run_mission_case(
     rounds: list[dict[str, Any]] = []
     started = time.time()
     goals = sum(len(specs) for specs in domain.chains.values())
-    while domain.goal() and world.left > 0 and not world.all_done:
+    deferred: list[str] = []
+    while world.left > 0 and not world.all_done:
+        if not domain.goal():
+            if domain.resume():
+                continue
+            break
         result = runner.run_with_repair(
             None,
             rounds=goals * (retries + 1) + 1,
@@ -653,10 +716,17 @@ def run_mission_case(
             }
         )
         if result["success"]:
+            if domain.resume():
+                continue
             break
         obj = failure.get("parameters", {}).get("object")
         if obj not in domain.chains or obj in domain.given_up:
             break  # nothing left to give up on
+        if any(f.startswith("lookahead_failed(") for f in failure.get("facts", ())):
+            if obj not in domain.unchecked:
+                domain.defer(obj)
+                deferred.append(obj)
+                continue
         domain.give_up(obj)
     final = env.check()
     total = final["total"]
@@ -674,6 +744,7 @@ def run_mission_case(
             "steps_used": world.used,
             "seconds": round(time.time() - started, 2),
             "given_up": sorted(domain.given_up),
+            "deferred": deferred,
             "unsupported": domain.unsupported(),
             "rounds": rounds,
             "executions": backend.log,
@@ -690,6 +761,7 @@ def evaluate_mission_case(
     policy: HppPolicy | None = None,
     step_factor: int = 150,
     retries: int = 2,
+    lookahead: bool = True,
 ) -> dict[str, Any]:
     """:func:`run_mission_case` over ``seeds``, as an ``evaluate_case`` row
     (``protocol: "mission"``) that ``summarize`` and ``merge_results`` take."""
@@ -697,7 +769,13 @@ def evaluate_mission_case(
     policy = policy or HppPolicy()
     rollouts = [
         run_mission_case(
-            env, info, seed, policy, step_factor=step_factor, retries=retries
+            env,
+            info,
+            seed,
+            policy,
+            step_factor=step_factor,
+            retries=retries,
+            lookahead=lookahead,
         )
         for seed in seeds
     ]

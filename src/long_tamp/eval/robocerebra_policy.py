@@ -256,17 +256,28 @@ class HppPolicy:
         return SegmentController(plan.stages, plan.tcp_start, record)
 
     def plan(
-        self, env: Any, goal: SegmentGoal, name: str, record: dict[str, Any]
+        self,
+        env: Any,
+        goal: SegmentGoal,
+        name: str,
+        record: dict[str, Any],
+        then: SegmentGoal | None = None,
     ) -> Any:
         """The plan reaching ``goal`` from the scene as it stands (exported
         under ``name``), or ``None`` to release what the hand holds (with
         ``recover`` only). ``record`` receives what the hand held and the
-        handles generated."""
+        handles generated.
+
+        ``then``, the place or pour that follows a pick, is a lookahead: it
+        is planned too, from the scene the pick leaves (the object held at
+        the top of the lift), and when it does not plan the pick fails with
+        a :class:`LookaheadFailed`. A ``then`` the scene has no region or
+        receiver for is not checked: it fails on its own."""
         from .robocerebra_plan import held_object, robot_files
+        from .robocerebra_scene import held_export
 
         if self._robot is None:
             self._robot = robot_files(self.assets)
-        urdf, srdf = self._robot
         self._calls += 1  # a fresh directory per call: a segment may replan
         scene = env.export_scene(self.work_dir / f"{name}-{self._calls}")
         held = held_object(scene.manifest)
@@ -283,19 +294,48 @@ class HppPolicy:
             region = None
         elif held != goal.obj:
             raise RuntimeError(f"{goal.obj} is not in the hand (holding {held})")
-        elif goal.kind == "poured":
-            if goal.receiver not in scene.manifest.get("objects", {}):
-                raise UnsupportedGoal(f"no object {goal.receiver!r} in the scene")
-            region = None
         else:
-            regions = {
-                region["region"]: region for region in scene.manifest.get("regions", [])
+            region = _region(scene.manifest, goal)
+        plan, handles = self._solve(scene.root, goal, region)
+        if handles is not None:
+            record["handles"] = handles
+        if goal.kind != "grasped" or then is None or plan.held_after is None:
+            return plan
+        try:
+            region = _region(scene.manifest, then)
+        except UnsupportedGoal:
+            return plan
+        after = plan.held_after
+        ahead = held_export(
+            scene, goal.obj, after["joints"], after["pose"], f"{scene.root}-then"
+        )
+        start = time.time()
+        try:
+            self._solve(ahead.root, then, region)
+        except Exception as error:
+            lookahead = {
+                "then": [then.kind, then.region or then.receiver],
+                "message": f"{type(error).__name__}: {error}",
+                **getattr(error, "info", {}),
+                "plan_seconds": round(time.time() - start, 3),
             }
-            if goal.region not in regions:
-                raise UnsupportedGoal(f"no region {goal.region!r} in the scene")
-            region = regions[goal.region]
+            raise LookaheadFailed(
+                f"{then.kind} of {goal.obj} after the pick does not plan",
+                {**plan.info, "lookahead": lookahead},
+            ) from None
+        plan.info["lookahead"] = {
+            "then": [then.kind, then.region or then.receiver],
+            "plan_seconds": round(time.time() - start, 3),
+        }
+        return plan
+
+    def _solve(
+        self, root: Path, goal: SegmentGoal, region: dict[str, Any] | None
+    ) -> tuple[Any, Any]:
+        assert self._robot is not None
+        urdf, srdf = self._robot
         args = (
-            scene.root,
+            root,
             urdf,
             srdf,
             goal.obj,
@@ -305,10 +345,27 @@ class HppPolicy:
             self.lift,
             goal.receiver,
         )
-        plan, handles = _in_child(_solve, *args) if self.isolate else _solve(*args)
-        if handles is not None:
-            record["handles"] = handles
-        return plan
+        return _in_child(_solve, *args) if self.isolate else _solve(*args)
+
+
+class LookaheadFailed(PlanningError):
+    """A pick that plans, but the place or pour after it does not, from the
+    scene the pick leaves: ``info["lookahead"]`` says why."""
+
+
+def _region(manifest: dict[str, Any], goal: SegmentGoal) -> dict[str, Any] | None:
+    """The manifest's region a place goes to (None for a pick or a pour);
+    :class:`UnsupportedGoal` when the scene has no such region or receiver."""
+    if goal.kind == "poured":
+        if goal.receiver not in manifest.get("objects", {}):
+            raise UnsupportedGoal(f"no object {goal.receiver!r} in the scene")
+        return None
+    if goal.kind != "placed":
+        return None
+    regions = {region["region"]: region for region in manifest.get("regions", [])}
+    if goal.region not in regions:
+        raise UnsupportedGoal(f"no region {goal.region!r} in the scene")
+    return regions[goal.region]
 
 
 def _solve(

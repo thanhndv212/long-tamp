@@ -19,6 +19,7 @@ paths and HPP configurations.
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,25 @@ def load_export(directory: str | Path) -> ExportedScene:
     """An exported scene written by :func:`write_export`."""
     root = Path(directory)
     return ExportedScene(root, json.loads((root / MANIFEST).read_text()))
+
+
+def held_export(
+    scene: ExportedScene,
+    target: str,
+    joints: dict[str, float],
+    pose: list[float],
+    out_dir: str | Path,
+) -> ExportedScene:
+    """A copy of ``scene`` under ``out_dir`` with the robot at ``joints``
+    and ``target`` at ``pose``: the scene a pick leaves, before it runs.
+    The fingers stay as exported (open, wider than on the object)."""
+    root = Path(out_dir)
+    shutil.copytree(scene.root, root, dirs_exist_ok=True)
+    manifest = json.loads(json.dumps(scene.manifest))
+    manifest["robot"]["joints"].update(joints)
+    manifest["objects"][target]["pose"] = list(pose)
+    (root / MANIFEST).write_text(json.dumps(manifest, indent=1))
+    return ExportedScene(root, manifest)
 
 
 @dataclass

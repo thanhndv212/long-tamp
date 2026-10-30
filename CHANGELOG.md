@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- RoboCerebra mission lookahead (#186): a pick is checked against the place or pour after
+  it, planned from the scene the lift leaves (`HppPolicy.plan(..., then=...)`,
+  `held_export`); an object whose next step would not plan is deferred, picked last and put
+  down. A step that does not plan is no longer retried, only an execution miss is.
+  `evaluate.py --mission --no-lookahead` turns the check off. case7 seed 0: 3/7 → 5/7.
 - RoboCerebra as a mission (#186, M11 R9, row D on Ideal): `evaluate.py --mission`
   (`long_tamp.eval.robocerebra_mission:evaluate_mission_case`) runs each rollout as one
   `long_tamp.mission` run over the case's whole goal. `RoboCerebraDomain` describes a case as

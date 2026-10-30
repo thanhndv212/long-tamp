@@ -287,18 +287,27 @@ class FakeController:
 class FakePolicy:
     """Plans every goal; ``fail`` says how many times a ``(kind, object)``
     plan runs without effect (-1: always), ``unsupported`` which raise
-    ``UnsupportedGoal`` and ``broken`` which raise ``PlanningError``."""
+    ``UnsupportedGoal``, ``broken`` which raise ``PlanningError`` and
+    ``ahead`` which, as the lookahead of a pick, fail it."""
 
-    def __init__(self, env, fail=None, unsupported=(), broken=()):
+    def __init__(self, env, fail=None, unsupported=(), broken=(), ahead=()):
         self.env, self.fail, self.unsupported = env, dict(fail or {}), set(unsupported)
-        self.broken = set(broken)
+        self.broken, self.ahead = set(broken), set(ahead)
         self.calls = []
+        #: Per call, the lookahead it was given: ``(kind, object)`` or None.
+        self.thens = []
 
-    def plan(self, env, goal, name, record):
-        from long_tamp.eval.robocerebra_policy import UnsupportedGoal
+    def plan(self, env, goal, name, record, then=None):
+        from long_tamp.eval.robocerebra_policy import LookaheadFailed, UnsupportedGoal
 
         self.calls.append((goal.kind, goal.obj))
+        self.thens.append(None if then is None else (then.kind, then.obj))
         key = (goal.kind, goal.obj)
+        if then is not None and (then.kind, then.obj) in self.ahead:
+            raise LookaheadFailed(
+                f"{then.kind} of {goal.obj} after the pick does not plan",
+                {"lookahead": {"message": "no release pose"}},
+            )
         if key in self.unsupported:
             raise UnsupportedGoal(f"no region {goal.region!r} in the scene")
         if key in self.broken:
@@ -343,6 +352,7 @@ def fake(monkeypatch):
             options.pop("fail", None),
             options.pop("unsupported", ()),
             options.pop("broken", ()),
+            options.pop("ahead", ()),
         )
         row = robocerebra_mission.run_mission_case(
             env, env.info, seed, policy, **options
@@ -469,3 +479,69 @@ def test_a_step_that_does_not_converge_is_cut_at_its_cap(fake, monkeypatch):
     assert [(e["steps_used"], e["status"], e["message"]) for e in place] == [
         (150, "success", "stalled")
     ]
+
+
+def test_a_pick_is_checked_against_the_step_after_it():
+    domain = RoboCerebraDomain(CASE3)
+    place = domain.then("plate_1", "s0")
+    assert (place.kind, place.obj, place.region) == ("placed", "plate_1", TABLE)
+    pour = domain.then("popcorn_1", "s0")
+    assert (pour.kind, pour.receiver) == ("poured", "plate_1")
+    assert domain.then("plate_1", "s2") is None  # nothing after
+    assert RoboCerebraDomain(CASE3, lookahead=False).then("plate_1", "s0") is None
+    domain.defer("plate_1")
+    assert "progress(plate_1, s2)" not in domain.goal()
+    assert domain.resume() and not domain.resume()
+    assert "progress(plate_1, s2)" in domain.goal()
+    assert domain.then("plate_1", "s0") is None  # no longer checked
+
+
+def test_an_object_whose_next_step_would_not_plan_goes_last(fake):
+    key = ("poured", "popcorn_1")
+    env, policy, row = fake(CASE3, ahead=[key], broken=[key])
+    mission = row["mission"]
+    assert mission["deferred"] == ["popcorn_1"]
+    assert mission["unplanned"][0]["facts"] == ["lookahead_failed(popcorn_1)"]
+    steps = [e["step"] for e in mission["executions"] if e["status"] == "success"]
+    # Everything else first, then the popcorn's pick, unchecked, which counts.
+    assert steps.index("pick popcorn_1") > max(
+        i for i, step in enumerate(steps) if "popcorn" not in step
+    ), steps
+    picks = [
+        t for c, t in zip(policy.calls, policy.thens) if c == ("grasped", "popcorn_1")
+    ]
+    assert picks == [key, None]
+    # The pour does not plan: given up on, put down, the pick still counted.
+    assert mission["given_up"] == ["popcorn_1"]
+    assert row["total_completed"] == row["total"] - 2
+    assert policy.calls.count(key) == 1  # not retried
+
+
+def test_without_lookahead_no_pick_is_checked(fake):
+    env, policy, row = fake(CASE3, lookahead=False)
+    assert row["success"]
+    assert policy.thens == [None] * len(policy.thens)
+
+
+def test_a_held_export_moves_the_robot_and_the_object(tmp_path):
+    from long_tamp.eval.robocerebra_scene import MANIFEST, held_export, load_export
+
+    root = tmp_path / "scene"
+    (root / "objects").mkdir(parents=True)
+    (root / "objects" / "plate_1.srdf").write_text("<robot/>")
+    manifest = {
+        "robot": {"joints": {"robot0_joint1": 0.0, "gripper0_finger_joint1": 0.04}},
+        "objects": {"plate_1": {"pose": [0, 0, 0, 0, 0, 0, 1]}},
+    }
+    (root / MANIFEST).write_text(json.dumps(manifest))
+    scene = load_export(root)
+    pose = [0.1, 0.2, 0.3, 0, 0, 0, 1]
+    ahead = held_export(scene, "plate_1", {"robot0_joint1": 0.5}, pose, f"{root}-then")
+    again = load_export(ahead.root)
+    assert again.robot_joints() == {
+        "robot0_joint1": 0.5,
+        "gripper0_finger_joint1": 0.04,
+    }
+    assert again.object_config("plate_1") == pose
+    assert (ahead.root / "objects" / "plate_1.srdf").exists()
+    assert scene.object_config("plate_1") == [0, 0, 0, 0, 0, 0, 1]  # untouched

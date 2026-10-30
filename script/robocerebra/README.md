@@ -592,6 +592,23 @@ The failures on every seed, or nearly:
 A step cut at 150 env steps in its tracker (#190) counts as a miss and is
 retried.
 
+#### Since the run: a pick checked against the step after it
+
+Planned one step at a time, a mission can pick an object whose place
+cannot plan from its grasp (case7's frypan above). Each pick is now
+checked: once it plans, the place or pour after it is planned too, held
+mode, from the scene the lift leaves (the robot's joints and the object's
+pose at the top of the lift; the fingers as exported, open). When that does
+not plan, the pick fails with `lookahead_failed(object)`, is not retried,
+and the object is deferred: the others go first, then it is picked without
+the check (the pick counts) and put down when its place fails.
+`--no-lookahead` runs the mission as above.
+
+On case7, seed 0: the frypan is deferred for the reason its place gave in
+the run ("no release pose ... in flat_stove_1_cook_region"), the butter and
+pudding pours run first, and the case goes from 3/7 to 5/7 (0.71, row C's
+score) in 367 s instead of 457 s. The full rerun is pending.
+
 ### Published results on RoboCerebra
 
 The paper's metric differs from ours. Its success rate (Eq. 1) is the share of a
