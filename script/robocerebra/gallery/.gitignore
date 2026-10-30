@@ -1,3 +1,5 @@
-# Capture output; build_html.py copies what the page needs into results/r3-grasp-gallery/
+# Capture output; build_html.py and build_rollout_html.py copy what the pages
+# need into results/r3-grasp-gallery/ and results/rollout-gallery/
 out/
 out_video/
+out_rollout/
