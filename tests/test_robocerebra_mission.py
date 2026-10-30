@@ -119,12 +119,16 @@ def test_the_plan_from_the_start_reaches_every_goal_in_order():
     steps = plan(domain, domain.initial_atoms())
     done = labels(domain, steps)
     for obj, specs in domain.chains.items():
-        mine = [label for label in done if label.split()[1] == obj]
-        assert [m.split()[0] for m in mine] == [
+        mine = [label.split()[0] for label in done if label.split()[1] == obj]
+        # A chain that ends with a pour leaves the object in the hand: it is
+        # put down to free the hand, unless it comes last (planner's choice).
+        if mine[-1] == "putdown":
+            mine.pop()
+        assert mine == [
             {"pick": "pick", "in": "place", "pour": "pour"}[s[0]] for s in specs
         ], (obj, done)
-    # Nothing put down on the way nor picked up again: every step a goal.
-    assert len(done) == sum(len(specs) for specs in domain.chains.values()), done
+    # Nothing put down on the way nor picked up again.
+    assert not any(label.startswith("regrasp") for label in done), done
 
 
 def test_a_wrong_object_in_hand_is_put_down_first():
@@ -410,8 +414,11 @@ def test_an_object_that_keeps_failing_is_given_up_on(fake):
     assert not row["success"]
     # Everything else is done, the popcorn's place too is lost.
     assert row["total_completed"] == row["total"] - 2
-    # It was put down to free the hand for the others.
-    assert "putdown popcorn_1" in [e["step"] for e in mission["executions"]]
+    # It was put down to free the hand, if anything was left to do after it.
+    steps = [e["step"] for e in mission["executions"]]
+    last = max(i for i, step in enumerate(steps) if step == "pour popcorn_1 plate_1")
+    if steps[last + 1 :]:
+        assert steps[last + 1] == "putdown popcorn_1", steps
     pours = [c for c in policy.calls if c == ("poured", "popcorn_1")]
     assert len(pours) == 3  # the first try and two retries
 
@@ -469,9 +476,10 @@ def test_mission_rows_summarize_and_refuse_to_merge_with_segments(fake, monkeypa
 
 
 def test_a_step_that_does_not_converge_is_cut_at_its_cap(fake, monkeypatch):
-    # The place counts, then the retreat never ends: cut at 150 steps, it
-    # succeeded; the rest of the rollout still has its budget.
-    label = f"place popcorn_1 {TABLE}"
+    # The pick counts, then the lift never ends: cut at 150 steps, it
+    # succeeded; the rest of the rollout still has its budget. (A pick is
+    # never the plan's last step, which would end the case before the cap.)
+    label = "pick popcorn_1"
     monkeypatch.setattr(FakeController, "hang", {label})
     env, policy, row = fake(CASE3)
     assert row["success"], row["mission"]
