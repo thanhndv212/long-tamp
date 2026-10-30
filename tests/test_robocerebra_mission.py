@@ -450,6 +450,7 @@ def test_mission_rows_summarize_and_refuse_to_merge_with_segments(fake, monkeypa
     summary = summarize({"Ideal/case3": row})
     assert summary["completed_share"] == 1.0
     assert summary["mission_rollouts"] == 2 and summary["objects_given_up"] == 0
+    assert "supported_segment_success_rate" not in summary
     segmented = {**row, "protocol": None}
     with pytest.raises(ValueError, match="mission runs mixed"):
         merge_results(

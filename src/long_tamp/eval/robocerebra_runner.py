@@ -228,7 +228,9 @@ def summarize(rows: dict[str, dict[str, Any]]) -> dict[str, Any]:
     own success (its predicates registered within its budget) does. Segments
     whose policy reported ``status: unsupported`` are counted apart.
     ``completed_share`` is the paper's metric: the share of a case's key
-    transitions that hold at the end, averaged over its rollouts.
+    transitions that hold at the end, averaged over its rollouts. Mission
+    rollouts (row D) have no segments, so their summary has no segment
+    counts but the mission's.
     """
     segments = [
         segment
@@ -253,7 +255,7 @@ def summarize(rows: dict[str, dict[str, Any]]) -> dict[str, Any]:
         ]
         case_passed = sum(segment["segment_success"] for segment in case_supported)
         by_case[case] = f"{case_passed}/{len(case_supported)}"
-    return {
+    summary = {
         "cases": len(rows),
         "rollouts_per_case": {case: len(row["rollouts"]) for case, row in rows.items()},
         "success_rate_by_case": {
@@ -274,13 +276,20 @@ def summarize(rows: dict[str, dict[str, Any]]) -> dict[str, Any]:
             round(len(passed) / len(supported), 4) if supported else 0.0
         ),
         "supported_segment_success_by_case": by_case,
-        **_mission_summary(rows),
         "mean_steps_used_on_success": (
             round(sum(_success_step(s) for s in passed) / len(passed), 1)
             if passed
             else None
         ),
     }
+    mission = _mission_summary(rows)
+    if mission and not segments:
+        summary = {
+            k: v
+            for k, v in summary.items()
+            if "segment" not in k and k != "mean_steps_used_on_success"
+        }
+    return {**summary, **mission}
 
 
 def _mission_summary(rows: dict[str, dict[str, Any]]) -> dict[str, Any]:
