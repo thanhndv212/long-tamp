@@ -490,14 +490,23 @@ class EnvMotion:
 class RoboCerebraBackend:
     """Runs :class:`EnvMotion` commands in the env (the execution
     contract): ``chunk`` env steps a poll, until the controller is done, the
-    case is done or the budget is spent. A step that ends without what it
-    must leave behind fails with ``goal_missed(object, sK)`` or
-    ``grasp_missed(gripper, object)``, which the mission replans from."""
+    case is done, the step has used ``max_steps`` (a tracker that does not
+    converge) or the budget is spent. A step that ends without what it must
+    leave behind fails with ``goal_missed(object, sK)``,
+    ``grasp_missed(gripper, object)`` or, cut at ``max_steps``,
+    ``stalled(gripper)``, which the mission replans from."""
 
-    def __init__(self, world: EnvWorld, chunk: int = 10, gripper: str = GRIPPER):
+    def __init__(
+        self,
+        world: EnvWorld,
+        chunk: int = 10,
+        gripper: str = GRIPPER,
+        max_steps: int = 150,
+    ):
         self.world = world
         self.chunk = chunk
         self.gripper = gripper
+        self.max_steps = max_steps
         self.motion: EnvMotion | None = None
         self.steps = 0
         #: One record per command: its step, env steps and outcome.
@@ -517,6 +526,8 @@ class RoboCerebraBackend:
         for _ in range(self.chunk):
             if getattr(controller, "done", True) or world.all_done:
                 return self._finish()
+            if self.steps >= self.max_steps:
+                return self._finish(stalled=True)
             if world.left <= 0:
                 return self._end(
                     ExecutionStatus.FAILURE, "budget spent", ("budget_spent()",)
@@ -530,7 +541,10 @@ class RoboCerebraBackend:
         if self.motion is not None:
             self._end(ExecutionStatus.FAILURE, "cancelled")
 
-    def _finish(self) -> tuple[ExecutionStatus, Feedback]:
+    def _finish(self, stalled: bool = False) -> tuple[ExecutionStatus, Feedback]:
+        """What the step left behind; cut short (``stalled``), it still
+        succeeds if that holds (a retreat that does not converge after the
+        release counted)."""
         assert self.motion is not None
         expect, world = self.motion.expect, self.world
         missed: tuple[str, ...] = ()
@@ -543,8 +557,10 @@ class RoboCerebraBackend:
         elif "released" in expect and world.held() == expect["released"]:
             missed = (f"still_held({self.gripper}, {expect['released']})",)
         if missed:
+            if stalled:
+                missed = (f"stalled({self.gripper})", *missed)
             return self._end(ExecutionStatus.FAILURE, "missed", missed)
-        return self._end(ExecutionStatus.SUCCESS, "done")
+        return self._end(ExecutionStatus.SUCCESS, "stalled" if stalled else "done")
 
     def _end(
         self, status: ExecutionStatus, message: str, facts: tuple[str, ...] = ()
@@ -602,7 +618,7 @@ def run_mission_case(
     scene = mission_scene(env, policy, budget)
     world: EnvWorld = scene.extras["world"]
     world.obs = obs
-    backend = RoboCerebraBackend(world, gripper=domain.gripper)
+    backend = RoboCerebraBackend(world, gripper=domain.gripper, max_steps=step_factor)
     make = runner_factory or MissionRunner
     runner = make(domain, scene, verbose=False)
     rounds: list[dict[str, Any]] = []

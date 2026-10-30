@@ -264,14 +264,18 @@ class FakeEnv:
 
 
 class FakeController:
-    """Runs ``steps`` env steps, then applies its effect to the env."""
+    """Runs ``steps`` env steps, then applies its effect to the env; with
+    ``hang``, never done after that (a retreat that does not converge)."""
+
+    hang: set = set()
 
     def __init__(self, effect, tcp_start=None, info=None, steps=3):
         self.effect, self.info, self.left = effect, info or {}, steps
+        self.hangs = info is not None and info.get("step") in self.hang
 
     @property
     def done(self):
-        return self.left == 0
+        return self.left <= 0 and not self.hangs
 
     def __call__(self, obs):
         self.left -= 1
@@ -426,3 +430,16 @@ def test_mission_rows_summarize_and_refuse_to_merge_with_segments(fake, monkeypa
         merge_results(
             [{"cases": {"Ideal/case3": row}}, {"cases": {"Ideal/case3": segmented}}]
         )
+
+
+def test_a_step_that_does_not_converge_is_cut_at_its_cap(fake, monkeypatch):
+    # The place counts, then the retreat never ends: cut at 150 steps, it
+    # succeeded; the rest of the rollout still has its budget.
+    label = f"place popcorn_1 {TABLE}"
+    monkeypatch.setattr(FakeController, "hang", {label})
+    env, policy, row = fake(CASE3)
+    assert row["success"], row["mission"]
+    place = [e for e in row["mission"]["executions"] if e["step"] == label]
+    assert [(e["steps_used"], e["status"], e["message"]) for e in place] == [
+        (150, "success", "stalled")
+    ]
