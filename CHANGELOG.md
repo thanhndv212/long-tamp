@@ -60,6 +60,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   real-time video) and builds `script/robocerebra/results/r3-grasp-gallery/index.html`,
   which sets each class's recorded verdict beside the rerun's. The rerun of 2026-10-27
   matches the recorded run on all 25 classes.
+- RoboCerebra rollout gallery for rows C and D: `capture_rollout.py C|D <case>...` reruns
+  whole rollouts at one seed with the full runs' policy and budgets, rendering every control
+  step, and `build_rollout_html.py` builds `script/robocerebra/results/rollout-gallery/`
+  (a video per rollout and a keyframe at each completed subtask). Recorded at seed 0: rows
+  C and D on Ideal cases 2, 7 and 8, and row C on Memory_Execution/case1.
 - RoboCerebra HPP segment policy (#159, M11 R4): `long_tamp.eval.robocerebra_policy:hpp_policy`
   translates each segment's goal (`pick` → grasped, `In`/`On` → placed; `pour`, `open`,
   `turnon` and regions missing from the export reported unsupported), detects the held
