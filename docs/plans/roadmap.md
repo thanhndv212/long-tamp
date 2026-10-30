@@ -183,7 +183,8 @@ flowchart LR
   R5["#160 pour"]
   R6["#161 articulated objects"]
   R7["#162 disturbance, mismatch, mix"]
-  R8["#163 continuous variant + tables"]
+  R8["#163 continuous variant + tables<br/>(row C on Ideal)"]
+  R9["#186 mission per rollout<br/>(row D on Ideal)"]
   X["#154 M11 exit"]
   S1[S1 SO-101 backend]
   S2[S2 vision]
@@ -218,24 +219,28 @@ flowchart LR
   M10 --> S5
   S5 --> S6
   X --> S6
+  R4 --> R9
+  M8 --> R9
+  R9 --> X
   classDef hw fill:#ffe0b2,stroke:#e65100,stroke-width:2px,color:#000
   classDef bench fill:#bbdefb,stroke:#0d47a1,stroke-width:2px,color:#000
   class S1,S2,S3,S4,S5,S6 hw
-  class R1,R2,R3,R4,R5,R6,R7,R8,X bench
+  class R1,R2,R3,R4,R5,R6,R7,R8,R9,X bench
   classDef done fill:#c8e6c9,stroke:#1b5e20,stroke-width:3px,color:#000
   classDef partial fill:#f1f8e9,stroke:#1b5e20,stroke-width:2px,stroke-dasharray:5 3,color:#000
   class M8,R1,R2,R4,R5 done
-  class M7,R3 partial
+  class M7,R3,R8,R9 partial
   linkStyle 16,17,18,22,23,25 stroke:#e65100,stroke-width:3px
-  linkStyle 0,1,2,3,5,6,7,10,11,12,13,26 stroke:#0d47a1,stroke-width:3px
+  linkStyle 0,1,2,3,5,6,7,10,11,12,13,26,27,29 stroke:#0d47a1,stroke-width:3px
 ```
 
 Orange: the real-hardware path on the SO-101 (soarm_tamp S1–S6, see its
 [delivery plan](https://github.com/thanhndv212/soarm_tamp/blob/main/docs/roadmap.md#delivery-plan)).
-Blue: the simulated benchmark path (RoboCerebra, #156–#163, closing M11 with #154).
+Blue: the simulated benchmark path (RoboCerebra, #156–#163 and #186, closing M11 with #154).
 Uncoloured nodes are the library milestones and sim pieces both paths build on.
 Green with ✓: done. Pale green, dashed: partly done (M7 waits on its real-robot exit run,
-#158 has handles for every class, but the pick checker passes for 14 of 25).
+#158 has handles for every class, but the pick checker passes for 14 of 25, and rows C and D
+are in on Ideal only, the other conditions waiting on #162).
 
 ## M7 — Hardware execution: remote backends and grippers (0.9.0)
 
@@ -332,8 +337,8 @@ planner-based entry has been published. #153 is split into:
 - [ ] [#163](https://github.com/thanhndv212/long-tamp/issues/163) R8 Continuous variant and results tables
       (row C on Ideal in: 61.4% by Eq. 1; the other conditions wait on #162)
 - [ ] [#186](https://github.com/thanhndv212/long-tamp/issues/186) R9 Whole-task planning on `long_tamp.mission` (row D)
-      (row D on Ideal in: 64.3% by Eq. 1; follow-ups #187 place on an object, #188 flat-object
-      grasp, #189 held start in collision, #190 tracker stall)
+      (row D on Ideal in: 64.3% by Eq. 1; follow-ups #187 place on an object, in review in
+      PR #192, #188 flat-object grasp, #189 held start in collision, #190 tracker stall)
 
 The first number to publish is the Ideal condition on pick/in/on subtasks (#156 → #159, about
 68% of subtasks). Row A is in: 412 of 540 supported segments (76.3%) over 10 Ideal cases ×
@@ -343,7 +348,11 @@ supported share is 93.4% and 603 of 710 supported segments pass (84.9%), every p
 as the published methods run (row C, #163), the policy completes 61.4% of the Ideal tasks' key
 state changes by the paper's Eq. 1, and 8 of 100 rollouts complete every step
 (`script/robocerebra/results/2026-10-29-r8-ideal-hpp-continuous.json`). Handed to `long_tamp.mission` as one goal a rollout (row D, #186), with the
-step budget shared over the rollout, it completes 64.3% (`script/robocerebra/results/2026-10-30-r9-ideal-hpp-mission.json`). Articulated objects (#161) are the critical path to the full table.
+step budget shared over the rollout, it completes 64.3% (`script/robocerebra/results/2026-10-30-r9-ideal-hpp-mission.json`).
+Placing onto another object (#187, PR #192) covers the 15 `On`-over-object goals, all onto
+`rack_1`: row A on seed 0 goes from 62/71 to 64/72 supported Ideal steps, none lost, and
+the butter and the mug go onto the rack upright in Memory_Execution 1–3. Rows C and D with
+it, 10 seeds per Ideal case, are next. Articulated objects (#161) are the critical path to the full table.
 
 **Exit test:** 20 SO-101 sim missions from language instructions with the simulated camera and injected disturbances complete or escalate cleanly; RoboCerebra results for all six conditions committed with seeds (privileged state, simulated camera, continuous variant); a recorded video.
 
