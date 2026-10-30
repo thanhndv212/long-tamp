@@ -99,8 +99,10 @@ the domain is written down.
   - `Move.spec` stays opaque. It carries the capability and its binding, and
     `plan_move` refines it (here through the row C policy). The path it returns is an env
     controller with no duration, so the executor bounds it by heartbeats (ADR-0004);
-  - `retry(failure)` means "replan from the observed world". The domain says no only
-    when replanning can't help (the budget is spent, a goal is unsupported).
+  - `retry(failure)` means "replan from the observed world". The domain says no when
+    replanning can't help: the budget is spent, a goal is unsupported, or the step
+    did not plan (the same geometry would fail the same way). An execution miss is
+    retried.
 
   The protocol is no longer provisional for single-arm pick/place. The hardware showcase
   (M7–M10) may still change it.

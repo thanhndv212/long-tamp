@@ -420,9 +420,9 @@ def test_a_step_that_does_not_plan_keeps_why(fake):
     env, policy, row = fake(CASE3, broken=[("grasped", "plate_1")])
     mission = row["mission"]
     assert "plate_1" in mission["given_up"]
-    assert policy.calls.count(("grasped", "plate_1")) == 3
+    assert policy.calls.count(("grasped", "plate_1")) == 1
     unplanned = mission["unplanned"]
-    assert len(unplanned) == 3
+    assert len(unplanned) == 1
     assert unplanned[0]["message"] == "PlanningError: no handle of plate_1 plans"
     assert unplanned[0]["tried"][0]["message"] == "collides"
     assert unplanned[0]["facts"][0].startswith("refinement_failed(")

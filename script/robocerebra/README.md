@@ -568,7 +568,9 @@ twice, and one rollout spent its whole budget.
 Of the 230 retries, 19 were of a step that executed and missed (a grasp that
 stalled, mostly) and passed on the retry, 10 of them in case8. Most of the
 rest replan a refinement that fails again the same way: no handle, no
-release pose. 107 objects were given up on.
+release pose. None of the 235 such replans planned, so since this run a step
+that does not plan (`refinement_failed`) is not retried; only an execution miss
+is. 107 objects were given up on.
 
 The rollouts took 9.4 hours, median 9 s to 70 s a rollout in cases 1–4,
 6 and 9, and 44 minutes in case10. Planning time is not budgeted.

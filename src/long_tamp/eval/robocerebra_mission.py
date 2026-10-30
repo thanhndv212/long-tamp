@@ -330,11 +330,13 @@ class RoboCerebraDomain(BaseMissionDomain):
         return []
 
     def retry(self, failure: Mapping[str, Any]) -> bool:
-        """Plan again from the world as observed, unless the budget is spent
-        or the scene has no way to reach the step (``unsupported``)."""
-        return not any(
-            f.startswith(("budget_spent(", "unsupported(")) for f in failure["facts"]
-        )
+        """Plan again from the world as observed after an execution miss (a
+        stalled grasp, a goal not reached). A step that did not plan
+        (``refinement_failed``) is not retried: the planner is given the same
+        geometry again, and in row D none of 235 such retries planned. Nor is
+        one past the budget or with no way to reach it (``unsupported``)."""
+        final = ("budget_spent(", "unsupported(", "refinement_failed(")
+        return not any(f.startswith(final) for f in failure["facts"])
 
     # -- geometry and execution ----------------------------------------------
 
