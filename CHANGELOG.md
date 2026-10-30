@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- RoboCerebra as a mission (#186, M11 R9, row D on Ideal): `evaluate.py --mission`
+  (`long_tamp.eval.robocerebra_mission:evaluate_mission_case`) runs each rollout as one
+  `long_tamp.mission` run over the case's whole goal. `RoboCerebraDomain` describes a case as
+  a mission domain (pick, place, pour, regrasp and putdown by goal stage) whose world is what
+  the env observes; each step's `Move` is refined by the row C policy (`HppPolicy.plan`), and
+  `RoboCerebraBackend` runs it in the env. A missed step is replanned from the observed world
+  (2 retries a step); an object that keeps failing or is unsupported is put down and given up
+  on. The step budget is 150 × the case's steps, shared over the rollout, and a step is cut at
+  150. ADR-0011 and ADR-0012 are amended: the second domain needed no protocol change. Row D
+  (Ideal, 10 seeds per case): 64.3% of key state changes, 8 / 100 rollouts with every step
+  done, in `script/robocerebra/results/2026-10-30-r9-ideal-hpp-mission.json`.
 - RoboCerebra continuous variant (#163, M11 R8, row C on Ideal): `evaluate.py --continuous`
   (`evaluate_case(resume=False)`) runs each rollout through without `resume(k)` and records the
   paper's Eq. 1 per rollout (`completed_share`). A passed segment's controller runs on until
