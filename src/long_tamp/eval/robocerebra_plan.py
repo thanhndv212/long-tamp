@@ -75,6 +75,16 @@ OFF_LEAF = re.compile(
     r"goal configuration at rank \d+: \(([^)]*)\) does not satisfy the leaf constraint"
 )
 SETTLE_SHIFT, SETTLE_TURN = 0.005, 0.05  # m, rad
+# The Panda links rigid with the hand (the fingers are frozen in a segment).
+HAND_LINKS = (
+    "panda/panda_link7",
+    "panda/panda_hand",
+    "panda/panda_leftfinger",
+    "panda/panda_rightfinger",
+)
+# HPP's report of a configuration's first collision: the two bodies, each
+# ``<owner>/<geometry>``.
+COLLISION = re.compile(r"Collision between object (\S+?)/\S+ and (\S+?)/\S+")
 # The pour checker (LIBERO's ``_eval_pour_predicate``) passes when, over its
 # last 40 steps, the two objects' origins came within 0.3 m and the poured
 # object's quaternion moved more than 0.1 (0.2 in some scene classes).
@@ -345,6 +355,7 @@ class SegmentPlanner:
         root = model.joints[model.getJointId(f"{target}/root_joint")].idx_q
         self._object_index = list(range(root, root + 7))
         self.q0 = list(self.task.q_init)
+        self._drop_static_pairs()
         if self.held:
             self.sequence.grasp_tracker.update_grasp(GRIPPER, f"{target}/{HELD}")
 
@@ -382,7 +393,9 @@ class SegmentPlanner:
         or, when that collides (a resumed demo state can leave the hand in a
         box, and the URDF's fingers reach 6 mm further than the sim's), the
         TCP raised straight up from it until it clears, with the stage that
-        gets there."""
+        gets there. Other objects sunk into their supports are raised out
+        first (:meth:`_settle_bystanders`)."""
+        self._settle_bystanders(info)
         valid, message = self._valid(self.q0)
         if not valid and not self.held and "panda/" not in message:
             valid, message = self._unsink(info, message)
@@ -425,6 +438,82 @@ class SegmentPlanner:
                 self.q0 = q
                 return valid, raised
         return False, message
+
+    def _settle_bystanders(
+        self, info: dict[str, Any], step: float = 0.001, max_rise: float = 0.01
+    ) -> None:
+        """Raise the objects other than the target out of the environment in
+        :attr:`q0`, ``step`` at a time up to ``max_rise`` each.
+
+        HPP reports only a configuration's first collision. One of an object
+        we do not move with the environment (MuJoCo leaves a resting object
+        a millimetre or so inside its support) would then hide every
+        collision of the robot or the target behind it, and :meth:`_judge`
+        ignores it: a mug planned through a rack's pegs. Their pairs live in
+        the problem's obstacles, which pyhpp cannot filter; the pairs between
+        two such objects are dropped instead (:meth:`_drop_static_pairs`).
+        Recorded as ``info["settled"]``."""
+        model = self.task.planner.model()
+        root = {
+            name: model.joints[model.getJointId(f"{name}/root_joint")].idx_q
+            for name in self.scene.objects
+            if name != self.target
+        }
+        raised: dict[str, float] = {}
+        q = np.asarray(self.q0, dtype=float)
+        with self._validations() as problem:
+            for _ in range(len(root) * round(max_rise / step)):
+                _, message = problem.isConfigValid(q)
+                match = COLLISION.search(str(message))
+                if match is None:
+                    break
+                pair = match.groups()
+                if "panda" in pair or self.target in pair:
+                    break  # the robot's or the target's: a real collision
+                owners = [name for name in pair if name in root]
+                if not owners:
+                    break
+                name = owners[0]
+                if raised.get(name, 0.0) + step > max_rise + 1e-9:
+                    break
+                q[root[name] + 2] += step
+                raised[name] = raised.get(name, 0.0) + step
+        if raised:
+            self.q0 = q.tolist()
+            info["settled"] = {name: round(rise, 4) for name, rise in raised.items()}
+
+    def _drop_static_pairs(self) -> int:
+        """Remove from the device the collision pairs no motion of the
+        segment changes: between two objects other than the target (neither
+        moves), and, with the target held, between it and the hand (it moves
+        with the hand). Either, in collision at the start (a butter wedged
+        between a rack's pegs, the URDF's fingers a few mm inside what they
+        hold), would hide the robot's and the target's other collisions
+        (:meth:`_judge`) or stop the plan. Returns how many were removed."""
+        from pinocchio import CollisionPair
+
+        geometry = self.task.planner.device.geomModel()
+        names = [g.name for g in geometry.geometryObjects]
+        owners = [name.split("/")[0] for name in names]
+        others = set(self.scene.objects) - {self.target}
+
+        def static(a: int, b: int) -> bool:
+            if owners[a] in others and owners[b] in others:
+                return True
+            if not self.held or {owners[a], owners[b]} != {"panda", self.target}:
+                return False
+            link = names[a] if owners[a] == "panda" else names[b]
+            return link.startswith(HAND_LINKS)
+
+        # Indices first: the pairs are views into the vector being shrunk.
+        pairs = [
+            (int(pair.first), int(pair.second))
+            for pair in geometry.collisionPairs
+            if static(pair.first, pair.second)
+        ]
+        for first, second in pairs:
+            geometry.removeCollisionPair(CollisionPair(first, second))
+        return len(pairs)
 
     def config_paths(
         self, phases: list[dict[str, Any]], samples: int = 120
