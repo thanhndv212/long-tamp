@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- RoboCerebra place onto an object's top (#187): an `On o x` goal whose `x` is another object
+  in the scene (15 goals, all onto `rack_1`) is no longer unsupported. `object_top_region`
+  builds the region from `x`'s collision geometry at its pose: within 2 cm of its origin, as
+  LIBERO's object `check_ontop` wants, resting from its support under the origin up to its
+  highest face. A release is also tried as held turned about the vertical, and one with the
+  fingers closing vertically (a rim pinch) is tried last instead of rejected
+  (`info["fingers"]`). Ideal, row A, seed 0: 62/71 → 64/72 supported steps (case2's
+  frypan onto the rack, case7's frypan onto the stove), no step lost.
 - RoboCerebra mission lookahead (#186): a pick is checked against the place or pour after
   it, planned from the scene the lift leaves (`HppPolicy.plan(..., then=...)`,
   `held_export`); an object whose next step would not plan is deferred, picked last and put
