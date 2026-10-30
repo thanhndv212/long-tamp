@@ -360,10 +360,25 @@ python script/robocerebra/evaluate.py Ideal/case1 --rollouts 10 \
 
 - Goals: `pick o` becomes *grasped* (the first R3 handle that plans, then a
   straight lift); `In o r` / `On o r` become *placed* (carry the held object into
-  `r`'s box and release); `pour o v` becomes *poured* (below). `open`, `close`,
-  `turnon` and `On` over an object are rejected as unsupported, as is a region
-  the exported scene lacks (`rack_1`); the segment then holds still with the
-  gripper closed.
+  `r`'s box and release); `pour o v` becomes *poured* (below). `open`, `close`
+  and `turnon` are rejected as unsupported, as is a region or object the
+  exported scene lacks; the segment then holds still with the gripper closed.
+- `On o x` over an object (#187; all 15 in the benchmark are onto `rack_1`:
+  the frypan in case2 of Ideal, Observation_Mismatching and Random_Disturbance,
+  the butter and the mug in Memory_Execution 1–3 and Mix 7–9). LIBERO's object
+  `check_ontop` passes when the two touch, `o`'s origin is no lower than
+  `x`'s and within 3 cm of it across. The place goes to a region made from
+  `x`'s collision geometry at the segment start (`object_top_region`): a
+  2 cm square about its origin, resting on the highest face under that origin
+  (the rack's plate, between its pegs) or, for an object too wide to go
+  between, up to its highest face (the pegs' tops). The demo's own place
+  never registers: it leaves the frypan on the pegs 4.6 cm off the rack's
+  origin. The frypan is held by a rim pinch, fingers above and below, and
+  the rack is 0.85 m out: the place tries the hand as it holds the object
+  turned about the vertical (the hand on the near side) after every other
+  orientation, and a release with the fingers closing vertically after all
+  of those, upright first. case2 step 3 then releases at `held/180` within
+  0.5 cm of the origin.
 - Pour (R5, #160). LIBERO's checker passes a pour when, within its last 40
   steps, the two objects' origins came within 0.3 m and the poured object's
   quaternion moved by more than 0.1 (0.2 in some scene classes); nothing

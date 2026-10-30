@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from long_tamp.eval.robocerebra_plan import (
+    ONTOP_REACH,
     POUR_ANGLES,
     POUR_REACH,
     PlanningError,
@@ -13,6 +14,7 @@ from long_tamp.eval.robocerebra_plan import (
     collision_corners,
     held_object,
     object_corners,
+    object_top_region,
     place_heights,
     place_orientations,
     place_positions,
@@ -240,6 +242,71 @@ def test_collision_corners_reach_the_top_of_a_vessel_based_at_its_origin(tmp_pat
     assert corners[:, 2].min() == pytest.approx(0.0)
     assert corners[:, 2].max() == pytest.approx(0.06)
     assert corners[:, 0].max() == pytest.approx(0.16)
+
+
+RACK = """<robot name="rack"><link name="base_link">
+  <collision><geometry><box size="0.14 0.28 0.035"/></geometry></collision>
+  <collision><origin xyz="0.04 0.05 0.06"/><geometry><box size="0.008 0.008 0.09"/></geometry></collision>
+  <collision><origin xyz="-0.04 0.05 0.06"/><geometry><box size="0.008 0.008 0.09"/></geometry></collision>
+</link></robot>"""
+
+
+def test_object_top_region_supports_between_and_on_the_pegs(tmp_path):
+    urdf = tmp_path / "rack.urdf"
+    urdf.write_text(RACK)
+    region = object_top_region("rack_1", urdf, pose(0.1, -0.5, 0.44))
+    assert region["region"] == region["support_geom"] == "rack_1"
+    assert region["box"]["center"][:2] == pytest.approx([0.1, -0.5])
+    assert region["box"]["half_extents"][:2] == [ONTOP_REACH, ONTOP_REACH]
+    # The checker wants the placed origin no lower than the rack's.
+    assert region["box"]["z_range"][0] == pytest.approx(0.44)
+    assert region["height"] == pytest.approx(0.44 + 0.0175)  # the plate
+    assert region["top"] == pytest.approx(0.44 + 0.105)  # the pegs' tops
+    # From resting on the plate up to resting on the pegs, then the rise.
+    lo, hi = place_heights(region, below=0.01, drop=0.02)
+    assert lo == pytest.approx(0.4875)
+    assert hi == pytest.approx(0.545 + 0.01 + 0.02 + 0.06)
+
+
+def test_object_top_region_turns_with_the_object(tmp_path):
+    urdf = tmp_path / "rack.urdf"
+    urdf.write_text(RACK)
+    upside_down = pose(0.0, 0.0, 0.5)
+    upside_down[:3, :3] = np.diag([1.0, -1.0, -1.0])
+    region = object_top_region("rack_1", urdf, upside_down)
+    # Pegs down: only the plate's face is on top.
+    assert region["height"] == region["top"] == pytest.approx(0.5175)
+
+
+def test_on_an_object_places_on_its_top(tmp_path):
+    from long_tamp.eval.robocerebra_policy import _region
+
+    urdf = tmp_path / "rack.urdf"
+    urdf.write_text(RACK)
+
+    class Scene:
+        def __init__(self):
+            self.manifest = {
+                "objects": {
+                    "pan": {},
+                    "rack_1": {"pose": [0.1, -0.5, 0.44, 0, 0, 0, 1]},
+                },
+                "regions": [{"region": "table", "box": {}}],
+            }
+
+        def file_paths(self):
+            return {"objects": {"rack_1": {"urdf": str(urdf)}}}
+
+        def object_config(self, name):
+            return self.manifest["objects"][name]["pose"]
+
+    scene = Scene()
+    assert _region(scene, SegmentGoal("placed", "pan", "table"))["region"] == "table"
+    top = _region(scene, SegmentGoal("placed", "pan", "rack_1"))
+    assert top["object"] == "rack_1" and top["top"] == pytest.approx(0.545)
+    for onto in ("pan", "shelf_1"):
+        with pytest.raises(UnsupportedGoal):
+            _region(scene, SegmentGoal("placed", "pan", onto))
 
 
 def test_pour_tilts_turn_about_the_tcp_enough_for_the_checker():

@@ -16,6 +16,8 @@ Predicates map onto what the planner does:
 ``in`` / ``on``
     ``placed``: the object is in the hand (the official resume puts the
     demo's state at the segment start); carry it over the region, release.
+    ``on`` over another object releases it on that object's top
+    (:func:`~long_tamp.eval.robocerebra_plan.object_top_region`).
 ``pour``
     ``poured``: the object is in the hand, as for a place (a pour always
     follows the pick of what it pours); carry it over the receiving object,
@@ -51,7 +53,9 @@ from typing import Any
 
 import numpy as np
 
-from .robocerebra_plan import PlanningError, tcp_to_eef
+from long_tamp.grasping import xyzquat_to_pose
+
+from .robocerebra_plan import PlanningError, object_top_region, tcp_to_eef
 from .robocerebra_tracker import POS_SCALE, OscTracker, Stage, obs_pose
 
 logger = logging.getLogger(__name__)
@@ -67,8 +71,9 @@ class UnsupportedGoal(ValueError):
 @dataclass(frozen=True)
 class SegmentGoal:
     """One goal predicate in planner terms: ``grasped`` an object,
-    ``placed`` it in ``region`` (a region name of the exported manifest),
-    or ``poured`` it over ``receiver`` (an object name)."""
+    ``placed`` it in ``region`` (a region name of the exported manifest, or
+    for ``on`` an object's), or ``poured`` it over ``receiver`` (an object
+    name)."""
 
     kind: str
     obj: str
@@ -295,14 +300,14 @@ class HppPolicy:
         elif held != goal.obj:
             raise RuntimeError(f"{goal.obj} is not in the hand (holding {held})")
         else:
-            region = _region(scene.manifest, goal)
+            region = _region(scene, goal)
         plan, handles = self._solve(scene.root, goal, region)
         if handles is not None:
             record["handles"] = handles
         if goal.kind != "grasped" or then is None or plan.held_after is None:
             return plan
         try:
-            region = _region(scene.manifest, then)
+            region = _region(scene, then)
         except UnsupportedGoal:
             return plan
         after = plan.held_after
@@ -353,9 +358,11 @@ class LookaheadFailed(PlanningError):
     scene the pick leaves: ``info["lookahead"]`` says why."""
 
 
-def _region(manifest: dict[str, Any], goal: SegmentGoal) -> dict[str, Any] | None:
-    """The manifest's region a place goes to (None for a pick or a pour);
+def _region(scene: Any, goal: SegmentGoal) -> dict[str, Any] | None:
+    """The region a place goes to, the exported manifest's or, failing
+    that, an object's top (None for a pick or a pour);
     :class:`UnsupportedGoal` when the scene has no such region or receiver."""
+    manifest = scene.manifest
     if goal.kind == "poured":
         if goal.receiver not in manifest.get("objects", {}):
             raise UnsupportedGoal(f"no object {goal.receiver!r} in the scene")
@@ -363,9 +370,15 @@ def _region(manifest: dict[str, Any], goal: SegmentGoal) -> dict[str, Any] | Non
     if goal.kind != "placed":
         return None
     regions = {region["region"]: region for region in manifest.get("regions", [])}
-    if goal.region not in regions:
-        raise UnsupportedGoal(f"no region {goal.region!r} in the scene")
-    return regions[goal.region]
+    if goal.region in regions:
+        return regions[goal.region]
+    if goal.region in manifest.get("objects", {}) and goal.region != goal.obj:
+        return object_top_region(
+            goal.region,
+            scene.file_paths()["objects"][goal.region]["urdf"],
+            xyzquat_to_pose(scene.object_config(goal.region)),
+        )
+    raise UnsupportedGoal(f"no region {goal.region!r} in the scene")
 
 
 def _solve(
