@@ -68,6 +68,105 @@ def test_evaluate_case_uses_segment_budget_resume_and_seed():
     assert result["success_rate"] == 1.0
 
 
+def test_evaluate_case_continuous_carries_state_and_scores_share():
+    env = FakeEnv()
+
+    def policy(client, info, segment, limit):
+        # The pick fails: segment 0 spends nothing, segment 1 runs on.
+        return np.zeros((0 if segment == 0 else 1, 7))
+
+    result = evaluate_case(
+        env, "Ideal/case1", policy, seeds=[0], step_limit=5, resume=False
+    )
+    rollout = result["rollouts"][0]
+    assert env.resumes == []
+    assert result["resume"] is False
+    assert [s["segment_success"] for s in rollout["segments"]] == [False, False]
+    assert rollout["completed_share"] == 0.5
+    summary = evaluate_cases(
+        FakeEnv(), ["Ideal/case1"], policy, seeds=[0], step_limit=5, resume=False
+    )["summary"]
+    assert summary["completed_share"] == 0.5
+    assert summary["completed_share_by_case"] == {"Ideal/case1": 0.5}
+
+
+class Finishing:
+    """A controller with stages left after its predicate registers."""
+
+    def __init__(self, steps):
+        self.left = steps
+
+    @property
+    def done(self):
+        return self.left == 0
+
+    def __call__(self, obs):
+        self.left -= 1
+        return np.zeros(7)
+
+
+def test_continuous_runs_controller_past_success_until_done():
+    env = FakeEnv()
+    resumed = evaluate_case(
+        FakeEnv(), "Ideal/case1", lambda *_: Finishing(3), seeds=[0], step_limit=5
+    )
+    assert [s["steps_used"] for s in resumed["rollouts"][0]["segments"]] == [1, 1]
+    result = evaluate_case(
+        env,
+        "Ideal/case1",
+        lambda *_: Finishing(3),
+        seeds=[0],
+        step_limit=5,
+        resume=False,
+    )
+    # Segment 0 registers at step 1 and runs on; its next step completes
+    # the case, which ends the rollout.
+    segments = result["rollouts"][0]["segments"]
+    assert [(s["steps_used"], s["success_step"]) for s in segments] == [(2, 1)]
+    assert result["rollouts"][0]["success"]
+
+
+def test_continuous_replans_a_controller_done_without_success():
+    class Stalls(Finishing):
+        info = {"status": "planned"}
+
+        def __call__(self, obs):
+            self.left -= 1
+            return np.zeros(7)
+
+    class StallingEnv(FakeEnv):
+        def step(self, action):
+            return self.check()  # nothing ever registers
+
+    calls = []
+
+    def policy(env, info, segment, limit):
+        calls.append((segment, limit))
+        return Stalls(2)
+
+    result = evaluate_case(
+        StallingEnv(), "Ideal/case1", policy, seeds=[0], step_limit=5, resume=False
+    )
+    segments = result["rollouts"][0]["segments"]
+    assert calls == [(0, 5), (0, 3), (0, 1), (1, 5), (1, 3), (1, 1)]
+    assert [s["steps_used"] for s in segments] == [5, 5]
+    assert [len(s["replans"]) for s in segments] == [2, 2]
+    # A controller done from the start (holding still) is not replanned.
+    holding = evaluate_case(
+        StallingEnv(),
+        "Ideal/case1",
+        lambda *_: Stalls(0),
+        seeds=[0],
+        step_limit=5,
+        resume=False,
+    )
+    assert all("replans" not in s for s in holding["rollouts"][0]["segments"])
+    resumed = StallingEnv()
+    calls.clear()
+    evaluate_case(resumed, "Ideal/case1", policy, seeds=[0], step_limit=5)
+    assert calls == [(0, 5), (1, 5)]
+
+
 def test_evaluate_case_rejects_budget_overrun():
     env = FakeEnv()
     with pytest.raises(ValueError, match="limit is 1"):
@@ -122,3 +221,8 @@ def test_merge_results_joins_seeds_and_counts_supported_segments():
     }
     with pytest.raises(ValueError, match="seed repeated"):
         merge_results([parts[0], parts[0]])
+    continuous = evaluate_cases(
+        FakeEnv(), ["Ideal/case2"], policy, seeds=[5], step_limit=20, resume=False
+    )
+    with pytest.raises(ValueError, match="continuous runs mixed"):
+        merge_results([parts[0], continuous])

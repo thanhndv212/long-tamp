@@ -154,6 +154,10 @@ predicates registered within their budget, leaving out the ones the policy
 reported as `unsupported` (`supported_segment_success_by_case` per case);
 `mean_steps_used_on_success` is against the budget.
 
+`--continuous` runs each rollout through without `resume(k)` (row C), with
+`long_tamp.eval.robocerebra_policy:hpp_policy_continuous`; the summary's
+`completed_share` is the paper's Eq. 1.
+
 Long runs can be split, one case and seed per process run in parallel, and
 joined:
 
@@ -437,6 +441,74 @@ The failures are the same segment on every seed, mostly:
 The other 3 failures are case1's popcorn pick, butter pick and butter place
 (1 seed each).
 
+### Row C: Ideal, uninterrupted (continuous variant, #163)
+
+`results/2026-10-29-r8-ideal-hpp-continuous.json`: the 10 Ideal cases × seeds
+0–9 run as the published methods run them, each rollout through from
+`reset(seed)` without `resume(k)`, so a segment starts from the scene the
+previous one left. Same 150 steps a segment and the same goals; scored with the
+paper's Eq. 1 (`completed_share`: the case's goal predicates that hold at the
+end). The policy is `hpp_policy_continuous`, the row A policy with `recover`:
+
+- A segment counts as passed at the step its predicates register
+  (`success_step`), but the controller runs on until its stages are done: a
+  place still releases and retreats, or the next pick finds the object in the
+  hand.
+- Each segment plans from the scene as it is. An object in the hand that the
+  goal does not want is released (open, rise 12 cm); an object to place or pour
+  that is not in the hand is picked first.
+- Replanning is long_tamp's protection for robustness, not a retry of a
+  one-shot run: when a controller that moved is done with the segment
+  undone, the runner calls the policy again within the same 150 steps, up to
+  3 calls a segment (`replans`). Planning time is not budgeted.
+
+| | Row A (resumed, R5) | Row C (uninterrupted) |
+| --- | --- | --- |
+| **Eq. 1, key state changes completed** | 94.2% (inflated by resume) | **61.4%** |
+| supported segments passed | 603 / 710 (84.9%) | 455 / 710 (64.1%) |
+| rollouts with every step done | 69% (mean over cases) | 8 / 100 (case1) |
+| mean step a passed segment registers at | 59.0 of 150 | 60.4 of 150 |
+
+| Case | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Eq. 1, row A | 0.98 | 0.75 | 1.0 | 0.83 | 1.0 | 1.0 | 0.86 | 1.0 | 1.0 | 1.0 |
+| Eq. 1, row C | 0.97 | 0.63 | 0.61 | 0.83 | 0.25 | 0.50 | 0.71 | 0.43 | 0.72 | 0.49 |
+| supported segments passed, row C | 58/60 | 24/30 | 60/100 | 50/60 | 15/60 | 30/50 | 50/60 | 30/60 | 79/100 | 59/130 |
+| rollout success, row C | 0.8 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+Of the 455 passed segments, 373 passed on their first plan. 82 took a second
+policy call, 77 of them a pick that first released what the previous place
+left in the hand; about 5 replanned after a plan that executed and missed. The
+8 complete rollouts replanned no segment. Planning took 13 CPU-hours over the
+100 rollouts, median 3.6 s a segment; 50 segments planned for over 5 minutes
+(65% of the time) and 7 of them passed. case10's seeds took 40 minutes to 2
+hours each.
+
+Without the resume a failure carries on: an `open` the policy declines leaves
+the cabinet shut for the place into it, and a place that fails leaves the
+object in the hand. The failures on every seed:
+
+| Segment | Cause |
+| --- | --- |
+| case2 3, frypan onto the rack | no region `rack_1` in the export |
+| case3 0–1, pick and place the plate | no handle of the plate plans |
+| case3 6–7, cookies onto the plate, the table | the held start collides (finger and plate) |
+| case4 5, frypan onto the cabinet top | no release pose in the region |
+| case5 1, pudding onto the plate | planned, fails in the carry; 2–5 fail after it |
+| case6 0, case8 0, case9 8, open | unsupported (#161) |
+| case6 1, pick butter | planned, fails in the lift |
+| case6 2, butter into the shut cabinet | no release pose |
+| case7 4, turn on the stove | unsupported (#161) |
+| case7 6, frypan onto the stove | no release pose in the region |
+| case8 1–2, cream cheese into the shut cabinet | planned, fails in the lift and the retreat |
+| case8 6, pour the wine | planned, fails in the tilt |
+| case9 9–10, white_bowl into the microwave | no handle of the bowl plans |
+
+case10, 13 segments with three pours and carries to a crowded table, loses
+more later in the rollout: its carries back to the coffee table do not plan
+(7 seeds for the bbq sauce), and plans that do run out of steps in the
+transit.
+
 ### Published results on RoboCerebra
 
 The paper's metric differs from ours. Its success rate (Eq. 1) is the share of a
@@ -463,10 +535,12 @@ task in one go, without resuming. Success, % (best Ideal in bold):
 not the page text. Check them against the PDF before citing.
 ‡ The columns are mapped by SparkVLA's HPE row, which repeats Table 3.
 
-Our Ideal numbers, from row A and the demo replay:
+Our Ideal numbers, from rows A and C and the demo replay:
 
 | | Ideal |
 | --- | --- |
+| **HPP policy, uninterrupted, Eq. 1 (row C)** | **61.4%** |
+| HPP policy, uninterrupted, rollouts with every step done (row C) | 8 / 100 |
 | HPP policy, supported segments passed | 603 / 710 (84.9%) |
 | HPP policy, all segments passed (unsupported counted as failed) | 603 / 760 (79.3%) |
 | HPP policy, rollout success (mean over cases) | 69% |
@@ -477,11 +551,16 @@ These numbers don't compare like-for-like:
 - **Inputs.** The HPP policy reads each segment's goal predicates and the exact
   scene state, so it should be compared with the ground-truth-plan rows, not the
   VLM-planner rows. The VLAs work from camera images.
-- **Resuming.** Every one of our segments starts from the official `resume(k)`
-  state, so an early failure doesn't carry into later segments. The published
-  rollouts run each task through without stopping.
-- **Unit.** Our unit is a segment, and theirs is a key state transition. The two
-  usually coincide, but not always.
+- **Resuming.** Row A starts every segment from the official `resume(k)`
+  state, so an early failure doesn't carry into later segments. Row C runs each
+  task through without stopping, as the published rollouts do, and is the
+  number to set beside theirs.
+- **Planning.** Our policy plans each segment before executing it and, in row
+  C, may replan within the segment's step budget; planning time is not
+  counted.
+- **Unit.** Row A's unit is a segment, and theirs is a key state transition. The
+  two usually coincide, but not always. Row C's Eq. 1 counts the benchmark's goal
+  predicates.
 - **Coverage.** We have only run Ideal; Mix and the Memory settings are still to
   do.
 

@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- RoboCerebra continuous variant (#163, M11 R8, row C on Ideal): `evaluate.py --continuous`
+  (`evaluate_case(resume=False)`) runs each rollout through without `resume(k)` and records the
+  paper's Eq. 1 per rollout (`completed_share`). A passed segment's controller runs on until
+  its stages are done, and one that moved and is done with the segment undone is replanned
+  within the segment's budget (up to 3 policy calls). `hpp_policy_continuous` plans from the
+  scene as it is: it releases an object the goal does not want in the hand and picks an object
+  to place or pour first. Row C (Ideal, 10 seeds per case): 61.4% of key state changes, 8 / 100
+  rollouts with every step done, in
+  `script/robocerebra/results/2026-10-29-r8-ideal-hpp-continuous.json`; the baseline
+  comparison page leads with it.
 - RoboCerebra pour action (#160, M11 R5): `SegmentPlanner.plan_pour` carries the held
   object upright over the receiver (centre first, then backed off towards the start and
   turned about the vertical) within the checker's 0.3 m reach, and tilts it 60, 45 or 30

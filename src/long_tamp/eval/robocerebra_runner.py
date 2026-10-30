@@ -1,4 +1,4 @@
-"""Segmented RoboCerebra evaluation with the benchmark's official resume.
+"""Segmented RoboCerebra evaluation, with or without the benchmark's resume.
 
 The policy callback receives the live client and one annotated task segment,
 and returns OSC_POSE actions for that segment: an ``(N, 7)`` array (open
@@ -6,6 +6,10 @@ loop), or a controller ``controller(obs) -> (7,)`` stepped closed loop from
 each observation (an ``info`` dict on it is recorded with the segment). This keeps planning in the
 caller (for example, a MissionRunner-backed policy) while this module owns
 seeding, the 150-step budget, benchmark resume semantics, and result records.
+
+With ``resume=False`` (row C, the continuous variant) the rollout runs
+through: each segment starts where the previous one left the scene, so an
+early failure carries into later segments, as in the published rollouts.
 """
 
 from __future__ import annotations
@@ -29,6 +33,8 @@ def evaluate_case(
     *,
     seeds: Sequence[int],
     step_limit: int = 150,
+    resume: bool = True,
+    max_attempts: int = 3,
 ) -> dict[str, Any]:
     """Evaluate one case over ``seeds``; each policy call is one segment.
 
@@ -36,7 +42,14 @@ def evaluate_case(
     or a controller called with each observation for the next action.
     Actions are applied one at a time so the first successful check stops
     the segment immediately; a controller runs until then or the budget is
-    spent. Unused budget is not carried forward.
+    spent. Unused budget is not carried forward. With ``resume``, later
+    segments start from the official ``resume(k)`` state; without it, from
+    the state the previous segment left, so a controller with a ``done``
+    attribute runs on past the success (a place still has to release and
+    retreat) until it is done or the budget is spent; one that moved and is
+    done without the segment registering is replaced by a new policy call, up to
+    ``max_attempts`` calls a segment (recorded as ``replans``).
+    ``success_step`` is the step the segment's predicates registered at.
     """
     if step_limit <= 0:
         raise ValueError("step_limit must be positive")
@@ -50,15 +63,39 @@ def evaluate_case(
         segments = []
         for index, span in enumerate(spans):
             started = time.time()
-            plan = policy(env, info, index, step_limit)
+            plan = first = policy(env, info, index, step_limit)
             policy_seconds = time.time() - started
             actions = (
                 plan if callable(plan) else _actions(plan, case, index, step_limit)
             )
-            used, monitor = 0, []
+            used, monitor, replans = 0, [], []
+            moving = _moving(actions)
             result = env.check()
-            segment_done = _segment_done(info, result, index)
-            while used < step_limit and not (result["all_done"] or segment_done):
+            success_step = 0 if _segment_done(info, result, index) else None
+            while used < step_limit and not result["all_done"]:
+                done = getattr(actions, "done", True)
+                if success_step is not None and (resume or done):
+                    break
+                if (
+                    not resume
+                    and success_step is None
+                    and moving
+                    and done
+                    and len(replans) + 1 < max_attempts
+                ):
+                    # Continuous: the controller ran out with the segment
+                    # not done; plan again from the scene as it now is.
+                    started = time.time()
+                    plan = policy(env, info, index, step_limit - used)
+                    policy_seconds += time.time() - started
+                    replans.append(dict(getattr(plan, "info", {})))
+                    actions = (
+                        plan
+                        if callable(plan)
+                        else _actions(plan, case, index, step_limit - used)
+                    )
+                    moving = _moving(actions)
+                    continue
                 if callable(actions):
                     action = np.asarray(actions(obs), dtype=float)
                 elif used < len(actions):
@@ -69,7 +106,9 @@ def evaluate_case(
                 obs = result.get("obs", obs)
                 monitor.extend(result.get("monitor", []))
                 used += 1
-                segment_done = _segment_done(info, result, index)
+                if success_step is None and _segment_done(info, result, index):
+                    success_step = used
+            segment_done = success_step is not None
             segments.append(
                 {
                     "segment": index,
@@ -77,18 +116,20 @@ def evaluate_case(
                     "demo_span": list(span),
                     "step_limit": step_limit,
                     "steps_used": used,
+                    "success_step": success_step,
                     "total_completed": result["total_completed"],
                     "total": result["total"],
                     "all_done": result["all_done"],
                     "segment_success": segment_done,
                     "policy_seconds": round(policy_seconds, 3),
                     "monitor": monitor,
-                    **({"policy": plan.info} if hasattr(plan, "info") else {}),
+                    **({"policy": first.info} if hasattr(first, "info") else {}),
+                    **({"replans": replans} if replans else {}),
                 }
             )
             if result["all_done"]:
                 break
-            if index + 1 < len(spans):
+            if resume and index + 1 < len(spans):
                 obs = env.resume(index + 1).get("obs", obs)
         final = env.check()
         rollouts.append(
@@ -97,6 +138,7 @@ def evaluate_case(
                 "success": bool(final["all_done"]),
                 "total_completed": final["total_completed"],
                 "total": final["total"],
+                "completed_share": _share(final),
                 "segments": segments,
             }
         )
@@ -104,11 +146,27 @@ def evaluate_case(
         "case": case,
         "model": info.get("model", "bddl"),
         "step_limit": step_limit,
+        "resume": resume,
         "rollouts": rollouts,
         "success_rate": (
             sum(row["success"] for row in rollouts) / len(rollouts) if rollouts else 0.0
         ),
     }
+
+
+def _moving(actions: Any) -> bool:
+    """A controller with motion to run (one done from the start holds still:
+    planning it again gives the same answer)."""
+    return callable(actions) and not getattr(actions, "done", True)
+
+
+def _share(result: dict[str, Any]) -> float:
+    """The share of the case's key transitions that hold (the paper's Eq. 1)."""
+    return (
+        round(result["total_completed"] / result["total"], 4)
+        if result["total"]
+        else 0.0
+    )
 
 
 def _actions(raw: Any, case: str, index: int, step_limit: int) -> np.ndarray:
@@ -150,10 +208,13 @@ def evaluate_cases(
     *,
     seeds: Sequence[int],
     step_limit: int = 150,
+    resume: bool = True,
 ) -> dict[str, Any]:
     """Evaluate multiple cases and report seed records and per-case SR."""
     rows = {
-        case: evaluate_case(env, case, policy, seeds=seeds, step_limit=step_limit)
+        case: evaluate_case(
+            env, case, policy, seeds=seeds, step_limit=step_limit, resume=resume
+        )
         for case in cases
     }
     return {"cases": rows, "summary": summarize(rows)}
@@ -166,6 +227,8 @@ def summarize(rows: dict[str, dict[str, Any]]) -> dict[str, Any]:
     earlier steps done, so it says little about the policy; each segment's
     own success (its predicates registered within its budget) does. Segments
     whose policy reported ``status: unsupported`` are counted apart.
+    ``completed_share`` is the paper's metric: the share of a case's key
+    transitions that hold at the end, averaged over its rollouts.
     """
     segments = [
         segment
@@ -196,6 +259,13 @@ def summarize(rows: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "success_rate_by_case": {
             case: row["success_rate"] for case, row in rows.items()
         },
+        "completed_share": _mean(
+            [_share(r) for row in rows.values() for r in row["rollouts"]]
+        ),
+        "completed_share_by_case": {
+            case: _mean([_share(r) for r in row["rollouts"]])
+            for case, row in rows.items()
+        },
         "segments": len(segments),
         "unsupported_segments": len(unsupported),
         "supported_segments": len(supported),
@@ -205,11 +275,20 @@ def summarize(rows: dict[str, dict[str, Any]]) -> dict[str, Any]:
         ),
         "supported_segment_success_by_case": by_case,
         "mean_steps_used_on_success": (
-            round(sum(s["steps_used"] for s in passed) / len(passed), 1)
+            round(sum(_success_step(s) for s in passed) / len(passed), 1)
             if passed
             else None
         ),
     }
+
+
+def _success_step(segment: dict[str, Any]) -> int:
+    step = segment.get("success_step")  # absent from results before row C
+    return segment["steps_used"] if step is None else step
+
+
+def _mean(values: Sequence[float]) -> float:
+    return round(sum(values) / len(values), 4) if values else 0.0
 
 
 def merge_results(parts: Sequence[dict[str, Any]]) -> dict[str, Any]:
@@ -221,6 +300,8 @@ def merge_results(parts: Sequence[dict[str, Any]]) -> dict[str, Any]:
             merged = rows.setdefault(case, {**row, "rollouts": []})
             if merged["step_limit"] != row["step_limit"]:
                 raise ValueError(f"{case}: step limits differ")
+            if merged.get("resume", True) != row.get("resume", True):
+                raise ValueError(f"{case}: resumed and continuous runs mixed")
             merged["rollouts"].extend(row["rollouts"])
     for case, row in rows.items():
         seeds = [rollout["seed"] for rollout in row["rollouts"]]
