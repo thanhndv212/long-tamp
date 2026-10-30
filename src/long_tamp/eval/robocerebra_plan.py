@@ -745,7 +745,9 @@ class SegmentPlanner:
         (:func:`place_heights`), and as near the center as the hand fits
         (:func:`place_positions`). The hand is tried as it holds the object first,
         then turned to approach horizontally from each side (a storage
-        box's compartment opens sideways). The carry ends ``approach`` back
+        box's compartment opens sideways), in :func:`place_orientations`'
+        order; one with the fingers closing vertically only after all the
+        others (``info["fingers"]``). The carry ends ``approach`` back
         along the approach axis; a straight move inserts the object,
         releases it, and backs out the same way.
         """
@@ -763,7 +765,7 @@ class SegmentPlanner:
         corners = object_corners(
             self.scene.manifest["objects"][self.target].get("bottom")
         )
-        found = None
+        candidates, vertical = [], []
         for name, rotation in place_orientations(tcp_start):
             # The object square to the world: a grasp's tilt goes to the
             # hand, not into how high the object stands.
@@ -779,11 +781,16 @@ class SegmentPlanner:
                 info["rejected"][name] = "rests out of the region's z range"
                 continue
             hand = obj @ inverse(object_in_tcp)
-            if abs(hand[2, 1]) > 0.5:
-                # Fingers above and below: opening them leaves the object
-                # lying on the lower one.
-                info["rejected"][name] = "fingers close vertically"
-                continue
+            # Fingers above and below: opening them may leave the object
+            # lying on the lower one. Tried last, for a rim pinch that has
+            # no other way to hold it.
+            group = vertical if abs(hand[2, 1]) > 0.5 else candidates
+            group.append((name, obj, heights, hand))
+        # A rim pinch keeps the object upright as held, turned if need be,
+        # before standing it on its side.
+        vertical.sort(key=lambda candidate: not candidate[0].startswith("held"))
+        found = None
+        for name, obj, heights, hand in candidates + vertical:
             approach_axis = hand[:3, 2]
             for xy, z in place_positions(region, approach_axis, heights, step):
                 obj[:3, 3] = [xy[0], xy[1], z]
@@ -802,6 +809,8 @@ class SegmentPlanner:
             )
         name, position, goal, (q_pre, q_place) = found
         info.update(orientation=name, object_goal=position)
+        if any(name == other for other, *_ in vertical):
+            info["fingers"] = "vertical"
         with self._validations() as problem:
             direct = self._line(q_start, q_pre, problem)
         if direct is not None:
@@ -1187,7 +1196,10 @@ def _extent(pose: np.ndarray, corners: np.ndarray | None, sign: int) -> float:
 def place_orientations(tcp: np.ndarray) -> list[tuple[str, np.ndarray]]:
     """World rotations to try for the hand at a release: none (as it
     holds the object), then turning its approach axis horizontal towards
-    each of +-x, +-y, at each quarter turn about that axis."""
+    each of +-x, +-y, at each quarter turn about that axis; last, as it
+    holds the object turned about the vertical by a quarter, a half and
+    three quarters (the hand on the near side of a wide object whose far
+    side is out of reach)."""
     out = [("held", np.eye(3))]
     approach = tcp[:3, 2]
     for name, direction in (
@@ -1205,6 +1217,10 @@ def place_orientations(tcp: np.ndarray) -> list[tuple[str, np.ndarray]]:
                     _axis_angle(direction, np.pi / 2 * quarter) @ align,
                 )
             )
+    for quarter in (1, 2, 3):
+        out.append(
+            (f"held/{90 * quarter}", _axis_angle(np.eye(3)[2], np.pi / 2 * quarter))
+        )
     return out
 
 

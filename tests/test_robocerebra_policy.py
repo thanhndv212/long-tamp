@@ -203,8 +203,15 @@ def test_place_orientations_turn_approach_horizontal():
     tcp = np.eye(4)
     tcp[:3, :3] = np.diag([1.0, -1.0, -1.0])  # top-down
     options = dict(place_orientations(tcp))
-    assert len(options) == 17 and np.allclose(options["held"], np.eye(3))
+    assert len(options) == 20 and np.allclose(options["held"], np.eye(3))
     assert np.allclose(options["-y/0"] @ tcp[:3, 2], [0.0, -1.0, 0.0])
+    # The held turns come last, about the vertical only.
+    assert [name for name, _ in place_orientations(tcp)[-3:]] == [
+        "held/90",
+        "held/180",
+        "held/270",
+    ]
+    assert np.allclose(options["held/180"], np.diag([-1.0, -1.0, 1.0]))
     for R in options.values():
         assert np.allclose(R @ R.T, np.eye(3)) and np.linalg.det(R) == pytest.approx(
             1.0
