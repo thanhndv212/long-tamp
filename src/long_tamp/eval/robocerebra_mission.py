@@ -387,18 +387,23 @@ class RoboCerebraDomain(BaseMissionDomain):
         try:
             plan = policy.plan(world.env, goal, name, record)
         except UnsupportedGoal as error:
-            return _unplanned(f"unsupported({obj})", str(error), q, record)
+            result = _unplanned(f"unsupported({obj})", str(error), q, record)
         except Exception as error:
             record.update(getattr(error, "info", {}))
-            return _unplanned(
+            result = _unplanned(
                 f"refinement_failed({name})",
                 f"{type(error).__name__}: {error}",
                 q,
                 record,
             )
-        record.update(plan.info, plan_seconds=round(time.time() - started, 3))
-        controller = SegmentController(plan.stages, plan.tcp_start, record)
-        return _planned(EnvMotion(controller, expect), "planned", q)
+        else:
+            record.update(plan.info, plan_seconds=round(time.time() - started, 3))
+            controller = SegmentController(plan.stages, plan.tcp_start, record)
+            return _planned(EnvMotion(controller, expect), "planned", q)
+        world.unplanned.append(
+            {**record, "message": result["message"], "facts": result["facts"]}
+        )
+        return result
 
 
 def _planned(motion: EnvMotion, message: str, q: Sequence[float]) -> dict[str, Any]:
@@ -430,13 +435,15 @@ def _unplanned(
 class EnvWorld:
     """The env as the mission sees it: the checker's counters and the
     object both fingers touch, read again only after the env stepped, and
-    the env steps left of the rollout's ``budget``."""
+    the env steps left of the rollout's ``budget``. ``unplanned`` keeps the
+    record of each step that did not plan, which the runner drops."""
 
     env: Any
     budget: int
     obs: dict[str, Any] = field(default_factory=dict)
     used: int = 0
     result: dict[str, Any] | None = None
+    unplanned: list[dict[str, Any]] = field(default_factory=list)
     _progress: dict[str, int] | None = field(default=None, repr=False)
     _held: tuple[str | None] | None = field(default=None, repr=False)
 
@@ -668,6 +675,7 @@ def run_mission_case(
             "unsupported": domain.unsupported(),
             "rounds": rounds,
             "executions": backend.log,
+            "unplanned": world.unplanned,
         },
     }
 

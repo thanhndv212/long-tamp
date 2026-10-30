@@ -286,10 +286,12 @@ class FakeController:
 
 class FakePolicy:
     """Plans every goal; ``fail`` says how many times a ``(kind, object)``
-    plan runs without effect (-1: always), ``unsupported`` which raise."""
+    plan runs without effect (-1: always), ``unsupported`` which raise
+    ``UnsupportedGoal`` and ``broken`` which raise ``PlanningError``."""
 
-    def __init__(self, env, fail=None, unsupported=()):
+    def __init__(self, env, fail=None, unsupported=(), broken=()):
         self.env, self.fail, self.unsupported = env, dict(fail or {}), set(unsupported)
+        self.broken = set(broken)
         self.calls = []
 
     def plan(self, env, goal, name, record):
@@ -299,6 +301,11 @@ class FakePolicy:
         key = (goal.kind, goal.obj)
         if key in self.unsupported:
             raise UnsupportedGoal(f"no region {goal.region!r} in the scene")
+        if key in self.broken:
+            from long_tamp.eval.robocerebra_plan import PlanningError
+
+            tried = [{"handle": "grasp_0", "success": False, "message": "collides"}]
+            raise PlanningError(f"no handle of {goal.obj} plans", {"tried": tried})
         effect = None if self._fails(key) else (lambda: self._apply(goal))
         return types.SimpleNamespace(stages=effect, tcp_start=None, info={})
 
@@ -332,7 +339,10 @@ def fake(monkeypatch):
     def run(goal, seed=0, **options):
         env = FakeEnv(goal)
         policy = FakePolicy(
-            env, options.pop("fail", None), options.pop("unsupported", ())
+            env,
+            options.pop("fail", None),
+            options.pop("unsupported", ()),
+            options.pop("broken", ()),
         )
         row = robocerebra_mission.run_mission_case(
             env, env.info, seed, policy, **options
@@ -401,6 +411,21 @@ def test_an_unsupported_region_is_given_up_on_without_retries(fake):
     mission = row["mission"]
     assert "plate_1" in mission["given_up"]
     assert policy.calls.count(("placed", "plate_1")) == 1
+    # The step that did not plan is kept, with why.
+    (unplanned,) = mission["unplanned"]
+    assert unplanned["facts"] == ["unsupported(plate_1)"]
+
+
+def test_a_step_that_does_not_plan_keeps_why(fake):
+    env, policy, row = fake(CASE3, broken=[("grasped", "plate_1")])
+    mission = row["mission"]
+    assert "plate_1" in mission["given_up"]
+    assert policy.calls.count(("grasped", "plate_1")) == 3
+    unplanned = mission["unplanned"]
+    assert len(unplanned) == 3
+    assert unplanned[0]["message"] == "PlanningError: no handle of plate_1 plans"
+    assert unplanned[0]["tried"][0]["message"] == "collides"
+    assert unplanned[0]["facts"][0].startswith("refinement_failed(")
 
 
 def test_the_budget_is_shared_by_the_whole_rollout(fake):
