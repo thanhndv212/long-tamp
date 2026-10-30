@@ -69,3 +69,15 @@ backend can't open. The execution summary also has screw-only keys (`screws_driv
   `reset_grasp_tracker_to_call_start`, so a refiner other than the grasp-sequence one
   must keep a tracker of that shape. That and `held` (gripper → handle) are what remain
   screw-shaped; #159 will tell.
+- Amended by #186: the second domain, RoboCerebra, runs on the runner unchanged.
+  - It uses `run_with_repair` only: no supervisor, drift check or plan-ahead. Its steps
+    are `Move`s, so the refiner is never called.
+  - The tracker requirement is met by `KinematicPlanner`, a stub with an empty tracker.
+    `recover_missed_grasp` then does nothing harmful: the backend has no `open_gripper`,
+    and the domain releases through a `putdown` step instead.
+  - The backend (`RoboCerebraBackend`) is the env: it steps the controller a chunk at a
+    time per `poll`, sends a heartbeat each chunk, caps a step at 150 env steps, and fails
+    with `budget_spent()` once the case's budget is used. The budget is shared by every
+    round of repair.
+  - The runner's tracker reads are still screw-shaped, but a domain without a tracker
+    can live with them.
