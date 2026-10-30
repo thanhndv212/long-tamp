@@ -293,11 +293,11 @@ def test_controller_without_stages_holds_closed():
 
 
 def test_policy_reports_a_missing_region_as_unsupported(monkeypatch):
-    def no_region(env, goal, segment, record):
+    def no_region(env, goal, name, record):
         raise UnsupportedGoal(f"no region {goal.region!r} in the scene")
 
     policy = HppPolicy()
-    monkeypatch.setattr(policy, "_plan", no_region)
+    monkeypatch.setattr(policy, "plan", no_region)
     info = {"goal": {"pan": [["on", "pan", "rack_1"]]}, "goal_steps": {"pan": [0]}}
     controller = policy(None, info, 0, 150)
     assert controller.info["status"] == "unsupported"

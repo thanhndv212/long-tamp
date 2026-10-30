@@ -331,6 +331,9 @@ planner-based entry has been published. #153 is split into:
 - [ ] [#162](https://github.com/thanhndv212/long-tamp/issues/162) R7 Disturbance, mismatch and mix conditions (needs #151, #145)
 - [ ] [#163](https://github.com/thanhndv212/long-tamp/issues/163) R8 Continuous variant and results tables
       (row C on Ideal in: 61.4% by Eq. 1; the other conditions wait on #162)
+- [ ] [#186](https://github.com/thanhndv212/long-tamp/issues/186) R9 Whole-task planning on `long_tamp.mission` (row D)
+      (row D on Ideal in: 64.3% by Eq. 1; follow-ups #187 place on an object, #188 flat-object
+      grasp, #189 held start in collision, #190 tracker stall)
 
 The first number to publish is the Ideal condition on pick/in/on subtasks (#156 → #159, about
 68% of subtasks). Row A is in: 412 of 540 supported segments (76.3%) over 10 Ideal cases ×
@@ -339,7 +342,8 @@ supported share is 93.4% and 603 of 710 supported segments pass (84.9%), every p
 (`script/robocerebra/results/2026-10-29-r5-ideal-hpp-pour.json`). Run through without the resume,
 as the published methods run (row C, #163), the policy completes 61.4% of the Ideal tasks' key
 state changes by the paper's Eq. 1, and 8 of 100 rollouts complete every step
-(`script/robocerebra/results/2026-10-29-r8-ideal-hpp-continuous.json`). Articulated objects (#161) are the critical path to the full table.
+(`script/robocerebra/results/2026-10-29-r8-ideal-hpp-continuous.json`). Handed to `long_tamp.mission` as one goal a rollout (row D, #186), with the
+step budget shared over the rollout, it completes 64.3% (`script/robocerebra/results/2026-10-30-r9-ideal-hpp-mission.json`). Articulated objects (#161) are the critical path to the full table.
 
 **Exit test:** 20 SO-101 sim missions from language instructions with the simulated camera and injected disturbances complete or escalate cleanly; RoboCerebra results for all six conditions committed with seeds (privileged state, simulated camera, continuous variant); a recorded video.
 

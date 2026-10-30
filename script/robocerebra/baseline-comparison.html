@@ -72,7 +72,7 @@ a { color: inherit; text-underline-offset: 2px; }
 }
 
 /* Hero + tiles */
-.tiles { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 16px; margin-top: 24px; }
+.tiles { display: grid; grid-template-columns: 1.4fr 1.2fr 1fr 1fr; gap: 16px; margin-top: 24px; }
 .tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
 .tile .label { font-size: 13px; color: var(--text-secondary); }
 .tile .value { font-size: 34px; font-weight: 620; line-height: 1.15; margin: 6px 0 4px; }
@@ -161,13 +161,15 @@ details summary { cursor: pointer; font-size: 13px; color: var(--text-secondary)
 <main>
   <div class="toolbar"><button id="theme" type="button">Toggle dark mode</button></div>
   <h1>RoboCerebra: our HPP segment policy against the published baselines</h1>
-  <p class="meta">long-tamp · #159 / #160 / #163 · 29 Oct 2026 · Ideal setting only on our side</p>
+  <p class="meta">long-tamp · #159 / #160 / #163 / #186 · 30 Oct 2026 · Ideal setting only on our side</p>
   <p class="lede">Run like the published methods, each task in one uninterrupted rollout
     and scored with the paper's Eq. 1, our HPP policy completes <strong>61.4 %</strong> of
     the Ideal tasks' key state changes (row C). The best published method, SparkVLA, scores
     46.4 %, and the best published run that is handed the ground-truth plan scores 31.2 %.
+    Handed to <code>long_tamp.mission</code> as one goal a rollout (row D), with the step
+    budget shared over the rollout and failed steps replanned, it completes 64.3 %.
     With the benchmark's resume before every segment (row A) the policy passes 79.3 % of
-    segments; that is an upper bound, not a score. <strong>Neither is a like-for-like
+    segments; that is an upper bound, not a score. <strong>None is a like-for-like
     win.</strong> Our policy reads the simulator's exact object poses and is given each
     subtask's goal; the VLAs see only camera images. Read the numbers below as "what a
     model-based planner reaches with privileged state", not as a leaderboard entry.</p>
@@ -177,6 +179,11 @@ details summary { cursor: pointer; font-size: 13px; color: var(--text-secondary)
       <div class="label"><span class="key" style="background:var(--series-ours)"></span>Ours, HPP policy: Ideal, uninterrupted, Eq. 1</div>
       <div class="value">61.4 %</div>
       <div class="note">Row C, 100 rollouts. Segments we can't attempt count as failures; 8 rollouts complete every step.</div>
+    </div>
+    <div class="tile">
+      <div class="label"><span class="key" style="background:var(--series-ours)"></span>Ours, one mission a rollout: Ideal, Eq. 1</div>
+      <div class="value">64.3 %</div>
+      <div class="note">Row D, 100 rollouts. 150 env steps per task step, shared over the rollout; 8 rollouts complete every step.</div>
     </div>
     <div class="tile">
       <div class="label"><span class="key" style="background:var(--series-gt)"></span>Best published run given the ground-truth plan</div>
@@ -344,7 +351,8 @@ details summary { cursor: pointer; font-size: 13px; color: var(--text-secondary)
   <h3>To make the comparison fair</h3>
   <ol>
     <li><s><strong>Run uninterrupted episodes.</strong></s> Done: row C drops
-      <code>resume(k)</code>, chains the segments and scores with Eq. 1 (61.4 %).</li>
+      <code>resume(k)</code>, chains the segments and scores with Eq. 1 (61.4 %). Row D plans
+      the whole task as one mission (64.3 %), with the step budget shared over the rollout.</li>
     <li><strong>Count every declined segment as a failure</strong>, or add the missing
       skills (<code>open</code>, <code>turnon</code>).</li>
     <li><strong>Run all six settings</strong>, so there is an Avg to set beside theirs.
@@ -362,7 +370,7 @@ details summary { cursor: pointer; font-size: 13px; color: var(--text-secondary)
     <li><a href="https://arxiv.org/abs/2608.16172">SparkVLA, arXiv 2608.16172</a>, Table 1.
       <strong>‡</strong> The extracted table lost its column headers. The columns were placed by matching its HPE row, which repeats RoboCerebra's Table 3 value for value.</li>
     <li><a href="https://arxiv.org/abs/2608.09516">HarnessWAM, arXiv 2608.09516</a>. The abstract reports Ideal only.</li>
-    <li>Ours: <code>results/2026-10-29-r8-ideal-hpp-continuous.json</code> (row C, uninterrupted), <code>results/2026-10-29-r5-ideal-hpp-pour.json</code> (row A, with pour; R4 before it: <code>results/2026-10-25-r4-ideal-hpp.json</code>) and <code>results/2026-10-17-r1-replay-ideal-demo.json</code> (demo replay, 56/76 subtasks).</li>
+    <li>Ours: <code>results/2026-10-30-r9-ideal-hpp-mission.json</code> (row D, one mission a rollout), <code>results/2026-10-29-r8-ideal-hpp-continuous.json</code> (row C, uninterrupted), <code>results/2026-10-29-r5-ideal-hpp-pour.json</code> (row A, with pour; R4 before it: <code>results/2026-10-25-r4-ideal-hpp.json</code>) and <code>results/2026-10-17-r1-replay-ideal-demo.json</code> (demo replay, 56/76 subtasks).</li>
   </ul>
 </main>
 <div class="tip" id="tip" role="tooltip"></div>
@@ -389,6 +397,7 @@ const IDEAL = [
   { g: "gt", name: "Ground-truth plan + OpenVLA", v: 31.23, src: "RoboCerebra Tables 4, 6 †" },
   { g: "ours", name: "Row C, uninterrupted: rollout success", v: 8.0, src: "row C; 8 of 100 rollouts, all case1", note: "Every step of the task done in one rollout." },
   { g: "ours", name: "Row C, uninterrupted: Eq. 1 (headline)", v: 61.4, src: "row C, 10 cases × 10 seeds", note: "Same protocol as the published runs; unsupported steps count as failures." },
+  { g: "ours", name: "Row D, one mission: Eq. 1", v: 64.3, src: "row D, 10 cases × 10 seeds", note: "Whole goal to long_tamp.mission; step budget shared over the rollout." },
   { g: "ours", name: "Row A, resumed: rollout success", v: 69.0, src: "row A; mean of per-case rollout success", note: "Not comparable: resumes mark earlier steps done." },
   { g: "ours", name: "Row A, resumed: all segments passed", v: 79.3, src: "row A, 603 / 760", note: "Upper bound: an early failure never carries on." },
   { g: "ours", name: "Row A, resumed: supported segments passed", v: 84.9, src: "row A, 603 / 710", note: "Leaves out 7 % of segments; not comparable." },
@@ -408,6 +417,7 @@ const HEAT = [
   ["Ground-truth plan + OpenVLA", "RoboCerebra T4/6 †", [25.16, 26.85, 30.68, 19.47, 23.48, 19.26, 31.23]],
   ["SparkVLA", "SparkVLA T1 ‡", [47.12, 33.13, 43.87, 60.30, 43.58, 48.52, 46.38]],
   ["Ours: HPP, uninterrupted, Eq. 1", "row C", [null, null, null, null, null, null, 61.4], true],
+  ["Ours: HPP, one mission, Eq. 1", "row D", [null, null, null, null, null, null, 64.3], true],
   ["Ours: HPP, resumed, all segments", "row A", [null, null, null, null, null, null, 79.3], true],
 ];
 // [case, passed, failed, unsupported, segments per rollout, rollout success]

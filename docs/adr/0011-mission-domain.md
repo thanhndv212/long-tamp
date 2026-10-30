@@ -88,5 +88,23 @@ the domain is written down.
   returns the domain's live 3D scene, or None, for the generic mission UI
   (`python -m long_tamp.mission ui`). The scene's `extras["refiner"]` and `extras["facts"]`
   are the runner's default refiner and the recorded facts true at the start.
+- Amended by #186 (no change to the protocol): the second real domain is
+  `RoboCerebraDomain` (`long_tamp.eval.robocerebra_mission`), one RoboCerebra case run as
+  one mission in the benchmark's env. It needed no new member. What it settled:
+  - `held` stays as it is. A domain without a grasp tracker overrides `world_state` and
+    reports object-level `grasped` from what the env observes (finger contacts, progress);
+  - facts that never change at run time (the case's goal chain, `next`, `rest`) go in
+    `static_preconditions`. The run-time preconditions name only what `world_state`
+    reports, since the session checks those against the world;
+  - `Move.spec` stays opaque. It carries the capability and its binding, and
+    `plan_move` refines it (here through the row C policy). The path it returns is an env
+    controller with no duration, so the executor bounds it by heartbeats (ADR-0004);
+  - `retry(failure)` means "replan from the observed world". The domain says no when
+    replanning can't help: the budget is spent, a goal is unsupported, or the step
+    did not plan (the same geometry would fail the same way). An execution miss is
+    retried.
+
+  The protocol is no longer provisional for single-arm pick/place. The hardware showcase
+  (M7–M10) may still change it.
 - The protocol has many members (about 25). That is the price of making the boundary
   explicit. Most of them come from `BaseMissionDomain`.

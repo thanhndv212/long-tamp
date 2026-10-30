@@ -158,6 +158,11 @@ reported as `unsupported` (`supported_segment_success_by_case` per case);
 `long_tamp.eval.robocerebra_policy:hpp_policy_continuous`; the summary's
 `completed_share` is the paper's Eq. 1.
 
+`--mission` (row D) hands each rollout's whole goal to `long_tamp.mission`:
+`long_tamp.eval.robocerebra_mission:evaluate_mission_case` describes the case as
+a mission domain and runs it with `MissionRunner.run_with_repair` in the env,
+with a step budget of 150 × the case's steps shared over the rollout.
+
 Long runs can be split, one case and seed per process run in parallel, and
 joined:
 
@@ -509,6 +514,101 @@ more later in the rollout: its carries back to the coffee table do not plan
 (7 seeds for the bbq sauce), and plans that do run out of steps in the
 transit.
 
+### Row D: Ideal, one mission per rollout (#186)
+
+`results/2026-10-30-r9-ideal-hpp-mission.json`: the 10 Ideal cases × seeds 0–9, each rollout one
+`long_tamp.mission` run over the case's whole goal instead of a policy called
+segment by segment. `RoboCerebraDomain` turns the case into a symbolic domain:
+
+- capabilities `pick`, `place`, `pour`, `regrasp` and `putdown` over the case's
+  objects, with a stage per goal step of each object, so an object's steps
+  run in the case's order. The order across objects is the task planner's,
+  not the case's;
+- the world it plans from is what the env observes: the benchmark's progress
+  and the object between the fingers;
+- each step is a `Move` that the row C policy (`HppPolicy.plan`) refines in HPP
+  from the scene as it is, and the env runs as the backend.
+
+When a step ends with its goal missed, the object dropped or still in the hand,
+the runner replans from the observed world (`run_with_repair`, 2 retries a
+step). An object that keeps failing, or whose goal is unsupported, is given up
+on: put down, and the rest of the goal planned without it.
+
+The step budget differs from rows A and C: 150 env steps × the case's steps,
+shared over the rollout rather than 150 a segment, and one step is cut at 150.
+A step that finishes early leaves its steps to later ones; retries spend from
+the same budget. Planning time is not budgeted.
+
+| | Row C (per segment) | Row D (one mission) |
+| --- | --- | --- |
+| **Eq. 1, key state changes completed** | 61.4% | **64.3%** |
+| rollouts with every step done | 8 / 100 (case1) | 8 / 100 (7 case1, 1 case5) |
+| budget used (mean) | – | 48.9%; 1 rollout spent it all |
+| steps retried | 82 policy calls | 230 retries |
+| objects given up on | – | 107 over 100 rollouts |
+
+| Case | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Eq. 1, row C | 0.97 | 0.63 | 0.61 | 0.83 | 0.25 | 0.50 | 0.71 | 0.43 | 0.72 | 0.49 |
+| Eq. 1, row D | 0.92 | 0.75 | 0.60 | 0.83 | 0.48 | 0.47 | 0.43 | 0.51 | 0.71 | 0.73 |
+| rollout success, row D | 0.7 | 0 | 0 | 0 | 0.1 | 0 | 0 | 0 | 0 | 0 |
+
+Where row D gains, a failure no longer carries on: the object is put down
+and the rest of the goal planned without it, and a step that finishes early
+leaves its env steps to the later ones. case5 goes from 0.25 to 0.48 and
+case10 from 0.49 to 0.73 (in row C its plans ran out of steps in the
+transit).
+
+Where it loses, the planner chose the order. case7 (0.71 → 0.43) does the
+frypan first: its place on the stove has no release pose, so it is put down
+where the hand is, and from there no handle of the pudding plans, on every
+seed. case1 (0.97 → 0.92) loses the butter's place into the storage box side
+twice, and one rollout spent its whole budget.
+
+Of the 230 retries, 19 were of a step that executed and missed (a grasp that
+stalled, mostly) and passed on the retry, 10 of them in case8. Most of the
+rest replan a refinement that fails again the same way: no handle, no
+release pose. None of the 235 such replans planned, so since this run a step
+that does not plan (`refinement_failed`) is not retried; only an execution miss
+is. 107 objects were given up on.
+
+The rollouts took 9.4 hours, median 9 s to 70 s a rollout in cases 1–4,
+6 and 9, and 44 minutes in case10. Planning time is not budgeted.
+
+The failures on every seed, or nearly:
+
+| Step | Cause |
+| --- | --- |
+| case2, frypan onto the rack | `rack_1` is an object, not a region (#187) |
+| case3, pick the plate | no handle of the plate plans (#188) |
+| case3, pour the cookies onto the plate | the held start collides, finger and cookies (#189) |
+| case4, frypan onto the cabinet top | no release pose in the region |
+| case5, pour the pudding onto the plate | does not plan (8 seeds) |
+| case5, wine bottle onto the table | no release pose (6 seeds), the grasp stalls (4) |
+| case7, frypan onto the stove | no release pose; put down, it blocks the pudding |
+| case10, bbq sauce back onto the table | does not plan (8 seeds) |
+| case6, 8, 9 open; case7 turn on | unsupported (#161) |
+
+A step cut at 150 env steps in its tracker (#190) counts as a miss and is
+retried.
+
+#### Since the run: a pick checked against the step after it
+
+Planned one step at a time, a mission can pick an object whose place
+cannot plan from its grasp (case7's frypan above). Each pick is now
+checked: once it plans, the place or pour after it is planned too, held
+mode, from the scene the lift leaves (the robot's joints and the object's
+pose at the top of the lift; the fingers as exported, open). When that does
+not plan, the pick fails with `lookahead_failed(object)`, is not retried,
+and the object is deferred: the others go first, then it is picked without
+the check (the pick counts) and put down when its place fails.
+`--no-lookahead` runs the mission as above.
+
+On case7, seed 0: the frypan is deferred for the reason its place gave in
+the run ("no release pose ... in flat_stove_1_cook_region"), the butter and
+pudding pours run first, and the case goes from 3/7 to 5/7 (0.71, row C's
+score) in 367 s instead of 457 s. The full rerun is pending.
+
 ### Published results on RoboCerebra
 
 The paper's metric differs from ours. Its success rate (Eq. 1) is the share of a
@@ -540,6 +640,7 @@ Our Ideal numbers, from rows A and C and the demo replay:
 | | Ideal |
 | --- | --- |
 | **HPP policy, uninterrupted, Eq. 1 (row C)** | **61.4%** |
+| HPP mission, one per rollout, Eq. 1 (row D) | 64.3% |
 | HPP policy, uninterrupted, rollouts with every step done (row C) | 8 / 100 |
 | HPP policy, supported segments passed | 603 / 710 (84.9%) |
 | HPP policy, all segments passed (unsupported counted as failed) | 603 / 760 (79.3%) |

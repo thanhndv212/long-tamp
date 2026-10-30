@@ -16,6 +16,12 @@ The HPP policy (#159, row A)::
 Row C, the continuous variant (#163), runs each rollout through without
 ``resume(k)``: add ``--continuous``.
 
+Row D (#186) hands each case's whole goal to long_tamp's mission loop
+instead of a policy per segment, with one budget of ``--step-limit`` env
+steps per task step for the rollout: ``--mission`` (no ``--policy``). Each
+pick is checked against the place or pour after it, and an object whose
+next step would not plan is left for last; ``--no-lookahead`` turns that off.
+
 Long runs can be split, one case and seed per process run in parallel, and
 joined afterwards::
 
@@ -67,6 +73,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="no resume(k) between segments (row C)",
     )
+    parser.add_argument(
+        "--mission",
+        action="store_true",
+        help="the whole goal as one mission, MissionRunner.run_with_repair (row D)",
+    )
+    parser.add_argument(
+        "--no-lookahead",
+        action="store_true",
+        help="with --mission, do not check a pick against the place or pour after it",
+    )
     parser.add_argument("--env-sh", default="~/devel/hpp/robocerebra/env.sh")
     parser.add_argument(
         "--bench", default=os.environ.get("RC_BENCH"), help="RoboCerebra_Bench (default: env.sh's RC_BENCH)"
@@ -86,29 +102,57 @@ def main(argv: list[str] | None = None) -> int:
         result["seeds"] = sorted({seed for part in parts for seed in part.get("seeds", [])})
         result["protocol"] = parts[0].get("protocol")
         return _write(result, Path(args.out))
-    if not args.policy:
-        parser.error("--policy is required unless --merge")
+    if args.mission and (args.policy or args.continuous):
+        parser.error("--mission takes neither --policy nor --continuous")
+    if not args.policy and not args.mission:
+        parser.error("--policy or --mission is required unless --merge")
     if args.rollouts < 1:
         parser.error("--rollouts must be positive")
     cases = args.cases
-    policy = _load_policy(args.policy)
     seeds = list(range(args.seed, args.seed + args.rollouts))
     command = server_command(args.env_sh, args.bench, no_render=True)
     with RoboCerebraClient.spawn(command) as env:
         cases = cases or [case for case in env.cases() if case.startswith("Ideal/")]
-        result: dict[str, Any] = evaluate_cases(
-            env,
-            cases,
-            policy,
-            seeds=seeds,
-            step_limit=args.step_limit,
-            resume=not args.continuous,
-        )
-    result["policy"] = args.policy
+        if args.mission:
+            result = _run_missions(env, cases, seeds, args.step_limit, lookahead=not args.no_lookahead)
+        else:
+            result = evaluate_cases(
+                env,
+                cases,
+                _load_policy(args.policy),
+                seeds=seeds,
+                step_limit=args.step_limit,
+                resume=not args.continuous,
+            )
+            result["policy"] = args.policy
+            between = "no resume" if args.continuous else "resume(k)"
+            result["protocol"] = f"reset(seed); per-segment policy; {between}; OSC_POSE"
     result["seeds"] = seeds
-    between = "no resume" if args.continuous else "resume(k)"
-    result["protocol"] = f"reset(seed); per-segment policy; {between}; OSC_POSE"
     return _write(result, Path(args.out))
+
+
+def _run_missions(
+    env: RoboCerebraClient, cases: list[str], seeds: list[int], step_factor: int, lookahead: bool = True
+) -> dict[str, Any]:
+    from long_tamp.eval.robocerebra_mission import evaluate_mission_case
+    from long_tamp.eval.robocerebra_policy import HppPolicy
+    from long_tamp.eval.robocerebra_runner import summarize
+
+    policy = HppPolicy()
+    rows = {
+        case: evaluate_mission_case(env, case, seeds=seeds, policy=policy, step_factor=step_factor, lookahead=lookahead)
+        for case in cases
+    }
+    ahead = "; a pick checked against the place or pour after it" if lookahead else ""
+    return {
+        "cases": rows,
+        "summary": summarize(rows),
+        "policy": "long_tamp.eval.robocerebra_mission:evaluate_mission_case",
+        "protocol": (
+            f"reset(seed); one mission over the whole goal (run_with_repair); "
+            f"{step_factor} env steps per task step, shared{ahead}; OSC_POSE"
+        ),
+    }
 
 
 def _write(result: dict[str, Any], output: Path) -> int:
