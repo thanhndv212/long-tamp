@@ -272,6 +272,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A RoboCerebra segment no longer plans the robot or the target through an obstacle hidden
+  behind a bystander's collision (#193). HPP reports only a configuration's first collision,
+  and one between objects the segment does not move (MuJoCo leaves them a millimetre inside
+  their supports; a butter wedges between a rack's pegs) was judged harmless, so a mug was
+  planned through `rack_1`'s pegs. `SegmentPlanner` now drops the pairs no motion of the
+  segment changes (between two such objects; the hand and the held target) and raises
+  objects sunk into the environment out, up to 1 cm (`info["settled"]`). Row A, seed 0:
+  Memory_Execution 1–3 14/23 → 16/23 supported steps, the mug resting on the rack in all
+  three; Ideal 64/72 → 67/72. A mug released over the pegs can still tip off in row C.
 - `YamlTaskLoader` passed grouped `environment_contacts` (`{env: [env/surface, ...]}`)
   to the factory as the environment names; it now passes the surfaces.
 - `PANDA_HAND`'s finger pads are measured on `script/twin/assets/panda_bimanual.urdf.template`
