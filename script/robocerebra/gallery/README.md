@@ -28,3 +28,22 @@ python3 script/robocerebra/gallery/build_html.py \
 The page compares each class's recorded verdict with the rerun's and flags a
 difference. Failure causes are in `CAUSE` in `build_html.py`; keep them in step
 with the README's AC2 table.
+
+## Rollouts (rows C and D)
+
+Whole rollouts, rerun at one seed with rendering on: the same policy and budgets as
+`evaluate.py --continuous` (row C) or `--mission` (row D). Rendering costs ~0.35 s a
+step, so record the rollouts a change is about, not the full run:
+
+```bash
+python script/robocerebra/gallery/capture_rollout.py C Ideal/case2 Ideal/case7   # in the container
+python script/robocerebra/gallery/capture_rollout.py D Ideal/case2 --seed 0
+script/robocerebra/gallery/encode.sh out_rollout                                 # on the host
+python3 script/robocerebra/gallery/build_rollout_html.py \
+  script/robocerebra/gallery/out_rollout script/robocerebra/results/rollout-gallery
+```
+
+The page (`../results/rollout-gallery/index.html`) shows each rollout's video and a
+keyframe at every subtask the benchmark's monitor reported completed. A row D rollout
+is not reproducible at a fixed seed (the mission's planning is not seeded by it), so a
+recorded rollout can complete more or fewer subtasks than the full run's at that seed.

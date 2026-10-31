@@ -66,6 +66,9 @@ LIMIT_MARGIN = 0.15  # rad, kept from the arm's limits at a release
 TRACK_MARGIN = 0.05  # rad, kept from the arm's limits while OSC tracks a grasp
 THIN_REGION = 0.005  # m: a region half this thin is swept across, not stopped in
 SWEEP_STEP = 0.004  # m: the sweep's carrot, under the slab's thickness per step
+# LIBERO's object On wants the origins within 3 cm across: release within
+# this of the receiver's origin, leaving room to settle.
+ONTOP_REACH = 0.02
 # HPP's refusal of a transit goal off the start's leaf, and the largest move
 # of the target onto its placement taken as settling, not as a real mismatch.
 OFF_LEAF = re.compile(
@@ -744,8 +747,11 @@ class SegmentPlanner:
         hand fits from ``drop`` above where it comes to rest
         (:func:`place_heights`), and as near the center as the hand fits
         (:func:`place_positions`). The hand is tried as it holds the object first,
-        then turned to approach horizontally from each side (a storage
-        box's compartment opens sideways). The carry ends ``approach`` back
+        upright and turned about the vertical, then turned to approach
+        horizontally from each side (a storage box's compartment opens
+        sideways), in :func:`place_orientations`' order; one with the
+        fingers closing vertically only after all the others
+        (``info["fingers"]``). The carry ends ``approach`` back
         along the approach axis; a straight move inserts the object,
         releases it, and backs out the same way.
         """
@@ -763,7 +769,7 @@ class SegmentPlanner:
         corners = object_corners(
             self.scene.manifest["objects"][self.target].get("bottom")
         )
-        found = None
+        candidates, vertical = [], []
         for name, rotation in place_orientations(tcp_start):
             # The object square to the world: a grasp's tilt goes to the
             # hand, not into how high the object stands.
@@ -779,11 +785,13 @@ class SegmentPlanner:
                 info["rejected"][name] = "rests out of the region's z range"
                 continue
             hand = obj @ inverse(object_in_tcp)
-            if abs(hand[2, 1]) > 0.5:
-                # Fingers above and below: opening them leaves the object
-                # lying on the lower one.
-                info["rejected"][name] = "fingers close vertically"
-                continue
+            # Fingers above and below: opening them may leave the object
+            # lying on the lower one. Tried last, for a rim pinch that has
+            # no other way to hold it.
+            group = vertical if abs(hand[2, 1]) > 0.5 else candidates
+            group.append((name, obj, heights, hand))
+        found = None
+        for name, obj, heights, hand in candidates + vertical:
             approach_axis = hand[:3, 2]
             for xy, z in place_positions(region, approach_axis, heights, step):
                 obj[:3, 3] = [xy[0], xy[1], z]
@@ -802,6 +810,8 @@ class SegmentPlanner:
             )
         name, position, goal, (q_pre, q_place) = found
         info.update(orientation=name, object_goal=position)
+        if any(name == other for other, *_ in vertical):
+            info["fingers"] = "vertical"
         with self._validations() as problem:
             direct = self._line(q_start, q_pre, problem)
         if direct is not None:
@@ -1075,6 +1085,46 @@ def collision_corners(urdf: str | Path) -> np.ndarray:
     return np.vstack(corners)
 
 
+def object_top_region(
+    name: str, urdf: str | Path, pose: np.ndarray, reach: float = ONTOP_REACH
+) -> dict[str, Any]:
+    """A region, in the manifest's ``regions`` terms, for ``On o name`` over
+    an object at ``pose``: what LIBERO's object ``check_ontop`` tests, ``o``
+    in contact with it, its origin no lower and within 3 cm across of
+    ``name``'s. The box is ``reach`` square about ``name``'s origin; it
+    supports at the highest collision face under that origin (a rack's
+    plate, between its pegs), up to its highest face anywhere (the pegs'
+    tops): an object too wide to go between rests on those."""
+    pose = np.asarray(pose, dtype=float)
+    origin = pose[:3, 3]
+    signs = np.array(np.meshgrid([-1, 1], [-1, 1], [-1, 1])).reshape(3, -1).T
+    tops, under = [], []
+    for primitive in load_urdf_primitives(urdf):
+        local = np.asarray(primitive.pose, dtype=float)
+        corners = (signs * primitive.half_extents()) @ local[:3, :3].T + local[:3, 3]
+        world = corners @ pose[:3, :3].T + origin
+        top = float(world[:, 2].max())
+        tops.append(top)
+        lo, hi = world[:, :2].min(axis=0), world[:, :2].max(axis=0)
+        if np.all(lo <= origin[:2]) and np.all(origin[:2] <= hi):
+            under.append(top)
+    if not tops:
+        raise ValueError(f"{name} has no collision geometry")
+    top = max(tops)
+    return {
+        "region": name,
+        "object": name,
+        "box": {
+            "center": [float(origin[0]), float(origin[1]), top],
+            "half_extents": [reach, reach, 0.0],
+            "z_range": [float(origin[2]), top + 0.30],
+        },
+        "support_geom": name,
+        "height": max(under) if under else top,
+        "top": top,
+    }
+
+
 def place_heights(
     region: dict[str, Any], below: float, drop: float, rise: float = 0.06
 ) -> tuple[float, float] | None:
@@ -1086,6 +1136,8 @@ def place_heights(
     and it is released ``drop`` to ``drop + rise`` above that. A region
     with no support (a storage box's side wall: a thin vertical slab) only
     counts while the object is held there, so the origin stays in range.
+    A region with a ``top`` above its support (an object's,
+    :func:`object_top_region`) is tried up to resting there too.
     """
     lo, hi = region["box"]["z_range"]
     margin = 0.005
@@ -1094,7 +1146,8 @@ def place_heights(
     rest = region.get("height", lo) + below
     if rest > hi:  # no margin: an object resting upright only tips lower
         return None
-    return max(rest + drop, lo + margin), rest + drop + rise
+    top = max(rest, region.get("top", lo) + below)
+    return max(rest + drop, lo + margin), top + drop + rise
 
 
 def place_positions(
@@ -1186,9 +1239,16 @@ def _extent(pose: np.ndarray, corners: np.ndarray | None, sign: int) -> float:
 
 def place_orientations(tcp: np.ndarray) -> list[tuple[str, np.ndarray]]:
     """World rotations to try for the hand at a release: none (as it
-    holds the object), then turning its approach axis horizontal towards
-    each of +-x, +-y, at each quarter turn about that axis."""
+    holds the object), then as it holds it turned about the vertical by a
+    quarter, a half and three quarters (the object still upright, the hand
+    on its near side when the far side is out of reach), then turning its
+    approach axis horizontal towards each of +-x, +-y, at each quarter turn
+    about that axis."""
     out = [("held", np.eye(3))]
+    for quarter in (1, 2, 3):
+        out.append(
+            (f"held/{90 * quarter}", _axis_angle(np.eye(3)[2], np.pi / 2 * quarter))
+        )
     approach = tcp[:3, 2]
     for name, direction in (
         ("+x", [1, 0, 0]),
