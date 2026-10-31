@@ -1325,13 +1325,19 @@ def _hull(points: np.ndarray) -> np.ndarray:
     def chain(sequence: np.ndarray) -> list[np.ndarray]:
         out: list[np.ndarray] = []
         for p in sequence:
-            while len(out) >= 2 and np.cross(out[-1] - out[-2], p - out[-2]) <= 1e-12:
+            while len(out) >= 2 and _turn(out[-2], out[-1], p) <= 1e-12:
                 out.pop()
             out.append(p)
         return out
 
     lower, upper = chain(unique), chain(unique[::-1])
     return np.array(lower[:-1] + upper[:-1])
+
+
+def _turn(o: np.ndarray, a: np.ndarray, b: np.ndarray) -> float:
+    """The z of ``(a - o) x (b - o)``: positive when ``o, a, b`` turn
+    counter-clockwise (``np.cross`` takes only 3-D vectors from numpy 2)."""
+    return float((a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]))
 
 
 def object_top_region(
