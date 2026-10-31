@@ -133,8 +133,14 @@ class SegmentController:
 
     @property
     def done(self) -> bool:
-        """Whether every stage has run (holding still counts as done)."""
+        """Whether every stage has run (holding still counts as done), or
+        tracking stalled (:attr:`stalled`)."""
         return not self.stages or (self.tracker is not None and self.tracker.done)
+
+    @property
+    def stalled(self) -> bool:
+        """Whether tracking gave up in a stage it made no progress in."""
+        return self.tracker is not None and self.tracker.stalled is not None
 
     def __call__(self, obs: dict[str, Any]) -> np.ndarray:
         position = obs.get(f"{self.info.get('target')}_pos")
