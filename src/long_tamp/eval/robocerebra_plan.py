@@ -69,6 +69,11 @@ SWEEP_STEP = 0.004  # m: the sweep's carrot, under the slab's thickness per step
 # LIBERO's object On wants the origins within 3 cm across: release within
 # this of the receiver's origin, leaving room to settle.
 ONTOP_REACH = 0.02
+# Points this close to the lowest, or a top this close to a level, touch; a
+# release over an object keeps its center of mass this far inside its support
+# (a butter on end has at most 8.6 mm).
+SUPPORT_TOL = 0.004
+SUPPORT_MARGIN = 0.005
 # HPP's refusal of a transit goal off the start's leaf, and the largest move
 # of the target onto its placement taken as settling, not as a real mismatch.
 OFF_LEAF = re.compile(
@@ -840,7 +845,12 @@ class SegmentPlanner:
         horizontally from each side (a storage box's compartment opens
         sideways), in :func:`place_orientations`' order; one with the
         fingers closing vertically only after all the others
-        (``info["fingers"]``). The carry ends ``approach`` back
+        (``info["fingers"]``). Over an object with a top above its
+        support (a rack's pegs above its plate), every orientation is tried
+        resting on the support before any resting on the top
+        (``info["rests"]``): an object released over the pegs' tips balances
+        on their edges, and slips between them or tips off as it is let go.
+        The carry ends ``approach`` back
         along the approach axis; a straight move inserts the object,
         releases it, and backs out the same way.
         """
@@ -878,20 +888,54 @@ class SegmentPlanner:
             # lying on the lower one. Tried last, for a rim pinch that has
             # no other way to hold it.
             group = vertical if abs(hand[2, 1]) > 0.5 else candidates
-            group.append((name, obj, heights, hand))
+            group.append((name, obj, heights, hand, below))
         found = None
-        for name, obj, heights, hand in candidates + vertical:
-            approach_axis = hand[:3, 2]
-            for xy, z in place_positions(region, approach_axis, heights, step):
-                obj[:3, 3] = [xy[0], xy[1], z]
-                goal = obj @ inverse(object_in_tcp)
-                insert, reason = self._straight(q_start, goal, approach)
-                if insert is not None:
-                    found = name, [round(float(v), 3) for v in obj[:3, 3]], goal, insert
+        # Resting on the support: the object's bottom under the top (among
+        # a rack's pegs, on its plate).
+        top = region.get("top")
+        over_top = top is not None and top > region.get("height", top)
+        passes = ("support", "top") if over_top else (None,)
+        if over_top:
+            paths = self.scene.file_paths()["objects"]
+            samples = collision_samples(paths[self.target]["urdf"])
+            support = (
+                paths[region["object"]]["urdf"],
+                xyzquat_to_pose(self.scene.object_config(region["object"])),
+            )
+        for rests in passes:
+            if rests is not None:
+                level = region["height"] if rests == "support" else top
+                faces = support_faces(*support, level)
+            for name, obj, heights, hand, below in candidates + vertical:
+                approach_axis = hand[:3, 2]
+                if rests is None:
+                    positions = place_positions(region, approach_axis, heights, step)
+                else:
+                    positions = self._resting(
+                        region, obj, samples, faces, heights, step, rests
+                    )
+                    if not positions:
+                        tally = info["rejected"].setdefault(name, {})
+                        tally[f"no stable rest on the {rests}"] = 1
+                for xy, z in positions:
+                    if rests == "support" and z - below > region["height"] + 2 * drop:
+                        continue
+                    if rests == "top" and z - below < top:
+                        continue
+                    obj[:3, 3] = [xy[0], xy[1], z]
+                    goal = obj @ inverse(object_in_tcp)
+                    insert, reason = self._straight(q_start, goal, approach)
+                    if insert is not None:
+                        position = [round(float(v), 3) for v in obj[:3, 3]]
+                        found = name, position, goal, insert
+                        break
+                    tally = info["rejected"].setdefault(name, {})
+                    tally[reason] = tally.get(reason, 0) + 1
+                if found:
                     break
-                tally = info["rejected"].setdefault(name, {})
-                tally[reason] = tally.get(reason, 0) + 1
             if found:
+                if rests is not None:
+                    info["rests"] = rests
                 break
         if found is None:
             raise PlanningError(
@@ -935,6 +979,42 @@ class SegmentPlanner:
         if escape:
             stages.insert(0, escape)
         return SegmentPlan(stages, self.q0, self.tcp0, info)
+
+    @staticmethod
+    def _resting(
+        region: dict[str, Any],
+        obj: np.ndarray,
+        samples: tuple[np.ndarray, np.ndarray],
+        faces: list[tuple[np.ndarray, np.ndarray]],
+        heights: tuple[float, float],
+        step: float,
+        rests: str,
+        grid: float = 0.005,
+    ) -> list[tuple[np.ndarray, float]]:
+        """Release positions over an object's top where the target, turned
+        as ``obj``, would rest on ``faces`` with its center of mass
+        :data:`SUPPORT_MARGIN` inside its contacts (:func:`support_margin`),
+        across the region's box every ``grid``. On the top, the widest
+        margin first (a mug's rim across both rows of pegs); on the
+        support, the nearest the center first. Each at heights from
+        ``heights[0]`` up to ``heights[1]``."""
+        box = region["box"]
+        center = np.asarray(box["center"][:2], dtype=float)
+        half = np.asarray(box["half_extents"][:2], dtype=float)
+        points, weights = samples
+        local = points @ obj[:3, :3].T
+        ranked = []
+        for dx in np.arange(-half[0], half[0] + 1e-9, grid):
+            for dy in np.arange(-half[1], half[1] + 1e-9, grid):
+                xy = center + [dx, dy]
+                world = local + [xy[0], xy[1], 0.0]
+                margin = support_margin(world, weights, faces)
+                if margin >= SUPPORT_MARGIN:
+                    key = -margin if rests == "top" else float(np.hypot(dx, dy))
+                    ranked.append((key, xy))
+        ranked.sort(key=lambda entry: entry[0])
+        heights_ = np.arange(heights[0], heights[1] + 1e-9, step)
+        return [(xy, float(z)) for _, xy in ranked for z in heights_]
 
     def plan_pour(
         self,
@@ -1172,6 +1252,82 @@ def collision_corners(urdf: str | Path) -> np.ndarray:
         pose = np.asarray(primitive.pose, dtype=float)
         corners.append(local @ pose[:3, :3].T + pose[:3, 3])
     return np.vstack(corners)
+
+
+def collision_samples(urdf: str | Path, n: int = 5) -> tuple[np.ndarray, np.ndarray]:
+    """Points filling an object's collision boxes, ``n`` a side (faces
+    included), in its frame, and each point's share of the volume."""
+    grid = np.linspace(-1.0, 1.0, n)
+    unit = np.array(np.meshgrid(grid, grid, grid)).reshape(3, -1).T
+    points, weights = [], []
+    for primitive in load_urdf_primitives(urdf):
+        half = primitive.half_extents()
+        pose = np.asarray(primitive.pose, dtype=float)
+        points.append((unit * half) @ pose[:3, :3].T + pose[:3, 3])
+        weights.append(np.full(len(unit), np.prod(2 * half) / len(unit)))
+    return np.vstack(points), np.concatenate(weights)
+
+
+def support_faces(
+    urdf: str | Path, pose: np.ndarray, level: float, tol: float = SUPPORT_TOL
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """The collision boxes of an object at ``pose`` whose top is within
+    ``tol`` of ``level`` (a rack's pegs at their tips, its plate): each as
+    its world pose and half extents."""
+    faces = []
+    for primitive in load_urdf_primitives(urdf):
+        half = primitive.half_extents()
+        world = pose @ np.asarray(primitive.pose, dtype=float)
+        top = world[2, 3] + float(np.abs(world[2, :3]) @ half)
+        if abs(top - level) <= tol:
+            faces.append((world, half))
+    return faces
+
+
+def support_margin(
+    points: np.ndarray,
+    weights: np.ndarray,
+    faces: list[tuple[np.ndarray, np.ndarray]],
+    tol: float = SUPPORT_TOL,
+) -> float:
+    """How far inside its support an object resting on ``faces`` keeps its
+    center of mass: the distance from it to the edge of the convex hull
+    of the object's lowest points (``points``, world, within ``tol`` of the
+    lowest) over a face. Negative outside, ``-inf`` with no area of
+    contact (the object falls between the faces or tips over)."""
+    com = weights @ points[:, :2] / weights.sum()
+    low = points[points[:, 2] <= points[:, 2].min() + tol]
+    touching = np.zeros(len(low), dtype=bool)
+    for world, half in faces:
+        local = (low[:, :2] - world[:2, 3]) @ world[:2, :2]
+        touching |= np.all(np.abs(local) <= half[:2] + 1e-6, axis=1)
+    hull = _hull(low[touching, :2])
+    if len(hull) < 3:
+        return -np.inf
+    edges = np.roll(hull, -1, axis=0) - hull
+    normals = np.stack([edges[:, 1], -edges[:, 0]], axis=1)
+    normals /= np.linalg.norm(normals, axis=1, keepdims=True)
+    # Counter-clockwise: the outward normal is to the right of an edge.
+    return float(np.min(-np.einsum("ij,ij->i", com - hull, normals)))
+
+
+def _hull(points: np.ndarray) -> np.ndarray:
+    """The 2-D convex hull of ``points``, counter-clockwise (monotone
+    chain); fewer than three points when they have no area."""
+    unique = np.unique(np.round(points, 6), axis=0)
+    if len(unique) < 3:
+        return unique
+
+    def chain(sequence: np.ndarray) -> list[np.ndarray]:
+        out: list[np.ndarray] = []
+        for p in sequence:
+            while len(out) >= 2 and np.cross(out[-1] - out[-2], p - out[-2]) <= 1e-12:
+                out.pop()
+            out.append(p)
+        return out
+
+    lower, upper = chain(unique), chain(unique[::-1])
+    return np.array(lower[:-1] + upper[:-1])
 
 
 def object_top_region(
