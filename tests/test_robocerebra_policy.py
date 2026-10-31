@@ -131,6 +131,44 @@ def test_tracker_boosts_through_friction():
     assert end_error() < 0.003
 
 
+def test_tracker_gives_up_on_a_carrot_out_of_reach():
+    """A wall at x = 0.03 m: the retreat to 0.3 m never gets past it (at its
+    last waypoint, ``patience`` would end it)."""
+    retreat = np.array([pose(x=0.01 * i) for i in range(31)])
+    stage = Stage("retreat", retreat, gripper=-1.0)
+    tracker = OscTracker([stage, Stage("next", pose()[None], gripper=1.0)])
+    current = pose()
+    for steps in range(1, 200):
+        obs = obs_at(current)
+        obs["robot0_joint_pos"] = np.zeros(7)
+        action = tracker(obs)
+        if tracker.done:
+            break
+        current[:3, 3] += POS_SCALE * action[:3]
+        current[0, 3] = min(current[0, 3], 0.03)
+    assert tracker.stalled == "retreat" and tracker.stage_name == "retreat"
+    assert steps < 50
+    entry = tracker.log[-1]
+    assert entry["stage"] == "retreat" and entry["stalled"]
+    assert entry["joints"] == [0.0] * 7
+    assert entry["end_error"][0] > 0.01
+    # Stalled, it holds where the hand is, with the stage's gripper.
+    held = tracker(obs_at(current))
+    assert np.allclose(held[:3], 0.0) and held[6] == -1.0
+
+
+def test_tracker_does_not_stall_while_it_moves():
+    stage = Stage("carry", np.array([pose(), pose(x=0.3)]), gripper=1.0)
+    tracker = OscTracker([stage], stall=5)
+    current = pose()
+    for _ in range(400):
+        action = tracker(obs_at(current))
+        if tracker.done:
+            break
+        current[:3, 3] += 0.1 * POS_SCALE * action[:3]  # slow, but moving
+    assert tracker.done and tracker.stalled is None
+
+
 def test_tracker_applies_tcp_offset():
     offset = pose(z=0.1)
     tracker = OscTracker(
