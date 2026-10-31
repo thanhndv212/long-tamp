@@ -203,6 +203,47 @@ def test_every_ideal_case_plans_its_supported_goals(case):
     assert all(label.split()[0] != "regrasp" for label in done), done
 
 
+#: Ideal/case2: two objects, either can go first.
+CASE2 = {
+    "cream_cheese_1": [
+        ["Pick", "cream_cheese_1"],
+        ["In", "cream_cheese_1", "white_storage_box_1_top_side"],
+    ],
+    "chefmate_8_frypan_1": [
+        ["Pick", "chefmate_8_frypan_1"],
+        ["On", "chefmate_8_frypan_1", "rack_1"],
+    ],
+}
+
+ORDER = f"""
+import json
+from long_tamp.eval.robocerebra_mission import RoboCerebraDomain
+from long_tamp.tasks.task_planning.skeleton import default_planner
+domain = RoboCerebraDomain({json.dumps(CASE2)})
+steps = default_planner().solve(domain.pddl_problem(domain.initial_atoms()))
+print(json.dumps([[c, p["object"]] for c, p in steps]))
+"""
+
+
+def test_the_plan_does_not_depend_on_the_hash_seed():
+    import subprocess
+
+    _task_planner_or_skip()
+    orders = set()
+    for seed in ("1", "3"):
+        env = dict(os.environ, PYTHONHASHSEED=seed)
+        env["PYTHONPATH"] = os.pathsep.join(p for p in sys.path if p)
+        run = subprocess.run(
+            [sys.executable, "-c", ORDER],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=True,
+        )
+        orders.add(run.stdout.strip().splitlines()[-1])
+    assert len(orders) == 1, orders
+
+
 # -- the mission in an env -----------------------------------------------------
 #
 # A fake env counts each object's goals as the checker does, and the fake

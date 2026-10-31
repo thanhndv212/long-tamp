@@ -280,6 +280,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A task plan through Unified Planning (pyperplan in the container) no longer depends on
+  Python's hash seed (#195). Unified Planning and pyperplan break ties between equal plans by
+  iterating over sets of strings, so each process could get its own order: RoboCerebra row D
+  ran case2's frypan or cream cheese first depending on `PYTHONHASHSEED`, the only change
+  between runs at fixed seeds on case1, case2 and case5. `UnifiedPlanningPlanner.solve`
+  now runs the engine in a child process with `PYTHONHASHSEED=0` (in process when it is
+  already 0). Fast Downward was already deterministic: it reads the same PDDL text.
 - A RoboCerebra segment no longer plans the robot or the target through an obstacle hidden
   behind a bystander's collision (#193). HPP reports only a configuration's first collision,
   and one between objects the segment does not move (MuJoCo leaves them a millimetre inside
