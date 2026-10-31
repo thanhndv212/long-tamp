@@ -16,7 +16,9 @@ and the causes behind the numbers.
 - **Rows:** A runs each step from the official `resume(k)` state, so a step's
   result does not depend on the ones before it. C runs the steps straight through
   with no resets (a dropped object stays dropped). D hands the whole goal to the
-  mission runner, which orders and repairs the steps itself.
+  mission runner, which orders and repairs the steps itself. B is A with the
+  object poses from the simulated camera and the goals written from the step
+  text, not from the simulator; no round has run it yet (R7).
 - **Cells** are rollouts that got the step done over rollouts that tried it
   (✅ all, 🟡 some, ❌ none, – not attempted: the predicate is unsupported, e.g.
   `open`/`turnon` before articulated objects, #161). Row C counts a step done when
@@ -32,18 +34,20 @@ and the causes behind the numbers.
 
 ## Rounds
 
-| Round | Row | What changed | Results | Cases | Headline |
-|---|---|---|---|---|---|
-| R1 | demo | env server (#156): the recorded demo replayed | [`2026-10-17-r1-replay-ideal-demo.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-17-r1-replay-ideal-demo.json) | 10 | demo: 56/76 steps straight through, 59/76 from resume(k) |
-| R2 | – | scene export to HPP (#157) | [`2026-10-18-r2-scene-export.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-18-r2-scene-export.json) | 60 | 60 cases, 13 layouts, 0 load errors; test plans 13/13 |
-| R3 | – | grasp handles per object class (#158) | [`2026-10-25-r3-grasp-handles.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-25-r3-grasp-handles.json) | 8 | 25 classes over 46 objects, 0 without handles |
-| R3 | – | one pick and lift per class (#158 AC2) | [`2026-10-26-r3-grasp-lift.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-26-r3-grasp-lift.json) | 9 | 14/25 classes lifted |
-| R4 | A | HPP segment policy, pick/in/on | [`2026-10-25-r4-ideal-hpp.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-25-r4-ideal-hpp.json) | 10 | 76% of supported steps done |
-| R5 | A | adds pour | [`2026-10-29-r5-ideal-hpp-pour.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-29-r5-ideal-hpp-pour.json) | 10 | 85% of supported steps done |
-| R8 | C | continuous | [`2026-10-29-r8-ideal-hpp-continuous.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-29-r8-ideal-hpp-continuous.json) | 10 | 61% of each rollout's goal done |
-| R9 | D | one mission a rollout | [`2026-10-30-r9-ideal-hpp-mission.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-30-r9-ideal-hpp-mission.json) | 10 | 64% of each rollout's goal done |
-| R10 | C | place onto an object | [`2026-10-31-r10-ideal-hpp-continuous.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-31-r10-ideal-hpp-continuous.json) | 10 | 68% of each rollout's goal done |
-| R11 | D | place onto an object | [`2026-10-31-r11-ideal-hpp-mission.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-31-r11-ideal-hpp-mission.json) | 10 | 68% of each rollout's goal done |
+| Round | Issue | Row | What changed | Results | Cases | Headline |
+|---|---|---|---|---|---|---|
+| R1 | [#156](https://github.com/thanhndv212/long-tamp/issues/156) | demo | env server: the recorded demo replayed | [`2026-10-17-r1-replay-ideal-demo.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-17-r1-replay-ideal-demo.json) | 10 | demo: 56/76 steps straight through, 59/76 from resume(k) |
+| R2 | [#157](https://github.com/thanhndv212/long-tamp/issues/157) | – | scene export to HPP | [`2026-10-18-r2-scene-export.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-18-r2-scene-export.json) | 60 | 60 cases, 13 layouts, 0 load errors; test plans 13/13 |
+| R3 | [#158](https://github.com/thanhndv212/long-tamp/issues/158) | – | grasp handles per object class | [`2026-10-25-r3-grasp-handles.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-25-r3-grasp-handles.json) | 8 | 25 classes over 46 objects, 0 without handles |
+| R3 | [#158](https://github.com/thanhndv212/long-tamp/issues/158) | – | one pick and lift per class (AC2) | [`2026-10-26-r3-grasp-lift.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-26-r3-grasp-lift.json) | 9 | 14/25 classes lifted |
+| R4 | [#159](https://github.com/thanhndv212/long-tamp/issues/159) | A | HPP segment policy, pick/in/on | [`2026-10-25-r4-ideal-hpp.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-25-r4-ideal-hpp.json) | 10 | 76% of supported steps done |
+| R5 | [#160](https://github.com/thanhndv212/long-tamp/issues/160) | A | adds pour | [`2026-10-29-r5-ideal-hpp-pour.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-29-r5-ideal-hpp-pour.json) | 10 | 85% of supported steps done |
+| R6 | [#161](https://github.com/thanhndv212/long-tamp/issues/161) | A, C, D | articulated objects: drawers, doors, knobs | not run yet | – | waits on it: the 83 steps checked as `open`/`close`/`turnon` (– in the tables) |
+| R7 | [#162](https://github.com/thanhndv212/long-tamp/issues/162) | A, B | Random_Disturbance, Observation_Mismatching and Mix; row B (camera poses #151, goals from the step text #145) for the Memory conditions | not run yet | – | waits on it: planner results on the 50 cases outside Ideal |
+| R8 | [#163](https://github.com/thanhndv212/long-tamp/issues/163) | C | continuous | [`2026-10-29-r8-ideal-hpp-continuous.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-29-r8-ideal-hpp-continuous.json) | 10 | 61% of each rollout's goal done |
+| R9 | [#186](https://github.com/thanhndv212/long-tamp/issues/186) | D | one mission a rollout | [`2026-10-30-r9-ideal-hpp-mission.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-30-r9-ideal-hpp-mission.json) | 10 | 64% of each rollout's goal done |
+| R10 | [#187](https://github.com/thanhndv212/long-tamp/issues/187) | C | R8 rerun: place onto an object | [`2026-10-31-r10-ideal-hpp-continuous.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-31-r10-ideal-hpp-continuous.json) | 10 | 68% of each rollout's goal done |
+| R11 | [#187](https://github.com/thanhndv212/long-tamp/issues/187) | D | R9 rerun: place onto an object | [`2026-10-31-r11-ideal-hpp-mission.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-31-r11-ideal-hpp-mission.json) | 10 | 68% of each rollout's goal done |
 
 Details of R1-R3: [R1 demo replay](#r1-demo-replay), [R2 scene export](#r2-scene-export), [R3 grasp handles and grasp-lift](#r3-grasp-handles-and-grasp-lift).
 
@@ -224,6 +228,8 @@ Grasp handles (R3): 24 on its 4 objects.
 
 Scene export (R2): 74 collision shapes (worst 6e-10 m off), 8 contact surfaces, 16 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm, a test plan for its layout found in 0.01 s.
 
+Step 0 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
 ### Ideal/case7
 
 > Place the boxes of chocolate pudding and butter into a bowl and heat the pan.
@@ -242,6 +248,8 @@ Rollout videos (seed 0): [row C](https://github.com/thanhndv212/long-tamp/blob/m
 
 Scene export (R2): 127 collision shapes (worst 5e-10 m off), 7 contact surfaces, 10 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm, a test plan for its layout found in 0.03 s.
 
+Step 4 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
 ### Ideal/case8
 
 > Place the cream cheese into the short cabinet, the chocolate pudding into the bowl, and pour a glass of wine.
@@ -259,6 +267,8 @@ Scene export (R2): 127 collision shapes (worst 5e-10 m off), 7 contact surfaces,
 Rollout videos (seed 0): [row C](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/C_Ideal_case8.mp4), [row D](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/D_Ideal_case8.mp4); all on the [gallery page](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/index.html).
 
 Scene export (R2): 141 collision shapes (worst 5e-10 m off), 10 contact surfaces, 21 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.6 cm.
+
+Step 0 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 ### Ideal/case9
 
@@ -279,6 +289,8 @@ Scene export (R2): 141 collision shapes (worst 5e-10 m off), 10 contact surfaces
 | 10 | Place the white bowl into the microwave | `in white_bowl_1 microwave_1_heating_region` | ❌ | ✅ | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 |
 
 Scene export (R2): 93 collision shapes (worst 7e-10 m off), 11 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm, a test plan for its layout found in 0.02 s.
+
+Step 8 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 ### Ideal/case10
 
@@ -325,7 +337,9 @@ Rollout videos (seed 0): [row C](https://github.com/thanhndv212/long-tamp/blob/m
 
 Scene export (R2): 78 collision shapes (worst 6e-10 m off), 10 contact surfaces, 11 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm, a test plan for its layout found in 0.02 s. Regions not exported: `bowl_drainer_1_left_region`, `bowl_drainer_1_right_region`.
 
-Not run by a planner round yet.
+Step 7 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Execution/case2
 
@@ -344,7 +358,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 79 collision shapes (worst 6e-10 m off), 11 contact surfaces, 12 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm. Regions not exported: `bowl_drainer_1_left_region`, `bowl_drainer_1_right_region`.
 
-Not run by a planner round yet.
+Step 7 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Execution/case3
 
@@ -365,7 +381,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 79 collision shapes (worst 7e-10 m off), 11 contact surfaces, 12 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm. Regions not exported: `bowl_drainer_1_left_region`, `bowl_drainer_1_right_region`.
 
-Not run by a planner round yet.
+Step 7 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Execution/case4
 
@@ -384,7 +402,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 70 collision shapes (worst 9e-10 m off), 13 contact surfaces, 18 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.9 cm, a test plan for its layout found in 0.01 s.
 
-Not run by a planner round yet.
+Step 5 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Execution/case5
 
@@ -402,7 +422,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 82 collision shapes (worst 5e-10 m off), 9 contact surfaces, 12 resting contacts as MuJoCo has them (0 disagree), robot clear by 7.9 cm.
 
-Not run by a planner round yet.
+Step 6 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Execution/case6
 
@@ -425,7 +447,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 93 collision shapes (worst 6e-10 m off), 11 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Steps 8, 11 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Execution/case7
 
@@ -448,7 +472,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 94 collision shapes (worst 8e-10 m off), 12 contact surfaces, 5 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Steps 8, 11 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Execution/case8
 
@@ -473,7 +499,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 174 collision shapes (worst 6e-10 m off), 13 contact surfaces, 24 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Steps 7, 13 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Execution/case9
 
@@ -500,7 +528,9 @@ Scene export (R2): 175 collision shapes (worst 7e-10 m off), 14 contact surfaces
 
 Grasp handles (R3): 42 on its 7 objects.
 
-Not run by a planner round yet.
+Steps 7, 13 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Execution/case10
 
@@ -525,7 +555,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 175 collision shapes (worst 9e-10 m off), 14 contact surfaces, 33 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm, a test plan for its layout found in 0.04 s.
 
-Not run by a planner round yet.
+Steps 7, 11 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ## Memory Exploration
 
@@ -550,7 +582,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 70 collision shapes (worst 8e-10 m off), 13 contact surfaces, 18 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.9 cm.
 
-Not run by a planner round yet.
+Steps 0, 1, 2, 3, 4 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Exploration/case2
 
@@ -571,7 +605,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 70 collision shapes (worst 7e-10 m off), 13 contact surfaces, 18 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.9 cm.
 
-Not run by a planner round yet.
+Steps 0, 1, 2 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Exploration/case3
 
@@ -596,7 +632,9 @@ Scene export (R2): 146 collision shapes (worst 6e-10 m off), 10 contact surfaces
 
 Grasp handles (R3): 30 on its 5 objects.
 
-Not run by a planner round yet.
+Steps 0, 1, 2, 8 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Exploration/case4
 
@@ -617,7 +655,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 146 collision shapes (worst 5e-10 m off), 10 contact surfaces, 16 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.6 cm.
 
-Not run by a planner round yet.
+Steps 0, 6 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Exploration/case5
 
@@ -642,7 +682,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 146 collision shapes (worst 5e-10 m off), 10 contact surfaces, 16 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Steps 0, 1, 2, 3, 4, 10 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Exploration/case6
 
@@ -667,7 +709,9 @@ Scene export (R2): 83 collision shapes (worst 5e-10 m off), 11 contact surfaces,
 
 Grasp handles (R3): 36 on its 6 objects.
 
-Not run by a planner round yet.
+Steps 0, 1, 2 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Exploration/case7
 
@@ -688,7 +732,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 83 collision shapes (worst 4e-10 m off), 11 contact surfaces, 12 resting contacts as MuJoCo has them (0 disagree), robot clear by 7.9 cm.
 
-Not run by a planner round yet.
+Step 0 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Exploration/case8
 
@@ -714,7 +760,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 93 collision shapes (worst 8e-10 m off), 11 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Steps 0, 1, 2, 3, 4 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Exploration/case9
 
@@ -738,7 +786,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 93 collision shapes (worst 8e-10 m off), 11 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Steps 0, 1, 2 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Exploration/case10
 
@@ -760,7 +810,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 93 collision shapes (worst 8e-10 m off), 11 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Step 0 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ## Mix
 
@@ -785,7 +837,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 70 collision shapes (worst 9e-10 m off), 13 contact surfaces, 18 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.9 cm.
 
-Not run by a planner round yet.
+Steps 0, 1, 2, 3, 4 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Mix/case2
 
@@ -806,7 +860,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 146 collision shapes (worst 4e-10 m off), 10 contact surfaces, 16 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Steps 0, 6 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Mix/case3
 
@@ -829,7 +885,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 83 collision shapes (worst 2e-10 m off), 11 contact surfaces, 12 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.0 cm.
 
-Not run by a planner round yet.
+Steps 0, 1, 2 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Mix/case4
 
@@ -852,7 +910,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 93 collision shapes (worst 5e-10 m off), 11 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Steps 8, 11 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Mix/case5
 
@@ -877,7 +937,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 175 collision shapes (worst 8e-10 m off), 14 contact surfaces, 33 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Steps 7, 11 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Mix/case6
 
@@ -898,7 +960,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 70 collision shapes (worst 6e-10 m off), 13 contact surfaces, 18 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.9 cm.
 
-Not run by a planner round yet.
+Steps 0, 1, 2 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Mix/case7
 
@@ -917,7 +981,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 78 collision shapes (worst 7e-10 m off), 10 contact surfaces, 11 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm. Regions not exported: `bowl_drainer_1_left_region`, `bowl_drainer_1_right_region`.
 
-Not run by a planner round yet.
+Step 7 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Mix/case8
 
@@ -936,7 +1002,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 79 collision shapes (worst 8e-10 m off), 11 contact surfaces, 12 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm. Regions not exported: `bowl_drainer_1_left_region`, `bowl_drainer_1_right_region`.
 
-Not run by a planner round yet.
+Step 7 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Mix/case9
 
@@ -957,7 +1025,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 79 collision shapes (worst 9e-10 m off), 11 contact surfaces, 12 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm. Regions not exported: `bowl_drainer_1_left_region`, `bowl_drainer_1_right_region`.
 
-Not run by a planner round yet.
+Step 7 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Mix/case10
 
@@ -981,7 +1051,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 93 collision shapes (worst 8e-10 m off), 11 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Steps 0, 1, 2 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ## Observation Mismatching
 
@@ -1000,7 +1072,7 @@ Not run by a planner round yet.
 
 Scene export (R2): 10 collision shapes (worst 4e-10 m off), 7 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.6 cm. Regions not exported: `white_storage_box_1_right_side`, `white_storage_box_1_left_side`.
 
-Not run by a planner round yet.
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Observation_Mismatching/case2
 
@@ -1015,7 +1087,7 @@ Not run by a planner round yet.
 
 Scene export (R2): 92 collision shapes (worst 7e-10 m off), 8 contact surfaces, 11 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm. Regions not exported: `white_storage_box_1_right_side`, `white_storage_box_1_left_side`, `wine_rack_1_top_region`.
 
-Not run by a planner round yet.
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Observation_Mismatching/case3
 
@@ -1036,7 +1108,7 @@ Not run by a planner round yet.
 
 Scene export (R2): 55 collision shapes (worst 8e-11 m off), 6 contact surfaces, 19 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Observation_Mismatching/case4
 
@@ -1053,7 +1125,7 @@ Not run by a planner round yet.
 
 Scene export (R2): 116 collision shapes (worst 4e-10 m off), 10 contact surfaces, 11 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Observation_Mismatching/case5
 
@@ -1070,7 +1142,7 @@ Not run by a planner round yet.
 
 Scene export (R2): 82 collision shapes (worst 6e-10 m off), 9 contact surfaces, 12 resting contacts as MuJoCo has them (0 disagree), robot clear by 7.6 cm.
 
-Not run by a planner round yet.
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Observation_Mismatching/case6
 
@@ -1087,7 +1159,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 74 collision shapes (worst 9e-10 m off), 8 contact surfaces, 16 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Step 0 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Observation_Mismatching/case7
 
@@ -1105,7 +1179,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 127 collision shapes (worst 5e-10 m off), 7 contact surfaces, 10 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Step 4 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Observation_Mismatching/case8
 
@@ -1123,7 +1199,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 141 collision shapes (worst 6e-10 m off), 10 contact surfaces, 21 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.6 cm.
 
-Not run by a planner round yet.
+Step 0 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Observation_Mismatching/case9
 
@@ -1145,7 +1223,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 93 collision shapes (worst 5e-10 m off), 11 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Step 8 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Observation_Mismatching/case10
 
@@ -1169,7 +1249,7 @@ Not run by a planner round yet.
 
 Scene export (R2): 171 collision shapes (worst 2e-16 m off), 11 contact surfaces, 48 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm. Regions not exported: `basket_1_contain_region`.
 
-Not run by a planner round yet.
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ## Random Disturbance
 
@@ -1188,7 +1268,7 @@ Not run by a planner round yet.
 
 Scene export (R2): 10 collision shapes (worst 5e-10 m off), 7 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.6 cm. Regions not exported: `white_storage_box_1_right_side`, `white_storage_box_1_left_side`.
 
-Not run by a planner round yet.
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Random_Disturbance/case2
 
@@ -1203,7 +1283,7 @@ Not run by a planner round yet.
 
 Scene export (R2): 92 collision shapes (worst 4e-10 m off), 8 contact surfaces, 11 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm. Regions not exported: `white_storage_box_1_right_side`, `white_storage_box_1_left_side`, `wine_rack_1_top_region`.
 
-Not run by a planner round yet.
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Random_Disturbance/case3
 
@@ -1224,7 +1304,7 @@ Not run by a planner round yet.
 
 Scene export (R2): 55 collision shapes (worst 7e-11 m off), 6 contact surfaces, 19 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Random_Disturbance/case4
 
@@ -1241,7 +1321,7 @@ Not run by a planner round yet.
 
 Scene export (R2): 116 collision shapes (worst 1e-10 m off), 10 contact surfaces, 11 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Random_Disturbance/case5
 
@@ -1258,7 +1338,7 @@ Not run by a planner round yet.
 
 Scene export (R2): 82 collision shapes (worst 5e-10 m off), 9 contact surfaces, 12 resting contacts as MuJoCo has them (0 disagree), robot clear by 6.8 cm.
 
-Not run by a planner round yet.
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Random_Disturbance/case6
 
@@ -1275,7 +1355,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 74 collision shapes (worst 8e-10 m off), 8 contact surfaces, 16 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Step 0 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Random_Disturbance/case7
 
@@ -1293,7 +1375,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 127 collision shapes (worst 4e-10 m off), 7 contact surfaces, 10 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Step 4 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Random_Disturbance/case8
 
@@ -1311,7 +1395,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 141 collision shapes (worst 5e-10 m off), 10 contact surfaces, 21 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.6 cm.
 
-Not run by a planner round yet.
+Step 0 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Random_Disturbance/case9
 
@@ -1333,7 +1419,9 @@ Not run by a planner round yet.
 
 Scene export (R2): 93 collision shapes (worst 6e-10 m off), 11 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Not run by a planner round yet.
+Step 8 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Random_Disturbance/case10
 
@@ -1357,7 +1445,7 @@ Not run by a planner round yet.
 
 Scene export (R2): 171 collision shapes (worst 2e-16 m off), 11 contact surfaces, 48 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm. Regions not exported: `basket_1_contain_region`.
 
-Not run by a planner round yet.
+Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ## R1 demo replay
 

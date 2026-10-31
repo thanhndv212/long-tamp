@@ -43,6 +43,40 @@ REPLAY = "2026-10-17-r1-replay-ideal-demo.json"
 EXPORT = "2026-10-18-r2-scene-export.json"
 GRASP_LIFT = "2026-10-26-r3-grasp-lift.json"
 HANDLES = "2026-10-25-r3-grasp-handles.json"
+# The issue behind each round; R10 and R11 rerun R8 and R9 after #187.
+ISSUES = {
+    "R1": 156,
+    "R2": 157,
+    "R3": 158,
+    "R4": 159,
+    "R5": 160,
+    "R6": 161,
+    "R7": 162,
+    "R8": 163,
+    "R9": 186,
+    "R10": 187,
+    "R11": 187,
+}
+# Rounds on the roadmap with no results yet: what they add, and what waits on them.
+NOT_RUN = [
+    (
+        "R6",
+        "A, C, D",
+        "articulated objects: drawers, doors, knobs",
+        "the {articulated} steps checked as `open`/`close`/`turnon` ({none} in the tables)",
+    ),
+    (
+        "R7",
+        "A, B",
+        (
+            "Random_Disturbance, Observation_Mismatching and Mix; row B"
+            " (camera poses #151, goals from the step text #145) for the Memory conditions"
+        ),
+        "planner results on the {other} cases outside Ideal",
+    ),
+]
+ISSUE_URL = "https://github.com/thanhndv212/long-tamp/issues"
+ARTICULATED = {"open", "close", "turnon"}
 GALLERY = RESULTS / "rollout-gallery"
 GRASP_GALLERY = RESULTS / "r3-grasp-gallery"
 # The mission runner's step verbs for each goal predicate.
@@ -254,7 +288,9 @@ def build(out: Path) -> None:
         "- **Rows:** A runs each step from the official `resume(k)` state, so a step's",
         "  result does not depend on the ones before it. C runs the steps straight through",
         "  with no resets (a dropped object stays dropped). D hands the whole goal to the",
-        "  mission runner, which orders and repairs the steps itself.",
+        "  mission runner, which orders and repairs the steps itself. B is A with the",
+        "  object poses from the simulated camera and the goals written from the step",
+        "  text, not from the simulator; no round has run it yet (R7).",
         "- **Cells** are rollouts that got the step done over rollouts that tried it",
         f"  (✅ all, 🟡 some, ❌ none, {NONE} not attempted: the predicate is unsupported, e.g.",
         "  `open`/`turnon` before articulated objects, #161). Row C counts a step done when",
@@ -270,8 +306,8 @@ def build(out: Path) -> None:
         "",
         "## Rounds",
         "",
-        "| Round | Row | What changed | Results | Cases | Headline |",
-        "|---|---|---|---|---|---|",
+        "| Round | Issue | Row | What changed | Results | Cases | Headline |",
+        "|---|---|---|---|---|---|---|",
     ]
     straight = resumed = steps = 0
     for item in json.loads((RESULTS / REPLAY).read_text())["summary"]:
@@ -284,7 +320,7 @@ def build(out: Path) -> None:
             "R1",
             REPLAY,
             "demo",
-            "env server (#156): the recorded demo replayed",
+            "env server: the recorded demo replayed",
             len(replay),
             f"demo: {straight}/{steps} steps straight through, {resumed}/{steps} from resume(k)",
         ),
@@ -292,7 +328,7 @@ def build(out: Path) -> None:
             "R2",
             EXPORT,
             NONE,
-            "scene export to HPP (#157)",
+            "scene export to HPP",
             summary["cases"],
             (
                 f"{summary['cases']} cases, {summary['layouts']} layouts, {summary['load_errors']} load errors;"
@@ -303,7 +339,7 @@ def build(out: Path) -> None:
             "R3",
             HANDLES,
             NONE,
-            "grasp handles per object class (#158)",
+            "grasp handles per object class",
             handles["summary"]["cases"],
             (
                 f"{handles['summary']['classes']} classes over {handles['summary']['objects']} objects,"
@@ -314,15 +350,15 @@ def build(out: Path) -> None:
             "R3",
             GRASP_LIFT,
             NONE,
-            "one pick and lift per class (#158 AC2)",
+            "one pick and lift per class (AC2)",
             len({r["case"] for r in lift.values()}),
             f"{lift_data['summary']['picked']}/{lift_data['summary']['classes']} classes lifted",
         ),
     ]
-    for label, name, row, change, cases, headline in early:
-        lines.append(
-            f"| {label} | {row} | {change} | [`{name}`]({rel(RESULTS / name)}) | {cases} | {headline} |"
-        )
+    table = [
+        (label, row, change, f"[`{name}`]({rel(RESULTS / name)})", cases, headline)
+        for label, name, row, change, cases, headline in early
+    ]
     for label, name, row, change, data in rounds:
         summary = data.get("summary", {})
         if row == "A":
@@ -331,9 +367,26 @@ def build(out: Path) -> None:
             headline = (
                 f"{summary.get('completed_share', 0):.0%} of each rollout's goal done"
             )
+        if label in ("R10", "R11"):
+            change = f"{'R8' if row == 'C' else 'R9'} rerun: {change}"
         path = rel(RESULTS / name)
+        table.append(
+            (label, row, change, f"[`{name}`]({path})", len(data["cases"]), headline)
+        )
+    articulated = sum(
+        any(spec[0] in ARTICULATED for spec in step)
+        for entry in catalog.values()
+        for step in step_specs(entry)
+    )
+    other = sum(not case.startswith("Ideal/") for case in catalog)
+    for label, row, change, waits in NOT_RUN:
+        waits = waits.format(articulated=articulated, other=other, none=NONE)
+        table.append((label, row, change, "not run yet", NONE, f"waits on it: {waits}"))
+    table.sort(key=lambda r: int(r[0][1:]))
+    for label, row, change, results, cases, headline in table:
+        issue = f"[#{ISSUES[label]}]({ISSUE_URL}/{ISSUES[label]})"
         lines.append(
-            f"| {label} | {row} | {change} | [`{name}`]({path}) | {len(data['cases'])} | {headline} |"
+            f"| {label} | {issue} | {row} | {change} | {results} | {cases} | {headline} |"
         )
     lines += [
         "",
@@ -452,7 +505,29 @@ def build(out: Path) -> None:
                 "",
                 f"Grasp handles (R3): {record['handles']} on its {record['objects']} objects.",
             ]
-        if not ran:
+        waiting = [
+            str(index)
+            for index, spec in enumerate(specs)
+            if any(s[0] in ARTICULATED for s in spec)
+        ]
+        if waiting:
+            lines += [
+                "",
+                (
+                    f"Step{'s' * (len(waiting) > 1)} {', '.join(waiting)} wait"
+                    f"{'s' * (len(waiting) == 1)} on articulated objects (R6,"
+                    f" [#161]({ISSUE_URL}/161))."
+                ),
+            ]
+        if not case.startswith("Ideal/"):
+            lines += [
+                "",
+                (
+                    f"Not run by a planner round yet: its condition waits on R7"
+                    f" ([#162]({ISSUE_URL}/162))."
+                ),
+            ]
+        elif not ran:
             lines += ["", "Not run by a planner round yet."]
         lines.append("")
     lines += [
