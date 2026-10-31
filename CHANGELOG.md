@@ -19,7 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rim pinch) is tried last instead of rejected (`info["fingers"]`). Row A, seed 0: Ideal
   62/71 → 64/72 supported steps (case2's frypan onto the rack, case7's frypan onto the
   stove), no step lost; Memory_Execution 1–3 (Mix 7–9 are the same scenes) put the butter
-  and the mug upright onto the rack, 6/6.
+  and the mug upright onto the rack, 6/6. Rows C and D over 10 seeds per Ideal case:
+  Eq. 1 61.4% → 67.7% and 64.3% → 67.9% (`2026-10-31-r10-…`, `2026-10-31-r11-…`).
 - RoboCerebra mission lookahead (#186): a pick is checked against the place or pour after
   it, planned from the scene the lift leaves (`HppPolicy.plan(..., then=...)`,
   `held_export`); an object whose next step would not plan is deferred, picked last and put
