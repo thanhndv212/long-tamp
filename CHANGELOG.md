@@ -280,6 +280,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A RoboCerebra place onto an object's top now releases where the object can rest
+  (#194, in part). A release over the rack used to be accepted wherever it was collision
+  free, so the butter was dropped on the peg tips and tumbled. Each candidate's center
+  of mass, sampled from its collision boxes, must now lie at least 5 mm inside the hull
+  of the points touching the face under it: the plate between the pegs first, nearest
+  its center, then an object's top, widest margin first. When neither rests, the old
+  collision-free release is kept (`info["rests"] == "unstable"`), since the checker counts
+  `On` the moment the object touches.
 - A task plan through Unified Planning (pyperplan in the container) no longer depends on
   Python's hash seed (#195). Unified Planning and pyperplan break ties between equal plans by
   iterating over sets of strings, so each process could get its own order: RoboCerebra row D
