@@ -847,9 +847,13 @@ class SegmentPlanner:
         fingers closing vertically only after all the others
         (``info["fingers"]``). Over an object with a top above its
         support (a rack's pegs above its plate), every orientation is tried
-        resting on the support before any resting on the top
-        (``info["rests"]``): an object released over the pegs' tips balances
-        on their edges, and slips between them or tips off as it is let go.
+        resting on the support, then resting on the top, before any release
+        it cannot rest at (``info["rests"]``: "support", "top" or
+        "unstable"): an object released over the pegs' tips balances on
+        their edges, and slips between them or tips off as it is let go. An
+        unstable release is still tried last: the checker counts an ``On``
+        the moment it holds, and an upright mug that leans into the pegs
+        holds long enough.
         The carry ends ``approach`` back
         along the approach axis; a straight move inserts the object,
         releases it, and backs out the same way.
@@ -894,7 +898,7 @@ class SegmentPlanner:
         # a rack's pegs, on its plate).
         top = region.get("top")
         over_top = top is not None and top > region.get("height", top)
-        passes = ("support", "top") if over_top else (None,)
+        passes = ("support", "top", "unstable") if over_top else (None,)
         if over_top:
             paths = self.scene.file_paths()["objects"]
             samples = collision_samples(paths[self.target]["urdf"])
@@ -903,12 +907,12 @@ class SegmentPlanner:
                 xyzquat_to_pose(self.scene.object_config(region["object"])),
             )
         for rests in passes:
-            if rests is not None:
+            if rests in ("support", "top"):
                 level = region["height"] if rests == "support" else top
                 faces = support_faces(*support, level)
             for name, obj, heights, hand, below in candidates + vertical:
                 approach_axis = hand[:3, 2]
-                if rests is None:
+                if rests in (None, "unstable"):
                     positions = place_positions(region, approach_axis, heights, step)
                 else:
                     positions = self._resting(
