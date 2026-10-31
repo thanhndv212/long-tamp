@@ -22,6 +22,7 @@ from long_tamp.eval.robocerebra_plan import (
 )
 from long_tamp.eval.robocerebra_policy import (
     HppPolicy,
+    ReleaseController,
     SegmentController,
     SegmentGoal,
     UnsupportedGoal,
@@ -344,6 +345,61 @@ def test_policy_plans_a_pour_over_the_receiver(monkeypatch, tmp_path):
     controller = policy(Env(), info, 1, 150)
     assert controller.info["status"] == "unsupported"
     assert controller.info["error"] == "no object 'bowl_9' in the scene"
+
+
+def test_recovering_policy_releases_or_picks_first(monkeypatch, tmp_path):
+    import long_tamp.eval.robocerebra_plan as plan_module
+    import long_tamp.eval.robocerebra_policy as policy_module
+
+    class Scene:
+        root = tmp_path
+        manifest = {"objects": {}, "regions": [{"region": "box_1"}]}
+
+    class Env:
+        def export_scene(self, out):
+            return Scene()
+
+    holding = {"now": None}
+    solved = []
+
+    def solve(scene, urdf, srdf, target, region, *rest):
+        solved.append((target, region))
+        return plan_module.SegmentPlan([], [], np.eye(4), {}), None
+
+    monkeypatch.setattr(policy_module, "_solve", solve)
+    monkeypatch.setattr(plan_module, "held_object", lambda manifest: holding["now"])
+    monkeypatch.setattr(plan_module, "robot_files", lambda assets: ("u", "s"))
+    info = {
+        "goal": {"cube_1": [["pick", "cube_1"], ["in", "cube_1", "box_1"]]},
+        "goal_steps": {"cube_1": [0, 1]},
+    }
+    policy = HppPolicy(work_dir=tmp_path, isolate=False, recover=True)
+    # A pick with another object in the hand releases it.
+    holding["now"] = "mug_1"
+    controller = policy(Env(), info, 0, 150)
+    assert isinstance(controller, ReleaseController)
+    assert controller.info["recovery"] == "release mug_1" and not solved
+    # A place whose object is not in the hand picks it first.
+    holding["now"] = None
+    controller = policy(Env(), info, 1, 150)
+    assert controller.info["status"] == "planned"
+    assert controller.info["recovery"] == "pick cube_1"
+    assert solved == [("cube_1", None)]
+    # Without recover, the same place fails as before.
+    controller = HppPolicy(work_dir=tmp_path, isolate=False)(Env(), info, 1, 150)
+    assert controller.info["status"] == "planning failed"
+
+
+def test_release_controller_opens_then_rises():
+    controller = ReleaseController(open_steps=2, lift=0.1)
+    T = pose()
+    actions = [controller(obs_at(T)) for _ in range(3)]
+    assert all(a[6] == -1.0 for a in actions)
+    assert np.allclose(actions[0][:3], 0.0) and actions[2][2] == 1.0
+    assert not controller.done
+    T[2, 3] += 0.095
+    controller(obs_at(T))
+    assert controller.done
 
 
 def test_controller_records_the_targets_path():
