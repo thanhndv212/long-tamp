@@ -584,3 +584,81 @@ def test_settled_start_takes_hpps_placement_of_the_target():
     far = [0.3, 0.4, 0.5, 0.0, 0.45, 0.0, 0.0, 0.0, 1.0]
     message = f"goal configuration at rank 0: ({','.join(map(str, far))},) does not satisfy the leaf constraint."
     assert planner._settled(message, q) is None  # a real move, not settling
+
+
+def bystander_planner(roots, target="mug_1"):
+    from types import SimpleNamespace
+
+    model = SimpleNamespace(
+        getJointId=lambda joint: joint.split("/")[0],
+        joints={name: SimpleNamespace(idx_q=i) for name, i in roots.items()},
+    )
+    planner = object.__new__(SegmentPlanner)
+    planner.target = target
+    planner.scene = SimpleNamespace(objects=list(roots))
+    planner.task = SimpleNamespace(planner=SimpleNamespace(model=lambda: model))
+    return planner
+
+
+def test_bystanders_are_raised_out_so_the_targets_collision_shows():
+    from contextlib import contextmanager
+
+    # q: [sauce z, butter z, mug z]; the mug is the target, in the rack's pegs.
+    planner = bystander_planner({"sauce_1": -2, "butter_1": -1, "mug_1": 0})
+
+    class Problem:
+        def isConfigValid(self, q):
+            for i, name, sunk in ((0, "sauce_1", 0.4235), (1, "butter_1", 0.4715)):
+                if q[i] < sunk:  # 1.5 and 1 mm into the table
+                    return (
+                        False,
+                        f"Collision between object environment/table_0 and {name}/base_link_0",
+                    )
+            return (
+                False,
+                "Collision between object rack_1/base_link_1 and mug_1/base_link_0",
+            )
+
+    @contextmanager
+    def validations():
+        yield Problem()
+
+    planner._validations = validations
+    planner.q0 = [0.422, 0.4702, 0.48]
+    info = {}
+    planner._settle_bystanders(info)
+    assert info["settled"] == {"sauce_1": 0.002, "butter_1": 0.002}
+    assert planner.q0[2] == 0.48  # the target is not moved
+    assert "mug_1" in Problem().isConfigValid(planner.q0)[1]
+
+
+def test_pairs_no_motion_changes_are_dropped():
+    from types import SimpleNamespace
+
+    names = ["panda/panda_hand_0", "rack_1/base_link_1", "butter_1/base_link_0"]
+    names += ["mug_1/base_link_0", "environment/table_0", "panda/panda_link3_0"]
+    pair = lambda a, b: SimpleNamespace(first=a, second=b)
+    pairs = [pair(1, 2), pair(0, 2), pair(1, 3), pair(2, 4), pair(2, 1)]
+    pairs += [pair(0, 3), pair(5, 3)]
+
+    class Geometry:
+        geometryObjects = [SimpleNamespace(name=n) for n in names]
+
+        def __init__(self):
+            self.collisionPairs = list(pairs)
+
+        def removeCollisionPair(self, p):
+            self.collisionPairs = [
+                c
+                for c in self.collisionPairs
+                if (c.first, c.second) != (p.first, p.second)
+            ]
+
+    for held, kept in ((False, [1, 2, 3, 5, 6]), (True, [1, 2, 3, 6])):
+        planner = bystander_planner({"rack_1": 0, "butter_1": 7, "mug_1": 14})
+        planner.held = held
+        geometry = Geometry()
+        planner.task.planner.device = SimpleNamespace(geomModel=lambda: geometry)
+        # Rack-butter both ways; held, the hand-mug pair too (not the arm's).
+        assert planner._drop_static_pairs() == len(pairs) - len(kept)
+        assert geometry.collisionPairs == [pairs[i] for i in kept]
