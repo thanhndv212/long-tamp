@@ -13,6 +13,7 @@ long_tamp's side (issue #156).
 | `env_server.py` | benchmark env | the server; numpy + stdlib at import, robosuite/LIBERO on `load` |
 | `replay_demo.py` | long_tamp env | replays a case's demo through the client, measures drift |
 | `results/` | | replay logs |
+| `task_catalog.py` | both | every case's task, steps and goal predicates (`dump`, benchmark env) and each round's progress on them (`build`, any Python) into [`docs/plans/robocerebra-tasks.md`](../../docs/plans/robocerebra-tasks.md) |
 
 ## Operations
 

@@ -1,0 +1,5017 @@
+{
+ "Ideal/case1": {
+  "task": "Organize all the food boxes into the white storage box.",
+  "steps": [
+   "Pick up cream cheese from coffee table",
+   "Place down cream cheese into white storage box placed at bottom side",
+   "Pick up popcorn from coffee table",
+   "Place down popcorn into white storage box placed at right side",
+   "Pick up butter from coffee table",
+   "Place down butter into white storage box placed at left side"
+  ],
+  "goal": {
+   "cream_cheese_1": [
+    [
+     "pick",
+     "cream_cheese_1"
+    ],
+    [
+     "in",
+     "cream_cheese_1",
+     "white_storage_box_1_bottom_side"
+    ]
+   ],
+   "popcorn_1": [
+    [
+     "pick",
+     "popcorn_1"
+    ],
+    [
+     "in",
+     "popcorn_1",
+     "white_storage_box_1_right_side"
+    ]
+   ],
+   "butter_1": [
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "in",
+     "butter_1",
+     "white_storage_box_1_left_side"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "cream_cheese_1": [
+    0,
+    1
+   ],
+   "popcorn_1": [
+    2,
+    3
+   ],
+   "butter_1": [
+    4,
+    5
+   ]
+  }
+ },
+ "Ideal/case2": {
+  "task": "Place the cream cheese into the white storage box and place the frypan onto the rack",
+  "steps": [
+   "Pick up the cream cheese from the coffee table.",
+   "Place the cream cheese into the white storage box at top side",
+   "Pick the frypan from the coffee table",
+   "Place the frypan onto the rack"
+  ],
+  "goal": {
+   "cream_cheese_1": [
+    [
+     "pick",
+     "cream_cheese_1"
+    ],
+    [
+     "in",
+     "cream_cheese_1",
+     "white_storage_box_1_top_side"
+    ]
+   ],
+   "chefmate_8_frypan_1": [
+    [
+     "pick",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "on",
+     "chefmate_8_frypan_1",
+     "rack_1"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "cream_cheese_1": [
+    0,
+    1
+   ],
+   "chefmate_8_frypan_1": [
+    2,
+    3
+   ]
+  }
+ },
+ "Ideal/case3": {
+  "task": "Place the plates neatly between the knife and fork, and pour all the snacks and drinks into the plates.",
+  "steps": [
+   "Pick up the plate from coffee table",
+   "Place the plate on dining set group",
+   "Pick up the popcorn from dining set group",
+   "Place the popcorn on the plate",
+   "Place the popcorn on dining set group",
+   "Pick up the cookies from dining set group",
+   "Place the cookies on the plate",
+   "Place the cookies on the dining set group",
+   "Pick up the wine bottle from dining set group",
+   "Pour out the wine bottle onto the plate"
+  ],
+  "goal": {
+   "plate_1": [
+    [
+     "pick",
+     "plate_1"
+    ],
+    [
+     "in",
+     "plate_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "popcorn_1": [
+    [
+     "pick",
+     "popcorn_1"
+    ],
+    [
+     "pour",
+     "popcorn_1",
+     "plate_1"
+    ],
+    [
+     "in",
+     "popcorn_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "cookies_1": [
+    [
+     "pick",
+     "cookies_1"
+    ],
+    [
+     "pour",
+     "cookies_1",
+     "plate_1"
+    ],
+    [
+     "in",
+     "cookies_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wine_bottle_1": [
+    [
+     "pick",
+     "wine_bottle_1"
+    ],
+    [
+     "pour",
+     "wine_bottle_1",
+     "plate_1"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "plate_1": [
+    0,
+    1
+   ],
+   "popcorn_1": [
+    2,
+    3,
+    4
+   ],
+   "cookies_1": [
+    5,
+    6,
+    7
+   ],
+   "wine_bottle_1": [
+    8,
+    9
+   ]
+  }
+ },
+ "Ideal/case4": {
+  "task": "Clean up the desk by putting the two boxes in the bowl and place the frying pan onto the cabinet.",
+  "steps": [
+   "Pick up cream cheese from coffee table",
+   "Place cream cheese into white bowl",
+   "Pick up popcorn from coffee table",
+   "Place popcorn into white bowl",
+   "Pick up frypan from coffee table",
+   "Place frypan on wooden cabinet top side"
+  ],
+  "goal": {
+   "cream_cheese_1": [
+    [
+     "pick",
+     "cream_cheese_1"
+    ],
+    [
+     "pour",
+     "cream_cheese_1",
+     "white_bowl_1"
+    ]
+   ],
+   "popcorn_1": [
+    [
+     "pick",
+     "popcorn_1"
+    ],
+    [
+     "pour",
+     "popcorn_1",
+     "white_bowl_1"
+    ]
+   ],
+   "chefmate_8_frypan_1": [
+    [
+     "pick",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "chefmate_8_frypan_1",
+     "wooden_cabinet_1_top_side"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "cream_cheese_1": [
+    0,
+    1
+   ],
+   "popcorn_1": [
+    2,
+    3
+   ],
+   "chefmate_8_frypan_1": [
+    4,
+    5
+   ]
+  }
+ },
+ "Ideal/case5": {
+  "task": "Prepare a snack tray with chocolate pudding and wine in the plate.",
+  "steps": [
+   "Pick up the chocolate pudding from wooden cabinet top side",
+   "Place the chocolate pudding on the plate",
+   "Place the chocolate pudding on the coffee table",
+   "Pick up the wine bottle from coffee table",
+   "Pour out wine from the wine bottle onto the plate",
+   "Place the wine bottle on the coffee table"
+  ],
+  "goal": {
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "plate_1"
+    ],
+    [
+     "in",
+     "chocolate_pudding_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wine_bottle_1": [
+    [
+     "pick",
+     "wine_bottle_1"
+    ],
+    [
+     "pour",
+     "wine_bottle_1",
+     "plate_1"
+    ],
+    [
+     "in",
+     "wine_bottle_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "chocolate_pudding_1": [
+    0,
+    1,
+    2
+   ],
+   "wine_bottle_1": [
+    3,
+    4,
+    5
+   ]
+  }
+ },
+ "Ideal/case6": {
+  "task": "Place the butter into the short cabinet and pour the tomato sauce into the plate.",
+  "steps": [
+   "Open the short cabinet in middle region",
+   "Pick up the butter from coffee table",
+   "Place down the butter into the short cabinet in middle region",
+   "Pick up the tomato sauce from coffee table",
+   "Pour out the tomato sauce onto the plate",
+   "Place the tomato sauce on the coffee table"
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "open",
+     "short_cabinet_1_middle_region"
+    ],
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "in",
+     "butter_1",
+     "short_cabinet_1_middle_region"
+    ]
+   ],
+   "tomato_sauce_1": [
+    [
+     "pick",
+     "tomato_sauce_1"
+    ],
+    [
+     "pour",
+     "tomato_sauce_1",
+     "plate_1"
+    ],
+    [
+     "in",
+     "tomato_sauce_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1,
+    2
+   ],
+   "tomato_sauce_1": [
+    3,
+    4,
+    5
+   ]
+  }
+ },
+ "Ideal/case7": {
+  "task": "Place the boxes of chocolate pudding and butter into a bowl and heat the pan.",
+  "steps": [
+   "Pick up chocolate pudding from coffee table",
+   "Place chocolate pudding into akita black bowl",
+   "Pick up butter from coffee table",
+   "Place butter into akita black bowl",
+   "Turn on flat stove in cook region",
+   "Pick up frypan from coffee table",
+   "Place frypan on flat stove in cook region"
+  ],
+  "goal": {
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "akita_black_bowl_1"
+    ]
+   ],
+   "butter_1": [
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "pour",
+     "butter_1",
+     "akita_black_bowl_1"
+    ]
+   ],
+   "flat_stove_1": [
+    [
+     "turnon",
+     "flat_stove_1"
+    ]
+   ],
+   "chefmate_8_frypan_1": [
+    [
+     "pick",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "chefmate_8_frypan_1",
+     "flat_stove_1_cook_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "chocolate_pudding_1": [
+    0,
+    1
+   ],
+   "butter_1": [
+    2,
+    3
+   ],
+   "flat_stove_1": [
+    4
+   ],
+   "chefmate_8_frypan_1": [
+    5,
+    6
+   ]
+  }
+ },
+ "Ideal/case8": {
+  "task": "Place the cream cheese into the short cabinet, the chocolate pudding into the bowl, and pour a glass of wine.",
+  "steps": [
+   "Open the short cabinet middle region",
+   "Pick up the cream cheese from coffee table",
+   "Place down the cream cheese into short cabinet middle region",
+   "Pick up the chocolate pudding from coffee table",
+   "Place down the chocolate pudding into akita black bowl",
+   "Pick up the wine bottle from coffee table",
+   "Pour out the contents of wine bottle into white yellow mug"
+  ],
+  "goal": {
+   "cream_cheese_1": [
+    [
+     "open",
+     "short_cabinet_1_middle_region"
+    ],
+    [
+     "pick",
+     "cream_cheese_1"
+    ],
+    [
+     "in",
+     "cream_cheese_1",
+     "short_cabinet_1_middle_region"
+    ]
+   ],
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "akita_black_bowl_1"
+    ]
+   ],
+   "wine_bottle_1": [
+    [
+     "pick",
+     "wine_bottle_1"
+    ],
+    [
+     "pour",
+     "wine_bottle_1",
+     "white_yellow_mug_1"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "cream_cheese_1": [
+    0,
+    1,
+    2
+   ],
+   "chocolate_pudding_1": [
+    3,
+    4
+   ],
+   "wine_bottle_1": [
+    5,
+    6
+   ]
+  }
+ },
+ "Ideal/case9": {
+  "task": "Place the chocolate pudding and cookies into a bowl and microwave it.",
+  "steps": [
+   "Pick up the white bowl from the wooden cabinet at top side",
+   "Place down the white bowl on the coffee table",
+   "Pick up the cookies from the coffee table",
+   "Place down the cookies into the white bowl",
+   "Place the cookies on the coffee table",
+   "Pick up the chocolate pudding from the coffee table",
+   "Place down the chocolate pudding into the white bowl",
+   "Place the chocolate pudding on the coffee table",
+   "Open the microwave",
+   "Pick up the white bowl from the coffee table",
+   "Place the white bowl into the microwave"
+  ],
+  "goal": {
+   "white_bowl_1": [
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "coffee_table_table_region"
+    ],
+    [
+     "open",
+     "microwave_1"
+    ],
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "microwave_1_heating_region"
+    ]
+   ],
+   "cookies_1": [
+    [
+     "pick",
+     "cookies_1"
+    ],
+    [
+     "pour",
+     "cookies_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "cookies_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "chocolate_pudding_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "white_bowl_1": [
+    0,
+    1,
+    8,
+    9,
+    10
+   ],
+   "cookies_1": [
+    2,
+    3,
+    4
+   ],
+   "chocolate_pudding_1": [
+    5,
+    6,
+    7
+   ]
+  }
+ },
+ "Ideal/case10": {
+  "task": "Place the cookies into the basket, pour the tomato sauce and BBQ sauce into the frying pan, pour the wine into the red coffee mug, and place the white-yellow mug into the wooden tray.",
+  "steps": [
+   "Pick up the cookies from the coffee table",
+   "Place down the cookies into basket in contain region",
+   "Pick up the tomato sauce from coffee table",
+   "Pour out the tomato sauce onto frypan",
+   "Place the tomato sauce on the coffee table",
+   "Pick up the bbq sauce from the coffee table",
+   "Pour out the bbq sauce onto frypan",
+   "Place the bbq sauce sauce on the coffee table",
+   "Pick up the wine from coffee table",
+   "Pour out the wine from wine bottle into red coffee mug",
+   "Place down the wine onto coffee table",
+   "Pick up the white yellow mug from coffee table",
+   "Place down the white yellow mug into wooden tray in contain region"
+  ],
+  "goal": {
+   "cookies_1": [
+    [
+     "pick",
+     "cookies_1"
+    ],
+    [
+     "in",
+     "cookies_1",
+     "basket_1_contain_region"
+    ]
+   ],
+   "tomato_sauce_1": [
+    [
+     "pick",
+     "tomato_sauce_1"
+    ],
+    [
+     "pour",
+     "tomato_sauce_1",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "tomato_sauce_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "bbq_sauce_1": [
+    [
+     "pick",
+     "bbq_sauce_1"
+    ],
+    [
+     "pour",
+     "bbq_sauce_1",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "bbq_sauce_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wine_bottle_1": [
+    [
+     "pick",
+     "wine_bottle_1"
+    ],
+    [
+     "pour",
+     "wine_bottle_1",
+     "red_coffee_mug_1"
+    ],
+    [
+     "in",
+     "wine_bottle_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "white_yellow_mug_1": [
+    [
+     "pick",
+     "white_yellow_mug_1"
+    ],
+    [
+     "in",
+     "white_yellow_mug_1",
+     "wooden_tray_1_contain_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "cookies_1": [
+    0,
+    1
+   ],
+   "tomato_sauce_1": [
+    2,
+    3,
+    4
+   ],
+   "bbq_sauce_1": [
+    5,
+    6,
+    7
+   ],
+   "wine_bottle_1": [
+    8,
+    9,
+    10
+   ],
+   "white_yellow_mug_1": [
+    11,
+    12
+   ]
+  }
+ },
+ "Memory_Execution/case1": {
+  "task": "After putting the butter and mug on the rack, pour in the milk, and check the wooden cabinet top region for any previously handled objects, placing them on the table if found.",
+  "steps": [
+   "Pick up the butter from coffee table",
+   "Place the butter onto the rack",
+   "Pick up the red coffee mug from coffee table",
+   "Place the red coffee mug onto the rack",
+   "Pick up the milk from coffee table",
+   "Pour out the milk from the milk container",
+   "Place down the milk onto coffee table",
+   "Open the wooden cabinet top region"
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "on",
+     "butter_1",
+     "rack_1"
+    ]
+   ],
+   "red_coffee_mug_1": [
+    [
+     "pick",
+     "red_coffee_mug_1"
+    ],
+    [
+     "on",
+     "red_coffee_mug_1",
+     "rack_1"
+    ]
+   ],
+   "milk_1": [
+    [
+     "pick",
+     "milk_1"
+    ],
+    [
+     "in",
+     "milk_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wooden_cabinet_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1
+   ],
+   "red_coffee_mug_1": [
+    2,
+    3
+   ],
+   "milk_1": [
+    4,
+    6
+   ],
+   "wooden_cabinet_1": [
+    7
+   ]
+  }
+ },
+ "Memory_Execution/case2": {
+  "task": "After placing the butter and mug on the rack, pour in the milk, and check the wooden cabinet top region for any previously handled objects, placing them on the table if found.",
+  "steps": [
+   "Pick up the butter from coffee table",
+   "Place the butter onto the rack",
+   "Pick up the red coffee mug from coffee table",
+   "Place the red coffee mug onto the rack",
+   "Pick up the milk from coffee table",
+   "Pour out the milk from the milk container",
+   "Place down the milk onto coffee table",
+   "Open the wooden cabinet top region"
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "on",
+     "butter_1",
+     "rack_1"
+    ]
+   ],
+   "red_coffee_mug_1": [
+    [
+     "pick",
+     "red_coffee_mug_1"
+    ],
+    [
+     "on",
+     "red_coffee_mug_1",
+     "rack_1"
+    ]
+   ],
+   "milk_1": [
+    [
+     "pick",
+     "milk_1"
+    ],
+    [
+     "in",
+     "milk_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wooden_cabinet_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1
+   ],
+   "red_coffee_mug_1": [
+    2,
+    3
+   ],
+   "milk_1": [
+    4,
+    6
+   ],
+   "wooden_cabinet_1": [
+    7
+   ]
+  }
+ },
+ "Memory_Execution/case3": {
+  "task": "After placing the butter and mug on the rack, pour in the milk, and check the wooden cabinet top region for any previously handled objects, placing them on the table if found.",
+  "steps": [
+   "Pick up the butter from coffee table",
+   "Place the butter onto the rack",
+   "Pick up the red coffee mug from coffee table",
+   "Place the red coffee mug onto the rack",
+   "Pick up the milk from coffee table",
+   "Pour out the milk from the milk container",
+   "Place down the milk onto coffee table",
+   "Open the wooden cabinet top region",
+   "Pick up the butter from the wooden cabinet top region",
+   "Place the butter on the coffee table"
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "on",
+     "butter_1",
+     "rack_1"
+    ]
+   ],
+   "butter_2": [
+    [
+     "pick",
+     "butter_2"
+    ],
+    [
+     "in",
+     "butter_2",
+     "coffee_table_table_region"
+    ]
+   ],
+   "red_coffee_mug_1": [
+    [
+     "pick",
+     "red_coffee_mug_1"
+    ],
+    [
+     "on",
+     "red_coffee_mug_1",
+     "rack_1"
+    ]
+   ],
+   "milk_1": [
+    [
+     "pick",
+     "milk_1"
+    ],
+    [
+     "in",
+     "milk_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wooden_cabinet_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1
+   ],
+   "butter_2": [
+    8,
+    9
+   ],
+   "red_coffee_mug_1": [
+    2,
+    3
+   ],
+   "milk_1": [
+    4,
+    6
+   ],
+   "wooden_cabinet_1": [
+    7
+   ]
+  }
+ },
+ "Memory_Execution/case4": {
+  "task": "Pour the butter into the red coffee mug, then pick up the plate and store it on the top side of the wooden shelf, and check the wooden cabinet top region for any previously handled objects, placing them on the table if found.",
+  "steps": [
+   "Pick up the butter from the kitchen table",
+   "Pour the butter into the red coffee mug",
+   "Place butter on the kitchen table",
+   "Pick up the plate from the kitchen table",
+   "Place the plate into the wooden shelf top side",
+   "Open the wooden cabinet top region",
+   "Pick up the butter from the wooden cabinet top region",
+   "Place butter on the kitchen table"
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "pour",
+     "butter_1",
+     "red_coffee_mug_1"
+    ],
+    [
+     "in",
+     "butter_1",
+     "kitchen_table_table_region"
+    ]
+   ],
+   "butter_2": [
+    [
+     "pick",
+     "butter_2"
+    ],
+    [
+     "in",
+     "butter_2",
+     "kitchen_table_table_region"
+    ]
+   ],
+   "plate_1": [
+    [
+     "pick",
+     "plate_1"
+    ],
+    [
+     "in",
+     "plate_1",
+     "wooden_shelf_1_top_side"
+    ]
+   ],
+   "wooden_cabinet_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1,
+    2
+   ],
+   "butter_2": [
+    6,
+    7
+   ],
+   "plate_1": [
+    3,
+    4
+   ],
+   "wooden_cabinet_1": [
+    5
+   ]
+  }
+ },
+ "Memory_Execution/case5": {
+  "task": "Prepare a snack tray with chocolate pudding and wine in the plate, and check the wooden cabinet top region for any previously handled objects, placing them on the table if found.",
+  "steps": [
+   "Pick up the chocolate pudding from wooden cabinet",
+   "Place the chocolate pudding on the plate",
+   "Place the chocolate pudding on the coffee table",
+   "Pick up the wine bottle from coffee table",
+   "Pour out wine from the wine bottle onto the plate",
+   "Place the wine bottle on the coffee table",
+   "Open the wooden cabinet top region"
+  ],
+  "goal": {
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "plate_1"
+    ],
+    [
+     "in",
+     "chocolate_pudding_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wine_bottle_1": [
+    [
+     "pick",
+     "wine_bottle_1"
+    ],
+    [
+     "pour",
+     "wine_bottle_1",
+     "plate_1"
+    ],
+    [
+     "in",
+     "wine_bottle_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wooden_cabinet_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "chocolate_pudding_1": [
+    0,
+    1,
+    2
+   ],
+   "wine_bottle_1": [
+    3,
+    4,
+    5
+   ],
+   "wooden_cabinet_1": [
+    6
+   ]
+  }
+ },
+ "Memory_Execution/case6": {
+  "task": "Pour the chocolate pudding and cookies into a bowl and microwave it,and check the wooden cabinet top region for any previously handled objects, placing them on the table if found.",
+  "steps": [
+   "Pick up the white bowl from the coffee table",
+   "Place down the white bowl on the coffee table",
+   "Pick up the cookies from the coffee table",
+   "Place down the cookies into the white bowl",
+   "Place the cookies on the coffee table",
+   "Pick up the chocolate pudding from the coffee table",
+   "Place down the chocolate pudding into the white bowl",
+   "Place the chocolate pudding on the coffee table",
+   "Open the microwave",
+   "Pick up the white bowl from the coffee table",
+   "Place the white bowl into the microwave",
+   "Open the top region of the wooden cabinet"
+  ],
+  "goal": {
+   "white_bowl_1": [
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "coffee_table_table_region"
+    ],
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "microwave_1_heating_region"
+    ]
+   ],
+   "cookies_1": [
+    [
+     "pick",
+     "cookies_1"
+    ],
+    [
+     "pour",
+     "cookies_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "cookies_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "chocolate_pudding_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wooden_cabinet_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ]
+   ],
+   "microwave_1": [
+    [
+     "open",
+     "microwave_1"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "white_bowl_1": [
+    0,
+    1,
+    9,
+    10
+   ],
+   "cookies_1": [
+    2,
+    3,
+    4
+   ],
+   "chocolate_pudding_1": [
+    5,
+    6,
+    7
+   ],
+   "wooden_cabinet_1": [
+    11
+   ],
+   "microwave_1": [
+    8
+   ]
+  }
+ },
+ "Memory_Execution/case7": {
+  "task": "Place the chocolate pudding and cookies into a bowl and microwave it,and check the wooden cabinet top region for any previously handled objects, placing them on the table if found.",
+  "steps": [
+   "Pick up the white bowl from the coffee table",
+   "Place down the white bowl on the coffee table",
+   "Pick up the cookies from the coffee table",
+   "Place down the cookies into the white bowl",
+   "Place the cookies on the coffee table",
+   "Pick up the chocolate pudding from the coffee table",
+   "Place down the chocolate pudding into the white bowl",
+   "Put the chocolate pudding on the coffee table",
+   "Open the microwave",
+   "Pick up the white bowl from the coffee table",
+   "Place the white bowl into the microwave",
+   "Open the top region of the wooden cabinet"
+  ],
+  "goal": {
+   "white_bowl_1": [
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "coffee_table_table_region"
+    ],
+    [
+     "open",
+     "microwave_1"
+    ],
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "microwave_1_heating_region"
+    ]
+   ],
+   "cookies_1": [
+    [
+     "pick",
+     "cookies_1"
+    ],
+    [
+     "pour",
+     "cookies_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "cookies_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "chocolate_pudding_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wooden_cabinet_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "white_bowl_1": [
+    0,
+    1,
+    8,
+    9,
+    10
+   ],
+   "cookies_1": [
+    2,
+    3,
+    4
+   ],
+   "chocolate_pudding_1": [
+    5,
+    6,
+    7
+   ],
+   "wooden_cabinet_1": [
+    11
+   ]
+  }
+ },
+ "Memory_Execution/case8": {
+  "task": "Heat the alphabet soup in a bowl using the microwave\uff0cpour a cup of milk into a mug,reposition the popcorn and check the white cabinet top region for any previously handled objects, placing them on the table if found.",
+  "steps": [
+   "Pick up the akita black bowl from coffee table.",
+   "Place the akita black bowl on table surface.",
+   "Pick up the popcorn from coffee table.",
+   "Place the popcorn on coffee table.",
+   "Pick up the alphabet soup from coffee table.",
+   "Pour out the alphabet soup into the akita black bowl.",
+   "Place the empty alphabet soup on table surface.",
+   "Open the microwave at top side.",
+   "Pick up the akita black bowl with soup from table surface.",
+   "Place the akita black bowl with soup into the microwave heating region.",
+   "Pick up the milk from its storage.",
+   "Pour out the milk into the white yellow mug.",
+   "Place the milk on table surface.",
+   "Open the top region of the white cabinet"
+  ],
+  "goal": {
+   "akita_black_bowl_1": [
+    [
+     "pick",
+     "akita_black_bowl_1"
+    ],
+    [
+     "in",
+     "akita_black_bowl_1",
+     "coffee_table_table_region"
+    ],
+    [
+     "pick",
+     "akita_black_bowl_1"
+    ],
+    [
+     "in",
+     "akita_black_bowl_1",
+     "microwave_1_heating_region"
+    ]
+   ],
+   "popcorn_1": [
+    [
+     "pick",
+     "popcorn_1"
+    ],
+    [
+     "in",
+     "popcorn_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "alphabet_soup_1": [
+    [
+     "pick",
+     "alphabet_soup_1"
+    ],
+    [
+     "pour",
+     "alphabet_soup_1",
+     "akita_black_bowl_1"
+    ],
+    [
+     "in",
+     "alphabet_soup_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "microwave_1": [
+    [
+     "open",
+     "microwave_1"
+    ]
+   ],
+   "milk_1": [
+    [
+     "pick",
+     "milk_1"
+    ],
+    [
+     "pour",
+     "milk_1",
+     "white_yellow_mug_1"
+    ],
+    [
+     "in",
+     "milk_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "white_cabinet_1": [
+    [
+     "open",
+     "white_cabinet_1_top_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "akita_black_bowl_1": [
+    0,
+    1,
+    8,
+    9
+   ],
+   "popcorn_1": [
+    2,
+    3
+   ],
+   "alphabet_soup_1": [
+    4,
+    5,
+    6
+   ],
+   "microwave_1": [
+    7
+   ],
+   "milk_1": [
+    10,
+    11,
+    12
+   ],
+   "white_cabinet_1": [
+    13
+   ]
+  }
+ },
+ "Memory_Execution/case9": {
+  "task": "Heat the alphabet soup in a bowl using the microwave\uff0cpour a cup of milk into a mug,reposition the popcorn and check the white cabinet top region for any previously handled objects, placing them on the table if found. placing them on the table if found.",
+  "steps": [
+   "Pick up the akita black bowl from coffee table.",
+   "Place the akita black bowl on table surface.",
+   "Pick up the popcorn from coffee table.",
+   "Place the popcorn on coffee table.",
+   "Pick up the alphabet soup from coffee table.",
+   "Pour out the alphabet soup into the akita black bowl.",
+   "Place the empty alphabet soup on table surface.",
+   "Open the microwave at top side.",
+   "Pick up the akita black bowl with soup from table surface.",
+   "Place the akita black bowl with soup into the microwave heating region.",
+   "Pick up the milk from its storage.",
+   "Pour out the milk into the white yellow mug.",
+   "Place the milk on table surface.",
+   "Open the top region of the white cabinet"
+  ],
+  "goal": {
+   "akita_black_bowl_1": [
+    [
+     "pick",
+     "akita_black_bowl_1"
+    ],
+    [
+     "in",
+     "akita_black_bowl_1",
+     "coffee_table_table_region"
+    ],
+    [
+     "pick",
+     "akita_black_bowl_1"
+    ],
+    [
+     "in",
+     "akita_black_bowl_1",
+     "microwave_1_heating_region"
+    ]
+   ],
+   "popcorn_1": [
+    [
+     "pick",
+     "popcorn_1"
+    ],
+    [
+     "in",
+     "popcorn_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "alphabet_soup_1": [
+    [
+     "pick",
+     "alphabet_soup_1"
+    ],
+    [
+     "pour",
+     "alphabet_soup_1",
+     "akita_black_bowl_1"
+    ],
+    [
+     "in",
+     "alphabet_soup_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "microwave_1": [
+    [
+     "open",
+     "microwave_1"
+    ]
+   ],
+   "milk_1": [
+    [
+     "pick",
+     "milk_1"
+    ],
+    [
+     "pour",
+     "milk_1",
+     "white_yellow_mug_1"
+    ],
+    [
+     "in",
+     "milk_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "white_cabinet_1": [
+    [
+     "open",
+     "white_cabinet_1_top_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "akita_black_bowl_1": [
+    0,
+    1,
+    8,
+    9
+   ],
+   "popcorn_1": [
+    2,
+    3
+   ],
+   "alphabet_soup_1": [
+    4,
+    5,
+    6
+   ],
+   "microwave_1": [
+    7
+   ],
+   "milk_1": [
+    10,
+    11,
+    12
+   ],
+   "white_cabinet_1": [
+    13
+   ]
+  }
+ },
+ "Memory_Execution/case10": {
+  "task": "Heat the alphabet soup in a bowl using the microwave\uff0cpour a cup of milk into a mug,reposition the popcorn and check the white cabinet top region for any previously handled objects, placing them on the table if found.",
+  "steps": [
+   "Pick up the akita black bowl from coffee table.",
+   "Place the akita black bowl on table surface.",
+   "Pick up the popcorn from coffee table.",
+   "Place the popcorn on coffee table.",
+   "Pick up the alphabet soup from coffee table.",
+   "Pour out the alphabet soup into the akita black bowl.",
+   "Place the empty alphabet soup on table surface.",
+   "Open the microwave.",
+   "Pick up the milk from its storage.",
+   "Pour out the milk into the white yellow mug.",
+   "Place the milk on table surface.",
+   "Open the top region of the white cabinet",
+   "Pick up the popcorn from coffee table.",
+   "Place the popcorn on coffee table."
+  ],
+  "goal": {
+   "akita_black_bowl_1": [
+    [
+     "pick",
+     "akita_black_bowl_1"
+    ],
+    [
+     "in",
+     "akita_black_bowl_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "popcorn_1": [
+    [
+     "pick",
+     "popcorn_1"
+    ],
+    [
+     "in",
+     "popcorn_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "alphabet_soup_1": [
+    [
+     "pick",
+     "alphabet_soup_1"
+    ],
+    [
+     "pour",
+     "alphabet_soup_1",
+     "akita_black_bowl_1"
+    ],
+    [
+     "in",
+     "alphabet_soup_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "microwave_1": [
+    [
+     "open",
+     "microwave_1"
+    ]
+   ],
+   "milk_1": [
+    [
+     "pick",
+     "milk_1"
+    ],
+    [
+     "pour",
+     "milk_1",
+     "white_yellow_mug_1"
+    ],
+    [
+     "in",
+     "milk_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "popcorn_2": [
+    [
+     "open",
+     "white_cabinet_1_top_region"
+    ],
+    [
+     "pick",
+     "popcorn_2"
+    ],
+    [
+     "in",
+     "popcorn_2",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "akita_black_bowl_1": [
+    0,
+    1
+   ],
+   "popcorn_1": [
+    2,
+    3
+   ],
+   "alphabet_soup_1": [
+    4,
+    5,
+    6
+   ],
+   "microwave_1": [
+    7
+   ],
+   "milk_1": [
+    8,
+    9,
+    10
+   ],
+   "popcorn_2": [
+    11,
+    12,
+    13
+   ]
+  }
+ },
+ "Memory_Exploration/case1": {
+  "task": "Find and pick the butter from the wooden cabinet, pour the cream cheese from the kitchen table into the red coffee mug, and put the plate onto the top side of the wooden shelf.",
+  "steps": [
+   "Open the wooden cabinet top region",
+   "Close the wooden cabinet top region",
+   "Open the wooden cabinet middle region",
+   "Close the wooden cabinet middle region",
+   "Open the wooden cabinet bottom region",
+   "Pick up the butter from the wooden cabinet bottom region",
+   "Place the butter on the kitchen table",
+   "Pick up the cream cheese from the kitchen table",
+   "Pour the cream cheese into the red coffee mug",
+   "Place cream cheese on the kitchen table",
+   "Pick up the plate from the kitchen table",
+   "Place the plate into the wooden shelf top side"
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "close",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "open",
+     "wooden_cabinet_1_middle_region"
+    ],
+    [
+     "close",
+     "wooden_cabinet_1_middle_region"
+    ],
+    [
+     "open",
+     "wooden_cabinet_1_bottom_region"
+    ],
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "in",
+     "butter_1",
+     "kitchen_table_table_region"
+    ]
+   ],
+   "plate_1": [
+    [
+     "pick",
+     "plate_1"
+    ],
+    [
+     "in",
+     "plate_1",
+     "wooden_shelf_1_top_side"
+    ]
+   ],
+   "cream_cheese_1": [
+    [
+     "pick",
+     "cream_cheese_1"
+    ],
+    [
+     "pour",
+     "cream_cheese_1",
+     "red_coffee_mug_1"
+    ],
+    [
+     "in",
+     "cream_cheese_1",
+     "kitchen_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "plate_1": [
+    10,
+    11
+   ],
+   "cream_cheese_1": [
+    7,
+    8,
+    9
+   ]
+  }
+ },
+ "Memory_Exploration/case2": {
+  "task": "Find and pick up the butter from the wooden cabinet, pour the cream cheese from the kitchen table into the red coffee mug, and put the plate from the kitchen table onto the top side of the wooden shelf.",
+  "steps": [
+   "Open the wooden cabinet top region",
+   "Close the wooden cabinet top region",
+   "Open the wooden cabinet middle region",
+   "Pick up the butter from the wooden cabinet middle region",
+   "Place the butter on the kitchen table",
+   "Pick up the cream cheese from the kitchen table",
+   "Pour the cream cheese into the red coffee mug",
+   "Place cream cheese on the kitchen table",
+   "Pick up the plate from the kitchen table",
+   "Place the plate on the wooden shelf top side"
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "close",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "open",
+     "wooden_cabinet_1_middle_region"
+    ],
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "in",
+     "butter_1",
+     "kitchen_table_table_region"
+    ]
+   ],
+   "plate_1": [
+    [
+     "pick",
+     "plate_1"
+    ],
+    [
+     "in",
+     "plate_1",
+     "wooden_shelf_1_top_side"
+    ]
+   ],
+   "cream_cheese_1": [
+    [
+     "pick",
+     "cream_cheese_1"
+    ],
+    [
+     "pour",
+     "cream_cheese_1",
+     "red_coffee_mug_1"
+    ],
+    [
+     "in",
+     "cream_cheese_1",
+     "kitchen_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "plate_1": [
+    8,
+    9
+   ],
+   "cream_cheese_1": [
+    5,
+    6,
+    7
+   ]
+  }
+ },
+ "Memory_Exploration/case3": {
+  "task": "Take the butter from the wooden cabinet, melt it in a Chefmate frypan, and serve wine in a white-and-yellow mug.",
+  "steps": [
+   "Open the wooden cabinet top region.",
+   "Close the wooden cabinet top region.",
+   "Open the wooden cabinet middle region.",
+   "Pick up the frypan pan from the coffee table",
+   "Place frypan on flat stove cook region.",
+   "Pick up butter from wooden cabinet.",
+   "Place butter into frypan.",
+   "Put butter on the coffee table",
+   "Turn on the flat stove cook region.",
+   "Pick up wine bottle from coffee table.",
+   "Pour wine from wine bottle into white yellow mug.",
+   "Place the wine bottle on the coffee table"
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "close",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "open",
+     "wooden_cabinet_1_middle_region"
+    ],
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "pour",
+     "butter_1",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "butter_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "chefmate_8_frypan_1": [
+    [
+     "pick",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "chefmate_8_frypan_1",
+     "flat_stove_1_cook_region"
+    ]
+   ],
+   "flat_stove_1": [
+    [
+     "turnon",
+     "flat_stove_1"
+    ]
+   ],
+   "wine_bottle_1": [
+    [
+     "pick",
+     "wine_bottle_1"
+    ],
+    [
+     "pour",
+     "wine_bottle_1",
+     "white_yellow_mug_1"
+    ],
+    [
+     "in",
+     "wine_bottle_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1,
+    2,
+    5,
+    6,
+    7
+   ],
+   "chefmate_8_frypan_1": [
+    3,
+    4
+   ],
+   "flat_stove_1": [
+    8
+   ],
+   "wine_bottle_1": [
+    9,
+    10,
+    11
+   ]
+  }
+ },
+ "Memory_Exploration/case4": {
+  "task": "Take the butter from the wooden cabinet, melt it in a Chefmate frypan, and serve wine in a white-and-yellow mug.",
+  "steps": [
+   "Open the wooden cabinet top region.",
+   "Pick up the frypan on the table.",
+   "Place frypan on flat stove cook region.",
+   "Pick up butter from wooden cabinet.",
+   "Place butter into frypan.",
+   "Put the butter on the coffee table.",
+   "Turn on the flat stove cook region.",
+   "Pick up wine bottle from coffee table.",
+   "Pour wine from wine bottle into white yellow mug.",
+   "Place the wine bottle on the coffee table"
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "pour",
+     "butter_1",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "butter_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "chefmate_8_frypan_1": [
+    [
+     "pick",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "chefmate_8_frypan_1",
+     "flat_stove_1_cook_region"
+    ]
+   ],
+   "flat_stove_1": [
+    [
+     "turnon",
+     "flat_stove_1"
+    ]
+   ],
+   "wine_bottle_1": [
+    [
+     "pick",
+     "wine_bottle_1"
+    ],
+    [
+     "pour",
+     "wine_bottle_1",
+     "white_yellow_mug_1"
+    ],
+    [
+     "in",
+     "wine_bottle_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    3,
+    4,
+    5
+   ],
+   "chefmate_8_frypan_1": [
+    1,
+    2
+   ],
+   "flat_stove_1": [
+    6
+   ],
+   "wine_bottle_1": [
+    7,
+    8,
+    9
+   ]
+  }
+ },
+ "Memory_Exploration/case5": {
+  "task": "Find the butter from the wooden cabinet, melt it in a Chefmate frypan, and serve wine in a white-and-yellow mug.",
+  "steps": [
+   "Open the wooden cabinet top region.",
+   "Close the wooden cabinet top region.",
+   "Open the wooden cabinet middle region.",
+   "Close the wooden cabinet middle region.",
+   "Open the wooden cabinet bottom region.",
+   "Pick up frypan from coffee table.",
+   "Place frypan on flat stove cook region.",
+   "Pick up butter from wooden cabinet.",
+   "Place butter into frypan.",
+   "Put the butter on the coffee table.",
+   "Turn on the flat stove cook region.",
+   "Pick up wine bottle from coffee table.",
+   "Pour wine from wine bottle into white yellow mug.",
+   "Place the wine bottle on the coffee table"
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "close",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "open",
+     "wooden_cabinet_1_middle_region"
+    ],
+    [
+     "close",
+     "wooden_cabinet_1_middle_region"
+    ],
+    [
+     "open",
+     "wooden_cabinet_1_bottom_region"
+    ],
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "pour",
+     "butter_1",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "butter_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "chefmate_8_frypan_1": [
+    [
+     "pick",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "chefmate_8_frypan_1",
+     "flat_stove_1_cook_region"
+    ]
+   ],
+   "flat_stove_1": [
+    [
+     "turnon",
+     "flat_stove_1"
+    ]
+   ],
+   "wine_bottle_1": [
+    [
+     "pick",
+     "wine_bottle_1"
+    ],
+    [
+     "pour",
+     "wine_bottle_1",
+     "white_yellow_mug_1"
+    ],
+    [
+     "in",
+     "wine_bottle_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    7,
+    8,
+    9
+   ],
+   "chefmate_8_frypan_1": [
+    5,
+    6
+   ],
+   "flat_stove_1": [
+    10
+   ],
+   "wine_bottle_1": [
+    11,
+    12,
+    13
+   ]
+  }
+ },
+ "Memory_Exploration/case6": {
+  "task": "Find the butter from the white cabinet, pour it and the barbecue sauce into the frying pan, and prepare a mug of orange juice.",
+  "steps": [
+   "Open the white cabinet top region",
+   "Close the white cabinet top region",
+   "Open the white cabinet middle region",
+   "Pick up the butter from the white cabinet",
+   "Pour the butter into the frypan",
+   "Place the butter on the coffee table.",
+   "Pick up the bbq sauce from the coffee table",
+   "Pour the bbq sauce into the frypan",
+   "Place the barbecue sauce on the coffee table.",
+   "Pick up the orange juice from the coffee table",
+   "Pour the orange juice into the red coffee mug",
+   "Place the orange juice back on the coffee table."
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "open",
+     "white_cabinet_1_top_region"
+    ],
+    [
+     "close",
+     "white_cabinet_1_top_region"
+    ],
+    [
+     "open",
+     "white_cabinet_1_middle_region"
+    ],
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "pour",
+     "butter_1",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "butter_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "bbq_sauce_1": [
+    [
+     "pick",
+     "bbq_sauce_1"
+    ],
+    [
+     "pour",
+     "bbq_sauce_1",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "bbq_sauce_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "orange_juice_1": [
+    [
+     "pick",
+     "orange_juice_1"
+    ],
+    [
+     "pour",
+     "orange_juice_1",
+     "red_coffee_mug_1"
+    ],
+    [
+     "in",
+     "orange_juice_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "bbq_sauce_1": [
+    6,
+    7,
+    8
+   ],
+   "orange_juice_1": [
+    9,
+    10,
+    11
+   ]
+  }
+ },
+ "Memory_Exploration/case7": {
+  "task": "Take the butter from the white cabinet, pour it and the barbecue sauce into the frying pan, and prepare a mug of orange juice.",
+  "steps": [
+   "Open the white cabinet top region",
+   "Pick up the butter from the white cabinet",
+   "Pour the butter into the frypan",
+   "Place the butter on the coffee table.",
+   "Pick up the bbq sauce from the coffee table",
+   "Pour the bbq sauce into the frypan",
+   "Place the barbecue sauce on the coffee table.",
+   "Pick up the orange juice from the coffee table",
+   "Pour the orange juice into the red coffee mug",
+   "Place the orange juice back on the coffee table."
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "open",
+     "white_cabinet_1_top_region"
+    ],
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "pour",
+     "butter_1",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "butter_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "bbq_sauce_1": [
+    [
+     "pick",
+     "bbq_sauce_1"
+    ],
+    [
+     "pour",
+     "bbq_sauce_1",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "bbq_sauce_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "orange_juice_1": [
+    [
+     "pick",
+     "orange_juice_1"
+    ],
+    [
+     "pour",
+     "orange_juice_1",
+     "red_coffee_mug_1"
+    ],
+    [
+     "in",
+     "orange_juice_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "bbq_sauce_1": [
+    4,
+    5,
+    6
+   ],
+   "orange_juice_1": [
+    7,
+    8,
+    9
+   ]
+  }
+ },
+ "Memory_Exploration/case8": {
+  "task": "Take the white bowl from the wooden cabinet, pour in the chocolate pudding and cookies, and put it on top of the wooden cabinet.",
+  "steps": [
+   "Open the wooden cabinet top region.",
+   "Close the wooden cabinet top region.",
+   "Open the wooden cabinet middle region.",
+   "Close the wooden cabinet middle region.",
+   "Open the wooden cabinet bottom region.",
+   "Pick up the white bowl from the wooden cabinet",
+   "Place down the white bowl on the coffee table",
+   "Pick up the cookies from the coffee table",
+   "Place down the cookies into the white bowl",
+   "Place the cookies on the coffee table",
+   "Pick up the chocolate pudding from the coffee table",
+   "Pour the chocolate pudding into the white bowl",
+   "Place the chocolate pudding on the coffee table",
+   "Pick up the white bowl from the coffee table",
+   "Place the white bowl onto the wooden cabinet at top side"
+  ],
+  "goal": {
+   "white_bowl_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "close",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "open",
+     "wooden_cabinet_1_middle_region"
+    ],
+    [
+     "close",
+     "wooden_cabinet_1_middle_region"
+    ],
+    [
+     "open",
+     "wooden_cabinet_1_bottom_region"
+    ],
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "coffee_table_table_region"
+    ],
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "wooden_cabinet_1_top_side"
+    ]
+   ],
+   "cookies_1": [
+    [
+     "pick",
+     "cookies_1"
+    ],
+    [
+     "pour",
+     "cookies_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "cookies_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "chocolate_pudding_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "white_bowl_1": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    13,
+    14
+   ],
+   "cookies_1": [
+    7,
+    8,
+    9
+   ],
+   "chocolate_pudding_1": [
+    10,
+    11,
+    12
+   ]
+  }
+ },
+ "Memory_Exploration/case9": {
+  "task": "Take the white bowl from the wooden cabinet, pour in the chocolate pudding and cookies, and put it on top of the wooden cabinet.",
+  "steps": [
+   "Open the wooden cabinet top region.",
+   "Close the wooden cabinet top region.",
+   "Open the wooden cabinet middle region.",
+   "Pick up the white bowl from the wooden cabinet",
+   "Place down the white bowl on the coffee table",
+   "Pick up the cookies from the coffee table",
+   "Place down the cookies into the white bowl",
+   "Place the cookies on the coffee table",
+   "Pick up the chocolate pudding from the coffee table",
+   "Place down the chocolate pudding into the white bowl",
+   "Place the chocolate pudding on the coffee table",
+   "Pick up the white bowl from the coffee table",
+   "Place the white bowl into the wooden cabinet at top side"
+  ],
+  "goal": {
+   "white_bowl_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "close",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "open",
+     "wooden_cabinet_1_middle_region"
+    ],
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "coffee_table_table_region"
+    ],
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "wooden_cabinet_1_top_side"
+    ]
+   ],
+   "cookies_1": [
+    [
+     "pick",
+     "cookies_1"
+    ],
+    [
+     "pour",
+     "cookies_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "cookies_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "chocolate_pudding_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "white_bowl_1": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    11,
+    12
+   ],
+   "cookies_1": [
+    5,
+    6,
+    7
+   ],
+   "chocolate_pudding_1": [
+    8,
+    9,
+    10
+   ]
+  }
+ },
+ "Memory_Exploration/case10": {
+  "task": "Take the white bowl from the wooden cabinet, pour in the chocolate pudding and cookies, and put it on top of the wooden cabinet.",
+  "steps": [
+   "Open the wooden cabinet top region.",
+   "Pick up the white bowl from the wooden cabinet",
+   "Place down the white bowl on the coffee table",
+   "Pick up the cookies from the coffee table",
+   "Place down the cookies into the white bowl",
+   "Place the cookies on the coffee table",
+   "Pick up the chocolate pudding from the coffee table",
+   "Place down the chocolate pudding into the white bowl",
+   "Place the  chocolate pudding  on the coffee table",
+   "Pick up the white bowl from the coffee table",
+   "Place the white bowl onto the top side of wooden cabinet"
+  ],
+  "goal": {
+   "white_bowl_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "coffee_table_table_region"
+    ],
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "wooden_cabinet_1_top_side"
+    ]
+   ],
+   "cookies_1": [
+    [
+     "pick",
+     "cookies_1"
+    ],
+    [
+     "pour",
+     "cookies_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "cookies_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "chocolate_pudding_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "white_bowl_1": [
+    0,
+    1,
+    2,
+    9,
+    10
+   ],
+   "cookies_1": [
+    3,
+    4,
+    5
+   ],
+   "chocolate_pudding_1": [
+    6,
+    7,
+    8
+   ]
+  }
+ },
+ "Mix/case1": {
+  "task": "Find and pick the butter from the wooden cabinet, pour the cream cheese from the kitchen table into the red coffee mug, and put the plate onto the top side of the wooden shelf.",
+  "steps": [
+   "Open the wooden cabinet top region",
+   "Close the wooden cabinet top region",
+   "Open the wooden cabinet middle region",
+   "Close the wooden cabinet middle region",
+   "Open the wooden cabinet bottom region",
+   "Pick up the butter from the wooden cabinet bottom region",
+   "Place the butter on the kitchen table",
+   "Pick up the cream cheese from the kitchen table",
+   "Pour the cream cheese into the red coffee mug",
+   "Place cream cheese on the kitchen table",
+   "Pick up the plate from the kitchen table",
+   "Place the plate into the wooden shelf top side"
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "close",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "open",
+     "wooden_cabinet_1_middle_region"
+    ],
+    [
+     "close",
+     "wooden_cabinet_1_middle_region"
+    ],
+    [
+     "open",
+     "wooden_cabinet_1_bottom_region"
+    ],
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "in",
+     "butter_1",
+     "kitchen_table_table_region"
+    ]
+   ],
+   "plate_1": [
+    [
+     "pick",
+     "plate_1"
+    ],
+    [
+     "in",
+     "plate_1",
+     "wooden_shelf_1_top_side"
+    ]
+   ],
+   "cream_cheese_1": [
+    [
+     "pick",
+     "cream_cheese_1"
+    ],
+    [
+     "pour",
+     "cream_cheese_1",
+     "red_coffee_mug_1"
+    ],
+    [
+     "in",
+     "cream_cheese_1",
+     "kitchen_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "plate_1": [
+    10,
+    11
+   ],
+   "cream_cheese_1": [
+    7,
+    8,
+    9
+   ]
+  }
+ },
+ "Mix/case2": {
+  "task": "Take the butter from the wooden cabinet, melt it in a Chefmate frypan, and serve wine in a white-and-yellow mug.",
+  "steps": [
+   "Open the wooden cabinet top region.",
+   "Pick up frypan from the table.",
+   "Place frypan on flat stove cook region.",
+   "Pick up butter from wooden cabinet.",
+   "Place butter into frypan.",
+   "Put the butter on the coffee table.",
+   "Turn on the flat stove cook region.",
+   "Pick up wine bottle from coffee table.",
+   "Pour wine from wine bottle into white yellow mug.",
+   "Place the wine bottle on the coffee table"
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "pour",
+     "butter_1",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "butter_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "chefmate_8_frypan_1": [
+    [
+     "pick",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "chefmate_8_frypan_1",
+     "flat_stove_1_cook_region"
+    ]
+   ],
+   "flat_stove_1": [
+    [
+     "turnon",
+     "flat_stove_1"
+    ]
+   ],
+   "wine_bottle_1": [
+    [
+     "pick",
+     "wine_bottle_1"
+    ],
+    [
+     "pour",
+     "wine_bottle_1",
+     "white_yellow_mug_1"
+    ],
+    [
+     "in",
+     "wine_bottle_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    3,
+    4,
+    5
+   ],
+   "chefmate_8_frypan_1": [
+    1,
+    2
+   ],
+   "flat_stove_1": [
+    6
+   ],
+   "wine_bottle_1": [
+    7,
+    8,
+    9
+   ]
+  }
+ },
+ "Mix/case3": {
+  "task": "Find the butter from the white cabinet, pour it and the barbecue sauce into the frying pan, and prepare a mug of orange juice.",
+  "steps": [
+   "Open the white cabinet top region",
+   "Close the white cabinet top region",
+   "Open the white cabinet middle region",
+   "Pick up the butter from the white cabinet",
+   "Pour the butter into the frypan",
+   "Place the butter on the coffee table.",
+   "Pick up the bbq sauce from the coffee table",
+   "Pour the bbq sauce into the frypan",
+   "Place the barbecue sauce on the coffee table.",
+   "Pick up the orange juice from the coffee table",
+   "Pour the orange juice into the red coffee mug",
+   "Place the orange juice back on the coffee table."
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "open",
+     "white_cabinet_1_top_region"
+    ],
+    [
+     "close",
+     "white_cabinet_1_top_region"
+    ],
+    [
+     "open",
+     "white_cabinet_1_middle_region"
+    ],
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "pour",
+     "butter_1",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "butter_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "bbq_sauce_1": [
+    [
+     "pick",
+     "bbq_sauce_1"
+    ],
+    [
+     "pour",
+     "bbq_sauce_1",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "bbq_sauce_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "orange_juice_1": [
+    [
+     "pick",
+     "orange_juice_1"
+    ],
+    [
+     "pour",
+     "orange_juice_1",
+     "red_coffee_mug_1"
+    ],
+    [
+     "in",
+     "orange_juice_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "bbq_sauce_1": [
+    6,
+    7,
+    8
+   ],
+   "orange_juice_1": [
+    9,
+    10,
+    11
+   ]
+  }
+ },
+ "Mix/case4": {
+  "task": "Pour the chocolate pudding and cookies into a bowl and microwave it,and check the wooden cabinet top region for any previously handled objects, placing them on the table if found.",
+  "steps": [
+   "Pick up the white bowl from the coffee table",
+   "Place down the white bowl on the coffee table",
+   "Pick up the cookies from the coffee table",
+   "Place down the cookies into the white bowl",
+   "Place the cookies on the coffee table",
+   "Pick up the chocolate pudding from the coffee table",
+   "Place down the chocolate pudding into the white bowl",
+   "Place the chocolate pudding on the coffee table",
+   "Open the microwave",
+   "Pick up the white bowl from the coffee table",
+   "Place the white bowl into the microwave",
+   "Open the top region of the wooden cabinet"
+  ],
+  "goal": {
+   "white_bowl_1": [
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "coffee_table_table_region"
+    ],
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "microwave_1_heating_region"
+    ]
+   ],
+   "cookies_1": [
+    [
+     "pick",
+     "cookies_1"
+    ],
+    [
+     "pour",
+     "cookies_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "cookies_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "chocolate_pudding_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "microwave_1": [
+    [
+     "open",
+     "microwave_1"
+    ]
+   ],
+   "wooden_cabinet_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "white_bowl_1": [
+    0,
+    1,
+    9,
+    10
+   ],
+   "cookies_1": [
+    2,
+    3,
+    4
+   ],
+   "chocolate_pudding_1": [
+    5,
+    6,
+    7
+   ],
+   "microwave_1": [
+    8
+   ],
+   "wooden_cabinet_1": [
+    11
+   ]
+  }
+ },
+ "Mix/case5": {
+  "task": "Heat the alphabet soup in a bowl using the microwave\uff0cpour a cup of milk into a mug,reposition the popcorn and check the white cabinet top region for any previously handled objects, placing them on the table if found.",
+  "steps": [
+   "Pick up the akita black bowl from coffee table.",
+   "Place the akita black bowl on table surface.",
+   "Pick up the popcorn from coffee table.",
+   "Place the popcorn on coffee table.",
+   "Pick up the alphabet soup from coffee table.",
+   "Pour out the alphabet soup into the akita black bowl.",
+   "Place the empty alphabet soup on table surface.",
+   "Open the microwave.",
+   "Pick up the milk from its storage.",
+   "Pour out the milk into the white yellow mug.",
+   "Place the milk on table surface.",
+   "Open the top region of the white cabinet",
+   "Pick up the popcorn from coffee table.",
+   "Place the popcorn on coffee table."
+  ],
+  "goal": {
+   "akita_black_bowl_1": [
+    [
+     "pick",
+     "akita_black_bowl_1"
+    ],
+    [
+     "in",
+     "akita_black_bowl_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "popcorn_1": [
+    [
+     "pick",
+     "popcorn_1"
+    ],
+    [
+     "in",
+     "popcorn_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "alphabet_soup_1": [
+    [
+     "pick",
+     "alphabet_soup_1"
+    ],
+    [
+     "pour",
+     "alphabet_soup_1",
+     "akita_black_bowl_1"
+    ],
+    [
+     "in",
+     "alphabet_soup_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "microwave_1": [
+    [
+     "open",
+     "microwave_1"
+    ]
+   ],
+   "milk_1": [
+    [
+     "pick",
+     "milk_1"
+    ],
+    [
+     "pour",
+     "milk_1",
+     "white_yellow_mug_1"
+    ],
+    [
+     "in",
+     "milk_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "popcorn_2": [
+    [
+     "open",
+     "white_cabinet_1_top_region"
+    ],
+    [
+     "pick",
+     "popcorn_2"
+    ],
+    [
+     "in",
+     "popcorn_2",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "akita_black_bowl_1": [
+    0,
+    1
+   ],
+   "popcorn_1": [
+    2,
+    3
+   ],
+   "alphabet_soup_1": [
+    4,
+    5,
+    6
+   ],
+   "microwave_1": [
+    7
+   ],
+   "milk_1": [
+    8,
+    9,
+    10
+   ],
+   "popcorn_2": [
+    11,
+    12,
+    13
+   ]
+  }
+ },
+ "Mix/case6": {
+  "task": "Find and pick up the butter from the wooden cabinet, pour the cream cheese from the kitchen table into the red coffee mug, and put the plate from the kitchen table onto the top side of the wooden shelf.",
+  "steps": [
+   "Open the wooden cabinet top region",
+   "Close the wooden cabinet top region",
+   "Open the wooden cabinet middle region",
+   "Pick up the butter from the wooden cabinet middle region",
+   "Place the butter on the kitchen table",
+   "Pick up the cream cheese from the kitchen table",
+   "Pour the cream cheese into the red coffee mug",
+   "Place cream cheese on the kitchen table",
+   "Pick up the plate from the kitchen table",
+   "Place the plate on the wooden shelf top side"
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "close",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "open",
+     "wooden_cabinet_1_middle_region"
+    ],
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "in",
+     "butter_1",
+     "kitchen_table_table_region"
+    ]
+   ],
+   "plate_1": [
+    [
+     "pick",
+     "plate_1"
+    ],
+    [
+     "in",
+     "plate_1",
+     "wooden_shelf_1_top_side"
+    ]
+   ],
+   "cream_cheese_1": [
+    [
+     "pick",
+     "cream_cheese_1"
+    ],
+    [
+     "pour",
+     "cream_cheese_1",
+     "red_coffee_mug_1"
+    ],
+    [
+     "in",
+     "cream_cheese_1",
+     "kitchen_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "plate_1": [
+    8,
+    9
+   ],
+   "cream_cheese_1": [
+    5,
+    6,
+    7
+   ]
+  }
+ },
+ "Mix/case7": {
+  "task": "After putting the butter and mug on the rack, pour in the milk, and check the wooden cabinet top region for any previously handled objects, placing them on the table if found.",
+  "steps": [
+   "Pick up the butter from coffee table",
+   "Place the butter onto the rack",
+   "Pick up the red coffee mug from coffee table",
+   "Place the red coffee mug onto the rack",
+   "Pick up the milk from coffee table",
+   "Pour out the milk from the milk container",
+   "Place down the milk onto coffee table",
+   "Open the wooden cabinet top region"
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "on",
+     "butter_1",
+     "rack_1"
+    ]
+   ],
+   "red_coffee_mug_1": [
+    [
+     "pick",
+     "red_coffee_mug_1"
+    ],
+    [
+     "on",
+     "red_coffee_mug_1",
+     "rack_1"
+    ]
+   ],
+   "milk_1": [
+    [
+     "pick",
+     "milk_1"
+    ],
+    [
+     "in",
+     "milk_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wooden_cabinet_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1
+   ],
+   "red_coffee_mug_1": [
+    2,
+    3
+   ],
+   "milk_1": [
+    4,
+    6
+   ],
+   "wooden_cabinet_1": [
+    7
+   ]
+  }
+ },
+ "Mix/case8": {
+  "task": "After placing the butter and mug on the rack, pour in the milk, and check the wooden cabinet top region for any previously handled objects, placing them on the table if found.",
+  "steps": [
+   "Pick up the butter from coffee table",
+   "Place the butter onto the rack",
+   "Pick up the red coffee mug from coffee table",
+   "Place the red coffee mug onto the rack",
+   "Pick up the milk from coffee table",
+   "Pour out the milk from the milk container",
+   "Place down the milk onto coffee table",
+   "Open the wooden cabinet top region"
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "on",
+     "butter_1",
+     "rack_1"
+    ]
+   ],
+   "red_coffee_mug_1": [
+    [
+     "pick",
+     "red_coffee_mug_1"
+    ],
+    [
+     "on",
+     "red_coffee_mug_1",
+     "rack_1"
+    ]
+   ],
+   "milk_1": [
+    [
+     "pick",
+     "milk_1"
+    ],
+    [
+     "in",
+     "milk_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wooden_cabinet_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1
+   ],
+   "red_coffee_mug_1": [
+    2,
+    3
+   ],
+   "milk_1": [
+    4,
+    6
+   ],
+   "wooden_cabinet_1": [
+    7
+   ]
+  }
+ },
+ "Mix/case9": {
+  "task": "After placing the butter and mug on the rack, pour in the milk, and check the wooden cabinet top region for any previously handled objects, placing them on the table if found.",
+  "steps": [
+   "Pick up the butter from coffee table",
+   "Place the butter onto the rack",
+   "Pick up the red coffee mug from coffee table",
+   "Place the red coffee mug onto the rack",
+   "Pick up the milk from coffee table",
+   "Pour out the milk from the milk container",
+   "Place down the milk onto coffee table",
+   "Open the wooden cabinet top region",
+   "Pick up the butter from the wooden cabinet top region",
+   "Place the butter on the coffee table"
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "on",
+     "butter_1",
+     "rack_1"
+    ]
+   ],
+   "butter_2": [
+    [
+     "pick",
+     "butter_2"
+    ],
+    [
+     "in",
+     "butter_2",
+     "coffee_table_table_region"
+    ]
+   ],
+   "red_coffee_mug_1": [
+    [
+     "pick",
+     "red_coffee_mug_1"
+    ],
+    [
+     "on",
+     "red_coffee_mug_1",
+     "rack_1"
+    ]
+   ],
+   "milk_1": [
+    [
+     "pick",
+     "milk_1"
+    ],
+    [
+     "in",
+     "milk_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wooden_cabinet_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1
+   ],
+   "butter_2": [
+    8,
+    9
+   ],
+   "red_coffee_mug_1": [
+    2,
+    3
+   ],
+   "milk_1": [
+    4,
+    6
+   ],
+   "wooden_cabinet_1": [
+    7
+   ]
+  }
+ },
+ "Mix/case10": {
+  "task": "Take the white bowl from the wooden cabinet, pour in the chocolate pudding and cookies, and put it on top of the wooden cabinet.",
+  "steps": [
+   "Open the wooden cabinet top region.",
+   "Close the wooden cabinet top region.",
+   "Open the wooden cabinet middle region.",
+   "Pick up the white bowl from the wooden cabinet",
+   "Place down the white bowl on the coffee table",
+   "Pick up the cookies from the coffee table",
+   "Place down the cookies into the white bowl",
+   "Place the cookies on the coffee table",
+   "Pick up the chocolate pudding from the coffee table",
+   "Place down the chocolate pudding into the white bowl",
+   "Place the chocolate pudding on the coffee table",
+   "Pick up the white bowl from the coffee table",
+   "Place the white bowl into the wooden cabinet at top side"
+  ],
+  "goal": {
+   "white_bowl_1": [
+    [
+     "open",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "close",
+     "wooden_cabinet_1_top_region"
+    ],
+    [
+     "open",
+     "wooden_cabinet_1_middle_region"
+    ],
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "coffee_table_table_region"
+    ],
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "wooden_cabinet_1_top_side"
+    ]
+   ],
+   "cookies_1": [
+    [
+     "pick",
+     "cookies_1"
+    ],
+    [
+     "pour",
+     "cookies_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "cookies_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "chocolate_pudding_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "white_bowl_1": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    11,
+    12
+   ],
+   "cookies_1": [
+    5,
+    6,
+    7
+   ],
+   "chocolate_pudding_1": [
+    8,
+    9,
+    10
+   ]
+  }
+ },
+ "Observation_Mismatching/case1": {
+  "task": "Organize all the food boxes into the white storage box.",
+  "steps": [
+   "Pick up cream cheese from coffee table",
+   "Place down cream cheese into white storage box placed at bottom side",
+   "Pick up popcorn from coffee table",
+   "Place down popcorn into white storage box placed at right side",
+   "Pick up butter from coffee table",
+   "Place down butter into white storage box placed at left side"
+  ],
+  "goal": {
+   "cream_cheese_1": [
+    [
+     "pick",
+     "cream_cheese_1"
+    ],
+    [
+     "in",
+     "cream_cheese_1",
+     "white_storage_box_1_bottom_side"
+    ]
+   ],
+   "popcorn_1": [
+    [
+     "pick",
+     "popcorn_1"
+    ],
+    [
+     "in",
+     "popcorn_1",
+     "white_storage_box_1_right_side"
+    ]
+   ],
+   "butter_1": [
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "in",
+     "butter_1",
+     "white_storage_box_1_left_side"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "cream_cheese_1": [
+    0,
+    1
+   ],
+   "popcorn_1": [
+    2,
+    3
+   ],
+   "butter_1": [
+    4,
+    5
+   ]
+  }
+ },
+ "Observation_Mismatching/case2": {
+  "task": "Place the cream cheese into the white storage box and place the frypan onto the rack",
+  "steps": [
+   "Pick up the cream cheese from the coffee table.",
+   "Place the cream cheese into the white storage box at top side",
+   "Pick the frypan from the coffee table",
+   "Place the frypan onto the rack"
+  ],
+  "goal": {
+   "cream_cheese_1": [
+    [
+     "pick",
+     "cream_cheese_1"
+    ],
+    [
+     "in",
+     "cream_cheese_1",
+     "white_storage_box_1_top_side"
+    ]
+   ],
+   "chefmate_8_frypan_1": [
+    [
+     "pick",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "on",
+     "chefmate_8_frypan_1",
+     "rack_1"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "cream_cheese_1": [
+    0,
+    1
+   ],
+   "chefmate_8_frypan_1": [
+    2,
+    3
+   ]
+  }
+ },
+ "Observation_Mismatching/case3": {
+  "task": "Place the plates neatly between the knife and fork, and pour all the snacks and drinks into the plates.",
+  "steps": [
+   "Pick up the plate from coffee table",
+   "Place the plate on dining set group",
+   "Pick up the popcorn from dining set group",
+   "Place the popcorn on the plate",
+   "Place the popcorn on dining set group",
+   "Pick up the cookies from dining set group",
+   "Place the cookies on the plate",
+   "Place the cookies on the dining set group",
+   "Pick up the wine bottle from dining set group",
+   "Pour out the wine bottle onto the plate"
+  ],
+  "goal": {
+   "plate_1": [
+    [
+     "pick",
+     "plate_1"
+    ],
+    [
+     "in",
+     "plate_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "popcorn_1": [
+    [
+     "pick",
+     "popcorn_1"
+    ],
+    [
+     "pour",
+     "popcorn_1",
+     "plate_1"
+    ],
+    [
+     "in",
+     "popcorn_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "cookies_1": [
+    [
+     "pick",
+     "cookies_1"
+    ],
+    [
+     "pour",
+     "cookies_1",
+     "plate_1"
+    ],
+    [
+     "in",
+     "cookies_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wine_bottle_1": [
+    [
+     "pick",
+     "wine_bottle_1"
+    ],
+    [
+     "pour",
+     "wine_bottle_1",
+     "plate_1"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "plate_1": [
+    0,
+    1
+   ],
+   "popcorn_1": [
+    2,
+    3,
+    4
+   ],
+   "cookies_1": [
+    5,
+    6,
+    7
+   ],
+   "wine_bottle_1": [
+    8,
+    9
+   ]
+  }
+ },
+ "Observation_Mismatching/case4": {
+  "task": "Clean up the desk by putting the two boxes in the bowl and place the frying pan onto the cabinet.",
+  "steps": [
+   "Pick up cream cheese from coffee table",
+   "Place cream cheese into white bowl",
+   "Pick up popcorn from coffee table",
+   "Place popcorn into white bowl",
+   "Pick up frypan from coffee table",
+   "Place frypan on wooden cabinet top side"
+  ],
+  "goal": {
+   "cream_cheese_1": [
+    [
+     "pick",
+     "cream_cheese_1"
+    ],
+    [
+     "pour",
+     "cream_cheese_1",
+     "white_bowl_1"
+    ]
+   ],
+   "popcorn_1": [
+    [
+     "pick",
+     "popcorn_1"
+    ],
+    [
+     "pour",
+     "popcorn_1",
+     "white_bowl_1"
+    ]
+   ],
+   "chefmate_8_frypan_1": [
+    [
+     "pick",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "chefmate_8_frypan_1",
+     "wooden_cabinet_1_top_side"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "cream_cheese_1": [
+    0,
+    1
+   ],
+   "popcorn_1": [
+    2,
+    3
+   ],
+   "chefmate_8_frypan_1": [
+    4,
+    5
+   ]
+  }
+ },
+ "Observation_Mismatching/case5": {
+  "task": "Prepare a snack tray with chocolate pudding and wine in the plate.",
+  "steps": [
+   "Pick up the chocolate pudding from wooden cabinet top side",
+   "Place the chocolate pudding on the plate",
+   "Place the chocolate pudding on the coffee table",
+   "Pick up the wine bottle from coffee table",
+   "Pour out wine from the wine bottle onto the plate",
+   "Place the wine bottle on the coffee table"
+  ],
+  "goal": {
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "plate_1"
+    ],
+    [
+     "in",
+     "chocolate_pudding_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wine_bottle_1": [
+    [
+     "pick",
+     "wine_bottle_1"
+    ],
+    [
+     "pour",
+     "wine_bottle_1",
+     "plate_1"
+    ],
+    [
+     "in",
+     "wine_bottle_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "chocolate_pudding_1": [
+    0,
+    1,
+    2
+   ],
+   "wine_bottle_1": [
+    3,
+    4,
+    5
+   ]
+  }
+ },
+ "Observation_Mismatching/case6": {
+  "task": "Place the butter into the short cabinet and pour the tomato sauce into the plate.",
+  "steps": [
+   "Open the short cabinet in middle region",
+   "Pick up the butter from coffee table",
+   "Place down the butter into the short cabinet in middle region",
+   "Pick up the tomato sauce from coffee table",
+   "Pour out the tomato sauce onto the plate",
+   "Place the tomato sauce on the coffee table"
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "open",
+     "short_cabinet_1_middle_region"
+    ],
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "in",
+     "butter_1",
+     "short_cabinet_1_middle_region"
+    ]
+   ],
+   "tomato_sauce_1": [
+    [
+     "pick",
+     "tomato_sauce_1"
+    ],
+    [
+     "pour",
+     "tomato_sauce_1",
+     "plate_1"
+    ],
+    [
+     "in",
+     "tomato_sauce_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1,
+    2
+   ],
+   "tomato_sauce_1": [
+    3,
+    4,
+    5
+   ]
+  }
+ },
+ "Observation_Mismatching/case7": {
+  "task": "Place the boxes of chocolate pudding and butter into a bowl and heat the pan.",
+  "steps": [
+   "Pick up chocolate pudding from coffee table",
+   "Place chocolate pudding into akita black bowl",
+   "Pick up butter from coffee table",
+   "Place butter into akita black bowl",
+   "Turn on flat stove in cook region",
+   "Pick up frypan from coffee table",
+   "Place frypan on flat stove in cook region"
+  ],
+  "goal": {
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "akita_black_bowl_1"
+    ]
+   ],
+   "butter_1": [
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "pour",
+     "butter_1",
+     "akita_black_bowl_1"
+    ]
+   ],
+   "flat_stove_1": [
+    [
+     "turnon",
+     "flat_stove_1"
+    ]
+   ],
+   "chefmate_8_frypan_1": [
+    [
+     "pick",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "chefmate_8_frypan_1",
+     "flat_stove_1_cook_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "chocolate_pudding_1": [
+    0,
+    1
+   ],
+   "butter_1": [
+    2,
+    3
+   ],
+   "flat_stove_1": [
+    4
+   ],
+   "chefmate_8_frypan_1": [
+    5,
+    6
+   ]
+  }
+ },
+ "Observation_Mismatching/case8": {
+  "task": "Place the cream cheese into the short cabinet, the chocolate pudding into the bowl, and pour a glass of wine.",
+  "steps": [
+   "Open the short cabinet middle region",
+   "Pick up the cream cheese from coffee table",
+   "Place down the cream cheese into short cabinet middle region",
+   "Pick up the chocolate pudding from coffee table",
+   "Place down the chocolate pudding into akita black bowl",
+   "Pick up the wine bottle from coffee table",
+   "Pour out the contents of wine bottle into white yellow mug"
+  ],
+  "goal": {
+   "cream_cheese_1": [
+    [
+     "open",
+     "short_cabinet_1_middle_region"
+    ],
+    [
+     "pick",
+     "cream_cheese_1"
+    ],
+    [
+     "in",
+     "cream_cheese_1",
+     "short_cabinet_1_middle_region"
+    ]
+   ],
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "akita_black_bowl_1"
+    ]
+   ],
+   "wine_bottle_1": [
+    [
+     "pick",
+     "wine_bottle_1"
+    ],
+    [
+     "pour",
+     "wine_bottle_1",
+     "white_yellow_mug_1"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "cream_cheese_1": [
+    0,
+    1,
+    2
+   ],
+   "chocolate_pudding_1": [
+    3,
+    4
+   ],
+   "wine_bottle_1": [
+    5,
+    6
+   ]
+  }
+ },
+ "Observation_Mismatching/case9": {
+  "task": "Place the chocolate pudding and cookies into a bowl and microwave it.",
+  "steps": [
+   "Pick up the white bowl from the wooden cabinet at top side",
+   "Place down the white bowl on the coffee table",
+   "Pick up the cookies from the coffee table",
+   "Place down the cookies into the white bowl",
+   "Place the cookies on the coffee table",
+   "Pick up the chocolate pudding from the coffee table",
+   "Place down the chocolate pudding into the white bowl",
+   "Place the chocolate pudding on the coffee table",
+   "Open the microwave",
+   "Pick up the white bowl from the coffee table",
+   "Place the white bowl into the microwave"
+  ],
+  "goal": {
+   "white_bowl_1": [
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "coffee_table_table_region"
+    ],
+    [
+     "open",
+     "microwave_1"
+    ],
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "microwave_1_heating_region"
+    ]
+   ],
+   "cookies_1": [
+    [
+     "pick",
+     "cookies_1"
+    ],
+    [
+     "pour",
+     "cookies_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "cookies_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "chocolate_pudding_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "white_bowl_1": [
+    0,
+    1,
+    8,
+    9,
+    10
+   ],
+   "cookies_1": [
+    2,
+    3,
+    4
+   ],
+   "chocolate_pudding_1": [
+    5,
+    6,
+    7
+   ]
+  }
+ },
+ "Observation_Mismatching/case10": {
+  "task": "Place the cookies into the basket, pour the tomato sauce and BBQ sauce into the frying pan, pour the wine into the red coffee mug, and place the white-yellow mug into the wooden tray.",
+  "steps": [
+   "Pick up the cookies from the coffee table",
+   "Place down the cookies into basket in contain region",
+   "Pick up the tomato sauce from coffee table",
+   "Pour out the tomato sauce onto frypan",
+   "Place the tomato sauce on the coffee table",
+   "Pick up the bbq sauce from the coffee table",
+   "Pour out the bbq sauce onto frypan",
+   "Place the bbq sauce sauce on the coffee table",
+   "Pick up the wine from coffee table",
+   "Pour out the wine from wine bottle into red coffee mug",
+   "Place down the wine onto coffee table",
+   "Pick up the white yellow mug from coffee table",
+   "Place down the white yellow mug into wooden tray in contain region"
+  ],
+  "goal": {
+   "cookies_1": [
+    [
+     "pick",
+     "cookies_1"
+    ],
+    [
+     "in",
+     "cookies_1",
+     "basket_1_contain_region"
+    ]
+   ],
+   "tomato_sauce_1": [
+    [
+     "pick",
+     "tomato_sauce_1"
+    ],
+    [
+     "pour",
+     "tomato_sauce_1",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "tomato_sauce_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "bbq_sauce_1": [
+    [
+     "pick",
+     "bbq_sauce_1"
+    ],
+    [
+     "pour",
+     "bbq_sauce_1",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "bbq_sauce_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wine_bottle_1": [
+    [
+     "pick",
+     "wine_bottle_1"
+    ],
+    [
+     "pour",
+     "wine_bottle_1",
+     "red_coffee_mug_1"
+    ],
+    [
+     "in",
+     "wine_bottle_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "white_yellow_mug_1": [
+    [
+     "pick",
+     "white_yellow_mug_1"
+    ],
+    [
+     "in",
+     "white_yellow_mug_1",
+     "wooden_tray_1_contain_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "cookies_1": [
+    0,
+    1
+   ],
+   "tomato_sauce_1": [
+    2,
+    3,
+    4
+   ],
+   "bbq_sauce_1": [
+    5,
+    6,
+    7
+   ],
+   "wine_bottle_1": [
+    8,
+    9,
+    10
+   ],
+   "white_yellow_mug_1": [
+    11,
+    12
+   ]
+  }
+ },
+ "Random_Disturbance/case1": {
+  "task": "Organize all the food boxes into the white storage box.",
+  "steps": [
+   "Pick up cream cheese from coffee table",
+   "Place down cream cheese into white storage box placed at bottom side",
+   "Pick up popcorn from coffee table",
+   "Place down popcorn into white storage box placed at right side",
+   "Pick up butter from coffee table",
+   "Place down butter into white storage box placed at left side"
+  ],
+  "goal": {
+   "cream_cheese_1": [
+    [
+     "pick",
+     "cream_cheese_1"
+    ],
+    [
+     "in",
+     "cream_cheese_1",
+     "white_storage_box_1_bottom_side"
+    ]
+   ],
+   "popcorn_1": [
+    [
+     "pick",
+     "popcorn_1"
+    ],
+    [
+     "in",
+     "popcorn_1",
+     "white_storage_box_1_right_side"
+    ]
+   ],
+   "butter_1": [
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "in",
+     "butter_1",
+     "white_storage_box_1_left_side"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "cream_cheese_1": [
+    0,
+    1
+   ],
+   "popcorn_1": [
+    2,
+    3
+   ],
+   "butter_1": [
+    4,
+    5
+   ]
+  }
+ },
+ "Random_Disturbance/case2": {
+  "task": "Place the cream cheese into the white storage box and place the frypan onto the rack",
+  "steps": [
+   "Pick up the cream cheese from the coffee table.",
+   "Place the cream cheese into the white storage box at top side",
+   "Pick the frypan from the coffee table",
+   "Place the frypan onto the rack"
+  ],
+  "goal": {
+   "cream_cheese_1": [
+    [
+     "pick",
+     "cream_cheese_1"
+    ],
+    [
+     "in",
+     "cream_cheese_1",
+     "white_storage_box_1_top_side"
+    ]
+   ],
+   "chefmate_8_frypan_1": [
+    [
+     "pick",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "on",
+     "chefmate_8_frypan_1",
+     "rack_1"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "cream_cheese_1": [
+    0,
+    1
+   ],
+   "chefmate_8_frypan_1": [
+    2,
+    3
+   ]
+  }
+ },
+ "Random_Disturbance/case3": {
+  "task": "Place the plates neatly between the knife and fork, and pour all the snacks and drinks into the plates.",
+  "steps": [
+   "Pick up the plate from coffee table",
+   "Place the plate on dining set group",
+   "Pick up the popcorn from dining set group",
+   "Place the popcorn on the plate",
+   "Place the popcorn on dining set group",
+   "Pick up the cookies from dining set group",
+   "Place the cookies on the plate",
+   "Place the cookies on the dining set group",
+   "Pick up the wine bottle from dining set group",
+   "Pour out the wine bottle onto the plate"
+  ],
+  "goal": {
+   "plate_1": [
+    [
+     "pick",
+     "plate_1"
+    ],
+    [
+     "in",
+     "plate_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "popcorn_1": [
+    [
+     "pick",
+     "popcorn_1"
+    ],
+    [
+     "pour",
+     "popcorn_1",
+     "plate_1"
+    ],
+    [
+     "in",
+     "popcorn_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "cookies_1": [
+    [
+     "pick",
+     "cookies_1"
+    ],
+    [
+     "pour",
+     "cookies_1",
+     "plate_1"
+    ],
+    [
+     "in",
+     "cookies_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wine_bottle_1": [
+    [
+     "pick",
+     "wine_bottle_1"
+    ],
+    [
+     "pour",
+     "wine_bottle_1",
+     "plate_1"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "plate_1": [
+    0,
+    1
+   ],
+   "popcorn_1": [
+    2,
+    3,
+    4
+   ],
+   "cookies_1": [
+    5,
+    6,
+    7
+   ],
+   "wine_bottle_1": [
+    8,
+    9
+   ]
+  }
+ },
+ "Random_Disturbance/case4": {
+  "task": "Clean up the desk by putting the two boxes in the bowl and place the frying pan onto the cabinet.",
+  "steps": [
+   "Pick up cream cheese from coffee table",
+   "Place cream cheese into white bowl",
+   "Pick up popcorn from coffee table",
+   "Place popcorn into white bowl",
+   "Pick up frypan from coffee table",
+   "Place frypan on wooden cabinet top side"
+  ],
+  "goal": {
+   "cream_cheese_1": [
+    [
+     "pick",
+     "cream_cheese_1"
+    ],
+    [
+     "pour",
+     "cream_cheese_1",
+     "white_bowl_1"
+    ]
+   ],
+   "popcorn_1": [
+    [
+     "pick",
+     "popcorn_1"
+    ],
+    [
+     "pour",
+     "popcorn_1",
+     "white_bowl_1"
+    ]
+   ],
+   "chefmate_8_frypan_1": [
+    [
+     "pick",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "chefmate_8_frypan_1",
+     "wooden_cabinet_1_top_side"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "cream_cheese_1": [
+    0,
+    1
+   ],
+   "popcorn_1": [
+    2,
+    3
+   ],
+   "chefmate_8_frypan_1": [
+    4,
+    5
+   ]
+  }
+ },
+ "Random_Disturbance/case5": {
+  "task": "Prepare a snack tray with chocolate pudding and wine in the plate.",
+  "steps": [
+   "Pick up the chocolate pudding from wooden cabinet top side",
+   "Place the chocolate pudding on the plate",
+   "Place the chocolate pudding on the coffee table",
+   "Pick up the wine bottle from coffee table",
+   "Pour out wine from the wine bottle onto the plate",
+   "Place the wine bottle on the coffee table"
+  ],
+  "goal": {
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "plate_1"
+    ],
+    [
+     "in",
+     "chocolate_pudding_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wine_bottle_1": [
+    [
+     "pick",
+     "wine_bottle_1"
+    ],
+    [
+     "pour",
+     "wine_bottle_1",
+     "plate_1"
+    ],
+    [
+     "in",
+     "wine_bottle_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "chocolate_pudding_1": [
+    0,
+    1,
+    2
+   ],
+   "wine_bottle_1": [
+    3,
+    4,
+    5
+   ]
+  }
+ },
+ "Random_Disturbance/case6": {
+  "task": "Place the butter into the short cabinet and pour the tomato sauce into the plate.",
+  "steps": [
+   "Open the short cabinet in middle region",
+   "Pick up the butter from coffee table",
+   "Place down the butter into the short cabinet in middle region",
+   "Pick up the tomato sauce from coffee table",
+   "Pour out the tomato sauce onto the plate",
+   "Place the tomato sauce on the coffee table"
+  ],
+  "goal": {
+   "butter_1": [
+    [
+     "open",
+     "short_cabinet_1_middle_region"
+    ],
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "in",
+     "butter_1",
+     "short_cabinet_1_middle_region"
+    ]
+   ],
+   "tomato_sauce_1": [
+    [
+     "pick",
+     "tomato_sauce_1"
+    ],
+    [
+     "pour",
+     "tomato_sauce_1",
+     "plate_1"
+    ],
+    [
+     "in",
+     "tomato_sauce_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "butter_1": [
+    0,
+    1,
+    2
+   ],
+   "tomato_sauce_1": [
+    3,
+    4,
+    5
+   ]
+  }
+ },
+ "Random_Disturbance/case7": {
+  "task": "Place the boxes of chocolate pudding and butter into a bowl and heat the pan.",
+  "steps": [
+   "Pick up chocolate pudding from coffee table",
+   "Place chocolate pudding into akita black bowl",
+   "Pick up butter from coffee table",
+   "Place butter into akita black bowl",
+   "Turn on flat stove in cook region",
+   "Pick up frypan from coffee table",
+   "Place frypan on flat stove in cook region"
+  ],
+  "goal": {
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "akita_black_bowl_1"
+    ]
+   ],
+   "butter_1": [
+    [
+     "pick",
+     "butter_1"
+    ],
+    [
+     "pour",
+     "butter_1",
+     "akita_black_bowl_1"
+    ]
+   ],
+   "flat_stove_1": [
+    [
+     "turnon",
+     "flat_stove_1"
+    ]
+   ],
+   "chefmate_8_frypan_1": [
+    [
+     "pick",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "chefmate_8_frypan_1",
+     "flat_stove_1_cook_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "chocolate_pudding_1": [
+    0,
+    1
+   ],
+   "butter_1": [
+    2,
+    3
+   ],
+   "flat_stove_1": [
+    4
+   ],
+   "chefmate_8_frypan_1": [
+    5,
+    6
+   ]
+  }
+ },
+ "Random_Disturbance/case8": {
+  "task": "Place the cream cheese into the short cabinet, the chocolate pudding into the bowl, and pour a glass of wine.",
+  "steps": [
+   "Open the short cabinet middle region",
+   "Pick up the cream cheese from coffee table",
+   "Place down the cream cheese into short cabinet middle region",
+   "Pick up the chocolate pudding from coffee table",
+   "Place down the chocolate pudding into akita black bowl",
+   "Pick up the wine bottle from coffee table",
+   "Pour out the contents of wine bottle into white yellow mug"
+  ],
+  "goal": {
+   "cream_cheese_1": [
+    [
+     "open",
+     "short_cabinet_1_middle_region"
+    ],
+    [
+     "pick",
+     "cream_cheese_1"
+    ],
+    [
+     "in",
+     "cream_cheese_1",
+     "short_cabinet_1_middle_region"
+    ]
+   ],
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "akita_black_bowl_1"
+    ]
+   ],
+   "wine_bottle_1": [
+    [
+     "pick",
+     "wine_bottle_1"
+    ],
+    [
+     "pour",
+     "wine_bottle_1",
+     "white_yellow_mug_1"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "cream_cheese_1": [
+    0,
+    1,
+    2
+   ],
+   "chocolate_pudding_1": [
+    3,
+    4
+   ],
+   "wine_bottle_1": [
+    5,
+    6
+   ]
+  }
+ },
+ "Random_Disturbance/case9": {
+  "task": "Place the chocolate pudding and cookies into a bowl and microwave it.",
+  "steps": [
+   "Pick up the white bowl from the wooden cabinet at top side",
+   "Place down the white bowl on the coffee table",
+   "Pick up the cookies from the coffee table",
+   "Place down the cookies into the white bowl",
+   "Place the cookies on the coffee table",
+   "Pick up the chocolate pudding from the coffee table",
+   "Place down the chocolate pudding into the white bowl",
+   "Place the chocolate pudding on the coffee table",
+   "Open the microwave",
+   "Pick up the white bowl from the coffee table",
+   "Place the white bowl into the microwave"
+  ],
+  "goal": {
+   "white_bowl_1": [
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "coffee_table_table_region"
+    ],
+    [
+     "open",
+     "microwave_1"
+    ],
+    [
+     "pick",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "white_bowl_1",
+     "microwave_1_heating_region"
+    ]
+   ],
+   "cookies_1": [
+    [
+     "pick",
+     "cookies_1"
+    ],
+    [
+     "pour",
+     "cookies_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "cookies_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "chocolate_pudding_1": [
+    [
+     "pick",
+     "chocolate_pudding_1"
+    ],
+    [
+     "pour",
+     "chocolate_pudding_1",
+     "white_bowl_1"
+    ],
+    [
+     "in",
+     "chocolate_pudding_1",
+     "coffee_table_table_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "white_bowl_1": [
+    0,
+    1,
+    8,
+    9,
+    10
+   ],
+   "cookies_1": [
+    2,
+    3,
+    4
+   ],
+   "chocolate_pudding_1": [
+    5,
+    6,
+    7
+   ]
+  }
+ },
+ "Random_Disturbance/case10": {
+  "task": "Place the cookies into the basket, pour the tomato sauce and BBQ sauce into the frying pan, pour the wine into the red coffee mug, and place the white-yellow mug into the wooden tray.",
+  "steps": [
+   "Pick up the cookies from the coffee table",
+   "Place down the cookies into basket in contain region",
+   "Pick up the tomato sauce from coffee table",
+   "Pour out the tomato sauce onto frypan",
+   "Place the tomato sauce on the coffee table",
+   "Pick up the bbq sauce from the coffee table",
+   "Pour out the bbq sauce onto frypan",
+   "Place the bbq sauce sauce on the coffee table",
+   "Pick up the wine from coffee table",
+   "Pour out the wine from wine bottle into red coffee mug",
+   "Place down the wine onto coffee table",
+   "Pick up the white yellow mug from coffee table",
+   "Place down the white yellow mug into wooden tray in contain region"
+  ],
+  "goal": {
+   "cookies_1": [
+    [
+     "pick",
+     "cookies_1"
+    ],
+    [
+     "in",
+     "cookies_1",
+     "basket_1_contain_region"
+    ]
+   ],
+   "tomato_sauce_1": [
+    [
+     "pick",
+     "tomato_sauce_1"
+    ],
+    [
+     "pour",
+     "tomato_sauce_1",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "tomato_sauce_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "bbq_sauce_1": [
+    [
+     "pick",
+     "bbq_sauce_1"
+    ],
+    [
+     "pour",
+     "bbq_sauce_1",
+     "chefmate_8_frypan_1"
+    ],
+    [
+     "in",
+     "bbq_sauce_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "wine_bottle_1": [
+    [
+     "pick",
+     "wine_bottle_1"
+    ],
+    [
+     "pour",
+     "wine_bottle_1",
+     "red_coffee_mug_1"
+    ],
+    [
+     "in",
+     "wine_bottle_1",
+     "coffee_table_table_region"
+    ]
+   ],
+   "white_yellow_mug_1": [
+    [
+     "pick",
+     "white_yellow_mug_1"
+    ],
+    [
+     "in",
+     "white_yellow_mug_1",
+     "wooden_tray_1_contain_region"
+    ]
+   ]
+  },
+  "goal_steps": {
+   "cookies_1": [
+    0,
+    1
+   ],
+   "tomato_sauce_1": [
+    2,
+    3,
+    4
+   ],
+   "bbq_sauce_1": [
+    5,
+    6,
+    7
+   ],
+   "wine_bottle_1": [
+    8,
+    9,
+    10
+   ],
+   "white_yellow_mug_1": [
+    11,
+    12
+   ]
+  }
+ }
+}
