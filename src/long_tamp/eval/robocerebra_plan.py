@@ -106,12 +106,16 @@ def held_object(manifest: dict[str, Any]) -> str | None:
 
 @dataclass
 class SegmentPlan:
-    """A segment's motion and how it was found."""
+    """A segment's motion and how it was found. A pick also gives the
+    scene it leaves (``held_after``: the robot's joints and the target's
+    pose at the top of the lift), for a lookahead to plan the next step
+    from."""
 
     stages: list[Stage]
     q_start: list[float]
     tcp_start: np.ndarray
     info: dict[str, Any] = field(default_factory=dict)
+    held_after: dict[str, Any] | None = None
 
 
 class PandaKinematics:
@@ -720,7 +724,11 @@ class SegmentPlanner:
             stages.insert(0, Stage("transit", transit, gripper=-1.0))
         if escape:
             stages.insert(0, escape)
-        return SegmentPlan(stages, self.q0, self.tcp0, info)
+        joints = self.scene.robot_joints()
+        for k, value in enumerate(self.arm(q_lift), 1):
+            joints[f"robot0_joint{k}"] = float(value)
+        after = {"joints": joints, "pose": pose_to_xyzquat(self.object_pose(q_lift))}
+        return SegmentPlan(stages, self.q0, self.tcp0, info, after)
 
     def plan_place(
         self,
