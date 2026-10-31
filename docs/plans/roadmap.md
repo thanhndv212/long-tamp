@@ -335,10 +335,9 @@ planner-based entry has been published. #153 is split into:
 - [ ] [#161](https://github.com/thanhndv212/long-tamp/issues/161) R6 Articulated objects: drawers, doors, knobs
 - [ ] [#162](https://github.com/thanhndv212/long-tamp/issues/162) R7 Disturbance, mismatch and mix conditions (needs #151, #145)
 - [ ] [#163](https://github.com/thanhndv212/long-tamp/issues/163) R8 Continuous variant and results tables
-      (row C on Ideal in: 61.4% by Eq. 1; the other conditions wait on #162)
+      (row C on Ideal in: 67.7% by Eq. 1; the other conditions wait on #162)
 - [ ] [#186](https://github.com/thanhndv212/long-tamp/issues/186) R9 Whole-task planning on `long_tamp.mission` (row D)
-      (row D on Ideal in: 64.3% by Eq. 1; follow-ups #187 place on an object, in review in
-      PR #192, #188 flat-object grasp, #189 held start in collision, #190 tracker stall)
+      (row D on Ideal in: 67.9% by Eq. 1; follow-ups #187 place on an object done, #188 flat-object grasp, #189 held start in collision, #190 tracker stall)
 
 The first number to publish is the Ideal condition on pick/in/on subtasks (#156 → #159, about
 68% of subtasks). Row A is in: 412 of 540 supported segments (76.3%) over 10 Ideal cases ×
@@ -351,8 +350,10 @@ state changes by the paper's Eq. 1, and 8 of 100 rollouts complete every step
 step budget shared over the rollout, it completes 64.3% (`script/robocerebra/results/2026-10-30-r9-ideal-hpp-mission.json`).
 Placing onto another object (#187, PR #192) covers the 15 `On`-over-object goals, all onto
 `rack_1`: row A on seed 0 goes from 62/71 to 64/72 supported Ideal steps, none lost, and
-the butter and the mug go onto the rack upright in Memory_Execution 1–3. Rows C and D with
-it, 10 seeds per Ideal case, are next. Articulated objects (#161) are the critical path to the full table.
+the butter and the mug go onto the rack upright in Memory_Execution 1–3. With it, row C
+completes 67.7% and row D 67.9%, 26 of 100 rollouts each with every step done
+(`script/robocerebra/results/2026-10-31-r10-ideal-hpp-continuous.json`,
+`…-r11-ideal-hpp-mission.json`). Articulated objects (#161) are the critical path to the full table.
 
 **Exit test:** 20 SO-101 sim missions from language instructions with the simulated camera and injected disturbances complete or escalate cleanly; RoboCerebra results for all six conditions committed with seeds (privileged state, simulated camera, continuous variant); a recorded video.
 
