@@ -360,10 +360,29 @@ python script/robocerebra/evaluate.py Ideal/case1 --rollouts 10 \
 
 - Goals: `pick o` becomes *grasped* (the first R3 handle that plans, then a
   straight lift); `In o r` / `On o r` become *placed* (carry the held object into
-  `r`'s box and release); `pour o v` becomes *poured* (below). `open`, `close`,
-  `turnon` and `On` over an object are rejected as unsupported, as is a region
-  the exported scene lacks (`rack_1`); the segment then holds still with the
-  gripper closed.
+  `r`'s box and release); `pour o v` becomes *poured* (below). `open`, `close`
+  and `turnon` are rejected as unsupported, as is a region or object the
+  exported scene lacks; the segment then holds still with the gripper closed.
+- `On o x` over an object (#187; all 15 in the benchmark are onto `rack_1`:
+  the frypan in case2 of Ideal, Observation_Mismatching and Random_Disturbance,
+  the butter and the mug in Memory_Execution 1–3 and Mix 7–9). LIBERO's object
+  `check_ontop` passes when the two touch, `o`'s origin is no lower than
+  `x`'s and within 3 cm of it across. The place goes to a region made from
+  `x`'s collision geometry at the segment start (`object_top_region`): a
+  2 cm square about its origin, resting on the highest face under that origin
+  (the rack's plate, between its pegs) or, for an object too wide to go
+  between, up to its highest face (the pegs' tops). The demo's own place
+  never registers: it leaves the frypan on the pegs 4.6 cm off the rack's
+  origin. The frypan is held by a rim pinch, fingers above and below, and
+  the rack is 0.85 m out: the place tries the hand as it holds the object
+  turned about the vertical (the hand on the near side) right after `held`,
+  before turning it on its side, and a release with the fingers closing
+  vertically after all the others. case2 step 3 then releases at `held/180`
+  within 0.5 cm of the origin. In Memory_Execution 1–3 (row A, seed 0; Mix
+  7–9 are the same scenes) the butter goes on the plate as held, and the mug,
+  with `held` out of reach, upright at `held/90` or `held/180`: 3/3 each.
+  Tried after the side approaches, the mug was released on its side and
+  rolled off the pegs in two of the three.
 - Pour (R5, #160). LIBERO's checker passes a pour when, within its last 40
   steps, the two objects' origins came within 0.3 m and the poured object's
   quaternion moved by more than 0.1 (0.2 in some scene classes); nothing
@@ -495,16 +514,16 @@ object in the hand. The failures on every seed:
 
 | Segment | Cause |
 | --- | --- |
-| case2 3, frypan onto the rack | no region `rack_1` in the export |
+| case2 3, frypan onto the rack | no region `rack_1` in the export (supported since, #187) |
 | case3 0–1, pick and place the plate | no handle of the plate plans |
 | case3 6–7, cookies onto the plate, the table | the held start collides (finger and plate) |
-| case4 5, frypan onto the cabinet top | no release pose in the region |
+| case4 5, frypan onto the cabinet top | no release pose in the region (passes since, #187) |
 | case5 1, pudding onto the plate | planned, fails in the carry; 2–5 fail after it |
 | case6 0, case8 0, case9 8, open | unsupported (#161) |
 | case6 1, pick butter | planned, fails in the lift |
 | case6 2, butter into the shut cabinet | no release pose |
 | case7 4, turn on the stove | unsupported (#161) |
-| case7 6, frypan onto the stove | no release pose in the region |
+| case7 6, frypan onto the stove | no release pose in the region (passes since, #187) |
 | case8 1–2, cream cheese into the shut cabinet | planned, fails in the lift and the retreat |
 | case8 6, pour the wine | planned, fails in the tilt |
 | case9 9–10, white_bowl into the microwave | no handle of the bowl plans |
@@ -513,6 +532,27 @@ case10, 13 segments with three pours and carries to a crowded table, loses
 more later in the rollout: its carries back to the coffee table do not plan
 (7 seeds for the bbq sauce), and plans that do run out of steps in the
 transit.
+
+#### With the place onto an object (#187)
+
+`results/2026-10-31-r10-ideal-hpp-continuous.json`: the same run with `On o x`
+onto another object supported (all onto `rack_1`) and the new release
+orientations (held turned about the vertical, a rim pinch last). Eq. 1
+61.4% → 67.7%; supported segments passed 483 / 720 (720: the frypan onto the
+rack is now supported); 26 / 100 rollouts with every step done (8 before).
+
+| Case | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Eq. 1, row C (R8) | 0.97 | 0.62 | 0.61 | 0.83 | 0.25 | 0.50 | 0.71 | 0.43 | 0.72 | 0.49 |
+| Eq. 1, row C | 0.97 | 0.95 | 0.61 | 1.00 | 0.25 | 0.50 | 0.86 | 0.43 | 0.72 | 0.48 |
+| supported segments passed, row C | 58/60 | 32/40 | 60/100 | 60/60 | 15/60 | 30/50 | 60/60 | 30/60 | 79/100 | 59/130 |
+| rollout success, row C | 0.8 | 0.8 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+case2's step 3, the frypan onto the rack, passes on 8 of 10 seeds. On the
+other two (0 and 9) the place runs through but the frypan ends on the pegs'
+tips, 6.6 cm above its release pose, and does not register. case4's frypan
+onto the cabinet top and case7's onto the stove, which had no release pose,
+pass on every seed: released as held turned about the vertical. The other cases are unchanged (case10 within a segment).
 
 ### Row D: Ideal, one mission per rollout (#186)
 
@@ -579,7 +619,7 @@ The failures on every seed, or nearly:
 
 | Step | Cause |
 | --- | --- |
-| case2, frypan onto the rack | `rack_1` is an object, not a region (#187) |
+| case2, frypan onto the rack | `rack_1` is an object, not a region (supported since, #187) |
 | case3, pick the plate | no handle of the plate plans (#188) |
 | case3, pour the cookies onto the plate | the held start collides, finger and cookies (#189) |
 | case4, frypan onto the cabinet top | no release pose in the region |
@@ -607,7 +647,43 @@ the check (the pick counts) and put down when its place fails.
 On case7, seed 0: the frypan is deferred for the reason its place gave in
 the run ("no release pose ... in flat_stove_1_cook_region"), the butter and
 pudding pours run first, and the case goes from 3/7 to 5/7 (0.71, row C's
-score) in 367 s instead of 457 s. The full rerun is pending.
+score) in 367 s instead of 457 s.
+
+#### With the place onto an object (#187)
+
+`results/2026-10-31-r11-ideal-hpp-mission.json`: the rerun, with the
+lookahead above, no retry of a step that does not plan, and #187's place onto
+an object and release orientations. Eq. 1 64.3% → 67.9%; 26 / 100 rollouts with every
+step done (6 case1, 2 case2, 10 case4, 8 case10); 115 retries, 73 objects
+given up on (107 before). Budget used 58.5% on mean, 13 rollouts spent it all.
+The rollouts took 6.3 hours.
+
+| Case | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Eq. 1, row D (R9) | 0.92 | 0.75 | 0.60 | 0.83 | 0.48 | 0.47 | 0.43 | 0.51 | 0.71 | 0.73 |
+| Eq. 1, row D | 0.85 | 0.60 | 0.60 | 1.00 | 0.23 | 0.47 | 0.86 | 0.57 | 0.70 | 0.91 |
+| rollout success, row D | 0.6 | 0.2 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0.8 |
+
+The frypan goes onto the rack on all 10 seeds of case2, onto the cabinet top
+in case4, and, deferred by the lookahead, onto the stove in case7. case10
+gains from not retrying what does not plan.
+
+The task order is the planner's, and in this run it differs from R9's: it
+depends on Python's hash seed (`PYTHONHASHSEED`), so a whole run takes one
+order per case. Rerunning case2 at seed 0 under hash seeds 1–4 gives the
+cream cheese first (4/4) for two and the frypan first (2/4) for the other two.
+The three cases that lose are that order, not a step that newly fails:
+
+- case2 (0.75 → 0.60) does the frypan first on every seed. Its place on the
+  rack ends at full reach, the elbow (joint 4) at its limit, and from there
+  every grasp of the cream cheese is at a joint limit: OSC stalls in the
+  transit, on 8 seeds. With the cream cheese first, the case is 4/4.
+- case5 (0.48 → 0.23) pours the pudding first on every seed (R9: the wine
+  bottle first on 6). The pudding pour does not plan and the wine bottle's
+  pick after it fails, as in R9's rollouts with that order.
+- case1 (0.92 → 0.85) places the butter first on every seed; its sweep into
+  the storage box's left side stalls on 4 seeds (R9: 2), and seed 6 plans
+  nothing after it.
 
 ### Published results on RoboCerebra
 

@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- RoboCerebra place onto an object's top (#187): an `On o x` goal whose `x` is another object
+  in the scene (15 goals, all onto `rack_1`) is no longer unsupported. `object_top_region`
+  builds the region from `x`'s collision geometry at its pose: within 2 cm of its origin, as
+  LIBERO's object `check_ontop` wants, resting from its support under the origin up to its
+  highest face. A release is also tried as held turned about the vertical, right after held
+  and before turning the object on its side, and one with the fingers closing vertically (a
+  rim pinch) is tried last instead of rejected (`info["fingers"]`). Row A, seed 0: Ideal
+  62/71 → 64/72 supported steps (case2's frypan onto the rack, case7's frypan onto the
+  stove), no step lost; Memory_Execution 1–3 (Mix 7–9 are the same scenes) put the butter
+  and the mug upright onto the rack, 6/6. Rows C and D over 10 seeds per Ideal case:
+  Eq. 1 61.4% → 67.7% and 64.3% → 67.9% (`2026-10-31-r10-…`, `2026-10-31-r11-…`).
 - RoboCerebra mission lookahead (#186): a pick is checked against the place or pour after
   it, planned from the scene the lift leaves (`HppPolicy.plan(..., then=...)`,
   `held_export`); an object whose next step would not plan is deferred, picked last and put
@@ -50,6 +61,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   real-time video) and builds `script/robocerebra/results/r3-grasp-gallery/index.html`,
   which sets each class's recorded verdict beside the rerun's. The rerun of 2026-10-27
   matches the recorded run on all 25 classes.
+- RoboCerebra rollout gallery for rows C and D: `capture_rollout.py C|D <case>...` reruns
+  whole rollouts at one seed with the full runs' policy and budgets, rendering every control
+  step, and `build_rollout_html.py` builds `script/robocerebra/results/rollout-gallery/`
+  (a video per rollout and a keyframe at each completed subtask). Recorded at seed 0: rows
+  C and D on Ideal cases 2, 7 and 8, and row C on Memory_Execution/case1.
 - RoboCerebra HPP segment policy (#159, M11 R4): `long_tamp.eval.robocerebra_policy:hpp_policy`
   translates each segment's goal (`pick` → grasped, `In`/`On` → placed; `pour`, `open`,
   `turnon` and regions missing from the export reported unsupported), detects the held
