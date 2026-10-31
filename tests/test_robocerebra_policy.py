@@ -9,9 +9,11 @@ from long_tamp.eval.robocerebra_plan import (
     ONTOP_REACH,
     POUR_ANGLES,
     POUR_REACH,
+    SUPPORT_MARGIN,
     PlanningError,
     SegmentPlanner,
     collision_corners,
+    collision_samples,
     held_object,
     object_corners,
     object_top_region,
@@ -21,6 +23,8 @@ from long_tamp.eval.robocerebra_plan import (
     pour_positions,
     pour_tilts,
     square,
+    support_faces,
+    support_margin,
 )
 from long_tamp.eval.robocerebra_policy import (
     HppPolicy,
@@ -277,6 +281,96 @@ def test_object_top_region_turns_with_the_object(tmp_path):
     region = object_top_region("rack_1", urdf, upside_down)
     # Pegs down: only the plate's face is on top.
     assert region["height"] == region["top"] == pytest.approx(0.5175)
+
+
+def test_support_faces_are_the_pegs_tips_or_the_plate(tmp_path):
+    urdf = tmp_path / "rack.urdf"
+    urdf.write_text(RACK)
+    at = pose(0.1, -0.5, 0.44)
+    tips = support_faces(urdf, at, 0.545)
+    assert [list(world[:2, 3]) for world, _ in tips] == [
+        pytest.approx([0.14, -0.45]),
+        pytest.approx([0.06, -0.45]),
+    ]
+    plate = support_faces(urdf, at, 0.4575)
+    assert len(plate) == 1 and plate[0][1] == pytest.approx([0.07, 0.14, 0.0175])
+    assert support_faces(urdf, at, 0.5) == []
+
+
+def test_collision_samples_fill_the_boxes(tmp_path):
+    urdf = tmp_path / "butter.urdf"
+    urdf.write_text("""<robot name="butter"><link name="base_link">
+  <collision><origin xyz="0 0 0.01"/><geometry><box size="0.06 0.03 0.02"/></geometry></collision>
+</link></robot>""")
+    points, weights = collision_samples(urdf, n=3)
+    assert len(points) == 27
+    assert weights.sum() == pytest.approx(0.06 * 0.03 * 0.02)
+    assert points.min(axis=0) == pytest.approx([-0.03, -0.015, 0.0])
+    assert points.max(axis=0) == pytest.approx([0.03, 0.015, 0.02])
+
+
+def face(x, y, half_x, half_y):
+    return pose(x, y), np.array([half_x, half_y, 0.005])
+
+
+def block(n=5, half=0.02):
+    """A 4 cm cube's sample points, its bottom at z 0, and their weights."""
+    grid = np.linspace(-half, half, n)
+    points = np.array(np.meshgrid(grid, grid, grid + half)).reshape(3, -1).T
+    return points, np.ones(len(points))
+
+
+def test_support_margin_on_a_plate_is_the_distance_to_its_edge():
+    points, weights = block()
+    margin = support_margin(points, weights, [face(0.0, 0.0, 0.1, 0.1)])
+    assert margin == pytest.approx(0.02)
+    # Over the plate's edge by 5 mm: only the part over the plate touches.
+    margin = support_margin(points + [0.015, 0, 0], weights, [face(0, 0, 0.03, 0.1)])
+    assert margin == pytest.approx(0.01)
+    assert margin >= SUPPORT_MARGIN
+
+
+def test_support_margin_rejects_peg_tips_it_cannot_rest_on():
+    points, weights = block()
+    # One peg under a corner: a single point of contact, no area.
+    assert support_margin(points, weights, [face(0.02, 0.02, 0.004, 0.004)]) == (
+        -np.inf
+    )
+    # One row of pegs along an edge: the center of mass is outside the contacts.
+    row = [face(0.02, y, 0.004, 0.004) for y in (-0.02, 0.0, 0.02)]
+    assert support_margin(points, weights, row) == -np.inf
+    # Two pegs along the edge, one each side: a strip the center is outside of.
+    two = [face(x, 0.02, 0.004, 0.012) for x in (-0.02, 0.02)]
+    assert support_margin(points, weights, two) < 0
+    # Pegs under all four corners: it rests, the center 2 cm inside.
+    corners = [face(x, y, 0.004, 0.004) for x in (-0.02, 0.02) for y in (-0.02, 0.02)]
+    assert support_margin(points, weights, corners) == pytest.approx(0.02)
+
+
+def test_resting_tries_the_plate_from_the_center_and_the_tips_widest_first():
+    points, weights = block(half=0.01)
+    region = {"box": {"center": [0.0, 0.0, 0.5], "half_extents": [0.01, 0.01, 0.1]}}
+    heights = (0.5, 0.51)
+    plate = [face(0.0, 0.0, 0.1, 0.1)]
+    found = SegmentPlanner._resting(
+        region, np.eye(4), (points, weights), plate, heights, 0.01, "support"
+    )
+    # 25 positions on a 5 mm grid, two heights each, the center first.
+    assert len(found) == 50
+    assert found[0][0] == pytest.approx([0.0, 0.0])
+    assert [z for _, z in found[:2]] == pytest.approx([0.5, 0.51])
+    # Two rows of pegs at x = ±1 cm: only centered across them does it rest
+    # on both, and nowhere along the rows is better than another.
+    rows = [face(x, 0.0, 0.002, 0.1) for x in (-0.01, 0.01)]
+    found = SegmentPlanner._resting(
+        region, np.eye(4), (points, weights), rows, heights, 0.01, "top"
+    )
+    assert len(found) == 10
+    assert all(xy[0] == pytest.approx(0.0, abs=1e-9) for xy, _ in found)
+    # Nothing to rest on: no positions.
+    assert not SegmentPlanner._resting(
+        region, np.eye(4), (points, weights), [], heights, 0.01, "top"
+    )
 
 
 def test_on_an_object_places_on_its_top(tmp_path):
