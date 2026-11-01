@@ -36,7 +36,9 @@ class Stage:
     takes about 8 steps to go from open to closed). ``step`` overrides the
     tracker's carrot distance: short where the path must be followed closely
     (an insertion), long where only its end matters; ``tol`` overrides how
-    close to the last pose the stage must end."""
+    close to the last pose the stage must end. A ``settle`` stage holds past
+    its dwell while the fingers still move: closing on a thin wall, they
+    travel nearly the whole stroke before they stop on it (#158)."""
 
     name: str
     tcp: np.ndarray  # (N, 4, 4) world poses of the planner's TCP
@@ -44,6 +46,7 @@ class Stage:
     dwell: int = 0
     step: float | None = None
     tol: float | None = None
+    settle: bool = False
 
     def __post_init__(self) -> None:
         self.tcp = np.asarray(self.tcp, dtype=float).reshape(-1, 4, 4)
@@ -124,6 +127,11 @@ class OscTracker:
     ``stall`` steps, tracking stops (``done``, ``stalled`` names the stage)
     and the hand holds where it is. The log records the stage, its error
     and the observed joints.
+
+    A ``settle`` stage ends only once the finger opening
+    (``robot0_gripper_qpos``) has changed by less than ``grip_still`` m a
+    step for ``grip_hold`` steps (the grip firms up after the fingers stop
+    on a thin wall), at most ``max_settle`` steps past its dwell.
     """
 
     stages: list[Stage]
@@ -139,6 +147,9 @@ class OscTracker:
     stall: int = 30
     min_progress: float = 0.002
     min_turn: float = 0.02
+    grip_still: float = 2e-4
+    grip_hold: int = 5
+    max_settle: int = 15
 
     def __post_init__(self) -> None:
         if not self.stages:
@@ -155,6 +166,8 @@ class OscTracker:
         self._best: tuple[int, float, float] | None = None
         self._still = 0  # steps without progress toward the carrot
         self._hold: tuple[np.ndarray, float] | None = None  # pose, gripper
+        self._opening: float | None = None  # the fingers' last step
+        self._still_grip = 0  # steps the fingers have not moved
         #: The stage tracking gave up in, if it stalled.
         self.stalled: str | None = None
         self.log: list[dict[str, Any]] = []
@@ -171,6 +184,7 @@ class OscTracker:
 
     def __call__(self, obs: dict[str, Any]) -> np.ndarray:
         current = obs_pose(obs)
+        self._still_grip = 0 if self._fingers_moving(obs) else self._still_grip + 1
         if self.done:
             if self._hold is not None:
                 return self._action(self._hold[0], current, self._hold[1])
@@ -206,7 +220,12 @@ class OscTracker:
                 or self._at_end > self.patience
             ):
                 self._dwelt += 1
-                if self._dwelt > stage.dwell:
+                settling = (
+                    stage.settle
+                    and self._still_grip < self.grip_hold
+                    and self._dwelt <= stage.dwell + self.max_settle
+                )
+                if self._dwelt > stage.dwell and not settling:
                     self.log.append(
                         {
                             "stage": stage.name,
@@ -235,6 +254,16 @@ class OscTracker:
             return False
         self._still += 1
         return self._still > self.stall
+
+    def _fingers_moving(self, obs: dict[str, Any]) -> bool:
+        """Whether the finger opening changed by ``grip_still`` or more
+        since the last step (false without a gripper observation)."""
+        if "robot0_gripper_qpos" not in obs:
+            return False
+        q = np.asarray(obs["robot0_gripper_qpos"], dtype=float)
+        opening, last = float(q[0] - q[-1]), self._opening
+        self._opening = opening
+        return last is None or abs(opening - last) >= self.grip_still
 
     def _boost(self) -> float:
         return min(1.0 + self._at_end / self.boost, self.max_boost)

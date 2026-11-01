@@ -814,7 +814,7 @@ class SegmentPlanner:
         info.update(lift=lifted, plan_time=round(time.time() - start, 3))
         stages = [
             Stage("insert", insert, gripper=-1.0, step=0.025, tol=0.003),
-            Stage("close", insert[-1:], gripper=1.0, dwell=9),
+            Stage("close", insert[-1:], gripper=1.0, dwell=9, settle=True),
             Stage("lift", lift_path, gripper=1.0, step=0.03),
         ]
         if transit is not None:
