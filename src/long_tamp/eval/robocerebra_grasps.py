@@ -48,6 +48,7 @@ def add_grasp_handles(
     scene: ExportedScene,
     *,
     max_handles: int = 6,
+    max_tilted: int = 4,
     planner_params: GraspPlannerParams | None = None,
     objects: Iterable[str] | None = None,
 ) -> dict[str, Any]:
@@ -57,6 +58,11 @@ def add_grasp_handles(
     The object geometry and obstacle geometry are read from the exported
     URDFs. The planner samples grasps and top-down pinches on thin horizontal
     rims or flanges.
+
+    Up to ``max_tilted`` handles more follow: the top-down grasps pitched
+    about their closing axis (:data:`TILTS`), the pads on the same contacts.
+    By an object close to the robot's base, a top-down grasp folds the elbow
+    to its stop; leaning the hand toward the robot unfolds it.
 
     The returned and persisted report contains a per-instance row with its
     class and generated handles. Raises if any object has no feasible handle
@@ -119,47 +125,19 @@ def add_grasp_handles(
         samples.extend(_rim_samples(planner, obj.primitives))
         for checked_obstacles in (obstacles, []):
             for grasp_pose, source in samples:
-                ev = planner.evaluate(
-                    grasp_pose, obj.primitives, checked_obstacles, full=True
+                candidate = _accept(
+                    planner,
+                    obj,
+                    grasp_pose,
+                    source,
+                    checked_obstacles,
+                    world_down_in_object,
                 )
-                if source.startswith("top-rim") and not ev.feasible:
-                    # The analytic rim frame is centered on the wall's top
-                    # face; shift by measured pad asymmetry before checking.
-                    grasp_pose = grasp_pose.copy()
-                    grasp_pose[:3, 3] += grasp_pose[:3, 1] * ev.offset
-                    ev = planner.evaluate(
-                        grasp_pose, obj.primitives, checked_obstacles, full=True
-                    )
-                # Closed finger contact with the target is intentional. The
-                # open-hand approach and palm/knuckles must stay clear.
-                bad = [
-                    label
-                    for label in ev.collisions
-                    if not (
-                        label.startswith("closed finger_")
-                        and any(f":{p.name}" in label for p in obj.primitives)
-                    )
-                ]
-                non_collision_reasons = [
-                    r for r in ev.reasons if not r.startswith("collision:")
-                ]
-                if non_collision_reasons or bad:
-                    continue
-                ev.collisions = [label for label in ev.collisions if label not in bad]
-                ev.reasons = []
-                ev.feasible = True
-                score = (
-                    max(0.0, float(grasp_pose[:3, 0] @ world_down_in_object))
-                    + ev.contact_ratio
-                )
-                candidate = _candidate(planner, grasp_pose, ev, source, score)
-                key = tuple(np.round(candidate.handle_pose.ravel(), 5))
-                current = candidates_by_pose.get(key)
-                if current is None or candidate.score > current.score:
+                if candidate is not None:
                     candidate.requires_scene_planning = (
                         checked_obstacles == [] and bool(obstacles)
                     )
-                    candidates_by_pose[key] = candidate
+                    _keep(candidates_by_pose, candidate)
             if candidates_by_pose:
                 break
 
@@ -177,6 +155,36 @@ def add_grasp_handles(
             raise ValueError(
                 f"{name} ({object_class(name)}) has no feasible grasp handle"
             )
+        # Tilted variants of the top-down grasps go after them, leaning
+        # toward the robot first: tried only when no top-down grasp plans
+        # or OSC can track it.
+        checked = [] if candidates[0].requires_scene_planning else obstacles
+        tilted: dict[tuple[float, ...], Any] = {}
+        for candidate in candidates:
+            if float(candidate.approach @ world_down_in_object) < TOP_DOWN:
+                continue
+            for grasp_pose in _tilted(planner, candidate):
+                found = _accept(
+                    planner,
+                    obj,
+                    grasp_pose,
+                    f"{candidate.source} tilted",
+                    checked,
+                    world_down_in_object,
+                )
+                if found is not None:
+                    found.requires_scene_planning = candidate.requires_scene_planning
+                    _keep(tilted, found)
+        to_robot = to_object[:3, :3] @ _horizontal(
+            np.asarray(scene.robot_pose()[:3]) - target_pose[:3, 3]
+        )
+        candidates.extend(
+            sorted(
+                tilted.values(),
+                key=lambda c: (float(c.approach @ to_robot), c.score),
+                reverse=True,
+            )[:max_tilted]
+        )
 
         handles_xml = []
         rows = []
@@ -243,6 +251,43 @@ _SECTION_START = "  <!-- RoboCerebra grasp handles: generated by long_tamp -->"
 _SECTION_END = "  <!-- End RoboCerebra grasp handles -->"
 
 
+def _accept(planner, obj, grasp_pose, source, obstacles, down):
+    """The candidate grasp of ``obj`` at ``grasp_pose``, scored toward the
+    world's ``down`` (object frame), or ``None`` if the open hand or the
+    palm hits ``obstacles`` or the object."""
+    ev = planner.evaluate(grasp_pose, obj.primitives, obstacles, full=True)
+    if source.startswith("top-rim") and not ev.feasible:
+        # The analytic rim frame is centered on the wall's top
+        # face; shift by measured pad asymmetry before checking.
+        grasp_pose = grasp_pose.copy()
+        grasp_pose[:3, 3] += grasp_pose[:3, 1] * ev.offset
+        ev = planner.evaluate(grasp_pose, obj.primitives, obstacles, full=True)
+    # Closed finger contact with the target is intentional. The
+    # open-hand approach and palm/knuckles must stay clear.
+    bad = [
+        label
+        for label in ev.collisions
+        if not (
+            label.startswith("closed finger_")
+            and any(f":{p.name}" in label for p in obj.primitives)
+        )
+    ]
+    if bad or any(not r.startswith("collision:") for r in ev.reasons):
+        return None
+    ev.reasons = []
+    ev.feasible = True
+    score = max(0.0, float(grasp_pose[:3, 0] @ down)) + ev.contact_ratio
+    return _candidate(planner, grasp_pose, ev, source, score)
+
+
+def _keep(found, candidate):
+    """Keep ``candidate`` in ``found`` unless a better one has its handle."""
+    key = tuple(np.round(candidate.handle_pose.ravel(), 5))
+    current = found.get(key)
+    if current is None or candidate.score > current.score:
+        found[key] = candidate
+
+
 def _candidate(planner, grasp_pose, evaluation, source, score):
     """Build a candidate while retaining the evaluator's contact evidence."""
     from long_tamp.grasping.planner import GraspCandidate
@@ -259,6 +304,44 @@ def _candidate(planner, grasp_pose, evaluation, source, score):
 # A bowl's rim is a ring of thin wall boxes leaning out ~15 degrees: their
 # thickness axis tilts as much from horizontal (RoboCerebra's bowls).
 RIM_TILT = 0.35  # sin of the largest tilt of a rim's closing axis, ~20 degrees
+
+
+#: Pitches of a top-down grasp about its closing axis, both ways [rad]
+#: (#158). From Ideal/case1's start posture, OSC tracks no top-down grasp of
+#: an object 21 cm in front of the base; leaning 30 degrees or more toward
+#: the robot, it does.
+TILTS = (np.radians(30.0), np.radians(45.0))
+#: A grasp is top-down when its approach is within ~25 degrees of down.
+TOP_DOWN = 0.9
+
+
+def _tilted(planner, candidate):
+    """``candidate``'s grasp pitched by each of :data:`TILTS`, both ways,
+    about its closing axis through the pads' centre."""
+    pose = candidate.pose
+    closing = pose[:3, 1]
+    pad_x = planner.gripper.pad_x_for_width(candidate.evaluation.width)
+    pads = pose[:3, 3] + pad_x * pose[:3, 0]
+    for tilt in TILTS:
+        for angle in (tilt, -tilt):
+            out = np.eye(4)
+            out[:3, :3] = _rotation(closing, angle) @ pose[:3, :3]
+            out[:3, 3] = pads - pad_x * out[:3, 0]
+            yield out
+
+
+def _rotation(axis, angle):
+    """Rotation by ``angle`` about the unit ``axis`` (Rodrigues)."""
+    x, y, z = axis
+    K = np.array([[0.0, -z, y], [z, 0.0, -x], [-y, x, 0.0]])
+    return np.eye(3) + np.sin(angle) * K + (1.0 - np.cos(angle)) * K @ K
+
+
+def _horizontal(v):
+    """``v`` with no vertical part, unit length (zero if vertical)."""
+    v = np.array([v[0], v[1], 0.0])
+    norm = np.linalg.norm(v)
+    return v / norm if norm > 1e-9 else v
 
 
 def _rim_samples(planner, primitives):
