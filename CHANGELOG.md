@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- RoboCerebra tilted grasps (#158): `add_grasp_handles` appends up to `max_tilted` (4)
+  handles after the top-down ones, each top-down grasp pitched 30 and 45 degrees about its
+  closing axis through the pads, the ones leaning toward the robot first. An object 21 cm in
+  front of the base has no top-down grasp OSC can track without joint 4 at its stop; leaning
+  the hand toward the robot unfolds the elbow. In `grasp_lift.py`, black_book and
+  glazed_rim_porcelain_ramekin now pick (70 and 49 steps) and macaroni_and_cheese is held
+  (lifted 10 cm, rotation 0.025; it starts in no region), where all three failed
+  (`results/2026-11-01-r3-tilted-grasps.json`). R3 stands at 17 of 25 classes picked and 5
+  held; rack, moka_pot and white_bowl still fail. A pick whose top-down grasp plans and
+  tracks is unchanged.
 - RoboCerebra edge pinch of a flat object (#188): a `pick` whose object has no handle that
   plans, and is flat (at most 3 cm thick, upright: the plate), now pushes it to the edge of
   its support region nearest the robot and pinches the overhang, fingers closing vertically,
