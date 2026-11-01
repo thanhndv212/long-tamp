@@ -178,7 +178,7 @@ flowchart LR
   SIM["#152 SO-101 stacking in sim"]
   R1["#156 env server ✓"]
   R2["#157 scene exporter ✓"]
-  R3["#158 grasps (17/25)"]
+  R3["#158 grasps (18/25)"]
   R4["#159 Ideal subset ✓"]
   R5["#160 pour"]
   R6["#161 articulated objects"]
@@ -239,7 +239,7 @@ Orange: the real-hardware path on the SO-101 (soarm_tamp S1–S6, see its
 Blue: the simulated benchmark path (RoboCerebra, #156–#163 and #186, closing M11 with #154).
 Uncoloured nodes are the library milestones and sim pieces both paths build on.
 Green with ✓: done. Pale green, dashed: partly done (M7 waits on its real-robot exit run,
-#158 has handles for every class, but the pick checker passes for 17 of 25 (5 more held), and rows C and D
+#158 has handles for every class, but the pick checker passes for 18 of 25 (5 more held), and rows C and D
 are in on Ideal only, the other conditions waiting on #162).
 
 ## M7 — Hardware execution: remote backends and grippers (0.9.0)
