@@ -388,7 +388,11 @@ def fake(monkeypatch):
     from long_tamp.eval import robocerebra_mission
 
     _task_planner_or_skip()
-    monkeypatch.setattr(robocerebra_mission, "SegmentController", FakeController)
+    monkeypatch.setattr(
+        robocerebra_mission,
+        "plan_controller",
+        lambda plan, record: FakeController(plan.stages, plan.tcp_start, record),
+    )
 
     def run(goal, seed=0, **options):
         env = FakeEnv(goal)

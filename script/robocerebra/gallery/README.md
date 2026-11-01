@@ -15,7 +15,8 @@ python script/robocerebra/gallery/capture.py white_bowl   # or only some classes
 
 Both reuse `grasp_lift.grasp_lift()` unchanged through a proxy that renders the
 agentview and wrist cameras, and skip classes already in their `rerun.json`
-(delete `out*/rerun.json` to redo them). Then on the host:
+(delete `out*/rerun.json` to redo them). Each runs 150 steps, as `grasp_lift.py`, but for the
+classes in `LIMITS` (the plate's edge pinch, #188, runs 800). Then on the host:
 
 ```bash
 script/robocerebra/gallery/encode.sh   # 20 Hz frames -> 30 fps real-time H.264 (ffmpeg)

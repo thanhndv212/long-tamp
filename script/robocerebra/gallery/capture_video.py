@@ -19,6 +19,7 @@ from long_tamp.eval.robocerebra_policy import HppPolicy  # noqa: E402
 
 OUT = Path(__file__).resolve().parent / "out_video"
 SIZE, LIMIT = 384, 150
+LIMITS = {"plate": 800}  # the edge pinch pushes before it grasps (#188)
 CAMS = ["agentview", "robot0_eye_in_hand"]
 
 
@@ -82,7 +83,9 @@ def main():
                     work_dir=Path("/tmp/grasp-gallery-video") / case / instance
                 )
                 try:
-                    row = gl.grasp_lift(env, policy, case, instance, 0, LIMIT)
+                    row = gl.grasp_lift(
+                        env, policy, case, instance, 0, LIMITS.get(name, LIMIT)
+                    )
                     row.pop("policy", None)
                 except Exception as e:
                     row = {

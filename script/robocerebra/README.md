@@ -321,7 +321,7 @@ with [`gallery/`](gallery/README.md)). The 7 failures:
 
 | Failure | Classes |
 | --- | --- |
-| no handle plans in the scene | black_book, plate, rack |
+| no handle plans in the scene | black_book, plate (edge pinch since, #188: picked in 630 steps), rack |
 | every grasp needs a joint at its limit under OSC | glazed_rim_porcelain_ramekin, macaroni_and_cheese |
 | grasped, lift does not plan | moka_pot (also unregistrable) |
 | fingers close on air short of the rim; the bowl never moves (in case4 it lifted but tilted 0.25) | white_bowl |
@@ -343,6 +343,26 @@ The bowls plan because the rim sampler takes walls leaning up to ~20 degrees
 left 0.13 mm off HPP's placement (`settled`). The plate's rim is a near-flat
 slab no top-down pinch reaches without the hand in the table.
 
+The plate picks since #188 by an edge pinch instead
+(`long_tamp.eval.robocerebra_push`). When no handle of a flat object (at
+most 3 cm thick, upright) plans, the pick pushes it to the edge of its
+support region nearest the robot's base, then pinches the part that hangs
+over: the hand comes in sideways along the edge, fingers closing vertically
+on the rim, and lifts. The push is short strokes, 6 cm each, the closed
+fingertips 2.2 cm above the table and re-seated behind the far rim after
+each one: on one long push they ride over the plate's few-mm rim. Its goal
+is 2.5 cm past the edge, moved along the edge 7, 14 or 21 cm either way
+until the sweep clears every object low enough to hit the plate (the moka
+pot in case3; its handle passes above) and the hand's way in clears
+everything below 15 cm. Both are scripted from the observations, not
+planned by HPP. `results/2026-11-01-plate-edge-pinch.json`: Ideal/case3
+picked on 10 of 10 seeds, 5 strokes, 513 to 594 steps (seed 3: 748),
+and Ideal/case5 (the coffee table) at seed 0 in 630. That is past R3's 150
+steps and row A's 150 a segment; the rows sharing a budget over the rollout
+(C, D) can afford it. The checker's rotation test passes at the pick
+though the plate turns more than that while it is pushed (worst 0.24 to
+0.27 over the rollout).
+
 Run it in the HPP environment with the benchmark server available:
 
 ```bash
@@ -360,7 +380,8 @@ python script/robocerebra/evaluate.py Ideal/case1 --rollouts 10 \
 ```
 
 - Goals: `pick o` becomes *grasped* (the first R3 handle that plans, then a
-  straight lift); `In o r` / `On o r` become *placed* (carry the held object into
+  straight lift; a flat object none of whose handles plans is pushed to the
+  table's edge and pinched there instead, #188); `In o r` / `On o r` become *placed* (carry the held object into
   `r`'s box and release); `pour o v` becomes *poured* (below). `open`, `close`
   and `turnon` are rejected as unsupported, as is a region or object the
   exported scene lacks; the segment then holds still with the gripper closed.
@@ -452,7 +473,7 @@ The failures are the same segment on every seed, mostly:
 
 | Segment | Seeds failed | Cause |
 | --- | --- | --- |
-| case3 0, pick plate | 10 | no handle of the plate plans |
+| case3 0, pick plate | 10 | no handle of the plate plans (edge pinch since, #188) |
 | case3 1, plate onto the table | 10 | no release pose in the region |
 | case4 5, frypan into the cabinet top | 10 | the held start collides (hand and frypan) |
 | case7 6, frypan onto the stove | 10 | no release pose in the region |
@@ -516,7 +537,7 @@ object in the hand. The failures on every seed:
 | Segment | Cause |
 | --- | --- |
 | case2 3, frypan onto the rack | no region `rack_1` in the export (supported since, #187) |
-| case3 0–1, pick and place the plate | no handle of the plate plans |
+| case3 0–1, pick and place the plate | no handle of the plate plans (edge pinch since, #188) |
 | case3 6–7, cookies onto the plate, the table | the held start collides (finger and plate) |
 | case4 5, frypan onto the cabinet top | no release pose in the region (passes since, #187) |
 | case5 1, pudding onto the plate | planned, fails in the carry; 2–5 fail after it |
@@ -621,7 +642,7 @@ The failures on every seed, or nearly:
 | Step | Cause |
 | --- | --- |
 | case2, frypan onto the rack | `rack_1` is an object, not a region (supported since, #187) |
-| case3, pick the plate | no handle of the plate plans (#188) |
+| case3, pick the plate | no handle of the plate plans (edge pinch since, #188) |
 | case3, pour the cookies onto the plate | the held start collides, finger and cookies (#189) |
 | case4, frypan onto the cabinet top | no release pose in the region |
 | case5, pour the pudding onto the plate | does not plan (8 seeds) |

@@ -13,6 +13,9 @@ Predicates map onto what the planner does:
 
 ``pick``
     ``grasped``: grasp one of the object's generated handles and lift it.
+    A flat object none of whose handles plans (a plate) is pushed to the
+    table's edge and pinched by its overhang instead
+    (:mod:`~long_tamp.eval.robocerebra_push`).
 ``in`` / ``on``
     ``placed``: the object is in the hand (the official resume puts the
     demo's state at the segment start); carry it over the region, release.
@@ -56,6 +59,7 @@ import numpy as np
 from long_tamp.grasping import xyzquat_to_pose
 
 from .robocerebra_plan import PlanningError, object_top_region, tcp_to_eef
+from .robocerebra_push import EdgePinch, EdgePinchController, edge_pinch
 from .robocerebra_tracker import POS_SCALE, OscTracker, Stage, obs_pose
 
 logger = logging.getLogger(__name__)
@@ -232,7 +236,7 @@ class HppPolicy:
 
     def __call__(
         self, env: Any, info: dict[str, Any], segment: int, step_limit: int
-    ) -> SegmentController | ReleaseController:
+    ) -> SegmentController | ReleaseController | EdgePinchController:
         specs = segment_specs(info, segment)
         record: dict[str, Any] = {"goals": specs}
         if not specs:
@@ -264,7 +268,7 @@ class HppPolicy:
         record.update(
             plan.info, status="planned", plan_seconds=round(time.time() - start, 3)
         )
-        return SegmentController(plan.stages, plan.tcp_start, record)
+        return plan_controller(plan, record)
 
     def plan(
         self,
@@ -277,7 +281,10 @@ class HppPolicy:
         """The plan reaching ``goal`` from the scene as it stands (exported
         under ``name``), or ``None`` to release what the hand holds (with
         ``recover`` only). ``record`` receives what the hand held and the
-        handles generated.
+        handles generated. A pick none of whose handles plans is an
+        :class:`~long_tamp.eval.robocerebra_push.EdgePinch` when the object
+        is flat (the HPP failure in ``record["hpp"]``); :func:`plan_controller`
+        runs either.
 
         ``then``, the place or pour that follows a pick, is a lookahead: it
         is planned too, from the scene the pick leaves (the object held at
@@ -307,7 +314,17 @@ class HppPolicy:
             raise RuntimeError(f"{goal.obj} is not in the hand (holding {held})")
         else:
             region = _region(scene, goal)
-        plan, handles = self._solve(scene.root, goal, region)
+        try:
+            plan, handles = self._solve(scene.root, goal, region)
+        except PlanningError as error:
+            if goal.kind != "grasped":
+                raise
+            try:
+                way = edge_pinch(scene, goal.obj)
+            except PlanningError:
+                raise error from None
+            record["hpp"] = error.info
+            return way  # scripted from the observations: no lookahead
         if handles is not None:
             record["handles"] = handles
         if goal.kind != "grasped" or then is None or plan.held_after is None:
@@ -362,6 +379,16 @@ class HppPolicy:
 class LookaheadFailed(PlanningError):
     """A pick that plans, but the place or pour after it does not, from the
     scene the pick leaves: ``info["lookahead"]`` says why."""
+
+
+def plan_controller(
+    plan: Any, record: dict[str, Any]
+) -> SegmentController | EdgePinchController:
+    """The controller running a plan from :meth:`HppPolicy.plan`, with
+    ``record`` as its ``info``."""
+    if isinstance(plan, EdgePinch):
+        return EdgePinchController(plan, info=record)
+    return SegmentController(plan.stages, plan.tcp_start, record)
 
 
 def _region(scene: Any, goal: SegmentGoal) -> dict[str, Any] | None:
@@ -506,6 +533,7 @@ __all__ = [
     "SegmentController",
     "SegmentGoal",
     "UnsupportedGoal",
+    "plan_controller",
     "hpp_policy",
     "hpp_policy_continuous",
     "segment_specs",
