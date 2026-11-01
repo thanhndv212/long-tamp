@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- RoboCerebra edge pinch of a flat object (#188): a `pick` whose object has no handle that
+  plans, and is flat (at most 3 cm thick, upright: the plate), now pushes it to the edge of
+  its support region nearest the robot and pinches the overhang, fingers closing vertically,
+  instead of failing (`long_tamp.eval.robocerebra_push`, `EdgePinchController`; the segment's
+  `info` keeps HPP's failure under `hpp`). The push is re-seated 6 cm strokes, its goal moved
+  along the edge clear of what stands in the way. Scripted from the observations, not planned:
+  Ideal/case3's plate picks on 10 of 10 seeds in 513–748 steps, Ideal/case5's in 630
+  (`results/2026-11-01-plate-edge-pinch.json`), past row A's 150 steps a segment.
 - RoboCerebra tasks and progress (`docs/plans/robocerebra-tasks.md`): every case's task, its
   steps and the goal predicate scoring each, with each round's result per step, from the demo
   replay (R1), scene export (R2) and grasp handles and grasp-lift (R3) to the planner rounds
