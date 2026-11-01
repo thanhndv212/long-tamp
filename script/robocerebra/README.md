@@ -317,14 +317,30 @@ cm with `rotation` at most 0.034. bbq_sauce, 2 mm above the band, registered
 while the closing fingers pressed it into the band and out again, before any
 lift. Screenshots and a real-time video of every class are in
 [`results/r3-grasp-gallery/`](results/r3-grasp-gallery/index.html) (work in progress, rebuilt
-with [`gallery/`](gallery/README.md)). The 7 failures:
+with [`gallery/`](gallery/README.md)). The 7 failures, and what changed since:
 
-| Failure | Classes |
-| --- | --- |
-| no handle plans in the scene | black_book, plate (edge pinch since, #188: picked in 630 steps), rack |
-| every grasp needs a joint at its limit under OSC | glazed_rim_porcelain_ramekin, macaroni_and_cheese |
-| grasped, lift does not plan | moka_pot (also unregistrable) |
-| fingers close on air short of the rim; the bowl never moves (in case4 it lifted but tilted 0.25) | white_bowl |
+| Failure | Classes | Since |
+| --- | --- | --- |
+| no handle plans in the scene | black_book, plate, rack | plate: edge pinch (#188), picked in 630 steps; black_book: tilted grasp, picked in 70 |
+| every grasp needs a joint at its limit under OSC | glazed_rim_porcelain_ramekin, macaroni_and_cheese | tilted grasp: the ramekin picked in 49 steps, the macaroni box held (lifted 10 cm, `rotation` 0.025) |
+| grasped, lift does not plan | moka_pot (also unregistrable) | |
+| fingers close on air short of the rim; the bowl never moves (in case4 it lifted but tilted 0.25) | white_bowl | |
+
+With them, **17 of 25 are picked and 5 held**; rack, moka_pot and white_bowl fail.
+
+**Tilted grasps.** black_book, the ramekin, the macaroni box and moka_pot all start
+21 cm in front of the robot's base (x ≈ −0.30 m, the base at −0.51). From the start
+posture, IK pose by pose (what `_tracked` checks) reaches no top-down grasp there at
+any yaw without joint 4 at its stop; leaning the hand 30 degrees or more toward the
+robot, it reaches over a hundred orientations. `add_grasp_handles` now appends up to
+`max_tilted` (4) handles after the top-down ones: each top-down grasp pitched 30 and 45
+degrees both ways about its closing axis through the pads, the pads on the same
+contacts, the ones leaning toward the robot first. They come after the top-down
+handles, so a class whose top-down grasp plans and tracks picks as before (none of the
+18 used the at-limit fallback). Rerun on the four classes
+(`results/2026-11-01-r3-tilted-grasps.json`): black_book and the ramekin pick on their
+first tilted handle, the macaroni box on its second; moka_pot's tilted handles do not
+plan either.
 
 OSC moves the arm toward each hand pose by the shortest joint motion, so it
 does not follow HPP's joint path: from the start posture it stays on another
@@ -333,10 +349,11 @@ its limit. Before, the arm then stalled 4 to 8 cm short with the joint at its
 stop (wooden_tray's wrist). The pick now rolls OSC out by IK pose by pose along
 the tracked path and takes a handle whose rollout stays 0.05 rad inside the
 limits, planning the lift from where the rollout ends. The ramekin and the
-macaroni box sit 20 cm in front of the robot's base, where every approach
-folds the elbow to its stop on the start branch; HPP reaches them only with
-the shoulder and upper arm twisted (j1 and j3 near ±1.5), a branch `OSC_POSE`
-actions cannot move the arm to.
+macaroni box sit 20 cm in front of the robot's base, where every top-down
+approach folds the elbow to its stop on the start branch; HPP reaches them only
+with the shoulder and upper arm twisted (j1 and j3 near ±1.5), a branch
+`OSC_POSE` actions cannot move the arm to. A tilted grasp (above) reaches them
+on the start branch.
 
 The bowls plan because the rim sampler takes walls leaning up to ~20 degrees
 (theirs lean 15), and white_bowl because the pick settles a start MuJoCo
