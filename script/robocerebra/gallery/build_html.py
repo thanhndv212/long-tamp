@@ -20,7 +20,7 @@ n_video = 0
 
 CAUSE = {
     "black_book": "No handle plans in the scene",
-    "plate": "No handle plans in the scene (near-flat rim; a top pinch puts the hand in the table)",
+    "plate": "No handle plans in the scene (near-flat rim; a top pinch puts the hand in the table). Since #188 it is pushed to the table's edge and pinched there, past 150 steps (the rerun's limit is 800)",
     "rack": "No handle plans in the scene",
     "glazed_rim_porcelain_ramekin": "Every grasp needs a joint at its limit under OSC_POSE (20 cm in front of the base)",
     "macaroni_and_cheese": "Every grasp needs a joint at its limit under OSC_POSE (20 cm in front of the base); knocked over",

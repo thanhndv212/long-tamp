@@ -19,12 +19,14 @@ from long_tamp.eval.robocerebra_policy import HppPolicy  # noqa: E402
 
 OUT = Path(__file__).resolve().parent / "out"
 EVERY, SIZE, LIMIT = 30, 384, 150
+LIMITS = {"plate": 800}  # the edge pinch pushes before it grasps (#188)
 CAMS = ["agentview", "robot0_eye_in_hand"]
 
 
 class Recorder:
     def __init__(self, env):
         self._env, self.frames, self.n = env, [], 0
+        self.limit = LIMIT
 
     def __getattr__(self, name):
         return getattr(self._env, name)
@@ -44,7 +46,7 @@ class Recorder:
     def step(self, action):
         r = self._env.step(action)
         self.n += 1
-        if r.get("all_done") or self.n >= LIMIT:
+        if r.get("all_done") or self.n >= self.limit:
             self._shot(f"end (step {self.n})")
         elif self.n % EVERY == 0:
             self._shot(f"step {self.n}")
@@ -75,7 +77,8 @@ def main():
                     work_dir=Path("/tmp/grasp-gallery") / case / instance
                 )
                 try:
-                    row = gl.grasp_lift(env, policy, case, instance, 0, LIMIT)
+                    env.limit = LIMITS.get(name, LIMIT)
+                    row = gl.grasp_lift(env, policy, case, instance, 0, env.limit)
                     row.pop("policy", None)
                 except Exception as e:  # keep going; record the error
                     row = {
