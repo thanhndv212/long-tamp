@@ -21,7 +21,7 @@ classes in `LIMITS` (the plate's edge pinch, #188, runs 800). Then on the host:
 ```bash
 script/robocerebra/gallery/encode.sh   # 20 Hz frames -> 30 fps real-time H.264 (ffmpeg)
 python3 script/robocerebra/gallery/build_html.py \
-  script/robocerebra/results/2026-10-26-r3-grasp-lift.json \
+  script/robocerebra/results/2026-11-01-r3-thin-rims.json \
   script/robocerebra/gallery/out script/robocerebra/results/r3-grasp-gallery \
   script/robocerebra/gallery/out_video
 ```

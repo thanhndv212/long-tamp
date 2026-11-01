@@ -41,7 +41,7 @@ ROUNDS = [
 ]
 REPLAY = "2026-10-17-r1-replay-ideal-demo.json"
 EXPORT = "2026-10-18-r2-scene-export.json"
-GRASP_LIFT = "2026-10-26-r3-grasp-lift.json"
+GRASP_LIFT = "2026-11-01-r3-thin-rims.json"
 HANDLES = "2026-10-25-r3-grasp-handles.json"
 # The issue behind each round; R10 and R11 rerun R8 and R9 after #187.
 ISSUES = {
