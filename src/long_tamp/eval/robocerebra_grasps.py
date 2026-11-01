@@ -346,16 +346,23 @@ def _horizontal(v):
 
 def _rim_samples(planner, primitives):
     """Sample top-down pinches, both ways round, on thin box rims and
-    flanges, horizontal or leaning (a bowl's wall)."""
+    flanges, horizontal or leaning (a bowl's wall), sunk down the wall
+    first and then flush with its top."""
     for primitive in primitives:
         if not isinstance(primitive, Box):
             continue
         half = primitive.half_extents()
         rotation = primitive.pose[:3, :3]
         up = int(np.argmax(np.abs(rotation[2])))
-        top_center = primitive.pose[:3, 3] + rotation[:, up] * half[up] * np.sign(
-            rotation[2, up]
-        )
+        rim_up = rotation[:, up] * np.sign(rotation[2, up])
+        top_center = primitive.pose[:3, 3] + rim_up * half[up]
+        # Flush, the pads overhang the rim by half their length; sunk by
+        # that half down a tall enough wall, they pinch it over their whole
+        # length (a 2 mm bowl wall slips out of a half-pad pinch, #158).
+        sink = planner.gripper.pad_length / 2
+        centers = [top_center]
+        if 2 * half[up] >= 2 * sink:
+            centers.insert(0, top_center - rim_up * sink)
         for axis in range(3):
             closing = rotation[:, axis]
             if axis == up or abs(closing[2]) > RIM_TILT:
@@ -364,9 +371,10 @@ def _rim_samples(planner, primitives):
             width = 2 * half[axis] / np.sqrt(1.0 - closing[2] ** 2)
             if width <= 0 or width > planner.gripper.max_width - 0.01:
                 continue
-            yield from planner._emit(
-                (0.0, 0.0, -1.0), closing, top_center, width, "top-rim"
-            )
+            for center in centers:
+                yield from planner._emit(
+                    (0.0, 0.0, -1.0), closing, center, width, "top-rim"
+                )
 
 
 __all__ = ["add_grasp_handles", "object_class", "write_handles"]

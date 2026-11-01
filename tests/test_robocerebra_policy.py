@@ -734,6 +734,27 @@ def test_rim_samples_pinch_a_leaning_wall_both_ways():
         assert abs(grasp[2, 1]) < 1e-9  # the pads close horizontally
 
 
+def test_rim_samples_sink_the_pads_down_a_tall_wall_first():
+    from long_tamp.eval.robocerebra_grasps import _rim_samples
+    from long_tamp.grasping import PANDA_HAND, Box, GraspPlanner, GraspPlannerParams
+
+    planner = GraspPlanner(PANDA_HAND, GraspPlannerParams())
+    sink = PANDA_HAND.pad_length / 2
+
+    def pad_heights(height):
+        pose = np.eye(4)
+        pose[:3, 3] = [0.05, 0.0, height / 2]
+        wall = Box(name="wall", pose=pose, size=(0.002, 0.02, height))
+        samples = list(_rim_samples(planner, [wall]))
+        pad_x = PANDA_HAND.pad_x_for_width(0.002)
+        return sorted({round(g[2, 3] - pad_x, 6) for g, _ in samples})
+
+    # A 25 mm wall is pinched sunk by half a pad and flush with its top.
+    assert np.allclose(pad_heights(0.025), [0.025 - sink, 0.025])
+    # A flange thinner than a pad is pinched flush only.
+    assert np.allclose(pad_heights(0.01), [0.01])
+
+
 def test_tilted_grasps_pitch_about_the_closing_axis_through_the_pads():
     from long_tamp.eval.robocerebra_grasps import TILTS, _tilted
     from long_tamp.grasping import PANDA_HAND, Box, GraspPlanner, GraspPlannerParams
