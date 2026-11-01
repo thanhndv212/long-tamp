@@ -61,9 +61,9 @@ from .robocerebra_policy import (
     HppPolicy,
     LookaheadFailed,
     ReleaseController,
-    SegmentController,
     SegmentGoal,
     UnsupportedGoal,
+    plan_controller,
 )
 
 #: ``goal.json`` predicate -> the capability that reaches it.
@@ -453,8 +453,8 @@ class RoboCerebraDomain(BaseMissionDomain):
             )
         else:
             record.update(plan.info, plan_seconds=round(time.time() - started, 3))
-            controller = SegmentController(plan.stages, plan.tcp_start, record)
-            return _planned(EnvMotion(controller, expect), "planned", q)
+            motion = EnvMotion(plan_controller(plan, record), expect)
+            return _planned(motion, "planned", q)
         world.unplanned.append(
             {**record, "message": result["message"], "facts": result["facts"]}
         )
