@@ -19,11 +19,11 @@ for sub in ("img", "video"):
 n_video = 0
 
 CAUSE = {
-    "black_book": "No handle plans in the scene",
+    "black_book": "No handle plans in the scene. Since #158 a tilted grasp, leaning toward the robot, picks it",
     "plate": "No handle plans in the scene (near-flat rim; a top pinch puts the hand in the table). Since #188 it is pushed to the table's edge and pinched there, past 150 steps (the rerun's limit is 800)",
     "rack": "No handle plans in the scene",
-    "glazed_rim_porcelain_ramekin": "Every grasp needs a joint at its limit under OSC_POSE (20 cm in front of the base)",
-    "macaroni_and_cheese": "Every grasp needs a joint at its limit under OSC_POSE (20 cm in front of the base); knocked over",
+    "glazed_rim_porcelain_ramekin": "Every grasp needs a joint at its limit under OSC_POSE (20 cm in front of the base). Since #158 a tilted grasp, leaning toward the robot, picks it",
+    "macaroni_and_cheese": "Every grasp needs a joint at its limit under OSC_POSE (20 cm in front of the base); knocked over. Since #158 a tilted grasp, leaning toward the robot, holds it (it starts in no region)",
     "moka_pot": "Grasped, lift does not plan (q_target=None); also unregistrable",
     "white_bowl": "Fingers close on air just short of the rim (see the wrist frames); the bowl never moves. At Ideal/case4 it lifted 10.7 cm but tilted 0.25 > 0.1",
     "ketchup": "Starts in no region (origin above the table band)",
