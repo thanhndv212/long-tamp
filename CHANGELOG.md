@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- RoboCerebra thin-rim pinch (#158): the rim sampler pinches a wall at least a pad long
+  with the pads sunk by half their length first, along the wall over their whole length,
+  then flush with its top as before; and the pick's close is a `settle` stage (`Stage.settle`,
+  `OscTracker.grip_still`/`grip_hold`/`max_settle`) that holds past its dwell until the
+  fingers have stopped (the opening changing by under 0.2 mm a step for 5 steps, at most 15
+  steps more). Closing on white_bowl's 2 mm rim, the fingers travel nearly their whole stroke,
+  and the lift began while they still closed on half a pad: the bowl slid out. It now picks in
+  66 steps (lifted 6 cm, rotation 0.006). Rerun on all 25 classes
+  (`results/2026-11-01-r3-thin-rims.json`, rack at Memory_Execution/case1, where it picks in
+  107): R3 stands at 18 of 25 picked and 5 held; the plate (its edge pinch past 150 steps)
+  and moka_pot (no handle plans; never a pick goal) fail. No class picked before fails; the
+  close's wait adds 0 to 8 steps.
 - RoboCerebra tilted grasps (#158): `add_grasp_handles` appends up to `max_tilted` (4)
   handles after the top-down ones, each top-down grasp pitched 30 and 45 degrees about its
   closing axis through the pads, the ones leaning toward the robot first. An object 21 cm in
