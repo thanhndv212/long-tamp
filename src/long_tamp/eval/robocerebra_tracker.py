@@ -116,6 +116,14 @@ class OscTracker:
     error can stall against friction or a grazing contact: while aiming at
     the last waypoint the gain grows by one ``gain`` every ``boost`` steps,
     up to ``max_boost`` times, like an integral term.
+
+    Before the last waypoint, a carrot the hand cannot reach (out of reach
+    on the arm's branch, a joint at its limit, a contact holding the hand)
+    would hold the stage forever: when the carrot has not moved on and its
+    error has not shrunk by ``min_progress`` m or ``min_turn`` rad for
+    ``stall`` steps, tracking stops (``done``, ``stalled`` names the stage)
+    and the hand holds where it is. The log records the stage, its error
+    and the observed joints.
     """
 
     stages: list[Stage]
@@ -128,6 +136,9 @@ class OscTracker:
     gain: float = 1.0
     boost: int = 4
     max_boost: float = 4.0
+    stall: int = 30
+    min_progress: float = 0.002
+    min_turn: float = 0.02
 
     def __post_init__(self) -> None:
         if not self.stages:
@@ -141,6 +152,11 @@ class OscTracker:
         self._index = 0
         self._at_end = 0  # steps aiming at the stage's last waypoint
         self._dwelt = 0
+        self._best: tuple[int, float, float] | None = None
+        self._still = 0  # steps without progress toward the carrot
+        self._hold: tuple[np.ndarray, float] | None = None  # pose, gripper
+        #: The stage tracking gave up in, if it stalled.
+        self.stalled: str | None = None
         self.log: list[dict[str, Any]] = []
 
     @property
@@ -149,11 +165,15 @@ class OscTracker:
 
     @property
     def stage_name(self) -> str:
+        if self.stalled:
+            return self.stalled
         return self.stages[min(self.stage, len(self.stages) - 1)].name
 
     def __call__(self, obs: dict[str, Any]) -> np.ndarray:
         current = obs_pose(obs)
         if self.done:
+            if self._hold is not None:
+                return self._action(self._hold[0], current, self._hold[1])
             return self._action(
                 self._waypoints[-1][-1], current, self.stages[-1].gripper
             )
@@ -165,6 +185,20 @@ class OscTracker:
         ):
             self._index += 1
         target = waypoints[self._index]
+        if self._index < last and self._stuck(target, current):
+            self.log.append(
+                {
+                    "stage": stage.name,
+                    "stalled": True,
+                    "waypoint": [self._index, last],
+                    "end_error": self._errors(target, current),
+                    **_joints(obs),
+                }
+            )
+            self.stalled = stage.name
+            self._hold = current, stage.gripper
+            self.stage = len(self.stages)
+            return self._action(current, current, stage.gripper)
         if self._index == last:
             self._at_end += 1
             if (
@@ -184,6 +218,24 @@ class OscTracker:
             return self._action(target, current, stage.gripper, self._boost())
         return self._action(target, current, stage.gripper)
 
+    def _stuck(self, target: np.ndarray, current: np.ndarray) -> bool:
+        """Whether the hand has made no progress toward ``target``, the
+        carrot at ``self._index``, for :attr:`stall` steps."""
+        dp, dr = pose_error(target, current)
+        position, turn = float(np.linalg.norm(dp)), float(np.linalg.norm(dr))
+        best = self._best
+        if (
+            best is None
+            or self._index > best[0]
+            or position < best[1] - self.min_progress
+            or turn < best[2] - self.min_turn
+        ):
+            self._best = (self._index, position, turn)
+            self._still = 0
+            return False
+        self._still += 1
+        return self._still > self.stall
+
     def _boost(self) -> float:
         return min(1.0 + self._at_end / self.boost, self.max_boost)
 
@@ -192,6 +244,8 @@ class OscTracker:
         self._index = 0
         self._at_end = 0
         self._dwelt = 0
+        self._best = None
+        self._still = 0
 
     def _within(self, target: np.ndarray, current: np.ndarray, step: float) -> bool:
         dp, dr = pose_error(target, current)
@@ -230,6 +284,17 @@ class OscTracker:
             action[3] = _TINY_ROTATION
         action[6] = gripper
         return action
+
+
+def _joints(obs: dict[str, Any]) -> dict[str, list[float]]:
+    """The arm's joint positions in ``obs``, if it has them."""
+    if "robot0_joint_pos" in obs:
+        q = np.asarray(obs["robot0_joint_pos"], dtype=float)
+    elif "robot0_joint_pos_cos" in obs and "robot0_joint_pos_sin" in obs:
+        q = np.arctan2(obs["robot0_joint_pos_sin"], obs["robot0_joint_pos_cos"])
+    else:
+        return {}
+    return {"joints": [round(float(v), 3) for v in q]}
 
 
 def _quat_matrix(x: float, y: float, z: float, w: float) -> np.ndarray:

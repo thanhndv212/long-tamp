@@ -553,7 +553,8 @@ class RoboCerebraBackend:
     """Runs :class:`EnvMotion` commands in the env (the execution
     contract): ``chunk`` env steps a poll, until the controller is done, the
     case is done, the step has used ``max_steps`` (a tracker that does not
-    converge) or the budget is spent. A step that ends without what it must
+    converge), the controller has stalled (``stalled``) or the budget is
+    spent. A step that ends without what it must
     leave behind fails with ``goal_missed(object, sK)``,
     ``grasp_missed(gripper, object)`` or, cut at ``max_steps``,
     ``stalled(gripper)``, which the mission replans from."""
@@ -587,7 +588,7 @@ class RoboCerebraBackend:
         world, controller = self.world, motion.controller
         for _ in range(self.chunk):
             if getattr(controller, "done", True) or world.all_done:
-                return self._finish()
+                return self._finish(stalled=getattr(controller, "stalled", False))
             if self.steps >= self.max_steps:
                 return self._finish(stalled=True)
             if world.left <= 0:
