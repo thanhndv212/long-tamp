@@ -280,6 +280,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A RoboCerebra `OscTracker` stage that stops converging now ends (#190). It used to run
+  until the step's budget was spent: case9's cookies place spent 1071 env steps in
+  `retreat` in the #186 smoke run, and 150 (the cap) in `insert`/`release` in r11, seeds 0
+  and 8. A stage whose carrot is not the last waypoint and whose position error has not
+  dropped by 2 mm, nor its rotation error by 0.02 rad, for 30 steps is cut; the tracker
+  holds the hand there, logs the stage, waypoint, error and arm joints (`"stalled": true`),
+  and the mission backend reports the step as stalled. The cause in case9 was the place
+  goal: all three objects go to the region's center, and the pudding and the cookies,
+  released at table height inside the bowl, held the hand against it. After #194 they
+  stack on the bowl instead, so the place converges but misses its goal; that is #201.
+  Row A, seed 0, on case2, case3 and case9: 22/25 segments as before, each in the same
+  number of env steps (two of them in 140 and 145); no stage stalled.
 - A RoboCerebra place onto an object's top now releases where the object can rest
   (#194, in part). A release over the rack used to be accepted wherever it was collision
   free, so the butter was dropped on the peg tips and tumbled. Each candidate's center
