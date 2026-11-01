@@ -704,6 +704,34 @@ def test_rim_samples_pinch_a_leaning_wall_both_ways():
         assert abs(grasp[2, 1]) < 1e-9  # the pads close horizontally
 
 
+def test_tilted_grasps_pitch_about_the_closing_axis_through_the_pads():
+    from long_tamp.eval.robocerebra_grasps import TILTS, _tilted
+    from long_tamp.grasping import PANDA_HAND, Box, GraspPlanner, GraspPlannerParams
+
+    planner = GraspPlanner(PANDA_HAND, GraspPlannerParams())
+    book = Box(name="book", pose=np.eye(4), size=(0.03, 0.11, 0.13))
+    samples = list(planner._samples([book]))
+    top = next(g for g, s in samples if np.allclose(g[:3, 0], [0, 0, -1]))
+    candidate = _candidate_at(planner, top, book)
+    pad_x = PANDA_HAND.pad_x_for_width(candidate.evaluation.width)
+    pads = top[:3, 3] + pad_x * top[:3, 0]
+    tilted = list(_tilted(planner, candidate))
+    assert len(tilted) == 2 * len(TILTS)
+    leans = []
+    for grasp in tilted:
+        assert np.allclose(grasp[:3, 1], top[:3, 1])  # the same closing axis
+        assert np.allclose(grasp[:3, 3] + pad_x * grasp[:3, 0], pads)  # the same contact
+        leans.append(np.arccos(-grasp[2, 0]))
+    assert np.allclose(sorted(leans), sorted([*TILTS, *TILTS]))
+
+
+def _candidate_at(planner, grasp, box):
+    from long_tamp.eval.robocerebra_grasps import _candidate
+
+    ev = planner.evaluate(grasp, [box])
+    return _candidate(planner, grasp, ev, "test", 0.0)
+
+
 def test_settled_start_takes_hpps_placement_of_the_target():
     planner = object.__new__(SegmentPlanner)
     planner._object_index = list(range(2, 9))
