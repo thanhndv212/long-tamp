@@ -7,6 +7,7 @@ from pathlib import Path
 recorded_path, frames_dir, out_dir = (Path(a) for a in sys.argv[1:4])
 video_dir = Path(sys.argv[4]) if len(sys.argv) > 4 else None
 recorded = json.loads(recorded_path.read_text())["classes"]
+recorded_date = recorded_path.name[:10]  # results/YYYY-MM-DD-....json
 rerun = (
     json.loads((frames_dir / "rerun.json").read_text())
     if (frames_dir / "rerun.json").exists()
@@ -21,11 +22,11 @@ n_video = 0
 CAUSE = {
     "black_book": "No handle plans in the scene. Since #158 a tilted grasp, leaning toward the robot, picks it",
     "plate": "No handle plans in the scene (near-flat rim; a top pinch puts the hand in the table). Since #188 it is pushed to the table's edge and pinched there, past 150 steps (the rerun's limit is 800)",
-    "rack": "No handle plans in the scene",
+    "rack": "No handle plans at Ideal/case2, 0.85 m from the base. Recorded at Memory_Execution/case1, 0.75 m out (the rack is only ever a place target)",
     "glazed_rim_porcelain_ramekin": "Every grasp needs a joint at its limit under OSC_POSE (20 cm in front of the base). Since #158 a tilted grasp, leaning toward the robot, picks it",
     "macaroni_and_cheese": "Every grasp needs a joint at its limit under OSC_POSE (20 cm in front of the base); knocked over. Since #158 a tilted grasp, leaning toward the robot, holds it (it starts in no region)",
-    "moka_pot": "Grasped, lift does not plan (q_target=None); also unregistrable",
-    "white_bowl": "Fingers close on air just short of the rim (see the wrist frames); the bowl never moves. At Ideal/case4 it lifted 10.7 cm but tilted 0.25 > 0.1",
+    "moka_pot": "No handle plans: 21 cm in front of the base, its top-down grasps need joint 4 at its stop and its tilted ones do not plan either. Never a pick goal in the benchmark; also unregistrable",
+    "white_bowl": "Its 2 mm rim slipped out of the pinch: the pads overhung the rim by half their length, and the lift began while the fingers still closed. Since #158 the pads sink down the wall and the close waits for the fingers to stop",
     "ketchup": "Starts in no region (origin above the table band)",
     "milk": "Starts in no region (origin above the table band)",
     "orange_juice": "Starts in no region (origin above the table band)",
@@ -114,7 +115,7 @@ for key, title in (
   <span class="meta">{html.escape(rec["case"])} · {html.escape(rec["instance"])}</span></header>
   {cause}
   <table><thead><tr><th></th><th>verdict</th><th>lifted</th><th>rotation</th><th>steps</th></tr></thead><tbody>
-  <tr><th>recorded (2026-10-26)</th><td><span class="chip {kind}">{label}</span></td><td>{fmt(rec.get("lifted"), " m")}</td><td>{fmt(rec.get("rotation"))}</td><td>{fmt(rec.get("steps_used"))}</td></tr>
+  <tr><th>recorded ({recorded_date})</th><td><span class="chip {kind}">{label}</span></td><td>{fmt(rec.get("lifted"), " m")}</td><td>{fmt(rec.get("rotation"))}</td><td>{fmt(rec.get("steps_used"))}</td></tr>
   <tr><th>this rerun</th>{rerun_cell}</tr></tbody></table>
   {body}
 </section>""")
@@ -162,7 +163,7 @@ dialog p {{ color:#eee; text-align:center; margin:6px 0 0; }}
 <body><div class="viz-root" data-cam="both" data-filter="all"><main>
 <h1>RoboCerebra R3: grasp and lift, all 25 classes</h1>
 <p class="lede">One pick of each object class (<code>pick &lt;instance&gt;</code>, seed 0, 150-step budget, <code>OSC_POSE</code>), planned by the HPP segment policy.
-Recorded verdicts are from <code>results/2026-10-26-r3-grasp-lift.json</code>: <strong>14 picked, 4 held but unregistrable, 7 failed</strong>.
+Recorded verdicts are from <code>results/{html.escape(recorded_path.name)}</code>: <strong>{len(groups["picked"])} picked, {len(groups["held"])} held but unregistrable, {len(groups["failed"])} failed</strong>.
 The frames come from a rerun of the same protocol with rendering on; where its verdict differs from the recorded one, the card says so.</p>
 <p class="meta">Videos: {n_video}/25. Rerun: {n_done}/25 classes. Frames: start, every 30 steps, and the last step. Click a frame to enlarge.</p>
 <div class="toolbar" role="toolbar">

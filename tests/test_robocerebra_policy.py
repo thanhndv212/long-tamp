@@ -107,6 +107,36 @@ def test_tracker_follows_stages_and_gripper():
     assert all(np.any(action[3:6]) for action in actions)
 
 
+def test_tracker_close_settles_until_the_fingers_stop():
+    """A thin wall: the fingers travel ~12 steps before they stop on it,
+    longer than the close's dwell (white_bowl's 2 mm rim, #158); the
+    stage then holds ``grip_hold`` (5) steps more while the grip firms up."""
+    opening = [0.08 - 0.0065 * k for k in range(12)] + [0.004] * 30
+
+    def steps_closing(settle):
+        stage = Stage("close", pose()[None], gripper=1.0, dwell=3, settle=settle)
+        tracker = OscTracker([stage, Stage("lift", pose(z=0.1)[None], gripper=1.0)])
+        for k, width in enumerate(opening):
+            tracker({**obs_at(pose()), "robot0_gripper_qpos": [width / 2, -width / 2]})
+            if tracker.stage > 0:
+                return k
+        raise AssertionError("the close never ended")
+
+    assert steps_closing(False) < 11  # lifts while the fingers still close
+    assert 16 <= steps_closing(True) <= 18
+
+
+def test_tracker_close_settles_at_most_max_settle():
+    stage = Stage("close", pose()[None], gripper=1.0, dwell=2, settle=True)
+    tracker = OscTracker([stage], max_settle=5)
+    for k in range(30):
+        width = 0.08 - 0.001 * k  # never stops
+        tracker({**obs_at(pose()), "robot0_gripper_qpos": [width / 2, -width / 2]})
+        if tracker.done:
+            break
+    assert tracker.done and k <= 2 + 5 + 1
+
+
 def test_tracker_boosts_through_friction():
     """An action below 0.2 does not move the end effector (static friction)."""
 
@@ -704,6 +734,27 @@ def test_rim_samples_pinch_a_leaning_wall_both_ways():
         assert abs(grasp[2, 1]) < 1e-9  # the pads close horizontally
 
 
+def test_rim_samples_sink_the_pads_down_a_tall_wall_first():
+    from long_tamp.eval.robocerebra_grasps import _rim_samples
+    from long_tamp.grasping import PANDA_HAND, Box, GraspPlanner, GraspPlannerParams
+
+    planner = GraspPlanner(PANDA_HAND, GraspPlannerParams())
+    sink = PANDA_HAND.pad_length / 2
+
+    def pad_heights(height):
+        pose = np.eye(4)
+        pose[:3, 3] = [0.05, 0.0, height / 2]
+        wall = Box(name="wall", pose=pose, size=(0.002, 0.02, height))
+        samples = list(_rim_samples(planner, [wall]))
+        pad_x = PANDA_HAND.pad_x_for_width(0.002)
+        return sorted({round(g[2, 3] - pad_x, 6) for g, _ in samples})
+
+    # A 25 mm wall is pinched sunk by half a pad and flush with its top.
+    assert np.allclose(pad_heights(0.025), [0.025 - sink, 0.025])
+    # A flange thinner than a pad is pinched flush only.
+    assert np.allclose(pad_heights(0.01), [0.01])
+
+
 def test_tilted_grasps_pitch_about_the_closing_axis_through_the_pads():
     from long_tamp.eval.robocerebra_grasps import TILTS, _tilted
     from long_tamp.grasping import PANDA_HAND, Box, GraspPlanner, GraspPlannerParams
@@ -720,7 +771,9 @@ def test_tilted_grasps_pitch_about_the_closing_axis_through_the_pads():
     leans = []
     for grasp in tilted:
         assert np.allclose(grasp[:3, 1], top[:3, 1])  # the same closing axis
-        assert np.allclose(grasp[:3, 3] + pad_x * grasp[:3, 0], pads)  # the same contact
+        assert np.allclose(
+            grasp[:3, 3] + pad_x * grasp[:3, 0], pads
+        )  # the same contact
         leans.append(np.arccos(-grasp[2, 0]))
     assert np.allclose(sorted(leans), sorted([*TILTS, *TILTS]))
 

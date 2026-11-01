@@ -321,12 +321,16 @@ with [`gallery/`](gallery/README.md)). The 7 failures, and what changed since:
 
 | Failure | Classes | Since |
 | --- | --- | --- |
-| no handle plans in the scene | black_book, plate, rack | plate: edge pinch (#188), picked in 630 steps; black_book: tilted grasp, picked in 70 |
+| no handle plans in the scene | black_book, plate, rack | plate: edge pinch (#188), picked in 630 steps; black_book: tilted grasp, picked in 70; rack: picked in 107 at Memory_Execution/case1 (below) |
 | every grasp needs a joint at its limit under OSC | glazed_rim_porcelain_ramekin, macaroni_and_cheese | tilted grasp: the ramekin picked in 49 steps, the macaroni box held (lifted 10 cm, `rotation` 0.025) |
-| grasped, lift does not plan | moka_pot (also unregistrable) | |
-| fingers close on air short of the rim; the bowl never moves (in case4 it lifted but tilted 0.25) | white_bowl | |
+| grasped, lift does not plan | moka_pot (also unregistrable) | no handle plans now (below) |
+| fingers close on air short of the rim; the bowl never moves (in case4 it lifted but tilted 0.25) | white_bowl | sunk rim pinch, close until the fingers stop: picked in 66 (below) |
 
-With them, **17 of 25 are picked and 5 held**; rack, moka_pot and white_bowl fail.
+Rerun on all 25 classes with every change in
+(`results/2026-11-01-r3-thin-rims.json`, the run the gallery and the task catalog now
+record): **18 of 25 are picked and 5 held**, 23 of 25 grasped and lifted without failing
+the rotation test. Two fail: the plate, whose edge pinch runs past the 150 steps, and
+moka_pot (below). No class picked before fails; the close's wait adds 0 to 8 steps.
 
 **Tilted grasps.** black_book, the ramekin, the macaroni box and moka_pot all start
 21 cm in front of the robot's base (x ≈ −0.30 m, the base at −0.51). From the start
@@ -359,6 +363,22 @@ The bowls plan because the rim sampler takes walls leaning up to ~20 degrees
 (theirs lean 15), and white_bowl because the pick settles a start MuJoCo
 left 0.13 mm off HPP's placement (`settled`). The plate's rim is a near-flat
 slab no top-down pinch reaches without the hand in the table.
+
+**Thin rims.** white_bowl's wall is 2 mm thick. A top-rim pinch put the pads' centre
+on the rim's top face, so half of each 18.5 mm pad hung above it, and the close
+ended on its 9-step dwell while the fingers, travelling nearly their whole stroke
+onto so thin a wall, were still closing: the lift slid the bowl out (lifted 0). The
+rim sampler now pinches a wall at least a pad long sunk by half a pad first (the pads
+along the wall over their whole length; flush with the top after), and the pick's
+close is a `settle` stage: it holds past its dwell until the finger opening has
+changed by under 0.2 mm a step for 5 steps (at most 15 steps more). white_bowl picks
+in 66 steps (lifted 6 cm, `rotation` 0.006).
+
+The rack is only ever a place target in the benchmark ("on X rack_1"). At Ideal/case2,
+0.85 m from the base, none of its handles plans; at Memory_Execution/case1 (and case2,
+case3, Mix/case7–9), 0.75 m out, it picks in 107 steps, the run's example (`--at`).
+moka_pot is never a pick goal either: every instance stands 21 cm in front of the base,
+where its top-down grasps need joint 4 at its stop and its tilted ones do not plan.
 
 The plate picks since #188 by an edge pinch instead
 (`long_tamp.eval.robocerebra_push`). When no handle of a flat object (at

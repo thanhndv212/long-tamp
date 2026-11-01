@@ -57,7 +57,7 @@ class Recorder:
 
 def main():
     recorded = json.loads(
-        (REPO / "script/robocerebra/results/2026-10-26-r3-grasp-lift.json").read_text()
+        (REPO / "script/robocerebra/results/2026-11-01-r3-thin-rims.json").read_text()
     )["classes"]
     only = set(sys.argv[1:])
     OUT.mkdir(parents=True, exist_ok=True)
