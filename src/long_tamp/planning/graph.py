@@ -1196,20 +1196,28 @@ class GraphBuilder:
         q_init: list[float] | None,
         graph_constraints: list[str] | None,
     ) -> list[str] | None:
-        """Lock non-participating objects' root joints so they cannot drift
+        """Lock non-participating objects' joints so they cannot drift
         during planning.
 
         Objects excluded from phase_objects have no LockedJoint produced by
         the factory, leaving their freeflyer DOFs completely unconstrained
-        (they would float to random positions). Returns graph_constraints,
-        extended with the new lock constraint names if any were created
-        (unchanged otherwise).
+        (they would float to random positions). An anchored object's joints
+        (a drawer's slide, a door's hinge) are locked the same way. Returns
+        graph_constraints, extended with the new lock constraint names if any
+        were created (unchanged otherwise).
         """
         _nonphase_objects = [o for o in orig_objects if o not in phase_objects]
         if not (_nonphase_objects and q_init is not None):
             return graph_constraints
 
-        _lock_patterns = [f"{o}/root_joint" for o in _nonphase_objects]
+        try:
+            _joint_names = list(dict(self.robot.rankInConfiguration))
+        except Exception:
+            _joint_names = []
+        _lock_patterns = []
+        for o in _nonphase_objects:
+            _own = [jn for jn in _joint_names if jn.startswith(f"{o}/")]
+            _lock_patterns.extend(_own or [f"{o}/root_joint"])
         try:
             from long_tamp.planning.constraints import ConstraintBuilder
 
