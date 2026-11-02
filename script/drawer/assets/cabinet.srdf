@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!--
+  The drawer's handle, at the centre of its bar. Its local z (the approach
+  direction) points into the front panel, -x of the cabinet, tilted 0.4 rad
+  down about the bar: the hand comes from slightly above, which keeps the
+  Panda's joint 6 clear of its limit. Its local y, the axis the fingers
+  close along, is then 0.4 rad off vertical, so the fingers still close on
+  the bar from above and below.
+
+  No contact surfaces: the cabinet is anchored, so the constraint-graph
+  factory locks its drawer joint whenever the handle is not grasped,
+  instead of building a placement for it.
+-->
+<robot name="cabinet">
+  <handle name="handle" clearance="0.05" approaching_direction="0 0 1">
+    <position xyz="0.207 0 0.6" xyzw="0.589368 -0.589368 -0.3906986 0.3906986"/>
+    <link name="drawer_link"/>
+  </handle>
+</robot>
