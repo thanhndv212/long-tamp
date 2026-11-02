@@ -509,7 +509,13 @@ def test_segment_goal_translation():
     assert SegmentGoal.from_spec(["pour", "cookies_1", "plate_1"]) == SegmentGoal(
         "poured", "cookies_1", receiver="plate_1"
     )
-    for spec in (["open", "drawer_1"], ["pick", "a", "b"], ["in", "a"], ["pour", "a"]):
+    for spec in (
+        ["open"],
+        ["pick", "a", "b"],
+        ["in", "a"],
+        ["pour", "a"],
+        ["grab", "a"],
+    ):
         with pytest.raises(UnsupportedGoal):
             SegmentGoal.from_spec(spec)
 
