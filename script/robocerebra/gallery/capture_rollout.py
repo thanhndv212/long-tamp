@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Rerun whole RoboCerebra rollouts (row C or row D), rendering every control step.
+"""Rerun whole RoboCerebra rollouts (row A, C or D), rendering every control step.
 
     python script/robocerebra/gallery/capture_rollout.py C Ideal/case2 Ideal/case7
     python script/robocerebra/gallery/capture_rollout.py D Ideal/case2 --seed 0
+    python script/robocerebra/gallery/capture_rollout.py A Memory_Exploration/case1
 
 Frames go to out_rollout/<row>/<case>/frames/NNNN.jpg (agentview | wrist, the
 step and the last completed subtask burned in), with the rollout's record and
@@ -68,7 +69,7 @@ class Recorder:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("row", choices=["C", "D"])
+    parser.add_argument("row", choices=["A", "C", "D"])
     parser.add_argument("cases", nargs="+")
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
@@ -82,13 +83,16 @@ def main():
             env.dir.mkdir(parents=True, exist_ok=True)
             for old in env.dir.glob("*.jpg"):
                 old.unlink()
-            if args.row == "C":
-                from long_tamp.eval.robocerebra_policy import hpp_policy_continuous
+            if args.row in ("A", "C"):
+                from long_tamp.eval.robocerebra_policy import (
+                    hpp_policy,
+                    hpp_policy_continuous,
+                )
                 from long_tamp.eval.robocerebra_runner import evaluate_case
 
-                row = evaluate_case(
-                    env, case, hpp_policy_continuous, seeds=[args.seed], resume=False
-                )
+                resume = args.row == "A"  # row A: resume(k) before each segment
+                policy = hpp_policy if resume else hpp_policy_continuous
+                row = evaluate_case(env, case, policy, seeds=[args.seed], resume=resume)
             else:
                 from long_tamp.eval.robocerebra_mission import evaluate_mission_case
                 from long_tamp.eval.robocerebra_policy import HppPolicy

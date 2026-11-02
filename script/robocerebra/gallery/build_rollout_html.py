@@ -20,6 +20,7 @@ for sub in ("img", "video"):
     (out / sub).mkdir(parents=True)
 
 ROWS = {
+    "A": "Row A: per segment, the demo's state restored by resume(k) before each",
     "C": "Row C: continuous, one policy call a segment, no resume(k)",
     "D": "Row D: one long_tamp mission over the whole goal",
 }
@@ -97,7 +98,7 @@ figure {{ margin: 0; flex: 0 0 320px; }}
 figure img {{ width: 320px; }}
 figcaption {{ font-size: 12px; }}
 </style></head><body>
-<h1>RoboCerebra rollouts, rows C and D</h1>
+<h1>RoboCerebra rollouts, rows A, C and D</h1>
 <p>Single rollouts rerun with rendering on, the same policy and budgets as the full runs.
 Each frame is agentview | wrist camera, with the step and the last completed subtask.
 Keyframes are taken at the step each subtask completed. Green: every subtask done.
