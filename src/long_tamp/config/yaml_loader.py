@@ -38,6 +38,7 @@ Example usage in a task script::
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
@@ -149,6 +150,36 @@ def _environment_contacts(raw: dict[str, list[str]] | list[str]) -> list[str]:
     return list(raw)
 
 
+# Joint types an articulated object may carry: one configuration value each.
+# A continuous joint is two values (cos, sin) in pinocchio, so it is left out.
+_ARTICULATED_JOINT_TYPES = ("prismatic", "revolute")
+
+
+def _urdf_movable_joints(urdf_path: str) -> dict[str, tuple[float, float]]:
+    """Movable joints of a URDF, as ``{name: (lower, upper)}``.
+
+    Fixed joints are skipped. Joint types other than prismatic and revolute
+    raise, since an anchored object's configuration is one value per joint.
+    """
+    root = ET.parse(urdf_path).getroot()
+    joints: dict[str, tuple[float, float]] = {}
+    for joint in root.iter("joint"):
+        kind = joint.get("type")
+        if kind == "fixed":
+            continue
+        name = joint.get("name")
+        if kind not in _ARTICULATED_JOINT_TYPES:
+            raise ValueError(
+                f"{urdf_path}: joint {name!r} is {kind}; an articulated object "
+                f"supports only {', '.join(_ARTICULATED_JOINT_TYPES)} joints"
+            )
+        limit = joint.find("limit")
+        if limit is None:
+            raise ValueError(f"{urdf_path}: joint {name!r} has no <limit>")
+        joints[name] = (float(limit.get("lower", 0)), float(limit.get("upper", 0)))
+    return joints
+
+
 # ---------------------------------------------------------------------------
 # Main loader class
 # ---------------------------------------------------------------------------
@@ -172,6 +203,7 @@ class YamlTaskLoader:
         self._file_paths: dict[str, Any] | None = None
         self._joint_bounds_class = None
         self._task_config = None
+        self._articulated_joints: dict[str, dict[str, float]] | None = None
 
     # ------------------------------------------------------------------
     # Public properties
@@ -205,7 +237,8 @@ class YamlTaskLoader:
         """Build a flat initial configuration list.
 
         Concatenates robot joint initial values (in joint_groups order) with
-        object initial poses (XYZQUAT).
+        object initial poses (XYZQUAT), or with the joint values of an object
+        declared ``root: anchor`` (see :attr:`articulated_joints`).
 
         Args:
             objects: Subset of object names to include. When *None* all objects
@@ -232,16 +265,85 @@ class YamlTaskLoader:
                 # Append identity-at-origin as a safe fallback.
                 q.extend([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
                 continue
-            obj_data = objects_raw[obj_name]
-            if "initial_pose_xyzquat" in obj_data:
-                q.extend([float(v) for v in obj_data["initial_pose_xyzquat"]])
-            elif "initial_pose_xyzrpy" in obj_data:
-                rpy = [float(v) for v in obj_data["initial_pose_xyzrpy"]]
-                q.extend(xyzrpy_to_xyzquat(rpy).tolist())
-            else:
-                q.extend([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
+            if obj_name in self.articulated_joints:
+                # An anchored object contributes its joint values, not a pose.
+                # They follow the URDF's order here; ManipulationTask.setup
+                # writes each one at its joint's rank, so this order only has
+                # to give the right length.
+                q.extend(self.articulated_joints[obj_name].values())
+                continue
+            q.extend(self._object_pose(obj_name))
 
         return q
+
+    @property
+    def articulated_joints(self) -> dict[str, dict[str, float]]:
+        """Initial joint values of each anchored object, by full joint name.
+
+        ``{object: {"object/joint": value}}`` for every object declared with
+        ``root: anchor``. Every prismatic or revolute joint of its URDF is
+        listed: the value given under the object's ``joints:`` key, else 0
+        clamped into the joint's limits.
+        """
+        if self._articulated_joints is None:
+            self._articulated_joints = self._build_articulated_joints()
+        return self._articulated_joints
+
+    def _object_pose(self, obj_name: str) -> list[float]:
+        """The object's initial pose as xyzquat (identity when not given)."""
+        obj_data = self._data.get("objects", {}).get(obj_name) or {}
+        if "initial_pose_xyzquat" in obj_data:
+            return [float(v) for v in obj_data["initial_pose_xyzquat"]]
+        if "initial_pose_xyzrpy" in obj_data:
+            rpy = [float(v) for v in obj_data["initial_pose_xyzrpy"]]
+            return xyzrpy_to_xyzquat(rpy).tolist()
+        return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+
+    def _anchored_objects(self) -> list[str]:
+        objects_raw = self._data.get("objects", {})
+        anchored = []
+        for name, obj_data in objects_raw.items():
+            root = (obj_data or {}).get("root", "freeflyer")
+            if root not in ("freeflyer", "anchor"):
+                raise ValueError(
+                    f"object {name!r}: root must be 'freeflyer' or 'anchor', "
+                    f"not {root!r}"
+                )
+            if root == "anchor":
+                anchored.append(name)
+        return anchored
+
+    def _build_articulated_joints(self) -> dict[str, dict[str, float]]:
+        objects_raw = self._data.get("objects", {})
+        result: dict[str, dict[str, float]] = {}
+        for name in self._anchored_objects():
+            urdf_path = self.file_paths["objects"].get(name, {}).get("urdf")
+            if not urdf_path:
+                raise ValueError(f"anchored object {name!r} has no URDF path")
+            limits = _urdf_movable_joints(urdf_path)
+            given: dict[str, float] = {}
+            for joint, value in (objects_raw[name].get("joints") or {}).items():
+                # Accept "drawer" as well as "cabinet/drawer".
+                local = (
+                    joint.split("/", 1)[1] if joint.startswith(f"{name}/") else joint
+                )
+                if local not in limits:
+                    raise ValueError(
+                        f"object {name!r}: joint {joint!r} is not a movable "
+                        f"joint of {urdf_path} (has: {sorted(limits)})"
+                    )
+                lower, upper = limits[local]
+                if not lower <= float(value) <= upper:
+                    raise ValueError(
+                        f"object {name!r}: joint {joint!r} value {value} is "
+                        f"outside its limits [{lower}, {upper}]"
+                    )
+                given[local] = float(value)
+            result[name] = {
+                f"{name}/{local}": given.get(local, min(max(0.0, lower), upper))
+                for local, (lower, upper) in limits.items()
+            }
+        return result
 
     # ------------------------------------------------------------------
     # Private builders
@@ -283,7 +385,7 @@ class YamlTaskLoader:
         for name, urdf in paths.get("environment", {}).items():
             env_paths[name] = resolve(urdf)
 
-        obj_paths: dict[str, dict[str, str]] = {}
+        obj_paths: dict[str, dict[str, Any]] = {}
         for name, odata in paths.get("objects", {}).items():
             if isinstance(odata, str):
                 obj_paths[name] = {"urdf": resolve(odata), "srdf": ""}
@@ -292,6 +394,13 @@ class YamlTaskLoader:
                     "urdf": resolve(odata.get("urdf", "")),
                     "srdf": resolve(odata.get("srdf", "")),
                 }
+
+        # An anchored object is fixed at its initial pose; only its own
+        # joints (drawers, doors, knobs) move.
+        for name in self._anchored_objects():
+            if name in obj_paths:
+                obj_paths[name]["root_joint_type"] = "anchor"
+                obj_paths[name]["pose"] = self._object_pose(name)
 
         return {
             "robot": robot_paths,
@@ -398,6 +507,8 @@ class YamlTaskLoader:
             "HANDLES_PER_OBJECT": handles_per_object,
             "CONTACT_SURFACES_PER_OBJECT": contacts_per_object,
             "OBJECTS_INFO": objects_info,
+            # Anchored objects' joints: {object: {"object/joint": initial}}
+            "ARTICULATED_JOINTS": self.articulated_joints,
             # Grippers & pairs
             "GRIPPERS": list(data.get("grippers", [])),
             "VALID_PAIRS": {k: list(v) for k, v in data.get("valid_pairs", {}).items()},
