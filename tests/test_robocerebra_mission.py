@@ -44,7 +44,7 @@ CASE3 = {
     ],
     "wine_bottle_1": [["Pick", "wine_bottle_1"], ["Pour", "wine_bottle_1", "plate_1"]],
 }
-#: Ideal/case6: the butter's chain starts with an unsupported open.
+#: Ideal/case6: the butter's chain starts with the cabinet's open.
 CASE6 = {
     "butter_1": [
         ["Open", "short_cabinet_1"],
@@ -93,14 +93,20 @@ def test_every_case_is_a_consistent_domain(goal):
 
 
 def test_chains_stop_at_the_first_unsupported_goal():
-    cut = chains(CASE9)
-    assert [s[0] for s in cut["white_bowl_1"]] == ["pick", "in"]
-    assert chains(CASE6)["butter_1"] == []
-    domain = RoboCerebraDomain(CASE6)
-    # Nothing to do for the butter: the checker never gets past its open.
-    assert domain.goal() == ["progress(tomato_sauce_1, s3)"]
-    assert domain.unsupported() == {"butter_1": CASE6["butter_1"]}
-    assert domain.goal(without=["tomato_sauce_1"]) == []
+    assert [s[0] for s in chains(CASE9)["white_bowl_1"]] == [
+        "pick",
+        "in",
+        "open",
+        "pick",
+        "in",
+    ]
+    wipe = {"mug_1": [["Pick", "mug_1"], ["Wipe", "mug_1"], ["In", "mug_1", TABLE]]}
+    assert chains(wipe)["mug_1"] == [["pick", "mug_1"]]
+    domain = RoboCerebraDomain(wipe)
+    # The checker never gets past the wipe.
+    assert domain.goal() == ["progress(mug_1, s1)"]
+    assert domain.unsupported() == {"mug_1": wipe["mug_1"][1:]}
+    assert RoboCerebraDomain(CASE6).unsupported() == {}
 
 
 def test_the_static_facts_are_the_chains():
@@ -112,6 +118,12 @@ def test_the_static_facts_are_the_chains():
         "next(s2, s3)",
         f"gripper({GRIPPER})",
     } <= facts
+    facts = set(RoboCerebraDomain(CASE9).static_facts())
+    assert {
+        "goal_actuate(white_bowl_1, s2, microwave_1)",
+        "rest(white_bowl_1, s2)",
+    } <= (facts)
+    assert "microwave_1" in RoboCerebraDomain(CASE9).objects()
 
 
 def test_the_plan_from_the_start_reaches_every_goal_in_order():
@@ -131,6 +143,45 @@ def test_the_plan_from_the_start_reaches_every_goal_in_order():
     assert not any(label.startswith("regrasp") for label in done), done
 
 
+def test_a_fixture_is_opened_with_the_hand_empty():
+    domain = RoboCerebraDomain(CASE6)
+    done = labels(domain, plan(domain, domain.initial_atoms()))
+    butter = [label for label in done if label.split()[1] == "butter_1"]
+    assert butter == [
+        "actuate butter_1 short_cabinet_1",
+        "pick butter_1",
+        "place butter_1 short_cabinet_1_middle_region",
+    ], done
+    domain = RoboCerebraDomain(CASE9)
+    done = labels(domain, plan(domain, domain.initial_atoms()))
+    bowl = [label for label in done if label.split()[1] == "white_bowl_1"]
+    assert bowl == [
+        "pick white_bowl_1",
+        f"place white_bowl_1 {TABLE}",
+        "actuate white_bowl_1 microwave_1",
+        "pick white_bowl_1",
+        "place white_bowl_1 microwave_1_heating_region",
+    ], done
+
+
+def test_an_object_held_across_an_open_is_put_down_and_taken_again():
+    goal = {
+        "white_bowl_1": [
+            ["Pick", "white_bowl_1"],
+            ["Open", "microwave_1"],
+            ["In", "white_bowl_1", "microwave_1_heating_region"],
+        ]
+    }
+    domain = RoboCerebraDomain(goal)
+    state = observed_atoms({"white_bowl_1": 1}, "white_bowl_1")
+    assert labels(domain, plan(domain, state)) == [
+        "putdown white_bowl_1",
+        "actuate white_bowl_1 microwave_1",
+        "regrasp white_bowl_1",
+        "place white_bowl_1 microwave_1_heating_region",
+    ]
+
+
 def test_a_wrong_object_in_hand_is_put_down_first():
     domain = RoboCerebraDomain(CASE3)
     progress = {"plate_1": 2, "popcorn_1": 0, "cookies_1": 3, "wine_bottle_1": 2}
@@ -148,7 +199,7 @@ def test_a_wrong_object_in_hand_is_put_down_first():
 def test_reached_goals_are_skipped_and_a_dropped_object_regrasped():
     domain = RoboCerebraDomain(CASE9)
     # The cookies were picked (counted) and fell: grasp them again, no pick.
-    state = observed_atoms({"white_bowl_1": 2, "cookies_1": 1}, None)
+    state = observed_atoms({"white_bowl_1": 5, "cookies_1": 1}, None)
     done = labels(domain, plan(domain, state))
     assert done == [
         "regrasp cookies_1",
@@ -160,7 +211,7 @@ def test_reached_goals_are_skipped_and_a_dropped_object_regrasped():
 def test_a_held_object_without_goals_is_put_down():
     domain = RoboCerebraDomain(CASE6, others=["ketchup_1", "tomato_sauce_1"])
     assert domain.others == ("ketchup_1",)
-    state = observed_atoms({"butter_1": 0, "tomato_sauce_1": 0}, "ketchup_1")
+    state = observed_atoms({"butter_1": 3, "tomato_sauce_1": 0}, "ketchup_1")
     done = labels(domain, plan(domain, state))
     assert done[0] == "putdown ketchup_1"
     assert done[1:] == [
@@ -198,7 +249,11 @@ def test_every_ideal_case_plans_its_supported_goals(case):
     assert check_domain(domain) == []
     done = labels(domain, plan(domain, domain.initial_atoms()))
     # Every goal once; a putdown only to free the hand after a final pour.
-    goals = [label for label in done if label.split()[0] in ("pick", "place", "pour")]
+    goals = [
+        label
+        for label in done
+        if label.split()[0] in ("pick", "place", "pour", "actuate")
+    ]
     assert len(goals) == sum(len(specs) for specs in domain.chains.values()), done
     assert all(label.split()[0] != "regrasp" for label in done), done
 
@@ -370,7 +425,17 @@ class FakePolicy:
         return left != 0
 
     def _apply(self, goal):
-        env, nxt = self.env, self.env.next_goal(goal.obj)
+        env = self.env
+        if goal.kind == "articulated":
+            # The fixture's goal is in another object's chain.
+            for obj in env.goal:
+                if env.held is None and env.next_goal(obj) == [
+                    goal.predicate,
+                    goal.obj,
+                ]:
+                    env.progress[obj] += 1
+            return
+        nxt = env.next_goal(goal.obj)
         if goal.kind == "grasped":
             env.held = goal.obj
             counts = nxt is not None and nxt[0] == "pick"
@@ -423,6 +488,16 @@ def test_a_case_runs_as_one_mission(fake):
     assert mission["steps_used"] <= mission["budget"] == 150 * 10
 
 
+@pytest.mark.parametrize("goal", [CASE6, CASE9])
+def test_a_case_with_a_fixture_to_open_runs_as_one_mission(fake, goal):
+    env, policy, row = fake(goal)
+    assert row["success"], row["mission"]
+    assert row["mission"]["unsupported"] == {}
+    opened = [c for c in policy.calls if c[0] == "articulated"]
+    assert len(opened) == 1 and opened[0][1] in ("short_cabinet_1", "microwave_1")
+    assert policy.articulations == {}  # load's, handed to the policy
+
+
 def test_a_missed_goal_is_planned_again_from_the_observed_world(fake):
     env, policy, row = fake(CASE3, fail={("poured", "popcorn_1"): 1})
     assert row["success"], row["mission"]
@@ -445,8 +520,8 @@ def test_a_dropped_object_is_regrasped(fake, monkeypatch):
 
     monkeypatch.setattr(FakePolicy, "_apply", drop_once)
     env, policy, row = fake(CASE9)
-    # Every supported goal (the bowl's stop at the microwave's open).
-    assert row["total_completed"] == 5, row["mission"]
+    # Every goal, the microwave's open with them.
+    assert row["success"] and row["total_completed"] == 8, row["mission"]
     steps = [e["step"] for e in row["mission"]["executions"]]
     assert "regrasp cookies_1" in steps, steps
     assert steps.count("pick cookies_1") == 1, steps
