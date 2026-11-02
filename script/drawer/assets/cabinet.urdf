@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+<!--
+  A one-drawer cabinet for the drawer open/close example (#161).
+
+  Frame: the front faces +x, the bottom sits at z = 0. The drawer is near
+  the top, its handle at z = 0.6, where a Panda reaches it with its hand
+  pointing forward (lower, the wrist joint 6 runs into its limit). The
+  carcass is hollow plates (back, sides, top, a solid lower block) so the drawer
+  slides through the opening without touching them; the drawer's front
+  panel stands 2 mm proud of the carcass when closed. Its joint "drawer"
+  slides along +x, out of the front, from 0 (closed) to 0.2 m. The handle
+  is a horizontal bar 3.5 cm off the front panel on two standoffs: room
+  for the Panda's fingertips to close around it from above and below.
+-->
+<robot name="cabinet">
+  <material name="wood"><color rgba="0.72 0.53 0.34 1"/></material>
+  <material name="steel"><color rgba="0.6 0.6 0.65 1"/></material>
+
+  <link name="base_link">
+    <!-- back -->
+    <visual><origin xyz="-0.14 0 0.345"/><geometry><box size="0.02 0.4 0.69"/></geometry><material name="wood"/></visual>
+    <collision><origin xyz="-0.14 0 0.345"/><geometry><box size="0.02 0.4 0.69"/></geometry></collision>
+    <!-- sides -->
+    <visual><origin xyz="0 0.19 0.345"/><geometry><box size="0.3 0.02 0.69"/></geometry><material name="wood"/></visual>
+    <collision><origin xyz="0 0.19 0.345"/><geometry><box size="0.3 0.02 0.69"/></geometry></collision>
+    <visual><origin xyz="0 -0.19 0.345"/><geometry><box size="0.3 0.02 0.69"/></geometry><material name="wood"/></visual>
+    <collision><origin xyz="0 -0.19 0.345"/><geometry><box size="0.3 0.02 0.69"/></geometry></collision>
+    <!-- top -->
+    <visual><origin xyz="0 0 0.68"/><geometry><box size="0.3 0.36 0.02"/></geometry><material name="wood"/></visual>
+    <collision><origin xyz="0 0 0.68"/><geometry><box size="0.3 0.36 0.02"/></geometry></collision>
+    <!-- lower block, whose top is the drawer cavity's floor -->
+    <visual><origin xyz="0 0 0.265"/><geometry><box size="0.3 0.36 0.53"/></geometry><material name="wood"/></visual>
+    <collision><origin xyz="0 0 0.265"/><geometry><box size="0.3 0.36 0.53"/></geometry></collision>
+  </link>
+
+  <link name="drawer_link">
+    <inertial><mass value="1.0"/><inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/></inertial>
+    <!-- tray, 1 cm clear of the cavity on every side -->
+    <visual><origin xyz="0.005 0 0.6"/><geometry><box size="0.25 0.34 0.12"/></geometry><material name="wood"/></visual>
+    <collision><origin xyz="0.005 0 0.6"/><geometry><box size="0.25 0.34 0.12"/></geometry></collision>
+    <!-- front panel -->
+    <visual><origin xyz="0.162 0 0.6"/><geometry><box size="0.02 0.38 0.13"/></geometry><material name="wood"/></visual>
+    <collision><origin xyz="0.162 0 0.6"/><geometry><box size="0.02 0.38 0.13"/></geometry></collision>
+    <!-- handle bar and its standoffs -->
+    <visual><origin xyz="0.207 0 0.6"/><geometry><box size="0.015 0.12 0.015"/></geometry><material name="steel"/></visual>
+    <collision><origin xyz="0.207 0 0.6"/><geometry><box size="0.015 0.12 0.015"/></geometry></collision>
+    <visual><origin xyz="0.186 0.05 0.6"/><geometry><box size="0.028 0.012 0.012"/></geometry><material name="steel"/></visual>
+    <collision><origin xyz="0.186 0.05 0.6"/><geometry><box size="0.028 0.012 0.012"/></geometry></collision>
+    <visual><origin xyz="0.186 -0.05 0.6"/><geometry><box size="0.028 0.012 0.012"/></geometry><material name="steel"/></visual>
+    <collision><origin xyz="0.186 -0.05 0.6"/><geometry><box size="0.028 0.012 0.012"/></geometry></collision>
+  </link>
+
+  <joint name="drawer" type="prismatic">
+    <parent link="base_link"/>
+    <child link="drawer_link"/>
+    <origin xyz="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="0" upper="0.2" effort="100" velocity="0.5"/>
+  </joint>
+</robot>
