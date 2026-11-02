@@ -140,9 +140,12 @@ class RoboCerebraClient:
 
     def load(self, case: str, model: str = "bddl") -> dict[str, Any]:
         """Build the env for ``case``: its task, step descriptions and demo
-        spans, goal, objects and regions. ``model="bddl"`` is the benchmark's
-        scene (fixtures resampled each reset); ``"demo"`` the demo's own
-        recorded scene, for replays."""
+        spans, goal, objects and regions, and ``articulations``: per object
+        or site an ``open``/``close``/``turnon``/``turnoff`` goal can name,
+        the joints the checker reads, the fixture judging them, its class
+        and its ranges. ``model="bddl"`` is the benchmark's scene (fixtures
+        resampled each reset); ``"demo"`` the demo's own recorded scene, for
+        replays."""
         return self._call("load", case, model=model)
 
     def set_goal(self, goal: dict[str, list[list[str]]]) -> dict[str, Any]:
