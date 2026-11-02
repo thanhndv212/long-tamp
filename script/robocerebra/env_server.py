@@ -360,6 +360,7 @@ class RoboCerebraEnv:
             "demo_length": len(self.demo_actions),
             "objects": list(self.env.object_names),
             "regions": list(self.env.regions),
+            "articulations": _articulations(self.env),
             "distractor": distractor.read_text().strip() if distractor.exists() else None,
             "has_init_file": self.init_state is not None,
             "switch_steps": SWITCH_STEPS,
@@ -632,6 +633,38 @@ class RoboCerebraEnv:
         )
         export["manifest"].update(case=self.case, model=self.model, t=self.t)
         return export
+
+
+def _articulations(env: Any) -> dict[str, dict[str, Any]]:
+    """What ``open``/``close``/``turnon``/``turnoff`` read (#161): per object
+    or site a goal can name, the joints the checker reads, the fixture whose
+    ranges judge them, its class and those ranges. An object is open when
+    any of its joints is, closed when all are; a site reads its own joints
+    against its parent's ranges."""
+    fixtures = {
+        name: obj
+        for name, obj in {**env.fixtures_dict, **env.objects_dict}.items()
+        if getattr(obj, "object_properties", {}).get("articulation") and obj.joints
+    }
+
+    def entry(joints: list[str], parent: str) -> dict[str, Any]:
+        ranges = fixtures[parent].object_properties["articulation"]
+        return {
+            "joints": list(joints),
+            "parent": parent,
+            "class": type(fixtures[parent]).__name__,
+            "ranges": {
+                key[len("default_") : -len("_ranges")]: [float(v) for v in value]
+                for key, value in ranges.items()
+                if value
+            },
+        }
+
+    out = {name: entry(obj.joints, name) for name, obj in fixtures.items()}
+    for name, site in getattr(env, "object_sites_dict", {}).items():
+        if site.joints and site.parent_name in fixtures:
+            out[name] = entry(site.joints, site.parent_name)
+    return out
 
 
 def _goal_regions(env: Any) -> list[str]:
