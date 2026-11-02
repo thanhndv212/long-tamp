@@ -177,9 +177,7 @@ class ArticulatedMotion:
         if self.kind == "slide":
             M[:3, 3] = delta * self.axis
             return M
-        k = self.axis
-        K = np.array([[0, -k[2], k[1]], [k[2], 0, -k[0]], [-k[1], k[0], 0]])
-        R = np.eye(3) + np.sin(delta) * K + (1 - np.cos(delta)) * K @ K
+        R = _rotation(delta * self.axis)
         M[:3, :3] = R
         M[:3, 3] = self.anchor - R @ self.anchor
         return M
@@ -188,23 +186,33 @@ class ArticulatedMotion:
         """The hand's world pose on the handle."""
         return self.body_pose @ self.handle
 
+    def swing(self) -> float:
+        """How far the move turns the hand about its own axis: a hinge's
+        travel, as much of it as the hand's axis lies along the hinge's."""
+        if self.kind != "hinge":
+            return 0.0
+        return self.travel * float(self.axis @ self.grasp()[:3, 2])
+
     def grip_stages(self, obs: dict[str, Any]) -> list[Stage]:
         """From the hand where it is: to the approach start, along the hand's
         axis onto the handle, close. Of the handle's pose and its half turn
-        (:data:`HALF_TURN`), the one nearer the hand's orientation is kept,
-        unless it would turn the last wrist joint past its limit: how far
-        the wrist turns depends on how the fixture faces the robot."""
+        (:data:`HALF_TURN`), the one the hand turns least to is kept, of
+        those whose grip and move after it (:meth:`swing`) keep the last
+        wrist joint in its limits, the wrist turning either way round
+        (:func:`_wrist_turn`): how far it turns depends on how the fixture
+        faces the robot, and on where the last action left the wrist."""
         hand = obs_pose(obs)
-        turned = self.handle @ HALF_TURN
-        if _wrist_cost(self.body_pose @ turned, hand, obs) < _wrist_cost(
-            self.grasp(), hand, obs
-        ):
-            self.handle = turned
+        swing = self.swing()  # the half turn keeps the hand's axis
+        options = []
+        for handle in (self.handle, self.handle @ HALF_TURN):
+            cost, spin = _wrist_turn(self.body_pose @ handle, hand, obs, swing)
+            options.append((cost, spin, handle))
+        cost, spin, self.handle = min(options, key=lambda option: option[0])
         self.info["handle"] = np.round(self.handle[:3], 4).tolist()
         grasp = self.grasp()
         start = _back(grasp, BACK_OFF)
         return [
-            Stage("approach", _line(hand, start), -1.0, tol=APPROACH_TOL),
+            Stage("approach", _turn_line(hand, start, spin), -1.0, tol=APPROACH_TOL),
             Stage("reach", _line(start, grasp), -1.0, tol=0.004),
             Stage("grip", grasp[None], 1.0, dwell=GRIP, settle=True),
         ]
@@ -250,6 +258,7 @@ class ArticulationController:
             self.tracker = OscTracker(
                 [*self.way.grip_stages(obs), self.way.move_stage()]
             )
+            self.info.update(self.way.info)  # the handle the grip took
         elif self.tracker.done and self.phase != "done":
             self._next(obs)
         if self.done:
@@ -337,15 +346,53 @@ def articulated_motion(
     )
 
 
-def _wrist_cost(target: np.ndarray, hand: np.ndarray, obs: dict[str, Any]) -> float:
-    """How far the hand turns to ``target``; infinite when the turn about its
-    axis would carry the last wrist joint past :data:`WRIST_LIMIT` (the hand
-    axis is that joint's axis)."""
+def _wrist_turn(
+    target: np.ndarray, hand: np.ndarray, obs: dict[str, Any], swing: float = 0.0
+) -> tuple[float, float]:
+    """How far the hand turns to ``target``, and how far of it about its own
+    axis (the last wrist joint's): the shortest turn, or that turn about
+    the axis the other way round, whichever is the shorter of those leaving
+    the joint in :data:`WRIST_LIMIT` at ``target`` and ``swing`` past it;
+    an infinite cost (and the shortest turn) when neither does."""
     turn = rotation_vector(hand[:3, :3].T @ target[:3, :3])
+    spin = float(turn[2])
     q = obs.get("robot0_joint_pos")
-    if q is not None and abs(float(q[-1]) + float(turn[2])) > WRIST_LIMIT:
-        return float("inf")
-    return float(np.linalg.norm(turn))
+    if q is None:
+        return float(np.linalg.norm(turn)), spin
+    wrist = float(q[-1])
+    best = float("inf"), spin
+    for other in (0.0, -2 * np.pi, 2 * np.pi):
+        end = wrist + spin + other
+        if max(abs(end), abs(end + swing)) <= WRIST_LIMIT:
+            cost = float(np.linalg.norm(turn)) + abs(other)
+            best = min(best, (cost, spin + other))
+    return best
+
+
+def _rotation(v: np.ndarray) -> np.ndarray:
+    """The rotation of rotation vector ``v``."""
+    angle = float(np.linalg.norm(v))
+    if angle < 1e-12:
+        return np.eye(3)
+    k = v / angle
+    K = np.array([[0, -k[2], k[1]], [k[2], 0, -k[0]], [-k[1], k[0], 0]])
+    return np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * K @ K
+
+
+def _turn_line(a: np.ndarray, b: np.ndarray, spin: float) -> np.ndarray:
+    """Poses from ``a`` to ``b``, turning ``spin`` about ``a``'s own z axis
+    on the way (either way round, even past half a turn), and the rest of
+    the turn to ``b`` along with it, in steps of at most 0.1 rad."""
+    Rz = _rotation(np.array([0.0, 0.0, spin]))
+    rest = rotation_vector(Rz.T @ a[:3, :3].T @ b[:3, :3])
+    n = max(10, int(np.ceil(max(abs(spin), np.linalg.norm(rest)) / 0.1)) + 1)
+    out = np.repeat(b[None], n, axis=0)
+    out[:, :3, 3] = np.linspace(a[:3, 3], b[:3, 3], n)
+    for i, s in enumerate(np.linspace(0.0, 1.0, n)):
+        out[i, :3, :3] = (
+            a[:3, :3] @ _rotation(np.array([0.0, 0.0, s * spin])) @ _rotation(s * rest)
+        )
+    return out
 
 
 def _back(T: np.ndarray, distance: float) -> np.ndarray:
