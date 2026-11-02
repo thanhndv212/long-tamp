@@ -26,10 +26,15 @@ Predicates map onto what the planner does:
     follows the pick of what it pours); carry it over the receiving object,
     tilt it and turn it back.
 
-Anything else (``open``, ``close``, ``turnon``) is rejected: the segment holds
-still with the gripper closed, so an object a later segment resumes in the
-hand is not dropped while the gripper command ramps (robosuite keeps the
-gripper command across the resume).
+``open`` / ``close`` / ``turnon`` / ``turnoff``
+    ``articulated``: the hand is empty; grip the fixture's handle, move it
+    by its joint's motion to the goal's value, let go
+    (:mod:`~long_tamp.eval.robocerebra_articulated`, scripted, not planned).
+
+Anything else is rejected: the segment holds still with the gripper closed,
+so an object a later segment resumes in the hand is not dropped while the
+gripper command ramps (robosuite keeps the gripper command across the
+resume).
 
 With ``recover`` (row C, the continuous variant, where no resume repairs
 the scene between segments) the policy plans the next action towards the
@@ -58,13 +63,25 @@ import numpy as np
 
 from long_tamp.grasping import xyzquat_to_pose
 
+from .robocerebra_articulated import (
+    ARTICULATED,
+    ArticulatedMotion,
+    ArticulationController,
+    articulated_motion,
+)
 from .robocerebra_plan import PlanningError, object_top_region, tcp_to_eef
 from .robocerebra_push import EdgePinch, EdgePinchController, edge_pinch
 from .robocerebra_tracker import POS_SCALE, OscTracker, Stage, obs_pose
 
 logger = logging.getLogger(__name__)
 
-PREDICATES = {"pick": "grasped", "in": "placed", "on": "placed", "pour": "poured"}
+PREDICATES = {
+    "pick": "grasped",
+    "in": "placed",
+    "on": "placed",
+    "pour": "poured",
+    **{name: "articulated" for name in ARTICULATED},
+}
 ASSETS = Path(__file__).resolve().parents[3] / "script" / "twin" / "assets"
 
 
@@ -76,13 +93,15 @@ class UnsupportedGoal(ValueError):
 class SegmentGoal:
     """One goal predicate in planner terms: ``grasped`` an object,
     ``placed`` it in ``region`` (a region name of the exported manifest, or
-    for ``on`` an object's), or ``poured`` it over ``receiver`` (an object
-    name)."""
+    for ``on`` an object's), ``poured`` it over ``receiver`` (an object
+    name), or ``articulated``: ``predicate`` (``open``, ...) holds for an
+    object or site with joints."""
 
     kind: str
     obj: str
     region: str | None = None
     receiver: str | None = None
+    predicate: str | None = None
 
     @classmethod
     def from_spec(cls, spec: list[str]) -> SegmentGoal:
@@ -97,6 +116,10 @@ class SegmentGoal:
             if len(spec) != 2:
                 raise UnsupportedGoal(f"pick takes one object: {list(spec)}")
             return cls(kind, str(spec[1]))
+        if kind == "articulated":
+            if len(spec) != 2:
+                raise UnsupportedGoal(f"{name} takes one object: {list(spec)}")
+            return cls(kind, str(spec[1]), predicate=name)
         if kind == "poured":
             if len(spec) != 3:
                 raise UnsupportedGoal(f"pour takes two objects: {list(spec)}")
@@ -233,12 +256,19 @@ class HppPolicy:
         self.recover = recover
         self._calls = 0
         self._robot: tuple[str, str] | None = None
+        self._articulations: dict[str, dict[str, Any]] = {}
 
     def __call__(
         self, env: Any, info: dict[str, Any], segment: int, step_limit: int
-    ) -> SegmentController | ReleaseController | EdgePinchController:
+    ) -> (
+        SegmentController
+        | ReleaseController
+        | EdgePinchController
+        | ArticulationController
+    ):
         specs = segment_specs(info, segment)
         record: dict[str, Any] = {"goals": specs}
+        self._articulations = info.get("articulations", {})
         if not specs:
             record["status"] = "no goal"
             return SegmentController(None, info=record)
@@ -283,8 +313,11 @@ class HppPolicy:
         ``recover`` only). ``record`` receives what the hand held and the
         handles generated. A pick none of whose handles plans is an
         :class:`~long_tamp.eval.robocerebra_push.EdgePinch` when the object
-        is flat (the HPP failure in ``record["hpp"]``); :func:`plan_controller`
-        runs either.
+        is flat (the HPP failure in ``record["hpp"]``); an ``articulated``
+        goal is an
+        :class:`~long_tamp.eval.robocerebra_articulated.ArticulatedMotion`
+        (the fixtures' joints are those of ``load``'s ``articulations`` the
+        last call saw); :func:`plan_controller` runs any of them.
 
         ``then``, the place or pour that follows a pick, is a lookahead: it
         is planned too, from the scene the pick leaves (the object held at
@@ -303,9 +336,16 @@ class HppPolicy:
         if self.recover and held is not None and held != goal.obj:
             record.update(status="release", recovery=f"release {held}")
             return None
-        if self.recover and goal.kind != "grasped" and held is None:
+        if self.recover and goal.kind in ("placed", "poured") and held is None:
             record["recovery"] = f"pick {goal.obj}"
             goal = SegmentGoal("grasped", goal.obj)
+        if goal.kind == "articulated":
+            if held is not None:
+                raise RuntimeError(f"{held} is in the hand")
+            assert goal.predicate is not None
+            return articulated_motion(
+                scene.manifest, self._articulations, goal.predicate, goal.obj
+            )
         if goal.kind == "grasped":
             if held is not None:
                 raise RuntimeError(f"{held} is already in the hand")
@@ -383,11 +423,13 @@ class LookaheadFailed(PlanningError):
 
 def plan_controller(
     plan: Any, record: dict[str, Any]
-) -> SegmentController | EdgePinchController:
+) -> SegmentController | EdgePinchController | ArticulationController:
     """The controller running a plan from :meth:`HppPolicy.plan`, with
     ``record`` as its ``info``."""
     if isinstance(plan, EdgePinch):
         return EdgePinchController(plan, info=record)
+    if isinstance(plan, ArticulatedMotion):
+        return ArticulationController(plan, info=record)
     return SegmentController(plan.stages, plan.tcp_start, record)
 
 

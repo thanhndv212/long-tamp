@@ -209,6 +209,13 @@ def export_scene(
                 "value": _joint_value(model, data, names.joint(j)),
                 "range": model.jnt_range[j].tolist() if model.jnt_limited[j] else None,
                 "axis_world": (data.xmat[b].reshape(3, 3) @ model.jnt_axis[j]).tolist(),
+                # Where the joint is: its body's world pose at the current
+                # value, and its axis and anchor in that body's frame (a
+                # hinge turns about the anchor; #161).
+                "body": names.body(b),
+                "body_pose": _xyzquat(data.xpos[b], data.xmat[b].reshape(3, 3)),
+                "axis": model.jnt_axis[j].tolist(),
+                "anchor": model.jnt_pos[j].tolist(),
                 "bodies": [names.body(x) for x in subtree(b)],
             }
         )

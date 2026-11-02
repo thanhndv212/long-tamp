@@ -24,6 +24,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   0.4 rad from above. Lower, or straight on, the Panda's joint 6 runs into its limit. Tests
   in `tests/test_articulated_objects.py`; the open/close run is `slow_planning` and runs
   nightly.
+- RoboCerebra open/close/turnon (#161): `HppPolicy` runs `open`, `close`, `turnon` and
+  `turnoff` segments (`SegmentGoal` kind `articulated`) with the new
+  `eval/robocerebra_articulated.py`. The hand grips the fixture's handle, follows the joint's
+  motion (a translation along a slide, a turn about a hinge's axis) to the goal's value, then
+  lets go and backs out. An open goes into the goal range by half its width, up to 4 cm or
+  0.6 rad. A close pushes 2 cm or 0.1 rad past the joint's limit, then lets go where the
+  push stopped. The motion is scripted on observations, like the edge pinch: HPP does not
+  plan it, and nothing checks collisions or reach. The handles (`HANDLES`) are hand poses in
+  the moving body's frame, per fixture class and drawer level. Of a handle's pose and its
+  half turn, the grip takes the one nearer the hand, unless that one would carry the last
+  wrist joint past its limit. The scene export records each joint's pivot, axis and body
+  pose, and the env server's `load` reports, per articulated goal, its fixture class,
+  joints and ranges (`articulations`). Ideal cases 6–9 (drawer, stove, microwave) pass in
+  row A on seeds 0–2 (12 of 12). In Memory_Exploration, opening and closing the wooden and
+  white cabinets' top and middle drawers pass (7 of 8). Their bottom drawer does not open
+  yet: its bar is 4 cm off the table, too low for the hand upright.
 - RoboCerebra thin-rim pinch (#158): the rim sampler pinches a wall at least a pad long
   with the pads sunk by half their length first, along the wall over their whole length,
   then flush with its top as before; and the pick's close is a `settle` stage (`Stage.settle`,
