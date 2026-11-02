@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Articulated objects (#161): a YAML object declared `root: anchor` is loaded fixed at its
+  initial pose (`PyHPPBackend.load_object(pose=...)`), and its prismatic and revolute
+  joints are its configuration, with initial values under `joints:` (by name; others start
+  at 0 within their limits). `YamlTaskLoader.articulated_joints` and
+  `task_config.ARTICULATED_JOINTS` list them. `ManipulationTask.setup` writes them into
+  `q_init` by joint rank, since pinocchio may not keep the URDF's order. Free-flyer bounds
+  apply only to free-flying objects, and a phase graph locks every joint of an object
+  outside the phase, not only its `root_joint`. With no contact surfaces, the factory locks
+  the joints while no handle is grasped. The new `script/drawer/task_drawer.py` opens and
+  closes a cabinet drawer with a Panda: grasp, `plan_loop` to slide the drawer out 15 cm,
+  release, grasp, slide it shut, release (about 45 s). Its handle is at z = 0.6, approached
+  0.4 rad from above. Lower, or straight on, the Panda's joint 6 runs into its limit. Tests
+  in `tests/test_articulated_objects.py`; the open/close run is `slow_planning` and runs
+  nightly.
 - RoboCerebra thin-rim pinch (#158): the rim sampler pinches a wall at least a pad long
   with the pads sunk by half their length first, along the wall over their whole length,
   then flush with its top as before; and the pick's close is a `settle` stage (`Stage.settle`,
