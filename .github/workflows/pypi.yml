@@ -55,7 +55,9 @@ jobs:
           tests/test_grasp_release_screw.py -m slow_planning
           --timeout=540 --timeout-method=thread
       # An articulated object: open and close a drawer (#161).
+      # Independent of the screw cell: run even when a step above fails.
       - name: Drawer open/close
+        if: ${{ !cancelled() }}
         run: >-
           timeout --kill-after=30s 10m python -m pytest
           tests/test_articulated_objects.py -m slow_planning
