@@ -171,6 +171,44 @@ def test_the_grip_keeps_the_last_wrist_joint_in_its_limits():
     assert turn[2] == pytest.approx(0.5)
 
 
+def test_the_grip_leaves_the_wrist_room_for_a_hinge_about_the_hands_axis():
+    # A door turning 1 rad about the hand's axis (a handle pinched from
+    # above, the hinge vertical): the wrist turns with it.
+    hand = about_z(drawer().grasp(), -0.5)
+    for direction, turned in [(1.0, True), (-1.0, False)]:
+        way = drawer("open", 0.0, 1.0, "hinge")
+        way.axis = direction * way.grasp()[:3, 2]
+        assert way.swing() == pytest.approx(direction)
+        grasp = way.grasp()
+        way.grip_stages(obs(hand, 1.5))  # the grasp: 2.0, then 3.0 or 1.0
+        expected = grasp @ HALF_TURN if turned else grasp
+        assert np.allclose(way.grasp(), expected), direction
+    assert drawer().swing() == 0.0  # a slide turns nothing
+
+
+def test_the_approach_turns_the_wrist_the_long_way_round_when_it_must():
+    # Ideal/case9's microwave after the bowl's place: the wrist at 2.58, the
+    # grip 2.99 rad on about the hand's axis, the door turning the hand
+    # 1.697 more. The short way there, and the half turn's (2.43, then
+    # 4.13), pass the limit; turning back 3.29 rad leaves -0.71, then 0.99.
+    way = drawer("open", 0.0, 1.697, "hinge")
+    way.axis = way.grasp()[:3, 2]
+    grasp = way.grasp()
+    hand = about_z(grasp, -2.99)
+    hand[:3, 3] += [-0.1, 0.0, 0.1]
+    approach = way.grip_stages(obs(hand, 2.58))[0].tcp
+    assert np.allclose(way.grasp(), grasp)
+    start = grasp.copy()
+    start[:3, 3] -= BACK_OFF * grasp[:3, 2]
+    assert np.allclose(approach[0], hand) and np.allclose(approach[-1], start)
+    spins = [
+        rotation_vector(a[:3, :3].T @ b[:3, :3])[2]
+        for a, b in zip(approach[:-1], approach[1:])
+    ]
+    assert all(-0.11 < spin < 0.0 for spin in spins)  # back, in small steps
+    assert sum(spins) == pytest.approx(2.99 - 2 * np.pi)
+
+
 def turned(R, rotvec):
     """``R`` turned by the world-frame rotation vector ``rotvec``."""
     angle = np.linalg.norm(rotvec)
