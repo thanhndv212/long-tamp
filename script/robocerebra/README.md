@@ -524,6 +524,20 @@ The failures are the same segment on every seed, mostly:
 The other 3 failures are case1's popcorn pick, butter pick and butter place
 (1 seed each).
 
+#### With articulated objects (#161)
+
+`results/2026-11-03-r12-ideal-hpp-articulated.json` (R12): the same protocol,
+nine (case, seed) processes in parallel, with `open`, `close` and `turnon`
+supported, so no segment is unsupported. It also takes in everything merged
+since R5 (#158's tilted grasps, #187, #188, #190, #194). Supported segments
+passed 713 / 760 (93.8%); all 40 fixture segments pass; 97 / 100 rollouts
+succeed.
+
+| Case | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| supported segments passed, R12 | 57/60 | 40/40 | 86/100 | 60/60 | 60/60 | 52/60 | 70/70 | 70/70 | 109/110 | 109/130 |
+| rollout success, R12 | 0.9 | 1 | 0.8 | 1 | 1 | 1 | 1 | 1 | 1 | 1 |
+
 ### Row C: Ideal, uninterrupted (continuous variant, #163)
 
 `results/2026-10-29-r8-ideal-hpp-continuous.json`: the 10 Ideal cases × seeds
@@ -578,10 +592,10 @@ object in the hand. The failures on every seed:
 | case3 6–7, cookies onto the plate, the table | the held start collides (finger and plate) |
 | case4 5, frypan onto the cabinet top | no release pose in the region (passes since, #187) |
 | case5 1, pudding onto the plate | planned, fails in the carry; 2–5 fail after it |
-| case6 0, case8 0, case9 8, open | unsupported (#161) |
+| case6 0, case8 0, case9 8, open | unsupported (supported since, #161) |
 | case6 1, pick butter | planned, fails in the lift |
 | case6 2, butter into the shut cabinet | no release pose |
-| case7 4, turn on the stove | unsupported (#161) |
+| case7 4, turn on the stove | unsupported (supported since, #161) |
 | case7 6, frypan onto the stove | no release pose in the region (passes since, #187) |
 | case8 1–2, cream cheese into the shut cabinet | planned, fails in the lift and the retreat |
 | case8 6, pour the wine | planned, fails in the tilt |
@@ -612,6 +626,28 @@ other two (0 and 9) the place runs through but the frypan ends on the pegs'
 tips, 6.6 cm above its release pose, and does not register. case4's frypan
 onto the cabinet top and case7's onto the stove, which had no release pose,
 pass on every seed: released as held turned about the vertical. The other cases are unchanged (case10 within a segment).
+
+#### With articulated objects (#161)
+
+`results/2026-11-03-r13-ideal-hpp-continuous.json` (R13): the rerun with
+`open`, `close` and `turnon` supported, and with everything merged since R10
+(#158, #188, #190, #194). Eq. 1 67.7% → 83.0%; supported segments passed
+598 / 760; 44 / 100 rollouts with every step done (26 before). 38 of the 40
+fixture steps register; the cases that open the cabinet first (6 and 8) no
+longer lose the place into it.
+
+| Case | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Eq. 1, row C (R10) | 0.97 | 0.95 | 0.61 | 1.00 | 0.25 | 0.50 | 0.86 | 0.43 | 0.72 | 0.48 |
+| Eq. 1, row C | 0.88 | 0.95 | 0.68 | 1.00 | 0.52 | 0.97 | 0.87 | 1.00 | 0.70 | 0.73 |
+| supported segments passed, row C | 53/60 | 32/40 | 66/100 | 60/60 | 31/60 | 58/60 | 59/70 | 69/70 | 77/110 | 93/130 |
+| rollout success, row C | 0.3 | 0.8 | 0 | 1 | 0 | 0.8 | 0.5 | 1 | 0 | 0 |
+
+case1 loses: the butter's place into the storage box finds no release pose
+on 6 seeds (none in R10), a change in how it is held, not a fixture. case9
+opens the microwave on 9 seeds, but the bowl starts in collision with the
+coffee table there and the pudding's place onto the table fails, so the
+bowl's carry into the microwave rarely follows.
 
 ### Row D: Ideal, one mission per rollout (#186)
 
@@ -686,7 +722,7 @@ The failures on every seed, or nearly:
 | case5, wine bottle onto the table | no release pose (6 seeds), the grasp stalls (4) |
 | case7, frypan onto the stove | no release pose; put down, it blocks the pudding |
 | case10, bbq sauce back onto the table | does not plan (8 seeds) |
-| case6, 8, 9 open; case7 turn on | unsupported (#161) |
+| case6, 8, 9 open; case7 turn on | unsupported (supported since, #161) |
 
 A step cut at 150 env steps in its tracker (#190) counts as a miss and is
 retried.
@@ -743,6 +779,27 @@ The three cases that lose are that order, not a step that newly fails:
 - case1 (0.92 → 0.85) places the butter first on every seed; its sweep into
   the storage box's left side stalls on 4 seeds (R9: 2), and seed 6 plans
   nothing after it.
+
+#### With articulated objects (#161)
+
+`results/2026-11-03-r14-ideal-hpp-mission.json` (R14): the mission with an
+`actuate` step for each `open`, `close` and `turnon`, the fixture's scripted
+motion, and with everything merged since R11 (#158, #188, #190, #194, and
+#195's fixed hash seed, so the task order no longer changes from run to run).
+Eq. 1 67.9% → 81.2%; 46 / 100 rollouts with every step done (26 before); all
+40 fixture steps execute; 174 retries, 89 objects given up on. Budget used
+69.3% on mean.
+
+| Case | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Eq. 1, row D (R11) | 0.85 | 0.60 | 0.60 | 1.00 | 0.23 | 0.47 | 0.86 | 0.57 | 0.70 | 0.91 |
+| Eq. 1, row D | 0.88 | 0.88 | 0.35 | 1.00 | 0.67 | 0.92 | 1.00 | 0.86 | 0.69 | 0.88 |
+| rollout success, row D | 0.3 | 0.7 | 0 | 1 | 0 | 0.6 | 1 | 0.5 | 0 | 0.5 |
+
+case9 opens the microwave on every seed, but nothing orders one object's
+chain against another's: the bowl can go into the microwave before the
+pudding and cookies are poured into it. case3 drops (0.60 → 0.35), a step
+outside the fixtures.
 
 ### Published results on RoboCerebra
 
