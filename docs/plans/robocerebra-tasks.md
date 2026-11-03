@@ -21,7 +21,7 @@ and the causes behind the numbers.
   text, not from the simulator; no round has run it yet (R7).
 - **Cells** are rollouts that got the step done over rollouts that tried it
   (✅ all, 🟡 some, ❌ none, – not attempted: the predicate is unsupported, e.g.
-  `open`/`turnon` before articulated objects, #161). Row C counts a step done when
+  `open`/`turnon` before R12, #161). Row C counts a step done when
   the benchmark registered it anywhere in the rollout. Row D's per-step cells
   count the mission's execution of the step succeeding, which can be ahead of
   what registered; its case totals are the benchmark's.
@@ -42,79 +42,81 @@ and the causes behind the numbers.
 | R3 | [#158](https://github.com/thanhndv212/long-tamp/issues/158) | – | one pick and lift per class (AC2) | [`2026-11-01-r3-thin-rims.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-11-01-r3-thin-rims.json) | 9 | 18/25 classes lifted |
 | R4 | [#159](https://github.com/thanhndv212/long-tamp/issues/159) | A | HPP segment policy, pick/in/on | [`2026-10-25-r4-ideal-hpp.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-25-r4-ideal-hpp.json) | 10 | 76% of supported steps done |
 | R5 | [#160](https://github.com/thanhndv212/long-tamp/issues/160) | A | adds pour | [`2026-10-29-r5-ideal-hpp-pour.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-29-r5-ideal-hpp-pour.json) | 10 | 85% of supported steps done |
-| R6 | [#161](https://github.com/thanhndv212/long-tamp/issues/161) | A, C, D | articulated objects: drawers, doors, knobs | not run yet | – | waits on it: the 83 steps checked as `open`/`close`/`turnon` (– in the tables) |
 | R7 | [#162](https://github.com/thanhndv212/long-tamp/issues/162) | A, B | Random_Disturbance, Observation_Mismatching and Mix; row B (camera poses #151, goals from the step text #145) for the Memory conditions | not run yet | – | waits on it: planner results on the 50 cases outside Ideal |
 | R8 | [#163](https://github.com/thanhndv212/long-tamp/issues/163) | C | continuous | [`2026-10-29-r8-ideal-hpp-continuous.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-29-r8-ideal-hpp-continuous.json) | 10 | 61% of each rollout's goal done |
 | R9 | [#186](https://github.com/thanhndv212/long-tamp/issues/186) | D | one mission a rollout | [`2026-10-30-r9-ideal-hpp-mission.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-30-r9-ideal-hpp-mission.json) | 10 | 64% of each rollout's goal done |
 | R10 | [#187](https://github.com/thanhndv212/long-tamp/issues/187) | C | R8 rerun: place onto an object | [`2026-10-31-r10-ideal-hpp-continuous.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-31-r10-ideal-hpp-continuous.json) | 10 | 68% of each rollout's goal done |
 | R11 | [#187](https://github.com/thanhndv212/long-tamp/issues/187) | D | R9 rerun: place onto an object | [`2026-10-31-r11-ideal-hpp-mission.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-10-31-r11-ideal-hpp-mission.json) | 10 | 68% of each rollout's goal done |
+| R12 | [#161](https://github.com/thanhndv212/long-tamp/issues/161) | A | R6 articulated objects: adds open/close/turnon | [`2026-11-03-r12-ideal-hpp-articulated.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-11-03-r12-ideal-hpp-articulated.json) | 10 | 94% of supported steps done |
+| R13 | [#161](https://github.com/thanhndv212/long-tamp/issues/161) | C | R6 articulated objects: adds open/close/turnon | [`2026-11-03-r13-ideal-hpp-continuous.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-11-03-r13-ideal-hpp-continuous.json) | 10 | 83% of each rollout's goal done |
+| R14 | [#161](https://github.com/thanhndv212/long-tamp/issues/161) | D | R6 articulated objects: adds open/close/turnon | [`2026-11-03-r14-ideal-hpp-mission.json`](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/2026-11-03-r14-ideal-hpp-mission.json) | 10 | 81% of each rollout's goal done |
 
 Details of R1-R3: [R1 demo replay](#r1-demo-replay), [R2 scene export](#r2-scene-export), [R3 grasp handles and grasp-lift](#r3-grasp-handles-and-grasp-lift).
 
 ## Progress by case
 
-| Case | Steps | R1 demo | R1 resume(k) | R2 | R3 handles | R4 | R5 | R8 | R9 | R10 | R11 | Videos |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| [Ideal/case1](#idealcase1) | 6 | 4/6 | 3/6 | ✅ | 14 on 4 | 56/60 | 57/60 | 58/60 | 55/60 | 58/60 | 51/60 |  |
-| [Ideal/case2](#idealcase2) | 4 | 1/4 | 1/4 | ✅ | 25 on 5 | 21/30 | 30/30 | 25/40 | 30/40 | 38/40 | 24/40 | [C](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/C_Ideal_case2.mp4), [D](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/D_Ideal_case2.mp4) |
-| [Ideal/case3](#idealcase3) | 10 | 8/10 | 9/10 | ✅ |  | 50/70 | 80/100 | 61/100 | 60/100 | 61/100 | 60/100 |  |
-| [Ideal/case4](#idealcase4) | 6 | 4/6 | 4/6 | ✅ | 20 on 5 | 30/40 | 50/60 | 50/60 | 50/60 | 60/60 | 60/60 |  |
-| [Ideal/case5](#idealcase5) | 6 | 6/6 | 6/6 | ✅ | 24 on 4 | 40/40 | 60/60 | 15/60 | 29/60 | 15/60 | 14/60 |  |
-| [Ideal/case6](#idealcase6) | 6 | 6/6 | 6/6 | ✅ |  | 31/40 | 42/50 | 30/60 | 28/60 | 30/60 | 28/60 |  |
-| [Ideal/case7](#idealcase7) | 7 | 3/7 | 4/7 | ✅ |  | 24/40 | 44/60 | 50/70 | 30/70 | 60/70 | 60/70 | [C](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/C_Ideal_case7.mp4), [D](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/D_Ideal_case7.mp4) |
-| [Ideal/case8](#idealcase8) | 7 | 7/7 | 7/7 | ✅ |  | 40/40 | 60/60 | 30/70 | 36/70 | 30/70 | 40/70 | [C](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/C_Ideal_case8.mp4), [D](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/D_Ideal_case8.mp4) |
-| [Ideal/case9](#idealcase9) | 11 | 7/11 | 9/11 | ✅ |  | 60/80 | 90/100 | 79/110 | 78/110 | 79/110 | 77/110 |  |
-| [Ideal/case10](#idealcase10) | 13 | 10/13 | 10/13 | ✅ | 60 on 10 | 60/100 | 90/130 | 64/130 | 95/130 | 63/130 | 118/130 |  |
-| [Memory_Execution/case1](#memory-executioncase1) | 8 |  |  | ✅ |  |  |  |  |  |  |  | [C](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/C_Memory_Execution_case1.mp4) |
-| [Memory_Execution/case2](#memory-executioncase2) | 8 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Memory_Execution/case3](#memory-executioncase3) | 10 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Memory_Execution/case4](#memory-executioncase4) | 8 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Memory_Execution/case5](#memory-executioncase5) | 7 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Memory_Execution/case6](#memory-executioncase6) | 12 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Memory_Execution/case7](#memory-executioncase7) | 12 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Memory_Execution/case8](#memory-executioncase8) | 14 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Memory_Execution/case9](#memory-executioncase9) | 14 |  |  | ✅ | 42 on 7 |  |  |  |  |  |  |  |
-| [Memory_Execution/case10](#memory-executioncase10) | 14 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Memory_Exploration/case1](#memory-explorationcase1) | 12 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Memory_Exploration/case2](#memory-explorationcase2) | 10 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Memory_Exploration/case3](#memory-explorationcase3) | 12 |  |  | ✅ | 30 on 5 |  |  |  |  |  |  |  |
-| [Memory_Exploration/case4](#memory-explorationcase4) | 10 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Memory_Exploration/case5](#memory-explorationcase5) | 14 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Memory_Exploration/case6](#memory-explorationcase6) | 12 |  |  | ✅ | 36 on 6 |  |  |  |  |  |  |  |
-| [Memory_Exploration/case7](#memory-explorationcase7) | 10 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Memory_Exploration/case8](#memory-explorationcase8) | 15 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Memory_Exploration/case9](#memory-explorationcase9) | 13 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Memory_Exploration/case10](#memory-explorationcase10) | 11 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Mix/case1](#mixcase1) | 12 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Mix/case2](#mixcase2) | 10 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Mix/case3](#mixcase3) | 12 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Mix/case4](#mixcase4) | 12 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Mix/case5](#mixcase5) | 14 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Mix/case6](#mixcase6) | 10 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Mix/case7](#mixcase7) | 8 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Mix/case8](#mixcase8) | 8 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Mix/case9](#mixcase9) | 10 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Mix/case10](#mixcase10) | 13 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Observation_Mismatching/case1](#observation-mismatchingcase1) | 6 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Observation_Mismatching/case2](#observation-mismatchingcase2) | 4 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Observation_Mismatching/case3](#observation-mismatchingcase3) | 10 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Observation_Mismatching/case4](#observation-mismatchingcase4) | 6 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Observation_Mismatching/case5](#observation-mismatchingcase5) | 6 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Observation_Mismatching/case6](#observation-mismatchingcase6) | 6 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Observation_Mismatching/case7](#observation-mismatchingcase7) | 7 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Observation_Mismatching/case8](#observation-mismatchingcase8) | 7 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Observation_Mismatching/case9](#observation-mismatchingcase9) | 11 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Observation_Mismatching/case10](#observation-mismatchingcase10) | 13 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Random_Disturbance/case1](#random-disturbancecase1) | 6 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Random_Disturbance/case2](#random-disturbancecase2) | 4 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Random_Disturbance/case3](#random-disturbancecase3) | 10 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Random_Disturbance/case4](#random-disturbancecase4) | 6 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Random_Disturbance/case5](#random-disturbancecase5) | 6 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Random_Disturbance/case6](#random-disturbancecase6) | 6 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Random_Disturbance/case7](#random-disturbancecase7) | 7 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Random_Disturbance/case8](#random-disturbancecase8) | 7 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Random_Disturbance/case9](#random-disturbancecase9) | 11 |  |  | ✅ |  |  |  |  |  |  |  |  |
-| [Random_Disturbance/case10](#random-disturbancecase10) | 13 |  |  | ✅ |  |  |  |  |  |  |  |  |
+| Case | Steps | R1 demo | R1 resume(k) | R2 | R3 handles | R4 | R5 | R8 | R9 | R10 | R11 | R12 | R13 | R14 | Videos |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| [Ideal/case1](#idealcase1) | 6 | 4/6 | 3/6 | ✅ | 14 on 4 | 56/60 | 57/60 | 58/60 | 55/60 | 58/60 | 51/60 | 57/60 | 53/60 | 53/60 |  |
+| [Ideal/case2](#idealcase2) | 4 | 1/4 | 1/4 | ✅ | 25 on 5 | 21/30 | 30/30 | 25/40 | 30/40 | 38/40 | 24/40 | 40/40 | 38/40 | 35/40 | [C](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/C_Ideal_case2.mp4), [D](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/D_Ideal_case2.mp4) |
+| [Ideal/case3](#idealcase3) | 10 | 8/10 | 9/10 | ✅ |  | 50/70 | 80/100 | 61/100 | 60/100 | 61/100 | 60/100 | 86/100 | 68/100 | 35/100 |  |
+| [Ideal/case4](#idealcase4) | 6 | 4/6 | 4/6 | ✅ | 20 on 5 | 30/40 | 50/60 | 50/60 | 50/60 | 60/60 | 60/60 | 60/60 | 60/60 | 60/60 |  |
+| [Ideal/case5](#idealcase5) | 6 | 6/6 | 6/6 | ✅ | 24 on 4 | 40/40 | 60/60 | 15/60 | 29/60 | 15/60 | 14/60 | 60/60 | 31/60 | 40/60 |  |
+| [Ideal/case6](#idealcase6) | 6 | 6/6 | 6/6 | ✅ |  | 31/40 | 42/50 | 30/60 | 28/60 | 30/60 | 28/60 | 52/60 | 58/60 | 55/60 | [C](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/C_Ideal_case6.mp4), [D](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/D_Ideal_case6.mp4) |
+| [Ideal/case7](#idealcase7) | 7 | 3/7 | 4/7 | ✅ |  | 24/40 | 44/60 | 50/70 | 30/70 | 60/70 | 60/70 | 70/70 | 61/70 | 70/70 | [C](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/C_Ideal_case7.mp4), [D](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/D_Ideal_case7.mp4) |
+| [Ideal/case8](#idealcase8) | 7 | 7/7 | 7/7 | ✅ |  | 40/40 | 60/60 | 30/70 | 36/70 | 30/70 | 40/70 | 70/70 | 70/70 | 60/70 | [C](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/C_Ideal_case8.mp4), [D](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/D_Ideal_case8.mp4) |
+| [Ideal/case9](#idealcase9) | 11 | 7/11 | 9/11 | ✅ |  | 60/80 | 90/100 | 79/110 | 78/110 | 79/110 | 77/110 | 109/110 | 77/110 | 76/110 | [C](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/C_Ideal_case9.mp4), [D](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/D_Ideal_case9.mp4) |
+| [Ideal/case10](#idealcase10) | 13 | 10/13 | 10/13 | ✅ | 60 on 10 | 60/100 | 90/130 | 64/130 | 95/130 | 63/130 | 118/130 | 109/130 | 95/130 | 115/130 |  |
+| [Memory_Execution/case1](#memory-executioncase1) | 8 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  | [C](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/C_Memory_Execution_case1.mp4) |
+| [Memory_Execution/case2](#memory-executioncase2) | 8 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Memory_Execution/case3](#memory-executioncase3) | 10 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Memory_Execution/case4](#memory-executioncase4) | 8 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Memory_Execution/case5](#memory-executioncase5) | 7 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Memory_Execution/case6](#memory-executioncase6) | 12 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Memory_Execution/case7](#memory-executioncase7) | 12 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Memory_Execution/case8](#memory-executioncase8) | 14 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Memory_Execution/case9](#memory-executioncase9) | 14 |  |  | ✅ | 42 on 7 |  |  |  |  |  |  |  |  |  |  |
+| [Memory_Execution/case10](#memory-executioncase10) | 14 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Memory_Exploration/case1](#memory-explorationcase1) | 12 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  | [A](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/A_Memory_Exploration_case1.mp4) |
+| [Memory_Exploration/case2](#memory-explorationcase2) | 10 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Memory_Exploration/case3](#memory-explorationcase3) | 12 |  |  | ✅ | 30 on 5 |  |  |  |  |  |  |  |  |  |  |
+| [Memory_Exploration/case4](#memory-explorationcase4) | 10 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Memory_Exploration/case5](#memory-explorationcase5) | 14 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Memory_Exploration/case6](#memory-explorationcase6) | 12 |  |  | ✅ | 36 on 6 |  |  |  |  |  |  |  |  |  |  |
+| [Memory_Exploration/case7](#memory-explorationcase7) | 10 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Memory_Exploration/case8](#memory-explorationcase8) | 15 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Memory_Exploration/case9](#memory-explorationcase9) | 13 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Memory_Exploration/case10](#memory-explorationcase10) | 11 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Mix/case1](#mixcase1) | 12 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Mix/case2](#mixcase2) | 10 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Mix/case3](#mixcase3) | 12 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Mix/case4](#mixcase4) | 12 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Mix/case5](#mixcase5) | 14 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Mix/case6](#mixcase6) | 10 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Mix/case7](#mixcase7) | 8 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Mix/case8](#mixcase8) | 8 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Mix/case9](#mixcase9) | 10 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Mix/case10](#mixcase10) | 13 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Observation_Mismatching/case1](#observation-mismatchingcase1) | 6 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Observation_Mismatching/case2](#observation-mismatchingcase2) | 4 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Observation_Mismatching/case3](#observation-mismatchingcase3) | 10 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Observation_Mismatching/case4](#observation-mismatchingcase4) | 6 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Observation_Mismatching/case5](#observation-mismatchingcase5) | 6 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Observation_Mismatching/case6](#observation-mismatchingcase6) | 6 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Observation_Mismatching/case7](#observation-mismatchingcase7) | 7 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Observation_Mismatching/case8](#observation-mismatchingcase8) | 7 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Observation_Mismatching/case9](#observation-mismatchingcase9) | 11 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Observation_Mismatching/case10](#observation-mismatchingcase10) | 13 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Random_Disturbance/case1](#random-disturbancecase1) | 6 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Random_Disturbance/case2](#random-disturbancecase2) | 4 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Random_Disturbance/case3](#random-disturbancecase3) | 10 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Random_Disturbance/case4](#random-disturbancecase4) | 6 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Random_Disturbance/case5](#random-disturbancecase5) | 6 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Random_Disturbance/case6](#random-disturbancecase6) | 6 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Random_Disturbance/case7](#random-disturbancecase7) | 7 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Random_Disturbance/case8](#random-disturbancecase8) | 7 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Random_Disturbance/case9](#random-disturbancecase9) | 11 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
+| [Random_Disturbance/case10](#random-disturbancecase10) | 13 |  |  | ✅ |  |  |  |  |  |  |  |  |  |  |  |
 
 Each cell sums the case's steps over its rollouts (10 seeds). Row A: steps done
 over steps tried, leaving out unsupported ones. Rows C and D: the benchmark's
@@ -130,14 +132,14 @@ A blank cell is a case the round did not run.
 
 > Organize all the food boxes into the white storage box.
 
-| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 0 | Pick up cream cheese from coffee table | `pick cream_cheese_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | 🟡 8/10 |
-| 1 | Place down cream cheese into white storage box placed at bottom side | `in cream_cheese_1 white_storage_box_1_bottom_side` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | 🟡 8/10 |
-| 2 | Pick up popcorn from coffee table | `pick popcorn_1` | ✅ | ✅ | 🟡 9/10 | 🟡 9/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 |
-| 3 | Place down popcorn into white storage box placed at right side | `in popcorn_1 white_storage_box_1_right_side` | ❌ | ❌ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | 🟡 9/10 |
-| 4 | Pick up butter from coffee table | `pick butter_1` | ✅ | ❌ | 🟡 8/10 | 🟡 9/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 5 | Place down butter into white storage box placed at left side | `in butter_1 white_storage_box_1_left_side` | ❌ | ❌ | 🟡 9/10 | 🟡 9/10 | 🟡 8/10 | 🟡 8/10 | 🟡 8/10 | 🟡 6/10 |
+| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) | R12 (A) | R13 (C) | R14 (D) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | Pick up cream cheese from coffee table | `pick cream_cheese_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | 🟡 8/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 1 | Place down cream cheese into white storage box placed at bottom side | `in cream_cheese_1 white_storage_box_1_bottom_side` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | 🟡 8/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 2 | Pick up popcorn from coffee table | `pick popcorn_1` | ✅ | ✅ | 🟡 9/10 | 🟡 9/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | 🟡 9/10 | ✅ 10/10 | ✅ 10/10 |
+| 3 | Place down popcorn into white storage box placed at right side | `in popcorn_1 white_storage_box_1_right_side` | ❌ | ❌ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 4 | Pick up butter from coffee table | `pick butter_1` | ✅ | ❌ | 🟡 8/10 | 🟡 9/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | ✅ 10/10 |
+| 5 | Place down butter into white storage box placed at left side | `in butter_1 white_storage_box_1_left_side` | ❌ | ❌ | 🟡 9/10 | 🟡 9/10 | 🟡 8/10 | 🟡 8/10 | 🟡 8/10 | 🟡 6/10 | 🟡 9/10 | 🟡 3/10 | 🟡 3/10 |
 
 Scene export (R2): 10 collision shapes (worst 5e-10 m off), 7 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.6 cm, a test plan for its layout found in 0.00 s. Regions not exported: `white_storage_box_1_right_side`, `white_storage_box_1_left_side`.
 
@@ -147,12 +149,12 @@ Grasp handles (R3): 14 on its 4 objects.
 
 > Place the cream cheese into the white storage box and place the frypan onto the rack
 
-| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 0 | Pick up the cream cheese from the coffee table. | `pick cream_cheese_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 2/10 |
-| 1 | Place the cream cheese into the white storage box at top side | `in cream_cheese_1 white_storage_box_1_top_side` | ❌ | ❌ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 2/10 |
-| 2 | Pick the frypan from the coffee table | `pick chefmate_8_frypan_1` | ❌ | ❌ | 🟡 1/10 | ✅ 10/10 | 🟡 5/10 | 🟡 9/10 | ✅ 10/10 | ✅ 10/10 |
-| 3 | Place the frypan onto the rack | `on chefmate_8_frypan_1 rack_1` | ❌ | ❌ | – | – | – | ❌ 0/10 | 🟡 8/10 | ✅ 10/10 |
+| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) | R12 (A) | R13 (C) | R14 (D) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | Pick up the cream cheese from the coffee table. | `pick cream_cheese_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 2/10 | ✅ 10/10 | ✅ 10/10 | 🟡 8/10 |
+| 1 | Place the cream cheese into the white storage box at top side | `in cream_cheese_1 white_storage_box_1_top_side` | ❌ | ❌ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 2/10 | ✅ 10/10 | ✅ 10/10 | 🟡 8/10 |
+| 2 | Pick the frypan from the coffee table | `pick chefmate_8_frypan_1` | ❌ | ❌ | 🟡 1/10 | ✅ 10/10 | 🟡 5/10 | 🟡 9/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 3 | Place the frypan onto the rack | `on chefmate_8_frypan_1 rack_1` | ❌ | ❌ | – | – | – | ❌ 0/10 | 🟡 8/10 | ✅ 10/10 | ✅ 10/10 | 🟡 8/10 | 🟡 9/10 |
 
 Rollout videos (seed 0): [row C](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/C_Ideal_case2.mp4), [row D](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/D_Ideal_case2.mp4); all on the [gallery page](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/index.html).
 
@@ -164,18 +166,18 @@ Grasp handles (R3): 25 on its 5 objects.
 
 > Place the plates neatly between the knife and fork, and pour all the snacks and drinks into the plates.
 
-| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 0 | Pick up the plate from coffee table | `pick plate_1` | ❌ | ❌ | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 |
-| 1 | Place the plate on dining set group | `in plate_1 coffee_table_table_region` | ❌ | ✅ | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 |
-| 2 | Pick up the popcorn from dining set group | `pick popcorn_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 3 | Place the popcorn on the plate | `pour popcorn_1 plate_1` | ✅ | ✅ | – | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 4 | Place the popcorn on dining set group | `in popcorn_1 coffee_table_table_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ✅ 10/10 | ❌ 0/10 |
-| 5 | Pick up the cookies from dining set group | `pick cookies_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 6 | Place the cookies on the plate | `pour cookies_1 plate_1` | ✅ | ✅ | – | ✅ 10/10 | 🟡 1/10 | ❌ 0/10 | 🟡 1/10 | ❌ 0/10 |
-| 7 | Place the cookies on the dining set group | `in cookies_1 coffee_table_table_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 |
-| 8 | Pick up the wine bottle from dining set group | `pick wine_bottle_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 9 | Pour out the wine bottle onto the plate | `pour wine_bottle_1 plate_1` | ✅ | ✅ | – | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) | R12 (A) | R13 (C) | R14 (D) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | Pick up the plate from coffee table | `pick plate_1` | ❌ | ❌ | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 |
+| 1 | Place the plate on dining set group | `in plate_1 coffee_table_table_region` | ❌ | ✅ | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ✅ 10/10 | ❌ 0/10 | ❌ 0/10 |
+| 2 | Pick up the popcorn from dining set group | `pick popcorn_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 8/10 |
+| 3 | Place the popcorn on the plate | `pour popcorn_1 plate_1` | ✅ | ✅ | – | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 7/10 |
+| 4 | Place the popcorn on dining set group | `in popcorn_1 coffee_table_table_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ✅ 10/10 | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 | 🟡 2/10 |
+| 5 | Pick up the cookies from dining set group | `pick cookies_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 8/10 |
+| 6 | Place the cookies on the plate | `pour cookies_1 plate_1` | ✅ | ✅ | – | ✅ 10/10 | 🟡 1/10 | ❌ 0/10 | 🟡 1/10 | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 |
+| 7 | Place the cookies on the dining set group | `in cookies_1 coffee_table_table_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 |
+| 8 | Pick up the wine bottle from dining set group | `pick wine_bottle_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 8/10 | 🟡 6/10 | 🟡 5/10 |
+| 9 | Pour out the wine bottle onto the plate | `pour wine_bottle_1 plate_1` | ✅ | ✅ | – | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 8/10 | 🟡 2/10 | ❌ 0/10 |
 
 Scene export (R2): 55 collision shapes (worst 5e-10 m off), 6 contact surfaces, 19 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm, a test plan for its layout found in 0.01 s.
 
@@ -183,14 +185,14 @@ Scene export (R2): 55 collision shapes (worst 5e-10 m off), 6 contact surfaces, 
 
 > Clean up the desk by putting the two boxes in the bowl and place the frying pan onto the cabinet.
 
-| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 0 | Pick up cream cheese from coffee table | `pick cream_cheese_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 1 | Place cream cheese into white bowl | `pour cream_cheese_1 white_bowl_1` | ❌ | ❌ | – | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 2 | Pick up popcorn from coffee table | `pick popcorn_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 3 | Place popcorn into white bowl | `pour popcorn_1 white_bowl_1` | ❌ | ❌ | – | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 4 | Pick up frypan from coffee table | `pick chefmate_8_frypan_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 5 | Place frypan on wooden cabinet top side | `in chefmate_8_frypan_1 wooden_cabinet_1_top_side` | ✅ | ✅ | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 |
+| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) | R12 (A) | R13 (C) | R14 (D) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | Pick up cream cheese from coffee table | `pick cream_cheese_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 1 | Place cream cheese into white bowl | `pour cream_cheese_1 white_bowl_1` | ❌ | ❌ | – | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 2 | Pick up popcorn from coffee table | `pick popcorn_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 3 | Place popcorn into white bowl | `pour popcorn_1 white_bowl_1` | ❌ | ❌ | – | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 4 | Pick up frypan from coffee table | `pick chefmate_8_frypan_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 5 | Place frypan on wooden cabinet top side | `in chefmate_8_frypan_1 wooden_cabinet_1_top_side` | ✅ | ✅ | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
 
 Scene export (R2): 116 collision shapes (worst 2e-10 m off), 10 contact surfaces, 11 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm, a test plan for its layout found in 0.02 s.
 
@@ -200,14 +202,14 @@ Grasp handles (R3): 20 on its 5 objects.
 
 > Prepare a snack tray with chocolate pudding and wine in the plate.
 
-| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 0 | Pick up the chocolate pudding from wooden cabinet top side | `pick chocolate_pudding_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | ✅ 10/10 |
-| 1 | Place the chocolate pudding on the plate | `pour chocolate_pudding_1 plate_1` | ✅ | ✅ | – | ✅ 10/10 | ❌ 0/10 | 🟡 1/10 | ❌ 0/10 | ❌ 0/10 |
-| 2 | Place the chocolate pudding on the coffee table | `in chocolate_pudding_1 coffee_table_table_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 |
-| 3 | Pick up the wine bottle from coffee table | `pick wine_bottle_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | 🟡 2/10 | 🟡 6/10 | 🟡 2/10 | ❌ 0/10 |
-| 4 | Pour out wine from the wine bottle onto the plate | `pour wine_bottle_1 plate_1` | ✅ | ✅ | – | ✅ 10/10 | 🟡 2/10 | 🟡 6/10 | 🟡 2/10 | ❌ 0/10 |
-| 5 | Place the wine bottle on the coffee table | `in wine_bottle_1 coffee_table_table_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | 🟡 1/10 | ❌ 0/10 | 🟡 1/10 | ❌ 0/10 |
+| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) | R12 (A) | R13 (C) | R14 (D) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | Pick up the chocolate pudding from wooden cabinet top side | `pick chocolate_pudding_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 1 | Place the chocolate pudding on the plate | `pour chocolate_pudding_1 plate_1` | ✅ | ✅ | – | ✅ 10/10 | ❌ 0/10 | 🟡 1/10 | ❌ 0/10 | ❌ 0/10 | ✅ 10/10 | ❌ 0/10 | ❌ 0/10 |
+| 2 | Place the chocolate pudding on the coffee table | `in chocolate_pudding_1 coffee_table_table_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ✅ 10/10 | ❌ 0/10 | ❌ 0/10 |
+| 3 | Pick up the wine bottle from coffee table | `pick wine_bottle_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | 🟡 2/10 | 🟡 6/10 | 🟡 2/10 | ❌ 0/10 | ✅ 10/10 | 🟡 7/10 | ✅ 10/10 |
+| 4 | Pour out wine from the wine bottle onto the plate | `pour wine_bottle_1 plate_1` | ✅ | ✅ | – | ✅ 10/10 | 🟡 2/10 | 🟡 6/10 | 🟡 2/10 | ❌ 0/10 | ✅ 10/10 | 🟡 7/10 | ✅ 10/10 |
+| 5 | Place the wine bottle on the coffee table | `in wine_bottle_1 coffee_table_table_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | 🟡 1/10 | ❌ 0/10 | 🟡 1/10 | ❌ 0/10 | ✅ 10/10 | 🟡 7/10 | ✅ 10/10 |
 
 Scene export (R2): 82 collision shapes (worst 5e-10 m off), 9 contact surfaces, 12 resting contacts as MuJoCo has them (0 disagree), robot clear by 7.4 cm.
 
@@ -217,100 +219,96 @@ Grasp handles (R3): 24 on its 4 objects.
 
 > Place the butter into the short cabinet and pour the tomato sauce into the plate.
 
-| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 0 | Open the short cabinet in middle region | `open short_cabinet_1_middle_region` | ✅ | ✅ | – | – | – | ❌ 0/10 | – | ❌ 0/10 |
-| 1 | Pick up the butter from coffee table | `pick butter_1` | ✅ | ✅ | 🟡 4/10 | 🟡 4/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 |
-| 2 | Place down the butter into the short cabinet in middle region | `in butter_1 short_cabinet_1_middle_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 |
-| 3 | Pick up the tomato sauce from coffee table | `pick tomato_sauce_1` | ✅ | ✅ | 🟡 7/10 | 🟡 8/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 4 | Pour out the tomato sauce onto the plate | `pour tomato_sauce_1 plate_1` | ✅ | ✅ | – | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | 🟡 9/10 |
-| 5 | Place the tomato sauce on the coffee table | `in tomato_sauce_1 coffee_table_table_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | 🟡 9/10 |
+| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) | R12 (A) | R13 (C) | R14 (D) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | Open the short cabinet in middle region | `open short_cabinet_1_middle_region` | ✅ | ✅ | – | – | – | ❌ 0/10 | – | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 1 | Pick up the butter from coffee table | `pick butter_1` | ✅ | ✅ | 🟡 4/10 | 🟡 4/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | 🟡 4/10 | ✅ 10/10 | 🟡 9/10 |
+| 2 | Place down the butter into the short cabinet in middle region | `in butter_1 short_cabinet_1_middle_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ✅ 10/10 | 🟡 8/10 | 🟡 6/10 |
+| 3 | Pick up the tomato sauce from coffee table | `pick tomato_sauce_1` | ✅ | ✅ | 🟡 7/10 | 🟡 8/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 8/10 | ✅ 10/10 | ✅ 10/10 |
+| 4 | Pour out the tomato sauce onto the plate | `pour tomato_sauce_1 plate_1` | ✅ | ✅ | – | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 5 | Place the tomato sauce on the coffee table | `in tomato_sauce_1 coffee_table_table_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 |
+
+Rollout videos (seed 0): [row C](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/C_Ideal_case6.mp4), [row D](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/D_Ideal_case6.mp4); all on the [gallery page](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/index.html).
 
 Scene export (R2): 74 collision shapes (worst 6e-10 m off), 8 contact surfaces, 16 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm, a test plan for its layout found in 0.01 s.
-
-Step 0 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 ### Ideal/case7
 
 > Place the boxes of chocolate pudding and butter into a bowl and heat the pan.
 
-| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 0 | Pick up chocolate pudding from coffee table | `pick chocolate_pudding_1` | ✅ | ✅ | 🟡 9/10 | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 |
-| 1 | Place chocolate pudding into akita black bowl | `pour chocolate_pudding_1 akita_black_bowl_1` | ❌ | ❌ | – | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 |
-| 2 | Pick up butter from coffee table | `pick butter_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 3 | Place butter into akita black bowl | `pour butter_1 akita_black_bowl_1` | ❌ | ❌ | – | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 4 | Turn on flat stove in cook region | `turnon flat_stove_1` | ✅ | ✅ | – | – | – | ❌ 0/10 | – | ❌ 0/10 |
-| 5 | Pick up frypan from coffee table | `pick chefmate_8_frypan_1` | ❌ | ❌ | 🟡 5/10 | 🟡 4/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 6 | Place frypan on flat stove in cook region | `in chefmate_8_frypan_1 flat_stove_1_cook_region` | ❌ | ✅ | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 |
+| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) | R12 (A) | R13 (C) | R14 (D) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | Pick up chocolate pudding from coffee table | `pick chocolate_pudding_1` | ✅ | ✅ | 🟡 9/10 | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 1 | Place chocolate pudding into akita black bowl | `pour chocolate_pudding_1 akita_black_bowl_1` | ❌ | ❌ | – | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 2 | Pick up butter from coffee table | `pick butter_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 3 | Place butter into akita black bowl | `pour butter_1 akita_black_bowl_1` | ❌ | ❌ | – | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 4 | Turn on flat stove in cook region | `turnon flat_stove_1` | ✅ | ✅ | – | – | – | ❌ 0/10 | – | ❌ 0/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 |
+| 5 | Pick up frypan from coffee table | `pick chefmate_8_frypan_1` | ❌ | ❌ | 🟡 5/10 | 🟡 4/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 6/10 | ✅ 10/10 |
+| 6 | Place frypan on flat stove in cook region | `in chefmate_8_frypan_1 flat_stove_1_cook_region` | ❌ | ✅ | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 6/10 | ✅ 10/10 |
 
 Rollout videos (seed 0): [row C](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/C_Ideal_case7.mp4), [row D](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/D_Ideal_case7.mp4); all on the [gallery page](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/index.html).
 
 Scene export (R2): 127 collision shapes (worst 5e-10 m off), 7 contact surfaces, 10 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm, a test plan for its layout found in 0.03 s.
 
-Step 4 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 ### Ideal/case8
 
 > Place the cream cheese into the short cabinet, the chocolate pudding into the bowl, and pour a glass of wine.
 
-| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 0 | Open the short cabinet middle region | `open short_cabinet_1_middle_region` | ✅ | ✅ | – | – | – | ❌ 0/10 | – | ❌ 0/10 |
-| 1 | Pick up the cream cheese from coffee table | `pick cream_cheese_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 |
-| 2 | Place down the cream cheese into short cabinet middle region | `in cream_cheese_1 short_cabinet_1_middle_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 |
-| 3 | Pick up the chocolate pudding from coffee table | `pick chocolate_pudding_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 8/10 | ✅ 10/10 | ✅ 10/10 |
-| 4 | Place down the chocolate pudding into akita black bowl | `pour chocolate_pudding_1 akita_black_bowl_1` | ✅ | ✅ | – | ✅ 10/10 | ✅ 10/10 | 🟡 8/10 | ✅ 10/10 | ✅ 10/10 |
-| 5 | Pick up the wine bottle from coffee table | `pick wine_bottle_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 6 | Pour out the contents of wine bottle into white yellow mug | `pour wine_bottle_1 white_yellow_mug_1` | ✅ | ✅ | – | ✅ 10/10 | ❌ 0/10 | ✅ 10/10 | ❌ 0/10 | ✅ 10/10 |
+| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) | R12 (A) | R13 (C) | R14 (D) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | Open the short cabinet middle region | `open short_cabinet_1_middle_region` | ✅ | ✅ | – | – | – | ❌ 0/10 | – | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 1 | Pick up the cream cheese from coffee table | `pick cream_cheese_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 2 | Place down the cream cheese into short cabinet middle region | `in cream_cheese_1 short_cabinet_1_middle_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 3 | Pick up the chocolate pudding from coffee table | `pick chocolate_pudding_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 8/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 5/10 |
+| 4 | Place down the chocolate pudding into akita black bowl | `pour chocolate_pudding_1 akita_black_bowl_1` | ✅ | ✅ | – | ✅ 10/10 | ✅ 10/10 | 🟡 8/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 5/10 |
+| 5 | Pick up the wine bottle from coffee table | `pick wine_bottle_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 6 | Pour out the contents of wine bottle into white yellow mug | `pour wine_bottle_1 white_yellow_mug_1` | ✅ | ✅ | – | ✅ 10/10 | ❌ 0/10 | ✅ 10/10 | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
 
 Rollout videos (seed 0): [row C](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/C_Ideal_case8.mp4), [row D](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/D_Ideal_case8.mp4); all on the [gallery page](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/index.html).
 
 Scene export (R2): 141 collision shapes (worst 5e-10 m off), 10 contact surfaces, 21 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.6 cm.
 
-Step 0 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 ### Ideal/case9
 
 > Place the chocolate pudding and cookies into a bowl and microwave it.
 
-| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 0 | Pick up the white bowl from the wooden cabinet at top side | `pick white_bowl_1` | ✅ | ❌ | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 1 | Place down the white bowl on the coffee table | `in white_bowl_1 coffee_table_table_region` | ❌ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 2 | Pick up the cookies from the coffee table | `pick cookies_1` | ✅ | ❌ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 3 | Place down the cookies into the white bowl | `pour cookies_1 white_bowl_1` | ✅ | ✅ | – | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 4 | Place the cookies on the coffee table | `in cookies_1 coffee_table_table_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 8/10 | ✅ 10/10 | 🟡 7/10 |
-| 5 | Pick up the chocolate pudding from the coffee table | `pick chocolate_pudding_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 6 | Place down the chocolate pudding into the white bowl | `pour chocolate_pudding_1 white_bowl_1` | ✅ | ✅ | – | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 7 | Place the chocolate pudding on the coffee table | `in chocolate_pudding_1 coffee_table_table_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 |
-| 8 | Open the microwave | `open microwave_1` | ❌ | ✅ | – | – | – | ❌ 0/10 | – | ❌ 0/10 |
-| 9 | Pick up the white bowl from the coffee table | `pick white_bowl_1` | ❌ | ✅ | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ✅ 10/10 | ❌ 0/10 | ✅ 10/10 |
-| 10 | Place the white bowl into the microwave | `in white_bowl_1 microwave_1_heating_region` | ❌ | ✅ | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 |
+| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) | R12 (A) | R13 (C) | R14 (D) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | Pick up the white bowl from the wooden cabinet at top side | `pick white_bowl_1` | ✅ | ❌ | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | 🟡 9/10 | ✅ 10/10 |
+| 1 | Place down the white bowl on the coffee table | `in white_bowl_1 coffee_table_table_region` | ❌ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 |
+| 2 | Pick up the cookies from the coffee table | `pick cookies_1` | ✅ | ❌ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 7/10 |
+| 3 | Place down the cookies into the white bowl | `pour cookies_1 white_bowl_1` | ✅ | ✅ | – | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 5/10 |
+| 4 | Place the cookies on the coffee table | `in cookies_1 coffee_table_table_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 8/10 | ✅ 10/10 | 🟡 7/10 | ✅ 10/10 | ✅ 10/10 | 🟡 5/10 |
+| 5 | Pick up the chocolate pudding from the coffee table | `pick chocolate_pudding_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 8/10 |
+| 6 | Place down the chocolate pudding into the white bowl | `pour chocolate_pudding_1 white_bowl_1` | ✅ | ✅ | – | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 5/10 |
+| 7 | Place the chocolate pudding on the coffee table | `in chocolate_pudding_1 coffee_table_table_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | 🟡 2/10 |
+| 8 | Open the microwave | `open microwave_1` | ❌ | ✅ | – | – | – | ❌ 0/10 | – | ❌ 0/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 |
+| 9 | Pick up the white bowl from the coffee table | `pick white_bowl_1` | ❌ | ✅ | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ✅ 10/10 | ❌ 0/10 | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ✅ 10/10 |
+| 10 | Place the white bowl into the microwave | `in white_bowl_1 microwave_1_heating_region` | ❌ | ✅ | ✅ 10/10 | ✅ 10/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | ✅ 10/10 | ❌ 0/10 | 🟡 5/10 |
+
+Rollout videos (seed 0): [row C](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/C_Ideal_case9.mp4), [row D](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/D_Ideal_case9.mp4); all on the [gallery page](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/index.html).
 
 Scene export (R2): 93 collision shapes (worst 7e-10 m off), 11 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm, a test plan for its layout found in 0.02 s.
-
-Step 8 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 ### Ideal/case10
 
 > Place the cookies into the basket, pour the tomato sauce and BBQ sauce into the frying pan, pour the wine into the red coffee mug, and place the white-yellow mug into the wooden tray.
 
-| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 0 | Pick up the cookies from the coffee table | `pick cookies_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 1 | Place down the cookies into basket in contain region | `in cookies_1 basket_1_contain_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
-| 2 | Pick up the tomato sauce from coffee table | `pick tomato_sauce_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 6/10 | ✅ 10/10 | 🟡 8/10 |
-| 3 | Pour out the tomato sauce onto frypan | `pour tomato_sauce_1 chefmate_8_frypan_1` | ✅ | ✅ | – | ✅ 10/10 | ❌ 0/10 | 🟡 6/10 | ❌ 0/10 | 🟡 8/10 |
-| 4 | Place the tomato sauce on the coffee table | `in tomato_sauce_1 coffee_table_table_region` | ✅ | ✅ | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | 🟡 4/10 | ❌ 0/10 | 🟡 3/10 |
-| 5 | Pick up the bbq sauce from the coffee table | `pick bbq_sauce_1` | ✅ | ❌ | ❌ 0/10 | ❌ 0/10 | 🟡 7/10 | 🟡 8/10 | 🟡 7/10 | ✅ 10/10 |
-| 6 | Pour out the bbq sauce onto frypan | `pour bbq_sauce_1 chefmate_8_frypan_1` | ✅ | ✅ | – | ✅ 10/10 | 🟡 7/10 | 🟡 8/10 | 🟡 7/10 | ✅ 10/10 |
-| 7 | Place the bbq sauce sauce on the coffee table | `in bbq_sauce_1 coffee_table_table_region` | ❌ | ❌ | ❌ 0/10 | ❌ 0/10 | 🟡 2/10 | ❌ 0/10 | 🟡 2/10 | ❌ 0/10 |
-| 8 | Pick up the wine from coffee table | `pick wine_bottle_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | 🟡 5/10 | 🟡 5/10 | 🟡 5/10 | 🟡 8/10 |
-| 9 | Pour out the wine from wine bottle into red coffee mug | `pour wine_bottle_1 red_coffee_mug_1` | ✅ | ✅ | – | ✅ 10/10 | 🟡 5/10 | 🟡 5/10 | 🟡 5/10 | 🟡 8/10 |
-| 10 | Place down the wine onto coffee table | `in wine_bottle_1 coffee_table_table_region` | ✅ | ✅ | ❌ 0/10 | ❌ 0/10 | 🟡 4/10 | 🟡 5/10 | 🟡 3/10 | 🟡 8/10 |
-| 11 | Pick up the white yellow mug from coffee table | `pick white_yellow_mug_1` | ❌ | ❌ | ✅ 10/10 | ✅ 10/10 | 🟡 2/10 | ✅ 10/10 | 🟡 2/10 | ✅ 10/10 |
-| 12 | Place down the white yellow mug into wooden tray in contain region | `in white_yellow_mug_1 wooden_tray_1_contain_region` | ❌ | ✅ | ✅ 10/10 | ✅ 10/10 | 🟡 2/10 | ✅ 10/10 | 🟡 2/10 | ✅ 10/10 |
+| # | Step | Checked as | R1 demo | R1 resume(k) | R4 (A) | R5 (A) | R8 (C) | R9 (D) | R10 (C) | R11 (D) | R12 (A) | R13 (C) | R14 (D) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | Pick up the cookies from the coffee table | `pick cookies_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 1 | Place down the cookies into basket in contain region | `in cookies_1 basket_1_contain_region` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 2 | Pick up the tomato sauce from coffee table | `pick tomato_sauce_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 | 🟡 6/10 | ✅ 10/10 | 🟡 8/10 | 🟡 9/10 | ✅ 10/10 | ✅ 10/10 |
+| 3 | Pour out the tomato sauce onto frypan | `pour tomato_sauce_1 chefmate_8_frypan_1` | ✅ | ✅ | – | ✅ 10/10 | ❌ 0/10 | 🟡 6/10 | ❌ 0/10 | 🟡 8/10 | ✅ 10/10 | ❌ 0/10 | 🟡 8/10 |
+| 4 | Place the tomato sauce on the coffee table | `in tomato_sauce_1 coffee_table_table_region` | ✅ | ✅ | ❌ 0/10 | ❌ 0/10 | ❌ 0/10 | 🟡 4/10 | ❌ 0/10 | 🟡 3/10 | ✅ 10/10 | ❌ 0/10 | 🟡 4/10 |
+| 5 | Pick up the bbq sauce from the coffee table | `pick bbq_sauce_1` | ✅ | ❌ | ❌ 0/10 | ❌ 0/10 | 🟡 7/10 | 🟡 8/10 | 🟡 7/10 | ✅ 10/10 | ❌ 0/10 | 🟡 9/10 | 🟡 7/10 |
+| 6 | Pour out the bbq sauce onto frypan | `pour bbq_sauce_1 chefmate_8_frypan_1` | ✅ | ✅ | – | ✅ 10/10 | 🟡 7/10 | 🟡 8/10 | 🟡 7/10 | ✅ 10/10 | ✅ 10/10 | 🟡 8/10 | 🟡 7/10 |
+| 7 | Place the bbq sauce sauce on the coffee table | `in bbq_sauce_1 coffee_table_table_region` | ❌ | ❌ | ❌ 0/10 | ❌ 0/10 | 🟡 2/10 | ❌ 0/10 | 🟡 2/10 | ❌ 0/10 | ❌ 0/10 | 🟡 8/10 | 🟡 3/10 |
+| 8 | Pick up the wine from coffee table | `pick wine_bottle_1` | ✅ | ✅ | ✅ 10/10 | ✅ 10/10 | 🟡 5/10 | 🟡 5/10 | 🟡 5/10 | 🟡 8/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 9 | Pour out the wine from wine bottle into red coffee mug | `pour wine_bottle_1 red_coffee_mug_1` | ✅ | ✅ | – | ✅ 10/10 | 🟡 5/10 | 🟡 5/10 | 🟡 5/10 | 🟡 8/10 | ✅ 10/10 | ✅ 10/10 | ✅ 10/10 |
+| 10 | Place down the wine onto coffee table | `in wine_bottle_1 coffee_table_table_region` | ✅ | ✅ | ❌ 0/10 | ❌ 0/10 | 🟡 4/10 | 🟡 5/10 | 🟡 3/10 | 🟡 8/10 | ✅ 10/10 | 🟡 3/10 | ✅ 10/10 |
+| 11 | Pick up the white yellow mug from coffee table | `pick white_yellow_mug_1` | ❌ | ❌ | ✅ 10/10 | ✅ 10/10 | 🟡 2/10 | ✅ 10/10 | 🟡 2/10 | ✅ 10/10 | ✅ 10/10 | 🟡 9/10 | ✅ 10/10 |
+| 12 | Place down the white yellow mug into wooden tray in contain region | `in white_yellow_mug_1 wooden_tray_1_contain_region` | ❌ | ✅ | ✅ 10/10 | ✅ 10/10 | 🟡 2/10 | ✅ 10/10 | 🟡 2/10 | ✅ 10/10 | ✅ 10/10 | 🟡 8/10 | ✅ 10/10 |
 
 Scene export (R2): 171 collision shapes (worst 2e-16 m off), 11 contact surfaces, 48 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm, a test plan for its layout found in 0.03 s. Regions not exported: `basket_1_contain_region`.
 
@@ -337,8 +335,6 @@ Rollout videos (seed 0): [row C](https://github.com/thanhndv212/long-tamp/blob/m
 
 Scene export (R2): 78 collision shapes (worst 6e-10 m off), 10 contact surfaces, 11 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm, a test plan for its layout found in 0.02 s. Regions not exported: `bowl_drainer_1_left_region`, `bowl_drainer_1_right_region`.
 
-Step 7 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Execution/case2
@@ -357,8 +353,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 | 7 | Open the wooden cabinet top region | `open wooden_cabinet_1_top_region` |
 
 Scene export (R2): 79 collision shapes (worst 6e-10 m off), 11 contact surfaces, 12 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm. Regions not exported: `bowl_drainer_1_left_region`, `bowl_drainer_1_right_region`.
-
-Step 7 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
@@ -381,8 +375,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 
 Scene export (R2): 79 collision shapes (worst 7e-10 m off), 11 contact surfaces, 12 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm. Regions not exported: `bowl_drainer_1_left_region`, `bowl_drainer_1_right_region`.
 
-Step 7 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Execution/case4
@@ -402,8 +394,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 
 Scene export (R2): 70 collision shapes (worst 9e-10 m off), 13 contact surfaces, 18 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.9 cm, a test plan for its layout found in 0.01 s.
 
-Step 5 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Execution/case5
@@ -421,8 +411,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 | 6 | Open the wooden cabinet top region | `open wooden_cabinet_1_top_region` |
 
 Scene export (R2): 82 collision shapes (worst 5e-10 m off), 9 contact surfaces, 12 resting contacts as MuJoCo has them (0 disagree), robot clear by 7.9 cm.
-
-Step 6 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
@@ -447,8 +435,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 
 Scene export (R2): 93 collision shapes (worst 6e-10 m off), 11 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Steps 8, 11 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Execution/case7
@@ -471,8 +457,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 | 11 | Open the top region of the wooden cabinet | `open wooden_cabinet_1_top_region` |
 
 Scene export (R2): 94 collision shapes (worst 8e-10 m off), 12 contact surfaces, 5 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
-
-Steps 8, 11 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
@@ -498,8 +482,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 | 13 | Open the top region of the white cabinet | `open white_cabinet_1_top_region` |
 
 Scene export (R2): 174 collision shapes (worst 6e-10 m off), 13 contact surfaces, 24 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
-
-Steps 7, 13 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
@@ -528,8 +510,6 @@ Scene export (R2): 175 collision shapes (worst 7e-10 m off), 14 contact surfaces
 
 Grasp handles (R3): 42 on its 7 objects.
 
-Steps 7, 13 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Execution/case10
@@ -555,8 +535,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 
 Scene export (R2): 175 collision shapes (worst 9e-10 m off), 14 contact surfaces, 33 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm, a test plan for its layout found in 0.04 s.
 
-Steps 7, 11 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ## Memory Exploration
@@ -580,9 +558,9 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 | 10 | Pick up the plate from the kitchen table | `pick plate_1` |
 | 11 | Place the plate into the wooden shelf top side | `in plate_1 wooden_shelf_1_top_side` |
 
-Scene export (R2): 70 collision shapes (worst 8e-10 m off), 13 contact surfaces, 18 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.9 cm.
+Rollout videos (seed 0): [row A](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/video/A_Memory_Exploration_case1.mp4); all on the [gallery page](https://github.com/thanhndv212/long-tamp/blob/main/script/robocerebra/results/rollout-gallery/index.html).
 
-Steps 0, 1, 2, 3, 4 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
+Scene export (R2): 70 collision shapes (worst 8e-10 m off), 13 contact surfaces, 18 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.9 cm.
 
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
@@ -604,8 +582,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 | 9 | Place the plate on the wooden shelf top side | `in plate_1 wooden_shelf_1_top_side` |
 
 Scene export (R2): 70 collision shapes (worst 7e-10 m off), 13 contact surfaces, 18 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.9 cm.
-
-Steps 0, 1, 2 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
@@ -632,8 +608,6 @@ Scene export (R2): 146 collision shapes (worst 6e-10 m off), 10 contact surfaces
 
 Grasp handles (R3): 30 on its 5 objects.
 
-Steps 0, 1, 2, 8 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Exploration/case4
@@ -654,8 +628,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 | 9 | Place the wine bottle on the coffee table | `in wine_bottle_1 coffee_table_table_region` |
 
 Scene export (R2): 146 collision shapes (worst 5e-10 m off), 10 contact surfaces, 16 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.6 cm.
-
-Steps 0, 6 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
@@ -682,8 +654,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 
 Scene export (R2): 146 collision shapes (worst 5e-10 m off), 10 contact surfaces, 16 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Steps 0, 1, 2, 3, 4, 10 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Exploration/case6
@@ -709,8 +679,6 @@ Scene export (R2): 83 collision shapes (worst 5e-10 m off), 11 contact surfaces,
 
 Grasp handles (R3): 36 on its 6 objects.
 
-Steps 0, 1, 2 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Exploration/case7
@@ -731,8 +699,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 | 9 | Place the orange juice back on the coffee table. | `in orange_juice_1 coffee_table_table_region` |
 
 Scene export (R2): 83 collision shapes (worst 4e-10 m off), 11 contact surfaces, 12 resting contacts as MuJoCo has them (0 disagree), robot clear by 7.9 cm.
-
-Step 0 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
@@ -760,8 +726,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 
 Scene export (R2): 93 collision shapes (worst 8e-10 m off), 11 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Steps 0, 1, 2, 3, 4 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Exploration/case9
@@ -786,8 +750,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 
 Scene export (R2): 93 collision shapes (worst 8e-10 m off), 11 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Steps 0, 1, 2 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Memory_Exploration/case10
@@ -809,8 +771,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 | 10 | Place the white bowl onto the top side of wooden cabinet | `in white_bowl_1 wooden_cabinet_1_top_side` |
 
 Scene export (R2): 93 collision shapes (worst 8e-10 m off), 11 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
-
-Step 0 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
@@ -837,8 +797,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 
 Scene export (R2): 70 collision shapes (worst 9e-10 m off), 13 contact surfaces, 18 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.9 cm.
 
-Steps 0, 1, 2, 3, 4 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Mix/case2
@@ -859,8 +817,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 | 9 | Place the wine bottle on the coffee table | `in wine_bottle_1 coffee_table_table_region` |
 
 Scene export (R2): 146 collision shapes (worst 4e-10 m off), 10 contact surfaces, 16 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
-
-Steps 0, 6 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
@@ -885,8 +841,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 
 Scene export (R2): 83 collision shapes (worst 2e-10 m off), 11 contact surfaces, 12 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.0 cm.
 
-Steps 0, 1, 2 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Mix/case4
@@ -909,8 +863,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 | 11 | Open the top region of the wooden cabinet | `open wooden_cabinet_1_top_region` |
 
 Scene export (R2): 93 collision shapes (worst 5e-10 m off), 11 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
-
-Steps 8, 11 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
@@ -937,8 +889,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 
 Scene export (R2): 175 collision shapes (worst 8e-10 m off), 14 contact surfaces, 33 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Steps 7, 11 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Mix/case6
@@ -960,8 +910,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 
 Scene export (R2): 70 collision shapes (worst 6e-10 m off), 13 contact surfaces, 18 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.9 cm.
 
-Steps 0, 1, 2 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Mix/case7
@@ -981,8 +929,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 
 Scene export (R2): 78 collision shapes (worst 7e-10 m off), 10 contact surfaces, 11 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm. Regions not exported: `bowl_drainer_1_left_region`, `bowl_drainer_1_right_region`.
 
-Step 7 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Mix/case8
@@ -1001,8 +947,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 | 7 | Open the wooden cabinet top region | `open wooden_cabinet_1_top_region` |
 
 Scene export (R2): 79 collision shapes (worst 8e-10 m off), 11 contact surfaces, 12 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm. Regions not exported: `bowl_drainer_1_left_region`, `bowl_drainer_1_right_region`.
-
-Step 7 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
@@ -1024,8 +968,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 | 9 | Place the butter on the coffee table | `in butter_2 coffee_table_table_region` |
 
 Scene export (R2): 79 collision shapes (worst 9e-10 m off), 11 contact surfaces, 12 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm. Regions not exported: `bowl_drainer_1_left_region`, `bowl_drainer_1_right_region`.
-
-Step 7 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
@@ -1050,8 +992,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 | 12 | Place the white bowl into the wooden cabinet at top side | `in white_bowl_1 wooden_cabinet_1_top_side` |
 
 Scene export (R2): 93 collision shapes (worst 8e-10 m off), 11 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
-
-Steps 0, 1, 2 wait on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
@@ -1159,8 +1099,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 
 Scene export (R2): 74 collision shapes (worst 9e-10 m off), 8 contact surfaces, 16 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Step 0 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Observation_Mismatching/case7
@@ -1179,8 +1117,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 
 Scene export (R2): 127 collision shapes (worst 5e-10 m off), 7 contact surfaces, 10 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Step 4 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Observation_Mismatching/case8
@@ -1198,8 +1134,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 | 6 | Pour out the contents of wine bottle into white yellow mug | `pour wine_bottle_1 white_yellow_mug_1` |
 
 Scene export (R2): 141 collision shapes (worst 6e-10 m off), 10 contact surfaces, 21 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.6 cm.
-
-Step 0 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
@@ -1222,8 +1156,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 | 10 | Place the white bowl into the microwave | `in white_bowl_1 microwave_1_heating_region` |
 
 Scene export (R2): 93 collision shapes (worst 5e-10 m off), 11 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
-
-Step 8 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
@@ -1355,8 +1287,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 
 Scene export (R2): 74 collision shapes (worst 8e-10 m off), 8 contact surfaces, 16 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Step 0 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Random_Disturbance/case7
@@ -1375,8 +1305,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 
 Scene export (R2): 127 collision shapes (worst 4e-10 m off), 7 contact surfaces, 10 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
 
-Step 4 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
-
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
 ### Random_Disturbance/case8
@@ -1394,8 +1322,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 | 6 | Pour out the contents of wine bottle into white yellow mug | `pour wine_bottle_1 white_yellow_mug_1` |
 
 Scene export (R2): 141 collision shapes (worst 5e-10 m off), 10 contact surfaces, 21 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.6 cm.
-
-Step 0 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 
@@ -1418,8 +1344,6 @@ Not run by a planner round yet: its condition waits on R7 ([#162](https://github
 | 10 | Place the white bowl into the microwave | `in white_bowl_1 microwave_1_heating_region` |
 
 Scene export (R2): 93 collision shapes (worst 6e-10 m off), 11 contact surfaces, 4 resting contacts as MuJoCo has them (0 disagree), robot clear by 8.8 cm.
-
-Step 8 waits on articulated objects (R6, [#161](https://github.com/thanhndv212/long-tamp/issues/161)).
 
 Not run by a planner round yet: its condition waits on R7 ([#162](https://github.com/thanhndv212/long-tamp/issues/162)).
 

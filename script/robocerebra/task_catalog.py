@@ -38,12 +38,16 @@ ROUNDS = [
     ("R9", "2026-10-30-r9-ideal-hpp-mission.json", "D", "one mission a rollout"),
     ("R10", "2026-10-31-r10-ideal-hpp-continuous.json", "C", "place onto an object"),
     ("R11", "2026-10-31-r11-ideal-hpp-mission.json", "D", "place onto an object"),
+    ("R12", "2026-11-03-r12-ideal-hpp-articulated.json", "A", "adds open/close/turnon"),
+    ("R13", "2026-11-03-r13-ideal-hpp-continuous.json", "C", "adds open/close/turnon"),
+    ("R14", "2026-11-03-r14-ideal-hpp-mission.json", "D", "adds open/close/turnon"),
 ]
 REPLAY = "2026-10-17-r1-replay-ideal-demo.json"
 EXPORT = "2026-10-18-r2-scene-export.json"
 GRASP_LIFT = "2026-11-01-r3-thin-rims.json"
 HANDLES = "2026-10-25-r3-grasp-handles.json"
-# The issue behind each round; R10 and R11 rerun R8 and R9 after #187.
+# The issue behind each round; R10 and R11 rerun R8 and R9 after #187, and
+# R12-R14 run rows A, C and D with R6's articulated objects.
 ISSUES = {
     "R1": 156,
     "R2": 157,
@@ -56,15 +60,12 @@ ISSUES = {
     "R9": 186,
     "R10": 187,
     "R11": 187,
+    "R12": 161,
+    "R13": 161,
+    "R14": 161,
 }
 # Rounds on the roadmap with no results yet: what they add, and what waits on them.
 NOT_RUN = [
-    (
-        "R6",
-        "A, C, D",
-        "articulated objects: drawers, doors, knobs",
-        "the {articulated} steps checked as `open`/`close`/`turnon` ({none} in the tables)",
-    ),
     (
         "R7",
         "A, B",
@@ -76,12 +77,12 @@ NOT_RUN = [
     ),
 ]
 ISSUE_URL = "https://github.com/thanhndv212/long-tamp/issues"
-ARTICULATED = {"open", "close", "turnon"}
 GALLERY = RESULTS / "rollout-gallery"
 GRASP_GALLERY = RESULTS / "r3-grasp-gallery"
 # The mission runner's step verbs for each goal predicate.
 NONE = "\u2013"  # en dash: a step not checked, or not attempted
 VERBS = {"pick": "pick", "on": "place", "in": "place", "pour": "pour"}
+VERBS.update(dict.fromkeys(("open", "close", "turnon"), "actuate"))
 
 
 def dump(out: Path) -> None:
@@ -122,10 +123,18 @@ def step_specs(entry: dict) -> list[list[list[str]]]:
     return specs
 
 
-def _label(spec: list[str]) -> str:
-    """A predicate as the mission runner names its step."""
-    verb = VERBS.get(spec[0], spec[0])
-    return " ".join([verb, *spec[1:]])
+def step_labels(entry: dict) -> list[list[str]]:
+    """Each step's predicates as the mission runner names its steps: an
+    ``actuate`` by the object whose chain it is in, then the fixture."""
+    labels: list[list[str]] = [[] for _ in entry["steps"]]
+    for obj, steps in entry["goal_steps"].items():
+        for index, step in enumerate(steps):
+            if step is not None and 0 <= step < len(labels):
+                spec = entry["goal"][obj][index]
+                verb = VERBS.get(spec[0], spec[0])
+                args = [obj, *spec[1:]] if verb == "actuate" else spec[1:]
+                labels[step].append(" ".join([verb, *args]))
+    return labels
 
 
 def step_tally(record: dict, row: str, entry: dict) -> list:
@@ -137,6 +146,7 @@ def step_tally(record: dict, row: str, entry: dict) -> list:
     succeeded (it may not have registered; the case total is the
     benchmark's)."""
     specs = step_specs(entry)
+    labels = step_labels(entry)
     rollouts = record["rollouts"]
     tally = []
     for index, step in enumerate(specs):
@@ -148,7 +158,7 @@ def step_tally(record: dict, row: str, entry: dict) -> list:
                 tried += 1
                 executions = rollout.get("mission", {}).get("executions", [])
                 succeeded = {e["step"] for e in executions if e["status"] == "success"}
-                done += all(_label(spec) in succeeded for spec in step)
+                done += all(label in succeeded for label in labels[index])
                 continue
             segments = rollout.get("segments", [])
             if index >= len(segments):
@@ -293,7 +303,7 @@ def build(out: Path) -> None:
         "  text, not from the simulator; no round has run it yet (R7).",
         "- **Cells** are rollouts that got the step done over rollouts that tried it",
         f"  (✅ all, 🟡 some, ❌ none, {NONE} not attempted: the predicate is unsupported, e.g.",
-        "  `open`/`turnon` before articulated objects, #161). Row C counts a step done when",
+        "  `open`/`turnon` before R12, #161). Row C counts a step done when",
         "  the benchmark registered it anywhere in the rollout. Row D's per-step cells",
         "  count the mission's execution of the step succeeding, which can be ahead of",
         "  what registered; its case totals are the benchmark's.",
@@ -369,18 +379,15 @@ def build(out: Path) -> None:
             )
         if label in ("R10", "R11"):
             change = f"{'R8' if row == 'C' else 'R9'} rerun: {change}"
+        if label in ("R12", "R13", "R14"):
+            change = f"R6 articulated objects: {change}"
         path = rel(RESULTS / name)
         table.append(
             (label, row, change, f"[`{name}`]({path})", len(data["cases"]), headline)
         )
-    articulated = sum(
-        any(spec[0] in ARTICULATED for spec in step)
-        for entry in catalog.values()
-        for step in step_specs(entry)
-    )
     other = sum(not case.startswith("Ideal/") for case in catalog)
     for label, row, change, waits in NOT_RUN:
-        waits = waits.format(articulated=articulated, other=other, none=NONE)
+        waits = waits.format(other=other)
         table.append((label, row, change, "not run yet", NONE, f"waits on it: {waits}"))
     table.sort(key=lambda r: int(r[0][1:]))
     for label, row, change, results, cases, headline in table:
@@ -434,7 +441,7 @@ def build(out: Path) -> None:
         handled = f"{handled['handles']} on {handled['objects']}" if handled else ""
         videos = ", ".join(
             f"[{row}]({rel(GALLERY / 'video' / video)})"
-            for row in ("C", "D")
+            for row in ("A", "C", "D")
             if (video := _video(row, case))
         )
         anchor = case.lower().replace("/", "").replace("_", "-")
@@ -487,7 +494,7 @@ def build(out: Path) -> None:
             lines += ["", "Predicates with no step: " + ", ".join(unchecked) + "."]
         videos = [
             f"[row {row}]({rel(GALLERY / 'video' / video)})"
-            for row in ("C", "D")
+            for row in ("A", "C", "D")
             if (video := _video(row, case))
         ]
         if videos:
@@ -504,20 +511,6 @@ def build(out: Path) -> None:
             lines += [
                 "",
                 f"Grasp handles (R3): {record['handles']} on its {record['objects']} objects.",
-            ]
-        waiting = [
-            str(index)
-            for index, spec in enumerate(specs)
-            if any(s[0] in ARTICULATED for s in spec)
-        ]
-        if waiting:
-            lines += [
-                "",
-                (
-                    f"Step{'s' * (len(waiting) > 1)} {', '.join(waiting)} wait"
-                    f"{'s' * (len(waiting) == 1)} on articulated objects (R6,"
-                    f" [#161]({ISSUE_URL}/161))."
-                ),
             ]
         if not case.startswith("Ideal/"):
             lines += [
