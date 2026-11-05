@@ -14,6 +14,9 @@ from long_tamp.eval.robocerebra_plan import (
     SegmentPlanner,
     collision_corners,
     collision_samples,
+    footprint,
+    free_spots,
+    object_extent,
     held_object,
     object_corners,
     object_top_region,
@@ -22,6 +25,8 @@ from long_tamp.eval.robocerebra_plan import (
     place_positions,
     pour_positions,
     pour_tilts,
+    region_area,
+    region_occupants,
     square,
     support_faces,
     support_margin,
@@ -271,6 +276,115 @@ def test_place_positions_back_off_along_approach():
         )
         == 3
     )
+
+
+# Ideal/case9's coffee-table region: LIBERO's 4 m square site over a
+# 0.7 m x 1.6 m table face.
+TABLE = {
+    "region": "coffee_table_table_region",
+    "points": [
+        [0.35, -0.74, 0.424],
+        [0.35, 0.86, 0.424],
+        [-0.35, 0.86, 0.424],
+        [-0.35, -0.74, 0.424],
+    ],
+    "box": {
+        "center": [0.0, 0.0, 0.42],
+        "half_extents": [2.0, 2.0, 0.007],
+        "z_range": [0.393, 0.477],
+    },
+    "support_geom": "coffee_table_collision",
+    "height": 0.424,
+}
+CUBE = (np.array([-0.04, -0.04]), np.array([0.04, 0.04]))
+
+
+def test_region_area_is_the_table_not_the_site():
+    lo, hi = region_area(TABLE)
+    assert lo == pytest.approx([-0.35, -0.74]) and hi == pytest.approx([0.35, 0.86])
+    # A region without a support polygon keeps its box.
+    lo, hi = region_area(region([0.44, 0.51]))
+    assert lo == pytest.approx([-0.05, -0.03]) and hi == pytest.approx([0.05, 0.03])
+
+
+def test_footprint_turns_with_the_pose():
+    corners = np.array([[0.05, 0.01, 0.0], [-0.05, -0.01, 0.02]])
+    T = pose(0.1, 0.2, 0.4)
+    T[:3, :3] = [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]  # 90 deg yaw
+    lo, hi = footprint(corners, T)
+    assert lo == pytest.approx([0.09, 0.15]) and hi == pytest.approx([0.11, 0.25])
+
+
+def test_object_extent_ignores_where_the_object_is_held():
+    # #201: the held cookies' extent was taken at the hand's position, so a
+    # "free" spot overlapped the pudding.
+    corners = np.array([[0.03, 0.04, 0.0], [-0.03, -0.04, 0.02]])
+    held = pose(0.3, -0.5, 0.6)
+    lo, hi = object_extent(corners, held)
+    assert lo == pytest.approx([-0.03, -0.04]) and hi == pytest.approx([0.03, 0.04])
+    held[:3, :3] = [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
+    lo, hi = object_extent(corners, held)
+    assert lo == pytest.approx([-0.04, -0.03]) and hi == pytest.approx([0.04, 0.03])
+
+
+def test_region_occupants_rest_on_the_support_inside_its_area():
+    resting = {
+        "white_bowl_1": (np.array([-0.04, -0.04]), np.array([0.04, 0.04]), 0.425),
+        # Stacked on the bowl, held above the table, off the table's edge.
+        "pudding_1": (np.array([-0.02, -0.02]), np.array([0.02, 0.02]), 0.49),
+        "on_the_shelf": (np.array([0.2, 0.2]), np.array([0.25, 0.25]), 0.9),
+        "off_the_edge": (np.array([1.0, 0.0]), np.array([1.1, 0.1]), 0.424),
+    }
+    assert list(region_occupants(TABLE, resting)) == ["white_bowl_1"]
+
+
+def test_free_spots_start_at_the_center_when_it_is_free():
+    spots = free_spots(TABLE, CUBE, {})
+    assert spots[0] == pytest.approx([0.0, 0.0])
+    assert len(spots) == 12
+
+
+def test_free_spots_keep_clear_of_what_rests_there():
+    bowl = (np.array([-0.04, -0.04]), np.array([0.04, 0.04]))
+    occupants = {"white_bowl_1": bowl}
+    spots = free_spots(TABLE, CUBE, occupants, gap=0.015, spacing=0.03)
+    assert spots, "the table has room beside the bowl"
+    for xy in spots:
+        lo, hi = xy + CUBE[0], xy + CUBE[1]
+        # No overlap with the bowl inflated by the gap.
+        assert np.any((hi <= bowl[0] - 0.015 + 1e-9) | (lo >= bowl[1] + 0.015 - 1e-9))
+        # The whole cube on the table.
+        assert np.all(lo >= [-0.35, -0.74]) and np.all(hi <= [0.35, 0.86])
+    # The nearest free spot is just past the bowl and the gap: 0.04 + 0.015 + 0.04.
+    assert np.linalg.norm(spots[0]) == pytest.approx(0.1, abs=0.011)
+    for a, b in zip(spots, spots[1:]):
+        assert np.linalg.norm(a) <= np.linalg.norm(b) + 1e-9
+    # Spread apart, so a spot out of reach is not tried a dozen times.
+    for i, a in enumerate(spots):
+        for b in spots[i + 1 :]:
+            assert np.linalg.norm(a - b) >= 0.03 - 1e-9
+
+
+def test_free_spots_three_places_land_apart():
+    # #201: the bowl, then the pudding, then the cookies, each placed where
+    # free_spots puts it first.
+    occupants: dict = {}
+    placed = []
+    for _ in range(3):
+        xy = free_spots(TABLE, CUBE, occupants)[0]
+        placed.append(xy)
+        occupants[len(placed)] = (xy + CUBE[0], xy + CUBE[1])
+    assert placed[0] == pytest.approx([0.0, 0.0])
+    for i, a in enumerate(placed):
+        for b in placed[i + 1 :]:
+            assert np.max(np.abs(a - b)) >= 0.08 + 0.015 - 1e-9
+
+
+def test_free_spots_none_when_the_area_is_full():
+    small = region([0.44, 0.51])  # 10 cm x 6 cm
+    full = {"box": (np.array([-0.05, -0.03]), np.array([0.05, 0.03]))}
+    tiny = (np.array([-0.01, -0.01]), np.array([0.01, 0.01]))
+    assert free_spots(small, tiny, full) == []
 
 
 def test_place_orientations_turn_approach_horizontal():
