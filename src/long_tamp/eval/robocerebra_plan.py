@@ -74,6 +74,15 @@ ONTOP_REACH = 0.02
 # (a butter on end has at most 8.6 mm).
 SUPPORT_TOL = 0.004
 SUPPORT_MARGIN = 0.005
+# A release into a region with objects already resting in it keeps this
+# clear of their footprints, tries spots this far apart (nearest the
+# region's center first), at most this many of them, before the center.
+FREE_GAP = 0.015
+FREE_SPACING = 0.03
+FREE_SPOTS = 12
+# An object counts as resting in a region when its lowest point is this
+# close to the region's support.
+RESTING_TOL = 0.03
 # HPP's refusal of a transit goal off the start's leaf, and the largest move
 # of the target onto its placement taken as settling, not as a real mismatch.
 OFF_LEAF = re.compile(
@@ -899,6 +908,19 @@ class SegmentPlanner:
         top = region.get("top")
         over_top = top is not None and top > region.get("height", top)
         passes = ("support", "top", "unstable") if over_top else (None,)
+        # Objects already resting in the region: release clear of them
+        # (#201), the center only when it is free.
+        occupants: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+        if not over_top and "support_geom" in region:
+            occupants = region_occupants(region, self._resting_objects(region))
+        if occupants:
+            info["occupants"] = {
+                name: [[round(float(v), 3) for v in corner] for corner in box]
+                for name, box in sorted(occupants.items())
+            }
+            target_corners = collision_corners(
+                self.scene.file_paths()["objects"][self.target]["urdf"]
+            )
         if over_top:
             paths = self.scene.file_paths()["objects"]
             samples = collision_samples(paths[self.target]["urdf"])
@@ -914,6 +936,15 @@ class SegmentPlanner:
                 approach_axis = hand[:3, 2]
                 if rests in (None, "unstable"):
                     positions = place_positions(region, approach_axis, heights, step)
+                    if occupants:
+                        spots = free_spots(
+                            region, object_extent(target_corners, obj), occupants
+                        )
+                        levels = np.arange(heights[0], heights[1] + 1e-9, step)
+                        free = [(xy, float(z)) for xy in spots for z in levels]
+                        # The old positions last: they may stack on an occupant.
+                        positions = free + positions
+                        n_free = len(free)
                 else:
                     positions = self._resting(
                         region, obj, samples, faces, heights, step, rests
@@ -921,7 +952,7 @@ class SegmentPlanner:
                     if not positions:
                         tally = info["rejected"].setdefault(name, {})
                         tally[f"no stable rest on the {rests}"] = 1
-                for xy, z in positions:
+                for k, (xy, z) in enumerate(positions):
                     if rests == "support" and z - below > region["height"] + 2 * drop:
                         continue
                     if rests == "top" and z - below < top:
@@ -932,6 +963,8 @@ class SegmentPlanner:
                     if insert is not None:
                         position = [round(float(v), 3) for v in obj[:3, 3]]
                         found = name, position, goal, insert
+                        if occupants and rests is None:
+                            info["spot"] = "free" if k < n_free else "occupied"
                         break
                     tally = info["rejected"].setdefault(name, {})
                     tally[reason] = tally.get(reason, 0) + 1
@@ -983,6 +1016,27 @@ class SegmentPlanner:
         if escape:
             stages.insert(0, escape)
         return SegmentPlan(stages, self.q0, self.tcp0, info)
+
+    def _resting_objects(
+        self, region: dict[str, Any]
+    ) -> dict[str, tuple[np.ndarray, np.ndarray, float]]:
+        """Every object but the target and the region's own (an object's
+        top), as it stands in the scene: its world xy footprint and its
+        lowest z, from its collision boxes."""
+        paths = self.scene.file_paths()["objects"]
+        out = {}
+        for name in self.scene.manifest["objects"]:
+            if name in (self.target, region.get("object")):
+                continue
+            pose = xyzquat_to_pose(self.scene.object_config(name))
+            try:
+                corners = collision_corners(paths[name]["urdf"])
+            except ValueError:  # no collision geometry
+                continue
+            lo, hi = footprint(corners, pose)
+            bottom = float((corners @ pose[:3, :3].T + pose[:3, 3])[:, 2].min())
+            out[name] = (lo, hi, bottom)
+        return out
 
     @staticmethod
     def _resting(
@@ -1435,6 +1489,107 @@ def place_positions(
     return [
         (center - offset * horizontal, float(z)) for offset in offsets for z in heights_
     ]
+
+
+def footprint(corners: np.ndarray, pose: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The world xy box (lo, hi) that ``corners`` (object frame) cover at
+    ``pose``."""
+    xy = (corners @ pose[:3, :3].T + pose[:3, 3])[:, :2]
+    return xy.min(axis=0), xy.max(axis=0)
+
+
+def object_extent(
+    corners: np.ndarray, pose: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """The xy offsets (lo, hi) from its origin that an object turned as
+    ``pose`` covers: :func:`footprint` without the pose's position, which
+    for a held object is wherever the hand holds it."""
+    turned = np.eye(4)
+    turned[:3, :3] = pose[:3, :3]
+    return footprint(corners, turned)
+
+
+def region_area(region: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
+    """The xy box a release in ``region`` may cover: its box, cut to its
+    support face's ``points`` when it has them (LIBERO's table region is a
+    4 m square; the table itself is not)."""
+    box = region["box"]
+    center = np.asarray(box["center"][:2], dtype=float)
+    half = np.asarray(box["half_extents"][:2], dtype=float)
+    lo, hi = center - half, center + half
+    points = region.get("points")
+    if points:
+        xy = np.asarray(points, dtype=float)[:, :2]
+        lo, hi = np.maximum(lo, xy.min(axis=0)), np.minimum(hi, xy.max(axis=0))
+    return lo, hi
+
+
+def region_occupants(
+    region: dict[str, Any],
+    resting: dict[str, tuple[np.ndarray, np.ndarray, float]],
+    tol: float = RESTING_TOL,
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """The footprints of the objects resting in ``region``: of ``resting``
+    (name: world xy box and lowest z), those whose bottom is within ``tol``
+    of the region's support and whose box meets its area."""
+    lo, hi = region_area(region)
+    height = region.get("height", region["box"]["z_range"][0])
+    return {
+        name: (a, b)
+        for name, (a, b, bottom) in resting.items()
+        if abs(bottom - height) <= tol and np.all(a <= hi) and np.all(b >= lo)
+    }
+
+
+def free_spots(
+    region: dict[str, Any],
+    extent: tuple[np.ndarray, np.ndarray],
+    occupants: dict[str, tuple[np.ndarray, np.ndarray]],
+    grid: float = 0.01,
+    gap: float = FREE_GAP,
+    spacing: float = FREE_SPACING,
+    limit: int = FREE_SPOTS,
+    margin: float = 0.01,
+) -> list[np.ndarray]:
+    """Origin xy positions in ``region`` where an object covering
+    ``extent`` (xy offsets lo, hi from its origin) stays ``gap`` clear of
+    every occupant's footprint and inside the region's area: the nearest
+    the region's center first, ``spacing`` apart, at most ``limit``.
+    The center itself comes first when it is free."""
+    lo, hi = region_area(region)
+    e_lo, e_hi = (np.asarray(e, dtype=float) for e in extent)
+    # The origin stays in the box by ``margin`` (LIBERO's In tests it)
+    # and the whole object over the area.
+    box = region["box"]
+    center = np.asarray(box["center"][:2], dtype=float)
+    half = np.asarray(box["half_extents"][:2], dtype=float)
+    o_lo = np.maximum(lo - e_lo, center - half + margin)
+    o_hi = np.minimum(hi - e_hi, center + half - margin)
+    if np.any(o_lo > o_hi):
+        return []
+    axes = [
+        center[i]
+        + grid
+        * np.arange(
+            np.ceil((o_lo[i] - center[i]) / grid),
+            np.floor((o_hi[i] - center[i]) / grid) + 1,
+        )
+        for i in range(2)
+    ]
+    xy = np.array(np.meshgrid(*axes)).reshape(2, -1).T
+    target = np.clip(center, o_lo, o_hi)
+    xy = xy[np.argsort(np.linalg.norm(xy - target, axis=1), kind="stable")]
+    free = np.ones(len(xy), dtype=bool)
+    for a, b in occupants.values():
+        # Overlap of [xy + e_lo, xy + e_hi] with [a - gap, b + gap].
+        free &= ~np.all((xy + e_hi > a - gap) & (xy + e_lo < b + gap), axis=1)
+    spots: list[np.ndarray] = []
+    for point in xy[free]:
+        if all(np.linalg.norm(point - s) >= spacing for s in spots):
+            spots.append(point)
+            if len(spots) == limit:
+                break
+    return spots
 
 
 def pour_positions(
