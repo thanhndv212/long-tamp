@@ -27,7 +27,7 @@ belongs in `long_tamp`, `agimus_spacelab`, both, or neither.
 
 The full process is written for all contributors in `docs/development/workflow.md`
 (roadmap → issue → ADR if design-level → branch → implement + tests → validate →
-PR with docs + CHANGELOG → squash-merge → issue closed, roadmap ticked → milestone gate
+PR with docs + CHANGELOG → merge commit → issue closed, roadmap ticked → milestone gate
 → release). Validation levels V0–V4 and the screw-assembly batch gate are in
 `docs/development/validation.md`. Follow those; this skill adds the agent-specific parts.
 
@@ -81,8 +81,8 @@ Every change reaches `dev` (or, for releases/hotfixes, `main`) through a pull re
 including agent-authored ones; nothing is pushed to `dev` or `main` directly. An agent drives its own PR from opening to merge:
 
 1. **Open.** Push the branch, then open the PR against `dev` with the GitHub CLI or the
-   GitHub MCP tools. Title in Conventional Commits form (`feat(grasping): ...`): it becomes
-   the squash commit's subject. Body: **Why** (the problem, with evidence: numbers, logs),
+   GitHub MCP tools. Title in Conventional Commits form (`feat(grasping): ...`): it heads
+   the merge commit's body. Body: **Why** (the problem, with evidence: numbers, logs),
    **What** (by module), **Validation** (tests run and their result, lint, anything checked
    by hand), **Found along the way** (issues noticed but not fixed here), **Not modelled /
    limits**. Report failures as they are, with the test name; a test that is flaky on
@@ -108,14 +108,17 @@ including agent-authored ones; nothing is pushed to `dev` or `main` directly. An
    validation evidence the issue asked for is in the PR, the PR is mergeable with no
    conflict, no review thread is left unanswered, and no reviewer has requested changes.
    An agent merges only when the maintainer has asked it to for that PR ("merge when
-   green" counts). Squash-merge, with the PR's Conventional Commits title as the commit
-   subject, so `dev` stays one commit per change. After the merge, close the linked
+   green" counts). Merge with a merge commit, `gh pr merge N --merge`: never squash, never
+   rebase. `dev` keeps every per-purpose commit of the PR, and its first-parent history
+   reads one merge per PR (`git log --first-parent dev`). If a PR was squashed or rebased
+   by mistake, say so: the fix is rebuilding `dev` with the original commits and a merge
+   commit per PR, then a `--force-with-lease` push, which needs the maintainer's go-ahead. After the merge, close the linked
    issue explicitly (`gh issue close N -c "Done in #PR (on dev)"`): closing keywords only
    fire on merges into the default branch (`main`). Then stop watching the PR and cancel
    any scheduled check-ins for it.
 5. **Delete the PR branch** right after the merge, on the remote and locally:
    `git push origin --delete <branch>` (or the PR page's "Delete branch" button), then
-   `git branch -D <branch>` after switching to `dev`. The squash commit on `dev` holds
+   `git branch -D <branch>` after switching to `dev`. The merge commit on `dev` holds
    everything the branch had, so nothing is lost. Confirm it is gone with
    `git ls-remote --heads origin <branch>` (no output). If the agent can't delete it
    (the push is refused, e.g. a 403 from a session's git proxy that only allows pushes

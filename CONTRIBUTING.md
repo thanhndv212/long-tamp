@@ -43,8 +43,8 @@ a source-built HPP environment with the PyPI wheels in one venv.
 
 Open it **against `dev`**, use the PR template and link the issue (`Closes #N`). A PR
 merges when CI is green on its latest commit, it has no conflicts, every review thread is answered, and the
-validation evidence the issue asked for is in the PR. PRs are squash-merged with their
-Conventional Commits title.
+validation evidence the issue asked for is in the PR. PRs are merged with a merge commit,
+never squashed or rebased, so their per-purpose commits stay on `dev`.
 
 ## Checks you can run locally
 
