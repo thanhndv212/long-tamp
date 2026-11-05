@@ -256,7 +256,9 @@ class HppPolicy:
         self.recover = recover
         self._calls = 0
         self._robot: tuple[str, str] | None = None
-        self._articulations: dict[str, dict[str, Any]] = {}
+        #: ``load``'s ``articulations``, which an articulated goal moves: set
+        #: by each call, and by the mission before it plans (row D).
+        self.articulations: dict[str, dict[str, Any]] = {}
 
     def __call__(
         self, env: Any, info: dict[str, Any], segment: int, step_limit: int
@@ -268,7 +270,7 @@ class HppPolicy:
     ):
         specs = segment_specs(info, segment)
         record: dict[str, Any] = {"goals": specs}
-        self._articulations = info.get("articulations", {})
+        self.articulations = info.get("articulations", {})
         if not specs:
             record["status"] = "no goal"
             return SegmentController(None, info=record)
@@ -316,8 +318,7 @@ class HppPolicy:
         is flat (the HPP failure in ``record["hpp"]``); an ``articulated``
         goal is an
         :class:`~long_tamp.eval.robocerebra_articulated.ArticulatedMotion`
-        (the fixtures' joints are those of ``load``'s ``articulations`` the
-        last call saw); :func:`plan_controller` runs any of them.
+        (the fixtures' joints are those of :attr:`articulations`); :func:`plan_controller` runs any of them.
 
         ``then``, the place or pour that follows a pick, is a lookahead: it
         is planned too, from the scene the pick leaves (the object held at
@@ -344,7 +345,7 @@ class HppPolicy:
                 raise RuntimeError(f"{held} is in the hand")
             assert goal.predicate is not None
             return articulated_motion(
-                scene.manifest, self._articulations, goal.predicate, goal.obj
+                scene.manifest, self.articulations, goal.predicate, goal.obj
             )
         if goal.kind == "grasped":
             if held is not None:

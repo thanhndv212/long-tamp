@@ -40,6 +40,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   row A on seeds 0–2 (12 of 12). In Memory_Exploration, opening and closing the wooden and
   white cabinets' top and middle drawers pass (7 of 8). Their bottom drawer does not open
   yet: its bar is 4 cm off the table, too low for the hand upright.
+- RoboCerebra fixtures in rows C and D (#161, R12–R14): the mission (row D) has an
+  `actuate` capability, one step per `open`, `close` or `turnon` in an object's chain, run
+  as the fixture's scripted motion; the continuous rollout (row C) runs them as row A does.
+  The grip now leaves the wrist room for the door's swing: of a handle and its half turn it
+  takes the one whose approach and swing both keep joint 7 within 2.75 rad, turning the
+  wrist the long way round (±2π) when the short way would not, along an approach that
+  interpolates through that turn. A microwave door hinged about the hand's axis stalled
+  at joint 7's stop before. The record keeps the handle the grip took.
+  `capture_rollout.py` records row A too. On Ideal × seeds 0–9: row A passes 713 of 760
+  segments (93.8%, none unsupported), row C completes 83.0% by Eq. 1 (R10: 67.7%) and row D
+  81.2% (R11: 67.9%), with 44 and 46 of 100 rollouts with every step done (26 each before);
+  every fixture step passes in rows A and D and 38 of 40 in row C. The rounds also take in
+  #158, #188, #190, #194 and #195. Results in `results/2026-11-03-r12-…`, `-r13-…` and
+  `-r14-…`; the task catalog lists them and counts row D's `actuate` steps.
 - RoboCerebra thin-rim pinch (#158): the rim sampler pinches a wall at least a pad long
   with the pads sunk by half their length first, along the wall over their whole length,
   then flush with its top as before; and the pick's close is a `settle` stage (`Stage.settle`,

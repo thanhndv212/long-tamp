@@ -180,8 +180,8 @@ flowchart LR
   R2["#157 scene exporter ✓"]
   R3["#158 grasps (18/25)"]
   R4["#159 Ideal subset ✓"]
-  R5["#160 pour"]
-  R6["#161 articulated objects"]
+  R5["#160 pour ✓"]
+  R6["#161 articulated objects ✓"]
   R7["#162 disturbance, mismatch, mix"]
   R8["#163 continuous variant + tables<br/>(row C on Ideal)"]
   R9["#186 mission per rollout<br/>(row D on Ideal)"]
@@ -228,7 +228,7 @@ flowchart LR
   class R1,R2,R3,R4,R5,R6,R7,R8,R9,X bench
   classDef done fill:#c8e6c9,stroke:#1b5e20,stroke-width:3px,color:#000
   classDef partial fill:#f1f8e9,stroke:#1b5e20,stroke-width:2px,stroke-dasharray:5 3,color:#000
-  class M8,R1,R2,R4,R5 done
+  class M8,R1,R2,R4,R5,R6 done
   class M7,R3,R8,R9 partial
   linkStyle 16,17,18,22,23,25 stroke:#e65100,stroke-width:3px
   linkStyle 0,1,2,3,5,6,7,10,11,12,13,26,27,29 stroke:#0d47a1,stroke-width:3px
@@ -332,12 +332,13 @@ planner-based entry has been published. #153 is split into:
       (handles for all 25 classes; 14 of 25 picked and 4 more held but unregistrable, PR #180)
 - [x] [#159](https://github.com/thanhndv212/long-tamp/issues/159) R4 Goal translator, in-hand start state, OSC_POSE tracker; Ideal subset (needs M8)
 - [x] [#160](https://github.com/thanhndv212/long-tamp/issues/160) R5 Pour action
-- [ ] [#161](https://github.com/thanhndv212/long-tamp/issues/161) R6 Articulated objects: drawers, doors, knobs
+- [x] [#161](https://github.com/thanhndv212/long-tamp/issues/161) R6 Articulated objects: drawers, doors, knobs
+      (rows A, C and D on Ideal: R12–R14, every fixture step supported)
 - [ ] [#162](https://github.com/thanhndv212/long-tamp/issues/162) R7 Disturbance, mismatch and mix conditions (needs #151, #145)
 - [ ] [#163](https://github.com/thanhndv212/long-tamp/issues/163) R8 Continuous variant and results tables
-      (row C on Ideal in: 67.7% by Eq. 1; the other conditions wait on #162)
+      (row C on Ideal in: 83.0% by Eq. 1; the other conditions wait on #162)
 - [ ] [#186](https://github.com/thanhndv212/long-tamp/issues/186) R9 Whole-task planning on `long_tamp.mission` (row D)
-      (row D on Ideal in: 67.9% by Eq. 1; follow-ups #187 place on an object done, #188 flat-object grasp, #189 held start in collision, #190 tracker stall)
+      (row D on Ideal in: 81.2% by Eq. 1; follow-ups #187 place on an object done, #188 flat-object grasp, #189 held start in collision, #190 tracker stall)
 
 The first number to publish is the Ideal condition on pick/in/on subtasks (#156 → #159, about
 68% of subtasks). Row A is in: 412 of 540 supported segments (76.3%) over 10 Ideal cases ×
@@ -353,7 +354,13 @@ Placing onto another object (#187, PR #192) covers the 15 `On`-over-object goals
 the butter and the mug go onto the rack upright in Memory_Execution 1–3. With it, row C
 completes 67.7% and row D 67.9%, 26 of 100 rollouts each with every step done
 (`script/robocerebra/results/2026-10-31-r10-ideal-hpp-continuous.json`,
-`…-r11-ideal-hpp-mission.json`). Articulated objects (#161) are the critical path to the full table.
+`…-r11-ideal-hpp-mission.json`). With articulated objects (#161: drawers, doors and knobs
+opened, closed and turned on by a scripted motion of the fixture's joint) no Ideal step is
+unsupported: row A passes 713 of 760 segments (93.8%), row C completes 83.0% and row D
+81.2%, with 44 and 46 of 100 rollouts with every step done
+(`script/robocerebra/results/2026-11-03-r12-ideal-hpp-articulated.json`,
+`…-r13-ideal-hpp-continuous.json`, `…-r14-ideal-hpp-mission.json`; these also take in
+#158, #188, #190, #194 and #195). The other five conditions (#162) are the critical path to the full table.
 
 **Exit test:** 20 SO-101 sim missions from language instructions with the simulated camera and injected disturbances complete or escalate cleanly; RoboCerebra results for all six conditions committed with seeds (privileged state, simulated camera, continuous variant); a recorded video.
 

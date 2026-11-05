@@ -10,25 +10,30 @@ order across objects. The domain says exactly that to a task planner:
 - ``progress(object, sK)``: the object's counter is at ``K`` (the env's
   ``check()["progress"]``, observed);
 - ``goal_pick(object, sK)``, ``goal_place(object, sK, region)``,
-  ``goal_pour(object, sK, receiver)``: the object's goal number ``K``
-  (static facts, from ``goal.json``); ``next(sK, sK+1)`` orders them;
+  ``goal_pour(object, sK, receiver)``, ``goal_actuate(object, sK,
+  fixture)``: the object's goal number ``K`` (static facts, from
+  ``goal.json``); ``next(sK, sK+1)`` orders them. An ``open``, ``close``,
+  ``turnon`` or ``turnoff`` of a fixture is in another object's chain (the
+  drawer opened before the butter goes in it): moving the fixture's joint
+  moves that object's counter on;
 - ``grasped(gripper, object)``: what the hand holds (observed from the
   finger contacts);
 - ``rest(object, sK)``: at ``K`` the object may be let go of: its next goal
-  is a pick, it has none left, or it is given up on (static).
+  is a pick or an actuate, it has none left, or it is given up on (static).
 
-``pick``, ``place`` and ``pour`` move an object's counter on when its next
-goal is theirs; ``regrasp`` and ``putdown`` take and release an object
+``pick``, ``place``, ``pour`` and ``actuate`` (the hand empty) move an
+object's counter on when its next goal is theirs; ``regrasp`` and ``putdown`` take and release an object
 without moving it on: ``regrasp`` an object that must be held and is not
 (it fell), ``putdown`` one that need not be (to free the hand). So a plan
 never puts down what it is carrying to a goal, nor picks up what it need
 not hold. The goal is every object's counter at the end of its chain, cut
-before the first goal the domain has no capability for (``open``,
-``turnon``: #161): the checker never counts past it.
+before the first goal the domain has no capability for: the checker never
+counts past it.
 
 Each step is refined by the HPP planner of rows A to C
 (:meth:`HppPolicy.plan <long_tamp.eval.robocerebra_policy.HppPolicy.plan>`,
-on a fresh scene export) and runs on :class:`RoboCerebraBackend`, which
+on a fresh scene export; an actuate is scripted, not planned:
+:mod:`~long_tamp.eval.robocerebra_articulated`) and runs on :class:`RoboCerebraBackend`, which
 steps its OSC tracker in the env and fails the step when the checker did
 not count its goal. :func:`evaluate_mission_case` runs a case as one
 mission (row D): ``MissionRunner.run_with_repair`` replans from the
@@ -56,6 +61,7 @@ from long_tamp.tasks.task_planning.language import Vocabulary
 from long_tamp.tasks.task_planning.predicates import Atom
 from long_tamp.tasks.task_planning.world_state import CompositeWorldState
 
+from .robocerebra_articulated import ARTICULATED
 from .robocerebra_plan import GRIPPER, held_object
 from .robocerebra_policy import (
     HppPolicy,
@@ -67,7 +73,13 @@ from .robocerebra_policy import (
 )
 
 #: ``goal.json`` predicate -> the capability that reaches it.
-GOAL_CAPABILITIES = {"pick": "pick", "in": "place", "on": "place", "pour": "pour"}
+GOAL_CAPABILITIES = {
+    "pick": "pick",
+    "in": "place",
+    "on": "place",
+    "pour": "pour",
+    **{name: "actuate" for name in ARTICULATED},
+}
 
 
 def stage(index: int) -> str:
@@ -112,12 +124,13 @@ class RoboCerebraDomain(BaseMissionDomain):
     name = "robocerebra"
     goal_notes = (
         "progress(object, sK) says K of the object's goals are reached; its "
-        "goal number K is goal_pick, goal_place or goal_pour at sK. "
-        "grasped(gripper, object) while the hand holds it."
+        "goal number K is goal_pick, goal_place, goal_pour or goal_actuate "
+        "at sK. grasped(gripper, object) while the hand holds it."
     )
     intro = (
-        "A Panda arm in a RoboCerebra scene moves objects between regions and "
-        "pours them over receivers, reaching each object's goals in order."
+        "A Panda arm in a RoboCerebra scene moves objects between regions, "
+        "pours them over receivers and opens, closes or turns on fixtures, "
+        "reaching each object's goals in order."
     )
 
     def __init__(
@@ -182,7 +195,7 @@ class RoboCerebraDomain(BaseMissionDomain):
             return None
         specs = self.chains.get(obj, [])
         k = int(at[1:]) + 1
-        if k >= len(specs) or GOAL_CAPABILITIES[specs[k][0]] == "pick":
+        if k >= len(specs) or GOAL_CAPABILITIES[specs[k][0]] not in ("place", "pour"):
             return None
         return SegmentGoal.from_spec(specs[k])
 
@@ -232,6 +245,21 @@ class RoboCerebraDomain(BaseMissionDomain):
             writes=("grasp_state",),
             restartable=True,
         )
+        actuate = CapabilityDescriptor(
+            "actuate",
+            "1.0",
+            {
+                "gripper": str,
+                "object": str,
+                "fixture": str,
+                "stage": str,
+                "next": str,
+            },
+            preconditions=("not grasped(?gripper, _)", "progress(?object, ?stage)"),
+            effects=advance,
+            writes=("joint_state",),
+            restartable=True,
+        )
         putdown = CapabilityDescriptor(
             "putdown",
             "1.0",
@@ -241,16 +269,20 @@ class RoboCerebraDomain(BaseMissionDomain):
             writes=("grasp_state",),
             restartable=True,
         )
-        return {d.capability_id: d for d in (pick, place, pour, regrasp, putdown)}
+        return {
+            d.capability_id: d for d in (pick, place, pour, actuate, regrasp, putdown)
+        }
 
     def objects(self) -> tuple[str, ...]:
-        """The objects with goals (receivers are objects too), then the
-        others."""
+        """The objects with goals (receivers and fixtures are objects too),
+        then the others."""
         found = dict.fromkeys((*self.full_goal, *self.others))
         for specs in self.chains.values():
             for spec in specs:
                 if spec[0] == "pour":
                     found.setdefault(spec[2])
+                elif GOAL_CAPABILITIES[spec[0]] == "actuate":
+                    found.setdefault(spec[1])
         return tuple(found)
 
     def regions(self) -> tuple[str, ...]:
@@ -284,6 +316,9 @@ class RoboCerebraDomain(BaseMissionDomain):
                     facts.append(f"rest({obj}, {stage(k)})")
                 elif capability == "place":
                     facts.append(f"goal_place({obj}, {stage(k)}, {spec[2]})")
+                elif capability == "actuate":
+                    facts.append(f"goal_actuate({obj}, {stage(k)}, {spec[1]})")
+                    facts.append(f"rest({obj}, {stage(k)})")
                 else:
                     facts.append(f"goal_pour({obj}, {stage(k)}, {spec[2]})")
         return tuple(facts)
@@ -297,6 +332,7 @@ class RoboCerebraDomain(BaseMissionDomain):
             "pick": (hand, "goal_pick(?object, ?stage)", step),
             "place": (hand, "goal_place(?object, ?stage, ?region)", step),
             "pour": (hand, "goal_pour(?object, ?stage, ?receiver)", step),
+            "actuate": (hand, "goal_actuate(?object, ?stage, ?fixture)", step),
             "regrasp": (hand, "not rest(?object, ?stage)"),
             "putdown": (hand, "rest(?object, ?stage)"),
         }
@@ -347,7 +383,7 @@ class RoboCerebraDomain(BaseMissionDomain):
         """One transaction per step, labelled without the counters."""
         shown = [
             str(parameters[k])
-            for k in ("object", "region", "receiver")
+            for k in ("object", "region", "receiver", "fixture")
             if k in parameters
         ]
         return [(capability, parameters, f"{capability} {' '.join(shown)}")]
@@ -405,7 +441,9 @@ class RoboCerebraDomain(BaseMissionDomain):
     ) -> dict[str, Any]:
         """Plan the step from the scene as it stands: HPP for a pick, place
         or pour (a ``regrasp`` is a pick that the checker does not count),
-        a :class:`ReleaseController` for a ``putdown``. The one path is an
+        a :class:`ReleaseController` for a ``putdown``, the fixture's
+        scripted motion for an ``actuate`` (its predicate is the object's
+        goal at ``stage``). The one path is an
         :class:`EnvMotion` saying what the step must leave behind. A pick
         is checked against the place or pour after it (:meth:`then`); when
         that does not plan, the step fails with ``lookahead_failed``."""
@@ -422,6 +460,11 @@ class RoboCerebraDomain(BaseMissionDomain):
             goal = SegmentGoal("grasped", obj)
         elif capability == "place":
             goal = SegmentGoal("placed", obj, str(parameters["region"]))
+        elif capability == "actuate":
+            predicate = self.chains[obj][int(str(parameters["stage"])[1:])][0]
+            goal = SegmentGoal(
+                "articulated", str(parameters["fixture"]), predicate=predicate
+            )
         else:
             goal = SegmentGoal("poured", obj, receiver=str(parameters["receiver"]))
         if capability == "regrasp":
@@ -681,6 +724,7 @@ def run_mission_case(
     from long_tamp.mission.runner import MissionRunner
 
     obs = env.reset(step=0, seed=int(seed)).get("obs") or {}
+    policy.articulations = info.get("articulations", {})
     domain = RoboCerebraDomain.from_info(info, lookahead=lookahead)
     budget = step_factor * len(info["steps"])
     scene = mission_scene(env, policy, budget)
