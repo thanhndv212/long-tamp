@@ -15,7 +15,7 @@ flowchart LR
   E --> F[Validate V0-V4]
   F --> G[PR: docs + CHANGELOG]
   G --> H[CI green + review]
-  H --> I[Squash-merge into dev, delete branch]
+  H --> I[Merge commit into dev, delete branch]
   I --> J[Close issue, tick roadmap]
   J -->|milestone done| K[Milestone gate on dev]
   K --> L[Release PR dev to main, tag]
@@ -27,7 +27,7 @@ flowchart LR
 | Branch | Role | Receives |
 |---|---|---|
 | `main` | Released code. What PyPI and the docs site reflect. Tags `vX.Y.Z` are cut here. | Release PRs from `dev`, hotfix PRs |
-| `dev` | Integration branch. All roadmap work lands here first. | Squash-merged feature/fix PRs |
+| `dev` | Integration branch. All roadmap work lands here first. | Feature/fix PRs, each merged with a merge commit |
 | `feature/<issue>-<slug>`, `fix/…`, `refactor/…`, `docs/…`, `chore/…` | One issue (or a coherent part of one) | — |
 
 - Feature work branches from `dev` and opens its PR **against `dev`**.
@@ -101,7 +101,8 @@ and apply to everyone:
   `test-standalone`, `test-hpp`, `distribution`, `docs`, `changelog`);
 - no conflict with `dev`, every review thread answered, no "changes requested";
 - the validation evidence the issue asked for is in the PR;
-- **squash-merge** into `dev` with the Conventional Commits title, then delete the branch.
+- **merge** into `dev` with a merge commit (`gh pr merge N --merge`; never squash or
+  rebase), then delete the branch.
 
 Never skip, disable or quarantine a test to get green.
 
@@ -138,4 +139,4 @@ A change is done when all of these hold:
 - [ ] `CHANGELOG.md` entry (or `skip-changelog` with a reason)
 - [ ] Docs updated; `mkdocs build --strict` passes
 - [ ] ADR written or updated if a design decision changed
-- [ ] PR squash-merged into `dev`, branch deleted, issue closed, roadmap ticked
+- [ ] PR merged into `dev` with a merge commit, branch deleted, issue closed, roadmap ticked
