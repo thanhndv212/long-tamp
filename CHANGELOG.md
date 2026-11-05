@@ -354,6 +354,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A RoboCerebra place into a region no longer puts every object at the region's center
+  (#201). In row D Ideal/case9 the bowl, the pudding and the cookies all went to (0, 0) of
+  the coffee table: on dev the pudding and the cookies were stacked on the bowl in seeds 2,
+  4 and 9, and the pudding's place missed in seed 3. A place onto a support now finds the
+  objects already resting in the region (lowest point within 3 cm of the support) and
+  tries release spots that keep the held object's box 1.5 cm clear of theirs and over the
+  support's face (the table region's site is a 4 m square, the table 0.7 × 1.6 m). Spots
+  are tried nearest the center first, 3 cm apart, up to 12, before the old positions
+  (`info["spot"]`, `info["occupants"]`). Case9 over seeds 0–9: every place onto the table
+  lands on it, apart, none missed (77/110 subtasks both ways, the other misses being
+  picks, which vary run to run). Row A, seed 0, the 10 Ideal cases: 72/76 segments as on dev,
+  each the same.
 - A RoboCerebra `OscTracker` stage that stops converging now ends (#190). It used to run
   until the step's budget was spent: case9's cookies place spent 1071 env steps in
   `retreat` in the #186 smoke run, and 150 (the cap) in `insert`/`release` in r11, seeds 0

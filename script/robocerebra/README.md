@@ -442,6 +442,17 @@ python script/robocerebra/evaluate.py Ideal/case1 --rollouts 10 \
   with `held` out of reach, upright at `held/90` or `held/180`: 3/3 each.
   Tried after the side approaches, the mug was released on its side and
   rolled off the pegs in two of the three.
+- A place into a region that already holds objects (#201; the coffee table in
+  Ideal/case9 gets the bowl, the pudding and the cookies) releases clear of them.
+  The objects resting on the region's support (lowest point within 3 cm of it)
+  are its occupants, each with the xy box of its collision geometry
+  (`region_occupants`). The release spots (`free_spots`) keep the held object's
+  own box 1.5 cm clear of every occupant and over the support's face (LIBERO's
+  table region is a 4 m square, the table 0.7 × 1.6 m). They are tried nearest
+  the region's center first, 3 cm apart, at most 12, the center itself first
+  when it is free. Only then come the old positions, which may stack on an
+  occupant (`info["spot"]`: "free" or "occupied"; `info["occupants"]` has the
+  boxes).
 - Pour (R5, #160). LIBERO's checker passes a pour when, within its last 40
   steps, the two objects' origins came within 0.3 m and the poured object's
   quaternion moved by more than 0.1 (0.2 in some scene classes); nothing
