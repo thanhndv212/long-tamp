@@ -328,7 +328,7 @@ class ManipulationTask(ABC):
             projector_step=projector_step,
         )
         # Get initial configuration
-        self.q_init = self.build_initial_config()
+        self.q_init = self._place_articulated_joints(self.build_initial_config())
 
         # Apply optimizer config from task_config (overrides backend defaults).
         # This wires YAML optimization: fields set via yaml_loader into the backend.
@@ -365,6 +365,33 @@ class ManipulationTask(ABC):
             )
 
         logger.info("✓ Task setup complete")
+
+    def _place_articulated_joints(self, q: List[float]) -> List[float]:
+        """Write each anchored object's initial joint values at their ranks.
+
+        ``task_config.ARTICULATED_JOINTS`` (``{object: {"object/joint":
+        value}}``, set by the YAML loader) gives the values by joint name.
+        ``build_initial_config`` lists them in URDF order, which needn't be
+        the model's: pinocchio may order sibling joints differently. Objects
+        outside ``task_config.OBJECTS`` aren't loaded and are skipped.
+        """
+        articulated = getattr(self.task_config, "ARTICULATED_JOINTS", None) or {}
+        loaded = set(getattr(self.task_config, "OBJECTS", []))
+        values = {
+            joint: value
+            for obj, joints in articulated.items()
+            if obj in loaded
+            for joint, value in joints.items()
+        }
+        if not values or not q:
+            return q
+        rank_map = dict(self.robot.rankInConfiguration)
+        q = list(q)
+        for joint, value in values.items():
+            if joint not in rank_map:
+                raise ValueError(f"articulated joint {joint!r} is not in the model")
+            q[rank_map[joint]] = value
+        return q
 
     def _log_setup_snapshot(self, setup_params: dict) -> None:
         """Emit the task-config snapshot to the run logger.

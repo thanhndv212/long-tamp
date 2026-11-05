@@ -451,6 +451,7 @@ class PyHPPBackend(BackendBase):
         urdf_path: str,
         srdf_path: Optional[str] = None,
         root_joint_type: str = "freeflyer",
+        pose: Optional[SE3] = None,
     ):
         """Load manipulable object.
 
@@ -459,9 +460,14 @@ class PyHPPBackend(BackendBase):
             urdf_path: Path to URDF file
             srdf_path: Path to SRDF file containing handles/grippers/contacts
             root_joint_type: Type of root joint ('freeflyer' or 'anchor')
+            pose: Optional SE3 pose of the root (defaults to identity). An
+                anchored object, such as a cabinet whose drawers are its
+                joints, is fixed there.
         """
         if self.device is None:
             raise RuntimeError("Must load robot first")
+        if pose is None:
+            pose = SE3.Identity()
 
         urdf.loadModel(
             self.device,
@@ -470,7 +476,7 @@ class PyHPPBackend(BackendBase):
             root_joint_type,
             resolve_mesh_paths(urdf_path),
             srdf_path or "",
-            SE3.Identity(),
+            pose,
         )
         self._refresh_problem_distance()
 
