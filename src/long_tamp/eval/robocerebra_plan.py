@@ -66,6 +66,10 @@ LIMIT_MARGIN = 0.15  # rad, kept from the arm's limits at a release
 TRACK_MARGIN = 0.05  # rad, kept from the arm's limits while OSC tracks a grasp
 THIN_REGION = 0.005  # m: a region half this thin is swept across, not stopped in
 SWEEP_STEP = 0.004  # m: the sweep's carrot, under the slab's thickness per step
+# m: a place carry's carrot, half the tracker's default, so the hand moves at
+# half speed: a long fast carry builds self-motion OSC does not damp, and the
+# elbow coasts on to joint 4's limit after the hand stops (#196).
+CARRY_STEP = 0.025
 # LIBERO's object On wants the origins within 3 cm across: release within
 # this of the receiver's origin, leaving room to settle.
 ONTOP_REACH = 0.02
@@ -1014,7 +1018,7 @@ class SegmentPlanner:
         pre = self.kin.tcp(self.arm(q_pre))
         line = np.array([pre, goal])
         stages = [
-            Stage("carry", carry, gripper=1.0),
+            Stage("carry", carry, gripper=1.0, step=CARRY_STEP),
             Stage("insert", line, gripper=1.0, step=0.02, tol=0.004),
         ]
         sweep = self._sweep(q_place, goal, region)
