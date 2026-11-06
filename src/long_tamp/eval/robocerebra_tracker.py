@@ -126,7 +126,7 @@ class OscTracker:
     error has not shrunk by ``min_progress`` m or ``min_turn`` rad for
     ``stall`` steps, tracking stops (``done``, ``stalled`` names the stage)
     and the hand holds where it is. The log records the stage, its error
-    and the observed joints.
+    and the observed joints, at a stall and at every stage's end.
 
     A ``settle`` stage ends only once the finger opening
     (``robot0_gripper_qpos``) has changed by less than ``grip_still`` m a
@@ -230,6 +230,7 @@ class OscTracker:
                         {
                             "stage": stage.name,
                             "end_error": self._errors(target, current),
+                            **_joints(obs),
                         }
                     )
                     self._next_stage()

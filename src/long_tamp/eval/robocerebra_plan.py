@@ -628,12 +628,23 @@ class SegmentPlanner:
         redundancy, the same hand pose can need a joint past its limit. IK
         pose by pose from the start arm is that motion; it fails if a pose
         is not reached or a joint comes within :data:`TRACK_MARGIN` of a
-        limit."""
+        limit, and :attr:`untracked` then says where."""
         arm = self.arm(q_start)
-        for T in tcps:
-            arm = self.kin.ik(arm, T, iterations=100, tol=1e-4)
-            if arm is None or self._near_limit(arm, TRACK_MARGIN):
+        for i, T in enumerate(tcps):
+            reached = self.kin.ik(arm, T, iterations=100, tol=1e-4)
+            if reached is None:
+                self.untracked = f"pose {i} of {len(tcps)} not reached"
                 return None
+            if self._near_limit(reached, TRACK_MARGIN):
+                near = (reached < self.kin.lower + TRACK_MARGIN) | (
+                    reached > self.kin.upper - TRACK_MARGIN
+                )
+                joints = ", ".join(
+                    f"joint {k + 1} at {reached[k]:.3f}" for k in np.flatnonzero(near)
+                )
+                self.untracked = f"pose {i} of {len(tcps)}: {joints}"
+                return None
+            arm = reached
         return arm
 
     def _near_limit(self, arm: np.ndarray, margin: float = LIMIT_MARGIN) -> bool:
@@ -777,7 +788,9 @@ class SegmentPlanner:
                     insert if transit is None else np.concatenate([transit, insert]),
                 )
                 if arm is None:
-                    grasp["success"], message = False, "the grasp is at a joint limit"
+                    grasp["success"], message = False, (
+                        f"the grasp is at a joint limit ({self.untracked})"
+                    )
                     at_limit = at_limit or (handle, grasp)
                 else:
                     # The lift starts where OSC leaves the arm, solved to
