@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from long_tamp.eval.robocerebra_plan import (
+    CARRY_STEP,
     ONTOP_REACH,
     POUR_ANGLES,
     POUR_REACH,
@@ -218,6 +219,28 @@ def test_tracker_does_not_stall_while_it_moves():
             break
         current[:3, 3] += 0.1 * POS_SCALE * action[:3]  # slow, but moving
     assert tracker.done and tracker.stalled is None
+
+
+def test_a_place_carry_moves_at_half_the_default_speed():
+    # A long fast carry builds self-motion that coasts the elbow to joint 4's
+    # limit once the hand stops (#196): the place carry's carrot is shorter.
+    spacing = 0.01  # a planned path is dense
+    path = np.array([pose(x=x) for x in np.arange(0.0, 0.6 + 1e-9, spacing)])
+
+    def cruise(step):
+        tracker = OscTracker([Stage("carry", path, gripper=1.0, step=step)])
+        end, actions = simulate(tracker, pose(), 200)
+        assert tracker.done
+        assert np.allclose(end[:3, 3], [0.6, 0.0, 0.0], atol=0.005)
+        # The cruise, before the last waypoint's gain boost.
+        return max(float(np.linalg.norm(a[:3])) for a in actions[:10])
+
+    slow, default = cruise(CARRY_STEP), cruise(None)
+    assert CARRY_STEP <= OscTracker.pos_step / 2
+    # The carrot is the first waypoint at least the step away.
+    assert slow <= (CARRY_STEP + spacing) / POS_SCALE + 1e-9
+    assert default == pytest.approx(1.0)  # the default saturates the action
+    assert slow < 0.8 * default
 
 
 def test_tracker_applies_tcp_offset():
