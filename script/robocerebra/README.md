@@ -463,7 +463,7 @@ python script/robocerebra/evaluate.py Ideal/case1 --rollouts 10 \
   from 3/5 to 4/5. Missions use about 25% more steps (case2: 430–470 → 540–556
   of 600). Seed 3 then fails: following the plan closely, the frypan grazes
   the wine rack, which dev's faster tracking cut past; that is a planning
-  problem of its own.
+  problem of its own (#211).
 - Pour (R5, #160). LIBERO's checker passes a pour when, within its last 40
   steps, the two objects' origins came within 0.3 m and the poured object's
   quaternion moved by more than 0.1 (0.2 in some scene classes); nothing
