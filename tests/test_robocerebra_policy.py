@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from long_tamp.eval.robocerebra_plan import (
+    CARRY_STEP,
     ONTOP_REACH,
     POUR_ANGLES,
     POUR_REACH,
@@ -112,6 +113,22 @@ def test_tracker_follows_stages_and_gripper():
     assert all(np.any(action[3:6]) for action in actions)
 
 
+def test_tracker_logs_the_joints_each_stage_ends_at():
+    # Where OSC leaves the planned arm shows stage by stage (#196).
+    stages = [
+        Stage("move", np.array([pose(), pose(x=0.02)]), gripper=-1.0),
+        Stage("hold", pose(x=0.02)[None], gripper=-1.0),
+    ]
+    tracker = OscTracker(stages)
+    current = pose()
+    for _ in range(40):
+        obs = obs_at(current)
+        obs["robot0_joint_pos"] = np.arange(7) * 0.1
+        current[:3, 3] += POS_SCALE * tracker(obs)[:3]
+    assert tracker.done
+    assert [entry["joints"][3] for entry in tracker.log] == [0.3, 0.3]
+
+
 def test_tracker_close_settles_until_the_fingers_stop():
     """A thin wall: the fingers travel ~12 steps before they stop on it,
     longer than the close's dwell (white_bowl's 2 mm rim, #158); the
@@ -202,6 +219,28 @@ def test_tracker_does_not_stall_while_it_moves():
             break
         current[:3, 3] += 0.1 * POS_SCALE * action[:3]  # slow, but moving
     assert tracker.done and tracker.stalled is None
+
+
+def test_a_place_carry_moves_at_half_the_default_speed():
+    # A long fast carry builds self-motion that coasts the elbow to joint 4's
+    # limit once the hand stops (#196): the place carry's carrot is shorter.
+    spacing = 0.01  # a planned path is dense
+    path = np.array([pose(x=x) for x in np.arange(0.0, 0.6 + 1e-9, spacing)])
+
+    def cruise(step):
+        tracker = OscTracker([Stage("carry", path, gripper=1.0, step=step)])
+        end, actions = simulate(tracker, pose(), 200)
+        assert tracker.done
+        assert np.allclose(end[:3, 3], [0.6, 0.0, 0.0], atol=0.005)
+        # The cruise, before the last waypoint's gain boost.
+        return max(float(np.linalg.norm(a[:3])) for a in actions[:10])
+
+    slow, default = cruise(CARRY_STEP), cruise(None)
+    assert CARRY_STEP <= OscTracker.pos_step / 2
+    # The carrot is the first waypoint at least the step away.
+    assert slow <= (CARRY_STEP + spacing) / POS_SCALE + 1e-9
+    assert default == pytest.approx(1.0)  # the default saturates the action
+    assert slow < 0.8 * default
 
 
 def test_tracker_applies_tcp_offset():
@@ -995,3 +1034,25 @@ def test_pairs_no_motion_changes_are_dropped():
         # Rack-butter both ways; held, the hand-mug pair too (not the arm's).
         assert planner._drop_static_pairs() == len(pairs) - len(kept)
         assert geometry.collisionPairs == [pairs[i] for i in kept]
+
+
+def test_an_untracked_grasp_says_where_and_which_joint():
+    from types import SimpleNamespace
+
+    planner = object.__new__(SegmentPlanner)
+    upper = np.full(7, 3.0)
+    upper[3] = -0.0698
+    j4 = iter([-0.5, -0.3, -0.08])
+
+    def ik(arm, T, iterations=100, tol=1e-4):
+        out = np.zeros(7)
+        out[3] = next(j4)
+        return out
+
+    planner.kin = SimpleNamespace(lower=np.full(7, -3.0), upper=upper, ik=ik)
+    planner._arm_index = list(range(7))
+    assert planner._tracked([0.0] * 7, np.stack([np.eye(4)] * 4)) is None
+    assert planner.untracked == "pose 2 of 4: joint 4 at -0.080"
+    planner.kin.ik = lambda *args, **kwargs: None
+    assert planner._tracked([0.0] * 7, np.stack([np.eye(4)] * 4)) is None
+    assert planner.untracked == "pose 0 of 4 not reached"
