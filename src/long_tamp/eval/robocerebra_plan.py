@@ -70,6 +70,15 @@ SWEEP_STEP = 0.004  # m: the sweep's carrot, under the slab's thickness per step
 # half speed: a long fast carry builds self-motion OSC does not damp, and the
 # elbow coasts on to joint 4's limit after the hand stops (#196).
 CARRY_STEP = 0.025
+# m: how far a planned place carry keeps the held object from the environment.
+# HPP plans to contact, and the object slips in the hand (a frypan ~1 cm by the
+# rack) and OSC lags the plan: a carry planned 0.3 mm past a wine rack grazed
+# it and stalled (#211).
+CARRY_CLEARANCE = 0.02
+# The loop edge's optimizers for a carry kept clear: the backend's spline
+# optimizer validates without the edge's margins and pulls the path back
+# against the rack.
+CLEAR_CARRY_OPTIMIZERS = ("GraphRandomShortcut", "GraphPartialShortcut")
 # LIBERO's object On wants the origins within 3 cm across: release within
 # this of the receiver's origin, leaving room to settle.
 ONTOP_REACH = 0.02
@@ -724,7 +733,21 @@ class SegmentPlanner:
             return None
         return out.tolist()
 
-    def _loop(self, q_from: list[float], q_to: list[float]) -> dict[str, Any]:
+    def _loop(
+        self, q_from: list[float], q_to: list[float], clear: bool = False
+    ) -> dict[str, Any]:
+        """Plan the arm from ``q_from`` to ``q_to`` in the current grasp
+        state. ``clear``: keep the held target :data:`CARRY_CLEARANCE` from
+        the environment, without the spline optimizer that undoes it
+        (:data:`CLEAR_CARRY_OPTIMIZERS`); both ends must already be that
+        clear."""
+        extra: dict[str, Any] = {}
+        if clear:
+            joint = f"{self.target}/root_joint"
+            extra = dict(
+                security_margins=[(joint, "universe", CARRY_CLEARANCE)],
+                optimizers=CLEAR_CARRY_OPTIMIZERS,
+            )
         return self.sequence.plan_loop(
             GRIPPER,
             q_from,
@@ -733,6 +756,7 @@ class SegmentPlanner:
             timeout_per_edge=self.timeout,
             max_iterations_per_edge=self.max_iterations,
             verbose=False,
+            **extra,
         )
 
     # -- segments --
@@ -1005,7 +1029,11 @@ class SegmentPlanner:
             info["carry"] = "line"
             carry = self.tcps(direct)
         else:
-            loop = self._loop(q_start, q_pre)
+            # Clear of the environment if it plans (#211), else as before.
+            loop = self._loop(q_start, q_pre, clear=True)
+            info["clearance"] = CARRY_CLEARANCE if loop["success"] else None
+            if not loop["success"]:
+                loop = self._loop(q_start, q_pre)
             if not loop["success"]:
                 info["message"] = loop.get("message")
                 raise PlanningError(
