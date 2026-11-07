@@ -354,6 +354,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A RoboCerebra place carry no longer grazes an obstacle it was planned to skim (#211). HPP
+  plans to contact. In row D Ideal/case2 seed 3, the frypan's carry passed the wine rack
+  0.3 mm away, then the pan slipped about 1 cm in the hand, hit the rack at 25–60 N and
+  stalled. A planned place carry now keeps the held object 2 cm from the environment
+  (`CARRY_CLEARANCE`, a security margin on the loop edge). Its loop also plans without the
+  spline optimizer, which ignores the edge's margins and pulled the path back to 2 mm. The
+  pan now passes 4 cm from the rack. If a carry does not plan with the margin, it plans
+  again without it. `plan_loop` takes `security_margins` and `optimizers`. Seeds 0–4 go
+  from 4/5 to 5/5.
 - A RoboCerebra step no longer starts at the elbow's limit after a long place (#196). The
   place's carry now runs at half the tracker's default speed (`CARRY_STEP`, a 2.5 cm
   carrot). A long fast carry built up velocity along the arm's redundant direction that

@@ -464,6 +464,19 @@ python script/robocerebra/evaluate.py Ideal/case1 --rollouts 10 \
   of 600). Seed 3 then fails: following the plan closely, the frypan grazes
   the wine rack, which dev's faster tracking cut past; that is a planning
   problem of its own (#211).
+- A planned place carry keeps the held object `CARRY_CLEARANCE` = 2 cm from
+  the environment (#211). HPP checks each configuration for contact and nothing
+  more, so a plan may pass an obstacle by a fraction of a millimetre, and the
+  object then slips in the hand by about a centimetre and OSC lags the plan.
+  In Ideal/case2 seed 3 the frypan's carry was planned 0.3 mm past the wine
+  rack; the pan hit it at 25–60 N and stalled. The carry's loop edge now has a
+  security margin between the target's joint and `universe`, and plans
+  without the spline optimizer: that optimizer validates with the problem's
+  checks rather than the edge's, ignores the margin, and pulled the path back
+  to 2 mm. With both changes the carry passes the rack 4 cm away. A carry that
+  does not plan with the margin (an end within 2 cm of the environment) plans
+  again without it (`info["clearance"]` is then `None`). Seeds 0–4: 4/5 → 5/5;
+  seed 3's place takes about 3 s more to plan.
 - Pour (R5, #160). LIBERO's checker passes a pour when, within its last 40
   steps, the two objects' origins came within 0.3 m and the poured object's
   quaternion moved by more than 0.1 (0.2 in some scene classes); nothing

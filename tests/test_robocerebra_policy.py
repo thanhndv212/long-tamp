@@ -6,7 +6,9 @@ import numpy as np
 import pytest
 
 from long_tamp.eval.robocerebra_plan import (
+    CARRY_CLEARANCE,
     CARRY_STEP,
+    CLEAR_CARRY_OPTIMIZERS,
     ONTOP_REACH,
     POUR_ANGLES,
     POUR_REACH,
@@ -956,6 +958,38 @@ def test_settled_start_takes_hpps_placement_of_the_target():
     far = [0.3, 0.4, 0.5, 0.0, 0.45, 0.0, 0.0, 0.0, 1.0]
     message = f"goal configuration at rank 0: ({','.join(map(str, far))},) does not satisfy the leaf constraint."
     assert planner._settled(message, q) is None  # a real move, not settling
+
+
+def loop_planner():
+    from types import SimpleNamespace
+
+    calls = []
+    planner = object.__new__(SegmentPlanner)
+    planner.target = "frypan_1"
+    planner.q0 = [0.0]
+    planner.timeout = 5.0
+    planner.max_iterations = 100
+    planner.sequence = SimpleNamespace(
+        plan_loop=lambda *args, **kwargs: calls.append(kwargs) or {"success": True}
+    )
+    return planner, calls
+
+
+def test_a_clear_carry_keeps_the_held_object_off_the_environment():
+    # A carry planned to contact grazed a wine rack once the pan slipped in
+    # the hand (#211): the loop edge keeps it a margin from the environment,
+    # without the spline optimizer that validates without the margin.
+    planner, calls = loop_planner()
+    planner._loop([0.0], [1.0], clear=True)
+    planner._loop([0.0], [1.0])
+    clear, plain = calls
+    assert clear["security_margins"] == [
+        ("frypan_1/root_joint", "universe", CARRY_CLEARANCE)
+    ]
+    assert CARRY_CLEARANCE >= 0.015  # more than the pan's slip by the rack
+    assert not any("Spline" in name for name in clear["optimizers"])
+    assert tuple(clear["optimizers"]) == CLEAR_CARRY_OPTIMIZERS
+    assert "security_margins" not in plain and "optimizers" not in plain
 
 
 def bystander_planner(roots, target="mug_1"):
