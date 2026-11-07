@@ -66,6 +66,10 @@ LIMIT_MARGIN = 0.15  # rad, kept from the arm's limits at a release
 TRACK_MARGIN = 0.05  # rad, kept from the arm's limits while OSC tracks a grasp
 THIN_REGION = 0.005  # m: a region half this thin is swept across, not stopped in
 SWEEP_STEP = 0.004  # m: the sweep's carrot, under the slab's thickness per step
+# m: a place carry's carrot, half the tracker's default, so the hand moves at
+# half speed: a long fast carry builds self-motion OSC does not damp, and the
+# elbow coasts on to joint 4's limit after the hand stops (#196).
+CARRY_STEP = 0.025
 # LIBERO's object On wants the origins within 3 cm across: release within
 # this of the receiver's origin, leaving room to settle.
 ONTOP_REACH = 0.02
@@ -628,12 +632,23 @@ class SegmentPlanner:
         redundancy, the same hand pose can need a joint past its limit. IK
         pose by pose from the start arm is that motion; it fails if a pose
         is not reached or a joint comes within :data:`TRACK_MARGIN` of a
-        limit."""
+        limit, and :attr:`untracked` then says where."""
         arm = self.arm(q_start)
-        for T in tcps:
-            arm = self.kin.ik(arm, T, iterations=100, tol=1e-4)
-            if arm is None or self._near_limit(arm, TRACK_MARGIN):
+        for i, T in enumerate(tcps):
+            reached = self.kin.ik(arm, T, iterations=100, tol=1e-4)
+            if reached is None:
+                self.untracked = f"pose {i} of {len(tcps)} not reached"
                 return None
+            if self._near_limit(reached, TRACK_MARGIN):
+                near = (reached < self.kin.lower + TRACK_MARGIN) | (
+                    reached > self.kin.upper - TRACK_MARGIN
+                )
+                joints = ", ".join(
+                    f"joint {k + 1} at {reached[k]:.3f}" for k in np.flatnonzero(near)
+                )
+                self.untracked = f"pose {i} of {len(tcps)}: {joints}"
+                return None
+            arm = reached
         return arm
 
     def _near_limit(self, arm: np.ndarray, margin: float = LIMIT_MARGIN) -> bool:
@@ -777,7 +792,9 @@ class SegmentPlanner:
                     insert if transit is None else np.concatenate([transit, insert]),
                 )
                 if arm is None:
-                    grasp["success"], message = False, "the grasp is at a joint limit"
+                    grasp["success"], message = False, (
+                        f"the grasp is at a joint limit ({self.untracked})"
+                    )
                     at_limit = at_limit or (handle, grasp)
                 else:
                     # The lift starts where OSC leaves the arm, solved to
@@ -1001,7 +1018,7 @@ class SegmentPlanner:
         pre = self.kin.tcp(self.arm(q_pre))
         line = np.array([pre, goal])
         stages = [
-            Stage("carry", carry, gripper=1.0),
+            Stage("carry", carry, gripper=1.0, step=CARRY_STEP),
             Stage("insert", line, gripper=1.0, step=0.02, tol=0.004),
         ]
         sweep = self._sweep(q_place, goal, region)

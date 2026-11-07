@@ -453,6 +453,17 @@ python script/robocerebra/evaluate.py Ideal/case1 --rollouts 10 \
   when it is free. Only then come the old positions, which may stack on an
   occupant (`info["spot"]`: "free" or "occupied"; `info["occupants"]` has the
   boxes).
+- A place's carry runs at half the tracker's default speed (#196): its carrot is
+  `CARRY_STEP` = 2.5 cm ahead, not 5 cm. On a long fast carry the arm builds
+  up velocity along its redundant direction, which OSC's weak nullspace pull
+  does not damp. After the hand stops, the elbow coasts on to joint 4's
+  limit (-0.07 rad). In Ideal/case2 the frypan's insert onto the rack ended
+  there on every seed, and the cream cheese's pick then started at the limit.
+  With the slow carry the insert ends at -0.7 to -1.2 rad, and seeds 0–4 go
+  from 3/5 to 4/5. Missions use about 25% more steps (case2: 430–470 → 540–556
+  of 600). Seed 3 then fails: following the plan closely, the frypan grazes
+  the wine rack, which dev's faster tracking cut past; that is a planning
+  problem of its own (#211).
 - Pour (R5, #160). LIBERO's checker passes a pour when, within its last 40
   steps, the two objects' origins came within 0.3 m and the poured object's
   quaternion moved by more than 0.1 (0.2 in some scene classes); nothing

@@ -354,6 +354,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A RoboCerebra step no longer starts at the elbow's limit after a long place (#196). The
+  place's carry now runs at half the tracker's default speed (`CARRY_STEP`, a 2.5 cm
+  carrot). A long fast carry built up velocity along the arm's redundant direction that
+  OSC's nullspace pull did not damp, so after the hand stopped the elbow coasted on to
+  joint 4's limit. In row D Ideal/case2 the frypan's insert onto the rack ended at -0.07
+  rad on every seed, and the cream cheese's pick after it started at the limit. Now the
+  insert ends at -0.7 to -1.2 rad, no step starts at a limit, and seeds 0–4 go from 3/5 to
+  4/5. Missions use about 25% more steps (case2: 430–470 → 540–556 of 600). Seed 3 now
+  fails: following its plan closely, the frypan grazes the wine rack (#211). Each
+  RoboCerebra stage's end in the tracker log, and a stall, now record the arm's joints,
+  and an untracked grasp's message names the pose and the joint at its limit.
 - A RoboCerebra place into a region no longer puts every object at the region's center
   (#201). In row D Ideal/case9 the bowl, the pudding and the cookies all went to (0, 0) of
   the coffee table: on dev the pudding and the cookies were stacked on the bowl in seeds 2,
