@@ -8,6 +8,465 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-10
+
+The mission runtime as a library (M8), and long_tamp on an open benchmark.
+
+- **Write your own mission:** the mission loop, operator chat and mission UI that lived in
+  the screw-assembly example are now `long_tamp.mission`, behind a `MissionDomain`
+  interface (ADR-0011, ADR-0012). A template domain and a tutorial show how to plug in a
+  new robot and task; the screw assembly runs on it unchanged (V3 gate 10/10).
+- **Robots on another host:** a remote execution backend over TCP, gripper models beyond
+  symmetric parallel jaws, grasp verification as facts, and repair from a missed grasp
+  (M7's library work; its real-robot exit run is still to come).
+- **RoboCerebra:** an env server, a scene exporter to URDF/SRDF, grasp handles for its
+  object classes, pour, articulated objects (drawers, doors, knobs) and whole-task planning
+  on `long_tamp.mission`. On the Ideal condition (10 cases × 10 seeds), row C completes
+  83.0% of the tasks' key state changes by the paper's Eq. 1 and row D 81.2%, against 25.16
+  for the published GT plan + OpenVLA baseline.
+- **Articulated objects** in the library: anchored objects with prismatic and revolute
+  joints, loaded from the task YAML.
+
+### Added
+
+- Articulated objects (#161): a YAML object declared `root: anchor` is loaded fixed at its
+  initial pose (`PyHPPBackend.load_object(pose=...)`), and its prismatic and revolute
+  joints are its configuration, with initial values under `joints:` (by name; others start
+  at 0 within their limits). `YamlTaskLoader.articulated_joints` and
+  `task_config.ARTICULATED_JOINTS` list them. `ManipulationTask.setup` writes them into
+  `q_init` by joint rank, since pinocchio may not keep the URDF's order. Free-flyer bounds
+  apply only to free-flying objects, and a phase graph locks every joint of an object
+  outside the phase, not only its `root_joint`. With no contact surfaces, the factory locks
+  the joints while no handle is grasped. The new `script/drawer/task_drawer.py` opens and
+  closes a cabinet drawer with a Panda: grasp, `plan_loop` to slide the drawer out 15 cm,
+  release, grasp, slide it shut, release (about 45 s). Its handle is at z = 0.6, approached
+  0.4 rad from above. Lower, or straight on, the Panda's joint 6 runs into its limit. Tests
+  in `tests/test_articulated_objects.py`; the open/close run is `slow_planning` and runs
+  nightly.
+- RoboCerebra open/close/turnon (#161): `HppPolicy` runs `open`, `close`, `turnon` and
+  `turnoff` segments (`SegmentGoal` kind `articulated`) with the new
+  `eval/robocerebra_articulated.py`. The hand grips the fixture's handle, follows the joint's
+  motion (a translation along a slide, a turn about a hinge's axis) to the goal's value, then
+  lets go and backs out. An open goes into the goal range by half its width, up to 4 cm or
+  0.6 rad. A close pushes 2 cm or 0.1 rad past the joint's limit, then lets go where the
+  push stopped. The motion is scripted on observations, like the edge pinch: HPP does not
+  plan it, and nothing checks collisions or reach. The handles (`HANDLES`) are hand poses in
+  the moving body's frame, per fixture class and drawer level. Of a handle's pose and its
+  half turn, the grip takes the one nearer the hand, unless that one would carry the last
+  wrist joint past its limit. The scene export records each joint's pivot, axis and body
+  pose, and the env server's `load` reports, per articulated goal, its fixture class,
+  joints and ranges (`articulations`). Ideal cases 6–9 (drawer, stove, microwave) pass in
+  row A on seeds 0–2 (12 of 12). In Memory_Exploration, opening and closing the wooden and
+  white cabinets' top and middle drawers pass (7 of 8). Their bottom drawer does not open
+  yet: its bar is 4 cm off the table, too low for the hand upright.
+- RoboCerebra fixtures in rows C and D (#161, R12–R14): the mission (row D) has an
+  `actuate` capability, one step per `open`, `close` or `turnon` in an object's chain, run
+  as the fixture's scripted motion; the continuous rollout (row C) runs them as row A does.
+  The grip now leaves the wrist room for the door's swing: of a handle and its half turn it
+  takes the one whose approach and swing both keep joint 7 within 2.75 rad, turning the
+  wrist the long way round (±2π) when the short way would not, along an approach that
+  interpolates through that turn. A microwave door hinged about the hand's axis stalled
+  at joint 7's stop before. The record keeps the handle the grip took.
+  `capture_rollout.py` records row A too. On Ideal × seeds 0–9: row A passes 713 of 760
+  segments (93.8%, none unsupported), row C completes 83.0% by Eq. 1 (R10: 67.7%) and row D
+  81.2% (R11: 67.9%), with 44 and 46 of 100 rollouts with every step done (26 each before);
+  every fixture step passes in rows A and D and 38 of 40 in row C. The rounds also take in
+  #158, #188, #190, #194 and #195. Results in `results/2026-11-03-r12-…`, `-r13-…` and
+  `-r14-…`; the task catalog lists them and counts row D's `actuate` steps.
+- RoboCerebra thin-rim pinch (#158): the rim sampler pinches a wall at least a pad long
+  with the pads sunk by half their length first, along the wall over their whole length,
+  then flush with its top as before; and the pick's close is a `settle` stage (`Stage.settle`,
+  `OscTracker.grip_still`/`grip_hold`/`max_settle`) that holds past its dwell until the
+  fingers have stopped (the opening changing by under 0.2 mm a step for 5 steps, at most 15
+  steps more). Closing on white_bowl's 2 mm rim, the fingers travel nearly their whole stroke,
+  and the lift began while they still closed on half a pad: the bowl slid out. It now picks in
+  66 steps (lifted 6 cm, rotation 0.006). Rerun on all 25 classes
+  (`results/2026-11-01-r3-thin-rims.json`, rack at Memory_Execution/case1, where it picks in
+  107): R3 stands at 18 of 25 picked and 5 held; the plate (its edge pinch past 150 steps)
+  and moka_pot (no handle plans; never a pick goal) fail. No class picked before fails; the
+  close's wait adds 0 to 8 steps.
+- RoboCerebra tilted grasps (#158): `add_grasp_handles` appends up to `max_tilted` (4)
+  handles after the top-down ones, each top-down grasp pitched 30 and 45 degrees about its
+  closing axis through the pads, the ones leaning toward the robot first. An object 21 cm in
+  front of the base has no top-down grasp OSC can track without joint 4 at its stop; leaning
+  the hand toward the robot unfolds the elbow. In `grasp_lift.py`, black_book and
+  glazed_rim_porcelain_ramekin now pick (70 and 49 steps) and macaroni_and_cheese is held
+  (lifted 10 cm, rotation 0.025; it starts in no region), where all three failed
+  (`results/2026-11-01-r3-tilted-grasps.json`). R3 stands at 17 of 25 classes picked and 5
+  held; rack, moka_pot and white_bowl still fail. A pick whose top-down grasp plans and
+  tracks is unchanged.
+- RoboCerebra edge pinch of a flat object (#188): a `pick` whose object has no handle that
+  plans, and is flat (at most 3 cm thick, upright: the plate), now pushes it to the edge of
+  its support region nearest the robot and pinches the overhang, fingers closing vertically,
+  instead of failing (`long_tamp.eval.robocerebra_push`, `EdgePinchController`; the segment's
+  `info` keeps HPP's failure under `hpp`). The push is re-seated 6 cm strokes, its goal moved
+  along the edge clear of what stands in the way. Scripted from the observations, not planned:
+  Ideal/case3's plate picks on 10 of 10 seeds in 513–748 steps, Ideal/case5's in 630
+  (`results/2026-11-01-plate-edge-pinch.json`), past row A's 150 steps a segment.
+- RoboCerebra tasks and progress (`docs/plans/robocerebra-tasks.md`): every case's task, its
+  steps and the goal predicate scoring each, with each round's result per step, from the demo
+  replay (R1), scene export (R2) and grasp handles and grasp-lift (R3) to the planner rounds
+  R4–R11, and links to the rollout videos. The rounds not run yet are listed too, with the
+  steps and cases waiting on them (R6 #161: 83 articulated steps; R7 #162: the 50 cases
+  outside Ideal). Generated by `script/robocerebra/task_catalog.py`
+  (`dump` in the benchmark env to `results/case-catalog.json`, then `build`); rerun `build`
+  when a round's results land.
+- RoboCerebra place onto an object's top (#187): an `On o x` goal whose `x` is another object
+  in the scene (15 goals, all onto `rack_1`) is no longer unsupported. `object_top_region`
+  builds the region from `x`'s collision geometry at its pose: within 2 cm of its origin, as
+  LIBERO's object `check_ontop` wants, resting from its support under the origin up to its
+  highest face. A release is also tried as held turned about the vertical, right after held
+  and before turning the object on its side, and one with the fingers closing vertically (a
+  rim pinch) is tried last instead of rejected (`info["fingers"]`). Row A, seed 0: Ideal
+  62/71 → 64/72 supported steps (case2's frypan onto the rack, case7's frypan onto the
+  stove), no step lost; Memory_Execution 1–3 (Mix 7–9 are the same scenes) put the butter
+  and the mug upright onto the rack, 6/6. Rows C and D over 10 seeds per Ideal case:
+  Eq. 1 61.4% → 67.7% and 64.3% → 67.9% (`2026-10-31-r10-…`, `2026-10-31-r11-…`).
+- RoboCerebra mission lookahead (#186): a pick is checked against the place or pour after
+  it, planned from the scene the lift leaves (`HppPolicy.plan(..., then=...)`,
+  `held_export`); an object whose next step would not plan is deferred, picked last and put
+  down. A step that does not plan is no longer retried, only an execution miss is.
+  `evaluate.py --mission --no-lookahead` turns the check off. case7 seed 0: 3/7 → 5/7.
+- RoboCerebra as a mission (#186, M11 R9, row D on Ideal): `evaluate.py --mission`
+  (`long_tamp.eval.robocerebra_mission:evaluate_mission_case`) runs each rollout as one
+  `long_tamp.mission` run over the case's whole goal. `RoboCerebraDomain` describes a case as
+  a mission domain (pick, place, pour, regrasp and putdown by goal stage) whose world is what
+  the env observes; each step's `Move` is refined by the row C policy (`HppPolicy.plan`), and
+  `RoboCerebraBackend` runs it in the env. A missed step is replanned from the observed world
+  (2 retries a step); an object that keeps failing or is unsupported is put down and given up
+  on. The step budget is 150 × the case's steps, shared over the rollout, and a step is cut at
+  150. ADR-0011 and ADR-0012 are amended: the second domain needed no protocol change. Row D
+  (Ideal, 10 seeds per case): 64.3% of key state changes, 8 / 100 rollouts with every step
+  done, in `script/robocerebra/results/2026-10-30-r9-ideal-hpp-mission.json`.
+- RoboCerebra continuous variant (#163, M11 R8, row C on Ideal): `evaluate.py --continuous`
+  (`evaluate_case(resume=False)`) runs each rollout through without `resume(k)` and records the
+  paper's Eq. 1 per rollout (`completed_share`). A passed segment's controller runs on until
+  its stages are done, and one that moved and is done with the segment undone is replanned
+  within the segment's budget (up to 3 policy calls). `hpp_policy_continuous` plans from the
+  scene as it is: it releases an object the goal does not want in the hand and picks an object
+  to place or pour first. Row C (Ideal, 10 seeds per case): 61.4% of key state changes, 8 / 100
+  rollouts with every step done, in
+  `script/robocerebra/results/2026-10-29-r8-ideal-hpp-continuous.json`; the baseline
+  comparison page leads with it.
+- RoboCerebra pour action (#160, M11 R5): `SegmentPlanner.plan_pour` carries the held
+  object upright over the receiver (centre first, then backed off towards the start and
+  turned about the vertical) within the checker's 0.3 m reach, and tilts it 60, 45 or 30
+  degrees about the TCP, about the hand's x axis first; the segment policy translates
+  `pour o v` to *poured*. The receiver's top comes from its collision geometry. Row A
+  (Ideal, 10 seeds per case): 170 / 170 pour segments, the supported share 71% → 93% and
+  603 / 710 supported segments (84.9%), in
+  `script/robocerebra/results/2026-10-29-r5-ideal-hpp-pour.json`.
+- RoboCerebra R3 grasp-lift gallery (#158 AC2, work in progress):
+  `script/robocerebra/gallery/` reruns `grasp_lift.py`'s pick per class with the cameras
+  rendered (screenshots, and a frame at every 20 Hz control step encoded to 30 fps
+  real-time video) and builds `script/robocerebra/results/r3-grasp-gallery/index.html`,
+  which sets each class's recorded verdict beside the rerun's. The rerun of 2026-10-27
+  matches the recorded run on all 25 classes.
+- RoboCerebra rollout gallery for rows C and D: `capture_rollout.py C|D <case>...` reruns
+  whole rollouts at one seed with the full runs' policy and budgets, rendering every control
+  step, and `build_rollout_html.py` builds `script/robocerebra/results/rollout-gallery/`
+  (a video per rollout and a keyframe at each completed subtask). Recorded at seed 0: rows
+  C and D on Ideal cases 2, 7 and 8, and row C on Memory_Execution/case1.
+- RoboCerebra HPP segment policy (#159, M11 R4): `long_tamp.eval.robocerebra_policy:hpp_policy`
+  translates each segment's goal (`pick` → grasped, `In`/`On` → placed; `pour`, `open`,
+  `turnon` and regions missing from the export reported unsupported), detects the held
+  object at a resume from the finger contacts, plans in HPP on the segment's exported scene
+  in a forked child process (HPP's memory is returned per segment) and tracks the TCP path
+  with closed-loop `OSC_POSE` actions (`robocerebra_tracker`). Row A (Ideal, 10 seeds per
+  case): 412 / 540 supported segments (76.3%), in
+  `script/robocerebra/results/2026-10-25-r4-ideal-hpp.json`.
+- RoboCerebra evaluator: a policy callback may return a controller `controller(obs)`,
+  stepped closed loop; each segment records `steps_used`, the checker's lines and the
+  policy's info. The summary counts supported-segment success, overall and per case,
+  since the official resume lets a rollout succeed with failed segments.
+  `evaluate.py --merge` joins results run one case and seed per process.
+- RoboCerebra env server: `set_goal` scores a caller's goal instead of the case's, `step`
+  returns the checker's `[Monitor]` lines, the export lists object and fixture sites
+  (`basket_1_contain_region`, `flat_stove_1_cook_region`) as regions, its manifest
+  reports robot contacts per object, and `regions` lists the regions an object is `in`
+  by the benchmark's predicate.
+- `script/robocerebra/grasp_lift.py` picks and lifts one object per R3 class under the
+  benchmark's pick checker (#158 AC2): 14 of 25 classes picked and 4 more held, in
+  `script/robocerebra/results/2026-10-26-r3-grasp-lift.json`. A row is `unregistrable`
+  when the object starts in no region it can leave (a bottle above the table region's
+  band, a basket in its own), which the checker's region rule can never count as picked;
+  such a row is `held` when the object's observed rise (`lifted`) is at least 5 cm and
+  its `rotation`, the checker's quaternion test, stays under the threshold.
+- RoboCerebra pick planning keeps a handle only if `OSC_POSE` can track it: the tracked
+  path is rolled out by IK from the observed arm, which must stay 0.05 rad inside the
+  joint limits, and the lift is planned from where the rollout ends. A grasp HPP reached
+  on another branch of the arm's redundancy stalled before with a joint at its stop.
+- RoboCerebra grasp-handle library (#158, M11 R3): `long_tamp.eval.add_grasp_handles`
+  derives object-relative Panda handles from exported collision geometry, including
+  top-rim pinches for container walls. `script/robocerebra/grasp_library.py` exports
+  a case-cover set and records coverage in `script/robocerebra/results/`; handles
+  blocked by current scene clutter are explicitly marked for later HPP planning.
+- RoboCerebra scenes in HPP (#157, M11 R2). The env server's `export_scene` op turns a
+  case's MuJoCo model into an environment URDF/SRDF (the LIBERO regions as contact
+  surfaces), one freeflyer URDF/SRDF per object and a manifest; `long_tamp.eval`'s
+  `write_export`/`load_export`/`ExportedScene` give them as `SceneBuilder` file paths and
+  configurations. `script/robocerebra/export_scene.py` checks all 60 cases against MuJoCo
+  (0 collision disagreements, shapes within 1e-9 m). `SceneBuilder.load_environment` and
+  `PyHPPBackend.load_environment` take an environment SRDF.
+- RoboCerebra env server (#156, M11 R1). `script/robocerebra/env_server.py` serves the
+  benchmark's env (a LIBERO fork on robosuite 1.4.0, Python 3.10) from its own interpreter
+  over the `long_tamp.execution.remote` wire, and `long_tamp.eval.RoboCerebraClient` drives
+  it: `load`, `reset`, the benchmark's mid-episode `resume`, chunked `OSC_POSE` `step`s scored
+  by the benchmark's own checker, `get_state`/`set_state` with the controller goal, `render`.
+  `replay_demo.py` replays a case's demo continuously and step by step and measures the drift;
+  the Ideal results are in `script/robocerebra/results/`.
+- `long_tamp.mission`: the `MissionDomain` interface (#131, ADR-0011). This is the
+  boundary between the mission loop and one robot and task.
+  - `MissionDomain` (a protocol), `BaseMissionDomain` (generic defaults: PDDL export,
+    goal vocabulary, planned document, repair policy, mock backend) and `check_domain`.
+  - Shared object-level goals `grasped(gripper, object)` / `placed_at(object, region)`,
+    with `ObjectLevelState` deriving `grasped` from `holds`.
+  - Screw assembly: `script/screw_assembly/screw_mission.py`, the reference
+    implementation. It wraps `screw_domain`; the mission itself is unchanged.
+  - `mypy` is in the `dev` extra, and a test type-checks both implementations against the
+    protocol.
+- `long_tamp.mission.MissionRunner`: the mission loop as a library (#132, ADR-0012),
+  parameterised by a `MissionDomain`, a refiner and an execution backend. It runs one plan
+  (`run_mission`), the repair loop (`run_with_repair`) and the supervisor
+  (`run_supervised`), and plans from a goal or an instruction. The run folder, events and
+  replay files are those of the screw runner.
+  - New domain hooks: `world_state`, `observed_start`, `opened_config` and
+    `execution_metrics`; the screw domain implements them.
+  - `task_screw_assembly.py` runs on it since #134 (see Changed).
+- The mission UI for any domain (#133): `python -m long_tamp.mission ui --domain
+  pkg.module:factory` (or `file.py:factory`) starts the page with the 3D scene, the operator
+  chat and the live plan monitor, on the domain's backend (`--backend`, default `mock`;
+  `-- --backend-option KEY=VALUE` for its options). `serve` runs one mission of it.
+  - `long_tamp.mission.MissionChat` and `run_chat`: the chat tools (`state`, `write_goal`,
+    `set_goal`, `add_constraint`, `plan`, `run`, `explain_failure`) on any
+    `MissionRunner`. Their hints and the model's instructions come from the domain's
+    vocabulary, capabilities and `intro`.
+  - New domain hook `scene_viewer(scene, port)` (the live 3D scene; none by default).
+    `MissionScene.extras["refiner"]` is the runner's default refiner, and
+    `extras["facts"]` seeds the recorded facts at the start.
+  - Screw assembly: `screw_mission.py:domain` launches through it; `mission_ui.py` is now
+    that launcher with MuJoCo as the default backend. `chat_tools.py` is gone, and
+    `task_screw_assembly.py --chat` uses the library's chat.
+- The template mission domain and the [write your own mission](docs/usage/write-your-own-mission.md)
+  tutorial (#135). `long_tamp.mission.template` is one arm moving a cube and a ball between
+  a table, a tray and a bin, on a kinematic scene (no HPP): `python -m long_tamp.mission ui
+  --domain long_tamp.mission.template:domain` plans, runs on the mock backend and repairs
+  (`:repair_demo` can't reach the tray). `tests/test_mission_template.py` runs the loop in CI.
+- The M8 exit test (#136): the screw assembly passes the V3 batch gate (10/10, 0/140
+  replanning blocks) and the M6 autonomy batch (0 unclean) on `long_tamp.mission`, and the
+  template domain runs the whole loop, repair included, from the mission UI chat. Results in
+  `script/screw_assembly/results/2026-10-18-m8-exit-*.json`.
+- Guide: [run long_tamp on your robot](docs/usage/run-on-your-robot.md) (#129) — the
+  execution contract, writing and serving a backend, registering a gripper model, the drift
+  check and the robot side's safety duties, with the SO-101 as the worked example.
+- Missed-grasp repair (#128, ADR-0010).
+  - `plan_execute_repair(retry=, max_retries=)` retries a failure instead of blocking it,
+    at most `max_retries` times per step; `retry_missed_grasp` retries `grasp_missed`.
+    `RepairOutcome.failures` is the fact history, oldest first.
+  - The supervisor's `Situation.failures` carries that history into its prompt and the
+    escalation report ("Fact history").
+  - `MuJoCoBackend.displace(obj, delta)` moves a free object (forwarded by
+    `ProcessBackend`).
+  - Screw assembly: a missed grasp opens the hand, plans from the observed
+    configuration and retries the pick (`--grasp-retries`); `--inject-miss` displaces a
+    part before a step to test it. A retry or a drift replans from the observed arms and
+    hands, but keeps a hand that carries something, and what it carries, as planned: an
+    observed driver sits where it slipped, and replanning from there put a finger inside it.
+    A retry also observes the objects (`observed_config(like, objects=True)`) and moves
+    one that is more than 5 mm from its planned pose; a drift replan keeps them as planned.
+    A hand the backend can't open (weld grasps) starts the retry open.
+
+- Grasp verification (#127, ADR-0009).
+  - `GripperActuation` protocol for backends with a hand: `open_gripper`,
+    `close_gripper(width|effort)`, `gripper_state` (a `GripperState` with the measured
+    opening and effort). `ProcessBackend` and `RemoteBackend` forward it.
+  - `ExpectedGrasp`, from `FingerClosureTable.expected_grasp`, judges a measured opening
+    against the hand model: `holds(g, o)` or `grasp_missed(g, o)`, reported as
+    `Feedback.facts`. The threshold is two `default_squeeze` past the commanded opening.
+  - MuJoCo backend: with `expect` (`GripTable.expect`), contact grasps close even when the
+    object isn't there, and a miss fails the command with `grasp_missed`; a missed weld
+    grasp reports the fact too. `hands` enables the actuation interface.
+  - A failed step's message lists its facts. `MockBackend(facts=...)` reports facts with
+    its failure.
+  - The screw-assembly example verifies its contact grasps (`--grasp contact`).
+
+- Gripper models beyond symmetric parallel jaws (#126, ADR-0008).
+  - `GripperModel` protocol: `GraspPlanner` and `FingerClosureTable` take any model.
+  - `RotaryJawGripperModel`: one jaw swinging against a fixed one, with the pads'
+    midpoint per stroke row; the planner closes about that midpoint.
+  - `SO101_JAW` preset, measured from the SO-101 URDF's meshes (matches soarm_tamp's
+    jaw table to 0.05 mm).
+  - `register_gripper` adds a model to `PRESETS`. The Robotiq 2F-85 and Panda presets
+    are unchanged.
+
+- Remote execution over TCP (#125, ADR-0007).
+  - `serve_backend(backend, port=...)` serves any execution backend next to the
+    hardware, and `RemoteBackend(host, port)` drives it from the planner.
+  - The wire is length-prefixed JSON frames, never pickle; paths cross as samples
+    (`SampledPath.from_samples`).
+  - One client at a time. The server cancels the running command when the client
+    disconnects or goes silent for `timeout` seconds.
+  - `RemoteBackend.spawn(factory, ...)` serves a backend from a local process, and
+    `python -m long_tamp.execution.remote module:factory` serves one on a robot host.
+  - The screw-assembly example takes `--remote` with `--backend mujoco`.
+
+- The task-planning BT nodes as a library and a BehaviorTree.CPP plugin (#25).
+  - Libraries: `long_tamp_bt_nodes` (call `RegisterNodes`), and `long_tamp_bt_nodes_plugin`
+    (`BT_REGISTER_NODES`, so `factory.registerFromPlugin` and Nav2's `plugin_lib_names`
+    work).
+  - The nodes talk to a header-only `long_tamp_bt::TaskSession`, found on the root
+    blackboard (`"long_tamp_session"`). A session can be embedded Python
+    (`PythonTaskSession`, in `long_tamp_bt_python`), ROS 2 services, or C++.
+  - The `taskplan_bt_plugin_loads` CTest loads the plugin into a stock factory and runs a
+    tree against a C++ session.
+  - Example: `screw_assembly_plugin` runs the screw-assembly mission (`--plan short` or
+    `full`) in a stock factory that loads the plugin. Its event stream starts with the plan,
+    for the viewer. `HostSession.get_plan_document()` gives a C++ host the plan, and
+    `create_screw_session` takes `"plan": "full"`.
+
+- `docs/architecture-tour.html`: an interactive architecture tour (self-contained, works
+  offline) with a step-through mission walkthrough, the package import map, the recovery
+  ladder and the process layout.
+
+- `examples/behaviortree` configures on its own (`cmake -S examples/behaviortree`): the BT
+  nodes, plugin and host build with a C++ compiler, CMake, Python and BehaviorTree.CPP,
+  without the top-level project's HPP C++ dependencies. CI builds it this way and runs its
+  HPP-free CTests (fake session, fault paths, plugin loading, event-stream parity), which no
+  CI job ran before.
+
+### Changed
+
+- The screw-assembly example runs on `long_tamp.mission.MissionRunner` (#134, ADR-0012).
+  `task_screw_assembly.py` builds a runner on `ScrewAssemblyDomain` and calls its
+  `run_mission`, `run_with_repair`, `run_supervised`, `plan_from_goal` and
+  `understand_instruction`; its own copy of the loop (about 800 lines) is gone. The CLI,
+  the run folder and the `run_mission(task, planner, n_parts, **mission)` entry the chat
+  tools call are unchanged. `scenarios.py`, `screw_bt_session.py` and `concurrency_ab.py`
+  use the runner too. The runner's running state, `MissionRun`, is public, so a caller can
+  refine steps outside a plan (a scenario's setup) or bind a plan it runs itself (a BT
+  host).
+
+- The spline optimizer's QP cap (`SplineGradientBased/QPMaxIterations`) is now upstream:
+  hpp-core [#459](https://github.com/humanoid-path-planner/hpp-core/pull/459), released in
+  hpp-core 9.1.0. Docs no longer call it a local patch. With hpp-core < 9.1.0 (including the
+  9.0.2 PyPI wheels) the backend still drops the spline optimizer.
+
+- `examples/behaviortree` uses an installed BehaviorTree.CPP release (>= 4.7, e.g.
+  `ros-$ROS_DISTRO-behaviortree-cpp`) when one is found, instead of always building it from
+  source. Building from source at the pinned commit remains as a fallback for machines
+  with no binary package (`LONG_TAMP_FETCH_BEHAVIORTREE_CPP`, default `ON`). The BT nodes build
+  and pass their tests against 4.7.0 to 4.10.0; the event logger no longer needs the
+  subscription API added in 4.10. The ROS package's `behaviortree_cpp::behaviortree_cpp`
+  target name is accepted as well as upstream's `BT::behaviortree_cpp`.
+- The TWIN examples and tests no longer need the external `hpp_practicals` package.
+  `tests/test_twin_examples.py` loads two of the repo's vendored UR10s instead of
+  `package://hpp_practicals` UR5s, so it now runs (rather than skips) wherever PyHPP is
+  available. The lift-ball config drops its stale `package://hpp_practicals` paths, and
+  `script/twin/README.md` documents the vendored assets.
+- The architecture page moved from `ARCHITECTURE.md` to `docs/architecture.md` and was
+  rewritten for 0.2.0–0.8.0. It now follows one mission through the code (four questions,
+  two stacks meeting at the refiner, the recovery ladder, model roles, processes) and ends
+  with a module map, instead of listing modules. The README's copied diagrams follow it.
+- `examples/behaviortree`: the headers are now under `include/long_tamp_bt/`, in the
+  `long_tamp_bt` namespace. `PythonSession` is now `PythonTaskSession` (a `TaskSession`),
+  and the host reads the session from the blackboard instead of binding it to the nodes.
+
+### Fixed
+
+- A RoboCerebra place carry no longer grazes an obstacle it was planned to skim (#211). HPP
+  plans to contact. In row D Ideal/case2 seed 3, the frypan's carry passed the wine rack
+  0.3 mm away, then the pan slipped about 1 cm in the hand, hit the rack at 25–60 N and
+  stalled. A planned place carry now keeps the held object 2 cm from the environment
+  (`CARRY_CLEARANCE`, a security margin on the loop edge). Its loop also plans without the
+  spline optimizer, which ignores the edge's margins and pulled the path back to 2 mm. The
+  pan now passes 4 cm from the rack. If a carry does not plan with the margin, it plans
+  again without it. `plan_loop` takes `security_margins` and `optimizers`. Seeds 0–4 go
+  from 4/5 to 5/5.
+- A RoboCerebra step no longer starts at the elbow's limit after a long place (#196). The
+  place's carry now runs at half the tracker's default speed (`CARRY_STEP`, a 2.5 cm
+  carrot). A long fast carry built up velocity along the arm's redundant direction that
+  OSC's nullspace pull did not damp, so after the hand stopped the elbow coasted on to
+  joint 4's limit. In row D Ideal/case2 the frypan's insert onto the rack ended at -0.07
+  rad on every seed, and the cream cheese's pick after it started at the limit. Now the
+  insert ends at -0.7 to -1.2 rad, no step starts at a limit, and seeds 0–4 go from 3/5 to
+  4/5. Missions use about 25% more steps (case2: 430–470 → 540–556 of 600). Seed 3 now
+  fails: following its plan closely, the frypan grazes the wine rack (#211). Each
+  RoboCerebra stage's end in the tracker log, and a stall, now record the arm's joints,
+  and an untracked grasp's message names the pose and the joint at its limit.
+- A RoboCerebra place into a region no longer puts every object at the region's center
+  (#201). In row D Ideal/case9 the bowl, the pudding and the cookies all went to (0, 0) of
+  the coffee table: on dev the pudding and the cookies were stacked on the bowl in seeds 2,
+  4 and 9, and the pudding's place missed in seed 3. A place onto a support now finds the
+  objects already resting in the region (lowest point within 3 cm of the support) and
+  tries release spots that keep the held object's box 1.5 cm clear of theirs and over the
+  support's face (the table region's site is a 4 m square, the table 0.7 × 1.6 m). Spots
+  are tried nearest the center first, 3 cm apart, up to 12, before the old positions
+  (`info["spot"]`, `info["occupants"]`). Case9 over seeds 0–9: every place onto the table
+  lands on it, apart, none missed (77/110 subtasks both ways, the other misses being
+  picks, which vary run to run). Row A, seed 0, the 10 Ideal cases: 72/76 segments as on dev,
+  each the same.
+- A RoboCerebra `OscTracker` stage that stops converging now ends (#190). It used to run
+  until the step's budget was spent: case9's cookies place spent 1071 env steps in
+  `retreat` in the #186 smoke run, and 150 (the cap) in `insert`/`release` in r11, seeds 0
+  and 8. A stage whose carrot is not the last waypoint and whose position error has not
+  dropped by 2 mm, nor its rotation error by 0.02 rad, for 30 steps is cut; the tracker
+  holds the hand there, logs the stage, waypoint, error and arm joints (`"stalled": true`),
+  and the mission backend reports the step as stalled. The cause in case9 was the place
+  goal: all three objects go to the region's center, and the pudding and the cookies,
+  released at table height inside the bowl, held the hand against it. After #194 they
+  stack on the bowl instead, so the place converges but misses its goal; that is #201.
+  Row A, seed 0, on case2, case3 and case9: 22/25 segments as before, each in the same
+  number of env steps (two of them in 140 and 145); no stage stalled.
+- A RoboCerebra place onto an object's top now releases where the object can rest
+  (#194, in part). A release over the rack used to be accepted wherever it was collision
+  free, so the butter was dropped on the peg tips and tumbled. Each candidate's center
+  of mass, sampled from its collision boxes, must now lie at least 5 mm inside the hull
+  of the points touching the face under it: the plate between the pegs first, nearest
+  its center, then an object's top, widest margin first. When neither rests, the old
+  collision-free release is kept (`info["rests"] == "unstable"`), since the checker counts
+  `On` the moment the object touches.
+- A task plan through Unified Planning (pyperplan in the container) no longer depends on
+  Python's hash seed (#195). Unified Planning and pyperplan break ties between equal plans by
+  iterating over sets of strings, so each process could get its own order: RoboCerebra row D
+  ran case2's frypan or cream cheese first depending on `PYTHONHASHSEED`, the only change
+  between runs at fixed seeds on case1, case2 and case5. `UnifiedPlanningPlanner.solve`
+  now runs the engine in a child process with `PYTHONHASHSEED=0` (in process when it is
+  already 0). Fast Downward was already deterministic: it reads the same PDDL text.
+- A RoboCerebra segment no longer plans the robot or the target through an obstacle hidden
+  behind a bystander's collision (#193). HPP reports only a configuration's first collision,
+  and one between objects the segment does not move (MuJoCo leaves them a millimetre inside
+  their supports; a butter wedges between a rack's pegs) was judged harmless, so a mug was
+  planned through `rack_1`'s pegs. `SegmentPlanner` now drops the pairs no motion of the
+  segment changes (between two such objects; the hand and the held target) and raises
+  objects sunk into the environment out, up to 1 cm (`info["settled"]`). Row A, seed 0:
+  Memory_Execution 1–3 14/23 → 16/23 supported steps, the mug resting on the rack in all
+  three; Ideal 64/72 → 67/72. A mug released over the pegs can still tip off in row C.
+- `YamlTaskLoader` passed grouped `environment_contacts` (`{env: [env/surface, ...]}`)
+  to the factory as the environment names; it now passes the surfaces.
+- `PANDA_HAND`'s finger pads are measured on `script/twin/assets/panda_bimanual.urdf.template`
+  instead of nominal: they run from 9.0 mm behind to 9.5 mm past the TCP (before, 10 mm
+  behind it). The R3 grasp-handle record is regenerated with them (251 handles).
+- `add_grasp_handles` skipped the rims of RoboCerebra's bowls, whose wall boxes lean out
+  ~15 degrees, leaving only side pinches into the table. Top-rim pinches now take closing
+  axes tilted up to ~20 degrees, centre on the box's top face and come both ways round.
+- RoboCerebra picks of an object MuJoCo left slightly sunk and tilted failed for every
+  handle ("does not satisfy the leaf constraint"): HPP's grasp goals project it onto its
+  placement, another leaf than the start. `plan_pick` now settles the start onto HPP's
+  projection (at most 5 mm, 0.05 rad) and retries.
+- `script/screw_assembly/kill_resume.py` read the part count from the first `mission`
+  event, which since the web viewer (#102) is the plan event (`ScrewAssembly4`), and
+  crashed after the resumed run. It now reads the root node's event (#134).
+
+- Repair no longer runs out of memory after blocking a whole step (#168).
+  - `to_pddl(blocked=...)` encodes a block as a positive `unblocked_...` predicate: the
+    bindings the static preconditions allow, minus the blocked ones.
+  - It keeps only the parameters that tell those bindings apart, so a 9-parameter
+    `clamp_and_screw` block becomes a 2-parameter one.
+  - Before, unified-planning's STRIPS compilation for pyperplan listed every grounding of
+    the 9-ary negated predicate. A screw-assembly repair (`--grasp contact` after
+    `screw_misaligned`) was killed with exit 137. It now gets `NoPlanFound` in about
+    3 s and gives up with the failures in its summary.
+
 ## [0.8.0] - 2026-10-02
 
 The mission UI. One page, started with one command (`mission_ui.py`), shows the 3D scene, an
@@ -823,7 +1282,9 @@ First public release, on PyPI as `long-tamp`.
   in ~18s as the *second* phase of a multi-grasp sequence but failed 6/6 draws when built as
   the *only* phase of a single-gripper session. Not root-caused.
 
-[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/thanhndv212/long-tamp/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/thanhndv212/long-tamp/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/thanhndv212/long-tamp/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/thanhndv212/long-tamp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/thanhndv212/long-tamp/compare/v0.4.0...v0.5.0

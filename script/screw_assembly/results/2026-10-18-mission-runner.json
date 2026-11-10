@@ -1,0 +1,103 @@
+{
+  "parts": [
+    4
+  ],
+  "completed": 10,
+  "attempted": 10,
+  "replanning_blocks": 0,
+  "planning_blocks": 140,
+  "recovered_failures": 11,
+  "failure_episodes": 11,
+  "seconds_median": 908.07,
+  "seconds_min": 683.91,
+  "seconds_max": 1632.94,
+  "seeds": [
+    {
+      "seed": 1,
+      "success": true,
+      "seconds": 990.7,
+      "blocks": 19,
+      "resumes": 3,
+      "replans": 0
+    },
+    {
+      "seed": 2,
+      "success": true,
+      "seconds": 845.61,
+      "blocks": 19,
+      "resumes": 2,
+      "replans": 0
+    },
+    {
+      "seed": 3,
+      "success": true,
+      "seconds": 927.99,
+      "blocks": 19,
+      "resumes": 0,
+      "replans": 0
+    },
+    {
+      "seed": 4,
+      "success": true,
+      "seconds": 1632.94,
+      "blocks": 19,
+      "resumes": 0,
+      "replans": 0
+    },
+    {
+      "seed": 5,
+      "success": true,
+      "seconds": 888.14,
+      "blocks": 19,
+      "resumes": 0,
+      "replans": 0
+    },
+    {
+      "seed": 6,
+      "success": true,
+      "seconds": 795.26,
+      "blocks": 19,
+      "resumes": 1,
+      "replans": 0
+    },
+    {
+      "seed": 7,
+      "success": true,
+      "seconds": 1043.08,
+      "blocks": 19,
+      "resumes": 1,
+      "replans": 0
+    },
+    {
+      "seed": 8,
+      "success": true,
+      "seconds": 683.91,
+      "blocks": 19,
+      "resumes": 2,
+      "replans": 0
+    },
+    {
+      "seed": 9,
+      "success": true,
+      "seconds": 1070.94,
+      "blocks": 19,
+      "resumes": 0,
+      "replans": 0
+    },
+    {
+      "seed": 10,
+      "success": true,
+      "seconds": 857.52,
+      "blocks": 19,
+      "resumes": 4,
+      "replans": 0
+    }
+  ],
+  "date": "2026-10-18",
+  "validation": "#134 V3 batch: task_screw_assembly.py on long_tamp.mission.MissionRunner",
+  "environment": "hpp-agimus-arm64 (source-built HPP, hpp-core 9.1.0), three missions at a time",
+  "command": "bash run_batch.sh 10 3 batch_134; summarize.py batch_134 --gate --baseline results/2026-10-18-dev-baseline-source-built.json",
+  "scene": "four-part screw assembly",
+  "gate": "PASS",
+  "notes": "10/10, 0/140 replanning blocks, 11/11 recoveries. Median 908 s vs 1181 s on dev in the same environment (run one after the other). Against the PyPI-wheel baseline (687 s) the time check fails: different environment (no spline optimizer there)."
+}

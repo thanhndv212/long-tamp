@@ -41,3 +41,9 @@ What becomes easier, harder, or required. What we give up.
 | [0004](0004-execution-contract.md) | The execution contract: polled backends, heartbeats, duration-scaled deadlines | Accepted |
 | [0005](0005-partial-order-plans.md) | Partial-order plans and concurrent arms | Accepted |
 | [0006](0006-ai-model-integration.md) | AI model integration: one gateway, typed roles, gated tools | Accepted |
+| [0007](0007-remote-execution.md) | Remote execution: backends served over TCP, JSON frames, stop on disconnect | Accepted |
+| [0008](0008-gripper-models.md) | Gripper models: one protocol, a rotary-jaw model, a preset registry | Accepted |
+| [0009](0009-grasp-verification.md) | Grasp verification: a hand interface, measured openings, facts | Accepted |
+| [0010](0010-missed-grasp-repair.md) | Repairing a missed grasp: retry from the observed world, then escalate | Accepted |
+| [0011](0011-mission-domain.md) | Mission domains: one protocol for any robot and task | Accepted |
+| [0012](0012-mission-runner.md) | The generic mission runner | Accepted |

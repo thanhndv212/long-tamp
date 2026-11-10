@@ -81,3 +81,6 @@ checkpoints/
 # build_assets.py --only ur10-official: the upstream clone
 script/ikea_table_prototype/assets/ur10/_upstream/
 script/ikea_table_prototype/assets/robotiq_2f85/_upstream/
+
+# The mission UI's default run folders (python -m long_tamp.mission ui)
+/runs/

@@ -283,3 +283,30 @@ def test_simulated_states_stream_to_a_display(tmp_path):
 
 def test_without_from_qpos_nothing_is_displayed(backend):
     assert backend.display is None
+
+
+def test_a_retry_observes_a_moved_object_a_drift_replan_does_not(tmp_path):
+    """#128: ``observed_config(like, True)`` asks ``from_qpos`` for the
+    objects too (a missed grasp looks for where the part went); the default
+    keeps them from ``like``."""
+    (tmp_path / "arm.urdf").write_text(ARM)
+    (tmp_path / "box.urdf").write_text(BOX)
+    (tmp_path / "tiny.yaml").write_text(CONFIG)
+    export = export_mjcf(tmp_path / "tiny.yaml", tmp_path / "mjcf")
+
+    def from_qpos(qpos, like, objects=False):
+        q = np.asarray(like, float).copy()
+        q[:2] = qpos[:2]
+        if objects:
+            q[2:] = qpos[2:]
+        return q
+
+    backend = MuJoCoBackend(
+        export, lambda q: np.asarray(q, float), speed=math.inf, from_qpos=from_qpos
+    )
+    backend.reset(REST)
+    backend.displace("box", (0.0, 0.2, 0.0))
+    assert backend.observed_config(REST) == pytest.approx(REST)
+    seen = backend.observed_config(REST, True)
+    assert seen[:2] == pytest.approx(REST[:2])
+    assert seen[2:5] - REST[2:5] == pytest.approx([0.0, 0.2, 0.0], abs=1e-9)

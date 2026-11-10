@@ -21,11 +21,11 @@
 #   - pokeball_bimanual.urdf / .srdf: unchanged from the UR5 version of
 #     this task — ball geometry/handles don't depend on which arm holds
 #     them.
-#
-# Ground + ball still reused from the sibling hpp-practicals repo
-# (package://hpp_practicals/...) — see script/twin/README.md for the
-# one-time dev-environment setup (`AMENT_PREFIX_PATH` for package://
-# resolution).
+#   - ground_bimanual.urdf: a flat box sized to both arms' bases.
+#   The ball and ground are derived from hpp-practicals' ur_benchmark
+#   assets (LGPL v2) but vendored here, so no external package is needed.
+#   Their paths below are likewise overridden by task_lift_ball.py with
+#   absolute paths.
 #
 # Consumed by: YamlTaskLoader (src/long_tamp/config/yaml_loader.py)
 
@@ -56,13 +56,13 @@ paths:
       pose: [1.1, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
 
   environment:
-    ground: "package://hpp_practicals/urdf/ur_benchmark/ground.urdf"
+    ground: "OVERRIDDEN_AT_RUNTIME_see_task_lift_ball.py"
 
   objects:
     ball:
-      urdf: "package://hpp_practicals/urdf/ur_benchmark/pokeball.urdf"
-      # srdf intentionally omitted — see note above, filled in by
-      # task_lift_ball.py at runtime.
+      urdf: "OVERRIDDEN_AT_RUNTIME_see_task_lift_ball.py"
+      # srdf intentionally omitted — filled in by task_lift_ball.py at
+      # runtime, same as the urdf.
 
 # ---------------------------------------------------------------------------
 # Scene selection

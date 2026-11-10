@@ -40,6 +40,28 @@ class SampledPath:
         self._q = np.array(samples)
         self._length = length
 
+    @classmethod
+    def from_samples(cls, times: Any, configurations: Any) -> SampledPath:
+        """A sampled path rebuilt from its sample ``times`` (starting at 0,
+        increasing) and ``configurations`` (one row per time), as sent over
+        a wire (``long_tamp.execution.remote``)."""
+        times = np.asarray(times, dtype=float)
+        q = np.asarray(configurations, dtype=float)
+        if times.ndim != 1 or len(times) < 2 or q.ndim != 2 or len(q) != len(times):
+            raise ValueError(
+                f"sampled path: {times.shape} times for {q.shape} configurations"
+            )
+        self = cls.__new__(cls)
+        self._times, self._q, self._length = times, q, float(times[-1])
+        return self
+
+    @property
+    def times(self) -> np.ndarray:
+        """The sample times, from 0 to ``length()`` (read-only)."""
+        view = self._times.view()
+        view.flags.writeable = False
+        return view
+
     def length(self) -> float:
         return self._length
 

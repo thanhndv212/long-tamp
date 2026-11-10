@@ -290,10 +290,12 @@ except Exception as e:
 
 ---
 
-## Bug 6 (open): A Single QP Solve Inside `SplineGradientBased` Is Unbounded
+## Bug 6 (fixed upstream): A Single QP Solve Inside `SplineGradientBased` Is Unbounded
 
-**Status**: fixed in a local hpp-core patch (2026-10-01, #26), not yet upstream. Without
-the patch, the workaround below still applies (the backend falls back to it by itself).
+**Status**: fixed upstream in hpp-core
+[#459](https://github.com/humanoid-path-planner/hpp-core/pull/459) (merged 2026-10-07),
+released in hpp-core **v9.1.0**. The PyPI wheels are still 9.0.2, so with them the
+workaround below still applies (the backend falls back to it by itself).
 
 ### Problem
 
@@ -316,8 +318,7 @@ pyhpp::manipulation::TransitionPlanner::optimizePath        <- PyHPPBackend "opt
 ```
 
 It is intermittent: one hang in about 20 screw-assembly missions run with the spline
-optimizer on (a few hundred blocks). The same optimizer is in `agimus_spacelab`'s default optimizer lists, so its
-missions are exposed too.
+optimizer on (a few hundred blocks).
 
 ### Root Cause
 
@@ -339,18 +340,25 @@ the same between-iteration points as the timeout.
 (which honor the timeout). `script/screw_assembly/` uses it. The cost is path smoothness
 wherever the spline pass would have helped. With it, 10/10 missions completed with no hang.
 
-### Fix (local hpp-core patch, 2026-10-01)
+### Fix (hpp-core 9.1.0, upstream #459)
 
-hpp-core branch `fix/qp-max-iterations` (commit `fd9a2054`, not pushed upstream yet) adds the
-`SplineGradientBased/QPMaxIterations` parameter. Its default, 0, keeps proxsuite's own
-default, so behavior is unchanged unless the parameter is set. `QuadraticProgram::solve()`
-passes it to proxsuite as `max_iter` and `max_iter_in`. `QuadraticProgram` and
-`SplineGradientBased` gain a member each, so hpp-manipulation and hpp-python must be rebuilt
-against it.
+hpp-core adds the `SplineGradientBased/QPMaxIterations` parameter (INT). Its default, 0,
+keeps proxsuite's own caps, so behavior is unchanged unless the parameter is set. When it is
+greater than 0, `QuadraticProgram::solve()` passes it to proxsuite as `max_iter`, and lowers
+`max_iter_in` to it only when it is below proxsuite's inner default (1500), never raising it.
+
+The upstream version also differs from the local patch first written (`fd9a2054`) in one way
+that applies whatever the parameter: `SplineGradientBased::optimize()` now checks the
+solve's return value. A failure on the first solve returns the input path; a later one
+stops the loop and returns the last collision-free path. Before, a failed solve was ignored.
+
+`QuadraticProgram` and `SplineGradientBased` gain a member each, so hpp-manipulation and
+hpp-python must be rebuilt against 9.1.0.
 
 On the long_tamp side, `configure_transition_planner(qp_max_iterations=N)` sets the parameter
-when hpp-core declares it. When it doesn't, the backend drops the spline optimizer, as
-`spline_optimizer=False` does. `script/screw_assembly/` uses 1000.
+when hpp-core declares it. When it doesn't (hpp-core < 9.1.0, including the 9.0.2 PyPI
+wheels), the backend drops the spline optimizer, as `spline_optimizer=False` does.
+`script/screw_assembly/` uses 1000.
 
 ### Proposed Fix (as first written)
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "long-tamp"
-version = "0.8.0"
+version = "0.9.0"
 description = "Long-TAMP - Manipulation Planning Framework"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -108,6 +108,7 @@ dev = [
     "pytest-cov",
     "black",
     "ruff",
+    "mypy",
     "sphinx",
     "sphinx-rtd-theme",
 ]

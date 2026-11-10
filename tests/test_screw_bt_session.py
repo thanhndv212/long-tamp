@@ -37,7 +37,7 @@ def test_the_screw_cell_session_runs_its_plan():
 
     run = run_plan(session)
     assert run.success, f"{run.failed_step}: {run.message}"
-    labels = [r["label"] for r in session.ctx["records"]]
+    labels = [r["label"] for r in session.run.records]
     assert labels == [
         "bootstrap: pick driver",
         "ur10_right home (bootstrap)",  # the lanes, planned in plan order

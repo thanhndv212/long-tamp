@@ -17,6 +17,7 @@ removed; the plan is mapped back). It is an optional dependency
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -84,20 +85,18 @@ class UnifiedPlanningPlanner:
         )
 
     def solve(self, export: PddlExport) -> list[Step]:
+        """The plan, the same for the same export: Unified Planning and
+        pyperplan break ties by iterating over sets of strings, so under a
+        random hash seed (Python's default) the order of equal-cost steps
+        changes from one process to the next. Unless ``PYTHONHASHSEED`` is
+        already 0, the engine runs in a child process that has it."""
         try:
-            from unified_planning.engines import CompilationKind
-            from unified_planning.io import PDDLReader
-            from unified_planning.shortcuts import (
-                Compiler,
-                OneshotPlanner,
-                get_environment,
-            )
+            import unified_planning  # noqa: F401
         except ImportError as error:  # pragma: no cover - depends on the extra
             raise ImportError(
                 "UnifiedPlanningPlanner needs the 'planning' extra: "
                 "pip install long-tamp[planning]"
             ) from error
-        get_environment().credits_stream = None
         name = self.engine_name()
         if self.engine == "auto" and name == "pyperplan":
             warnings.warn(
@@ -106,28 +105,87 @@ class UnifiedPlanningPlanner:
                 "install up-fast-downward",
                 stacklevel=2,
             )
-        problem = PDDLReader().parse_problem_string(export.domain, export.problem)
-        with OneshotPlanner(name=name) as planner:
-            map_backs = []
-            for kind_name in self.COMPILATIONS:
-                if planner.supports(problem.kind):
-                    break
-                kind = getattr(CompilationKind, kind_name)
-                with Compiler(problem_kind=problem.kind, compilation_kind=kind) as c:
-                    compiled = c.compile(problem, kind)
-                problem = compiled.problem
-                map_backs.append(compiled.map_back_action_instance)
-            result = planner.solve(problem, timeout=self.timeout)
-        if result.plan is None:
-            raise NoPlanFound(f"{name}: {result.status.name}")
-        plan = result.plan
-        for map_back in reversed(map_backs):
-            plan = plan.replace_action_instances(map_back)
-        actions = [
-            (a.action.name, *(str(p) for p in a.actual_parameters))
-            for a in plan.actions
-        ]
+        if os.environ.get("PYTHONHASHSEED") == "0":
+            actions = _up_actions(export.domain, export.problem, name, self.timeout)
+        else:
+            actions = _up_actions_seeded(
+                export.domain, export.problem, name, self.timeout
+            )
         return from_pddl_plan(export, actions)
+
+
+def _up_actions(
+    domain: str, problem: str, name: str, timeout: float | None
+) -> list[tuple[str, ...]]:
+    """Solve with the Unified Planning engine ``name``, compiling the
+    problem down until it supports it: the plan's actions, names first."""
+    from unified_planning.engines import CompilationKind
+    from unified_planning.io import PDDLReader
+    from unified_planning.shortcuts import Compiler, OneshotPlanner, get_environment
+
+    get_environment().credits_stream = None
+    parsed = PDDLReader().parse_problem_string(domain, problem)
+    with OneshotPlanner(name=name) as planner:
+        map_backs = []
+        for kind_name in UnifiedPlanningPlanner.COMPILATIONS:
+            if planner.supports(parsed.kind):
+                break
+            kind = getattr(CompilationKind, kind_name)
+            with Compiler(problem_kind=parsed.kind, compilation_kind=kind) as c:
+                compiled = c.compile(parsed, kind)
+            parsed = compiled.problem
+            map_backs.append(compiled.map_back_action_instance)
+        result = planner.solve(parsed, timeout=timeout)
+    if result.plan is None:
+        raise NoPlanFound(f"{name}: {result.status.name}")
+    plan = result.plan
+    for map_back in reversed(map_backs):
+        plan = plan.replace_action_instances(map_back)
+    return [
+        (a.action.name, *(str(p) for p in a.actual_parameters)) for a in plan.actions
+    ]
+
+
+def _up_actions_seeded(
+    domain: str, problem: str, name: str, timeout: float | None
+) -> list[tuple[str, ...]]:
+    """:func:`_up_actions` in a child process with ``PYTHONHASHSEED=0``
+    and this one's import path."""
+    request = {"domain": domain, "problem": problem, "name": name}
+    request["timeout"] = timeout
+    env = dict(os.environ, PYTHONHASHSEED="0")
+    env["PYTHONPATH"] = os.pathsep.join(p for p in sys.path if p)
+    run = subprocess.run(
+        [sys.executable, "-c", f"from {__name__} import _child; _child()"],
+        input=json.dumps(request),
+        capture_output=True,
+        text=True,
+        env=env,
+        # The engine's own timeout, plus the child's start-up.
+        timeout=None if timeout is None else timeout + 60.0,
+    )
+    lines = run.stdout.strip().splitlines()
+    if run.returncode != 0 or not lines:
+        tail = run.stderr.strip().splitlines()[-3:]
+        raise RuntimeError(f"{name} exit {run.returncode}: {' | '.join(tail)}")
+    reply = json.loads(lines[-1])
+    if "no_plan" in reply:
+        raise NoPlanFound(reply["no_plan"])
+    return [tuple(a) for a in reply["actions"]]
+
+
+def _child() -> None:
+    """The child of :func:`_up_actions_seeded`: a request on stdin, the
+    actions (or why there are none) as the last line of stdout."""
+    request = json.loads(sys.stdin.read())
+    try:
+        actions = _up_actions(
+            request["domain"], request["problem"], request["name"], request["timeout"]
+        )
+    except NoPlanFound as error:
+        print(json.dumps({"no_plan": str(error)}))
+        return
+    print(json.dumps({"actions": actions}))
 
 
 class FastDownwardPlanner:

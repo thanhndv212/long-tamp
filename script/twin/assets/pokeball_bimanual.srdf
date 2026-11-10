@@ -5,9 +5,8 @@
   radius sphere) is unchanged; a second handle is added at the same point with a
   distinct orientation, following the pattern used for simultaneous dual-arm
   holds elsewhere (two handles on one object, same xyz, different approach
-  direction). Used with the *original*, unmodified
-  package://hpp_practicals/urdf/ur_benchmark/pokeball.urdf for geometry — only the
-  SRDF (grasp semantics) is overridden. See script/twin/README.md.
+  direction). Paired with the vendored pokeball_bimanual.urdf (same geometry,
+  primitive visual). See script/twin/README.md.
 -->
 <robot name="pokeball">
   <handle name="handle" clearance="0.025">

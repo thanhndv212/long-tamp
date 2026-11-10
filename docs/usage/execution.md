@@ -124,7 +124,7 @@ executor = PlanExecutor(session, backend, control=control,
 
 Every decision is a `watchdog` event, and the viewer and the chat show it. An operator's
 pending request always comes first, and so does a pause. In the screw assembly, use
-`--watchdog 300,900`. `mission_ui.py` turns it on by default.
+`--watchdog 300,900`. The mission UI (`python -m long_tamp.mission ui`) turns it on by default.
 
 `MockBackend` (scriptable: busy starts, failures, stalls, slow real-time factor) is there
 for tests and demos.
@@ -194,6 +194,34 @@ them. This assumes the grasps still hold. A 0.2 rad bump of an arm whose gripper
 clamped part would break the grasp in the real world, so the planner can't start from that
 configuration either. `--inject-drift
 "LABEL:JOINT:RAD"` bumps a joint just before step LABEL's motion, to exercise this.
+
+## Grippers and grasp verification
+
+A backend that drives a hand implements `GripperActuation` (ADR-0009):
+
+```python
+backend.close_gripper("arm/gripper", width=0.03)   # or effort=..., or fully
+state = backend.gripper_state("arm/gripper")       # GripperState(width, effort)
+backend.open_gripper("arm/gripper")
+```
+
+After it closes on a planned grasp, it checks the measured opening against the hand's model
+and reports the outcome in `Feedback.facts`: `holds(arm/gripper, cube)`, or
+`grasp_missed(arm/gripper, cube)` with the command failing. `ExpectedGrasp` does the check;
+`FingerClosureTable.expected_grasp(gripper, handle)` builds one per grasp:
+
+```python
+expected = closures.expected_grasp("arm/gripper", "cube/handle")
+fact = expected.verify(backend.gripper_state("arm/gripper"))
+```
+
+An opening more than two `default_squeeze` below the commanded one means the hand closed on
+nothing. The step's failure message lists the facts, and `run.executions[i].result.facts`
+holds them.
+
+The MuJoCo backend verifies contact grasps when given `expect` (`GripTable(closures,
+expected).expect`) and actuates the `hands` it's given (`GripperBinding`s). The
+screw-assembly example does both with `--grasp contact`.
 
 ## Planning ahead
 

@@ -95,20 +95,36 @@ outcome = plan_execute_repair(plan, execute, policy, max_rounds=3)
 ```
 
 - `to_pddl(..., blocked=[("clamp_and_screw", {"clamp": "fixtures/clamp1", "seat":
-  "part1/h_seat"})])` adds `(not (blocked_clamp_and_screw__clamp__seat ?clamp ?seat))`
-  to the action and the blocked values to the problem, so a planner can't choose that
-  pair again, whatever the other parameters.
+  "part1/h_seat"})])` adds `(unblocked_clamp_and_screw__clamp__seat ?clamp ?seat)` to
+  the action, and to the problem every pair the action's static preconditions allow
+  except the blocked one, so a planner can't choose that pair again, whatever the other
+  parameters. The predicate keeps only the parameters that tell the allowed bindings
+  apart: blocking a whole 9-parameter `clamp_and_screw` binding becomes a block on the
+  clamp and the holding hand. That keeps the predicate's arity low, which matters for
+  planners reached through unified-planning: compiling a STRIPS problem for pyperplan
+  lists every grounding of every predicate, and a 9-ary one ran out of memory. Past
+  20 000 allowed bindings the export falls back to `(not (blocked_... ?clamp ?seat))`
+  and the blocked values.
 - The policy maps a failure to bindings to block (the default blocks the failed step's
   own binding). The loop stops on success, after `max_rounds` plans, when the policy has
   nothing new to block, or when no plan avoids the blocks (`NoPlanFound`).
 - Each round plans from the world state the previous one left, so completed steps are
   not redone.
+- `retry=retry_missed_grasp, max_retries=2` retries a step whose grasp missed instead
+  of blocking it: the object moved, the binding is still right (ADR-0010). The executor
+  opens the hand and plans from the observed configuration before the retry. Past
+  `max_retries` the loop gives up, and `outcome.failures` holds every failure, oldest
+  first, for a supervisor or an escalation report.
 
 Screw assembly: `task_screw_assembly.py --planner up --replan 3` runs this loop with
 `screw_domain.repair_policy` (a clamp that can't reach a part's seat is blocked for that
 part; anything else blocks the failed step), and `--inject-failure
 clamp_and_screw:clamp=fixtures/clamp1` makes that step fail once, as if unreachable, to
-test it.
+test it. With `--backend mujoco`, `--inject-miss 'part1 A0: grasp:part1:0,-0.10,0'`
+moves part1 10 cm just before its grasp, so the grasp misses and is retried where the
+part (`--grasp-retries N`, default 2; each retry uses a `--replan` round). At 6 cm the
+part is still between the fingers, which close across y, so the opened hand starts inside
+it; moved along x, the part goes into the rack.
 
 ## Running Fast Downward directly
 

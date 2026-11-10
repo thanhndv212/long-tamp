@@ -412,13 +412,20 @@ class PyHPPBackend(BackendBase):
             return
         self.problem.distance(WeighedDistance(self.device).asDistancePtr_t())
 
-    def load_environment(self, name: str, urdf_path: str, pose: Optional[SE3] = None):
+    def load_environment(
+        self,
+        name: str,
+        urdf_path: str,
+        pose: Optional[SE3] = None,
+        srdf_path: Optional[str] = None,
+    ):
         """Load environment model.
 
         Args:
             name: Name for the environment object
             urdf_path: Path to URDF file
             pose: Optional SE3 pose (defaults to identity)
+            srdf_path: Optional SRDF (the environment's contact surfaces)
         """
         if self.device is None:
             raise RuntimeError("Must load robot first")
@@ -427,7 +434,13 @@ class PyHPPBackend(BackendBase):
             pose = SE3.Identity()
 
         urdf.loadModel(
-            self.device, 0, name, "anchor", resolve_mesh_paths(urdf_path), "", pose
+            self.device,
+            0,
+            name,
+            "anchor",
+            resolve_mesh_paths(urdf_path),
+            srdf_path or "",
+            pose,
         )
 
         return name
@@ -438,6 +451,7 @@ class PyHPPBackend(BackendBase):
         urdf_path: str,
         srdf_path: Optional[str] = None,
         root_joint_type: str = "freeflyer",
+        pose: Optional[SE3] = None,
     ):
         """Load manipulable object.
 
@@ -446,9 +460,14 @@ class PyHPPBackend(BackendBase):
             urdf_path: Path to URDF file
             srdf_path: Path to SRDF file containing handles/grippers/contacts
             root_joint_type: Type of root joint ('freeflyer' or 'anchor')
+            pose: Optional SE3 pose of the root (defaults to identity). An
+                anchored object, such as a cabinet whose drawers are its
+                joints, is fixed there.
         """
         if self.device is None:
             raise RuntimeError("Must load robot first")
+        if pose is None:
+            pose = SE3.Identity()
 
         urdf.loadModel(
             self.device,
@@ -457,7 +476,7 @@ class PyHPPBackend(BackendBase):
             root_joint_type,
             resolve_mesh_paths(urdf_path),
             srdf_path or "",
-            SE3.Identity(),
+            pose,
         )
         self._refresh_problem_distance()
 
@@ -1672,10 +1691,10 @@ class PyHPPBackend(BackendBase):
                 observed stuck 11+ minutes in one solve. Omitted: unchanged.
             qp_max_iterations: caps that QP solve's iterations (proxsuite's
                 ``max_iter``), which bounds the spline optimizer by
-                ``path_optimizer_timeout`` plus one bounded solve. Needs an
-                hpp-core with the ``SplineGradientBased/QPMaxIterations``
-                parameter; with one that lacks it, the spline optimizer is
-                dropped instead, as with ``spline_optimizer=False``.
+                ``path_optimizer_timeout`` plus one bounded solve. Needs
+                hpp-core >= 9.1.0 (``SplineGradientBased/QPMaxIterations``);
+                with an older one, the spline optimizer is dropped instead,
+                as with ``spline_optimizer=False``.
         """
         if inner_planner_type is not None:
             self._transition_inner_planner_type = inner_planner_type

@@ -1,0 +1,86 @@
+# Drawer open/close example (#161): one Panda opens a cabinet's drawer by
+# its handle, lets go, then grasps it again and pushes it shut.
+#
+# The cabinet is an articulated object: `root: anchor` fixes it at its
+# initial pose instead of giving it a free-flyer root, and its prismatic
+# joint `cabinet/drawer` is the only part that moves. With no contact
+# surfaces, the constraint-graph factory locks that joint whenever the
+# handle is not grasped (at whatever value it was left), and frees it
+# while the gripper holds the handle.
+#
+# Assets: the Panda is the vendored one of script/twin (its URDF is a
+# template, rendered by task_drawer.py at runtime, which overrides the
+# placeholder paths below); the ground is twin's too.
+#
+# Consumed by: YamlTaskLoader (src/long_tamp/config/yaml_loader.py)
+
+task: drawer
+
+paths:
+  robot:
+    panda:
+      urdf: "OVERRIDDEN_AT_RUNTIME_see_task_drawer.py"
+      srdf: "OVERRIDDEN_AT_RUNTIME_see_task_drawer.py"
+  environment:
+    ground: "../../twin/assets/ground_bimanual.urdf"
+  objects:
+    cabinet:
+      urdf: "../assets/cabinet.urdf"
+      srdf: "../assets/cabinet.srdf"
+
+robots:
+  - panda
+
+environments:
+  - ground
+
+# Panda's "ready" pose; fingers frozen fully open (see freeze_joints).
+joint_groups:
+  PANDA:
+    - {joint: panda/panda_joint1, initial:  0.000000, bounds: [-2.8973, 2.8973]}
+    - {joint: panda/panda_joint2, initial: -0.785398, bounds: [-1.7628, 1.7628]}
+    - {joint: panda/panda_joint3, initial:  0.000000, bounds: [-2.8973, 2.8973]}
+    - {joint: panda/panda_joint4, initial: -2.356190, bounds: [-3.0718, -0.0698]}
+    - {joint: panda/panda_joint5, initial:  0.000000, bounds: [-2.8973, 2.8973]}
+    - {joint: panda/panda_joint6, initial:  1.570700, bounds: [-0.0175, 3.7525]}
+    - {joint: panda/panda_joint7, initial:  0.785398, bounds: [-2.8973, 2.8973]}
+    - {joint: panda/panda_finger_joint1, initial: 0.04, bounds: [0.0, 0.04]}
+    - {joint: panda/panda_finger_joint2, initial: 0.04, bounds: [0.0, 0.04]}
+
+# No free-flying object in this scene; kept for the loader's bounds class.
+freeflyer_bounds:
+  translation: [[-1.0, 1.5], [-1.0, 1.0], [0.0, 1.5]]
+  quaternion:  [[-1.0001, 1.0001], [-1.0001, 1.0001],
+                [-1.0001, 1.0001], [-1.0001, 1.0001]]
+
+arm_groups:
+  panda:
+    joint_keyword: "panda/"
+    grippers:
+      - panda/gripper
+
+objects:
+  cabinet:
+    # Fixed in the world, its front (+x of the cabinet) turned to face the
+    # robot: 0.75 m ahead, rotated 180 degrees about z.
+    root: anchor
+    initial_pose_xyzquat: [0.75, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+    # Initial value of each joint, by name; a joint left out starts at 0
+    # (clamped into its limits).
+    joints:
+      cabinet/drawer: 0.0
+    handles:
+      - cabinet/handle
+    contact_surfaces: []
+
+grippers:
+  - panda/gripper
+
+valid_pairs:
+  panda/gripper:
+    - cabinet/handle
+
+environment_contacts: {}
+
+freeze_joints:
+  - panda/panda_finger_joint

@@ -135,3 +135,13 @@ def test_screw_plan_steps_come_from_the_mission_name():
         [{"ir_id": "mission", "name": "Screw assembly, 1 part(s)"}]
     )
     assert steps[0] == "b00-grasp" and steps[-1] == "b06-rack" and len(steps) == 7
+
+
+def test_screw_plan_steps_skip_the_plan_event():
+    steps = _load_kill_resume().plan_steps(
+        [
+            {"ir_id": "mission", "role": "plan", "name": "ScrewAssembly1"},
+            {"ir_id": "mission", "role": "sequence", "name": "Screw assembly, 1 part(s)"},
+        ]
+    )
+    assert len(steps) == 7

@@ -71,10 +71,12 @@ nav:
       - Automatic task planning: usage/task-planning-pddl.md
       - AI models: usage/ai-models.md
       - Execution backends: usage/execution.md
+      - Run on your robot: usage/run-on-your-robot.md
       - Simulation (MuJoCo): usage/simulation-mujoco.md
       - Skills: usage/skills.md
       - Mission events: usage/events.md
       - Mission viewer: usage/viewer.md
+      - Write your own mission: usage/write-your-own-mission.md
   - Features:
       - Overview: features/README.md
       - Phase-target lookahead: features/phase-target-lookahead.md
@@ -91,8 +93,16 @@ nav:
           - "0004 Execution contract": adr/0004-execution-contract.md
           - "0005 Partial-order plans": adr/0005-partial-order-plans.md
           - "0006 AI model integration": adr/0006-ai-model-integration.md
+          - "0007 Remote execution": adr/0007-remote-execution.md
+          - "0008 Gripper models": adr/0008-gripper-models.md
+          - "0009 Grasp verification": adr/0009-grasp-verification.md
+          - "0010 Missed-grasp repair": adr/0010-missed-grasp-repair.md
+          - "0011 Mission domains": adr/0011-mission-domain.md
+          - "0012 Mission runner": adr/0012-mission-runner.md
   - Plans:
       - Roadmap: plans/roadmap.md
+      - "Simulation benchmark selection": plans/sim-benchmark-selection.md
+      - "RoboCerebra tasks and progress": plans/robocerebra-tasks.md
       - "Roadmap: PyPI as the default install": plans/pypi-install-roadmap.md
       - "0.1.0 release draft": plans/release-0.1.0.md
   - Bugs (upstream HPP):

@@ -27,6 +27,11 @@ class HostSession(TaskPlanningSession):
     def get_behavior_tree_xml(self) -> str:
         return self.artifact.xml
 
+    def get_plan_document(self) -> str:
+        """The plan's IR document (JSON), e.g. for a host to start its event
+        stream with a ``plan`` event, which viewers draw (#25)."""
+        return json.dumps(self.plan.document)
+
 
 def create_fake_session(options_json: str = "{}") -> HostSession:
     """Create a deterministic, mission-agnostic conformance session.

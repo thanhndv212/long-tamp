@@ -421,7 +421,8 @@ class PlanExecutor:
             self._executions.append(StepExecution(node["id"], command, outcome))
             self._emit(node, command, outcome.status.name, "RUNNING", outcome)
             if outcome.status is not ExecutionStatus.SUCCESS:
-                return f"execution failed ({outcome.reason}): {outcome.message}"
+                facts = f" [{', '.join(outcome.facts)}]" if outcome.facts else ""
+                return f"execution failed ({outcome.reason}): {outcome.message}{facts}"
         return ""
 
     def _execute_async(

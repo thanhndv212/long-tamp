@@ -1,0 +1,85 @@
+{
+  "date": "2026-10-18",
+  "validation": "#136 M8 exit test, the template domain through the mission UI: python -m long_tamp.mission ui --domain long_tamp.mission.template:<factory>, driven through the page's chat API (POST /api/chat, POST /api/action start)",
+  "environment": "macOS host, no HPP, mock backend; the local OpenAI-compatible gateway (9router), model openai:cx/gpt-6-luna",
+  "gate": "PASS",
+  "runs": [
+    {
+      "domain": "long_tamp.mission.template:repair_demo",
+      "operator": [
+        "Take the cube off the table and put it in the tray if you can; anywhere off the table is fine.",
+        "(Start mission)",
+        "That failed. Find out why, then put the cube anywhere else off the table and run it.",
+        "Put both objects in the tray, the ball first. (meant for the second run, sent here by mistake: planned, not run)"
+      ],
+      "tools": [
+        "write_goal",
+        "set_goal",
+        "plan",
+        "run",
+        "explain_failure",
+        "set_goal",
+        "plan",
+        "run",
+        "write_goal",
+        "set_goal",
+        "plan"
+      ],
+      "blocks": [
+        {
+          "label": "pick cube table",
+          "success": true
+        },
+        {
+          "label": "place cube tray",
+          "success": false
+        },
+        {
+          "label": "place cube bin",
+          "success": true
+        }
+      ],
+      "final_facts": [
+        "placed_at(ball, table)",
+        "placed_at(cube, bin)"
+      ],
+      "outcome": "completed after one repair: the place in the unreachable tray failed with cannot_reach(arm/gripper, tray); the model called explain_failure, set placed_at(cube, bin) and ran it",
+      "notes": "the model's last answer, after the successful run, was not JSON; the chat logged it as an error ('unusable answer'). The mission had already succeeded. The last write_goal/set_goal/plan are the stray fourth message; its plan, which would place in the unreachable tray again, was not run (the model warned that it might fail)."
+    },
+    {
+      "domain": "long_tamp.mission.template:domain",
+      "operator": [
+        "Put both objects in the tray, the ball first.",
+        "(Start mission)"
+      ],
+      "tools": [
+        "write_goal",
+        "plan",
+        "run"
+      ],
+      "blocks": [
+        {
+          "label": "pick ball table",
+          "success": true
+        },
+        {
+          "label": "place ball tray",
+          "success": true
+        },
+        {
+          "label": "pick cube table",
+          "success": true
+        },
+        {
+          "label": "place cube tray",
+          "success": true
+        }
+      ],
+      "final_facts": [
+        "placed_at(ball, tray)",
+        "placed_at(cube, tray)"
+      ],
+      "outcome": "completed: both objects in the tray, ball first (plan first=[placed_at(ball, tray)])"
+    }
+  ]
+}

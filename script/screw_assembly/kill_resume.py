@@ -115,7 +115,10 @@ def plan_steps(events: list[dict[str, Any]]) -> list[str]:
     sys.path.insert(0, str(HERE))
     import screw_domain
 
-    root = next(e for e in events if e["ir_id"] == "mission")
+    # the root node's events, not the plan event the viewer draws (same id)
+    root = next(
+        e for e in events if e["ir_id"] == "mission" and e.get("role") != "plan"
+    )
     n_parts = int(re.search(r"(\d+) part", root["name"]).group(1))
     document = screw_domain.build_plan_document(n_parts)
     return [step["id"] for step in screw_domain.transactions(document)]

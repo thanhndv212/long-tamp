@@ -143,12 +143,26 @@ its own role toggle. Your panels can read those events.
 
 ### The mission UI
 
-One command starts the whole thing (in the HPP environment):
+One command starts the whole thing for any mission domain (#133):
+
+```bash
+python -m long_tamp.mission ui --domain my_pkg.my_domain:make_domain
+```
+
+`--domain` names a factory returning a `MissionDomain` (`module:attribute`, or
+`path/to/file.py:attribute`). The chat's tools and the model's instructions come from the
+domain: its capabilities, goal vocabulary and `intro`. `--backend` picks the domain's backend
+(`mock` by default), and `-- --backend-option KEY=VALUE` passes options to its
+`make_backend`. A domain with a 3D scene returns it from `scene_viewer`.
+
+For the screw assembly (in the HPP environment):
 
 ```bash
 cd script/screw_assembly
 python mission_ui.py                     # MuJoCo; --backend playback for planned paths only
 ```
+
+This is the same launcher, with `--domain screw_mission.py:domain --backend mujoco`.
 
 It prints the page's URL (and opens a browser, outside a container). Then:
 
@@ -166,12 +180,13 @@ It prints the page's URL (and opens a browser, outside a container). Then:
    chat history, so you can ask *why did that step fail?*
 
 **Reset mission**, under the chat, starts over: a fresh mission with the robot and parts back
-at the start, an empty chat and a new run folder. `mission_ui.py` restarts the mission, and
+at the start, an empty chat and a new run folder. The launcher restarts the mission, and
 the page reloads itself when the new one answers, in about 10 s. It is available when nothing
 is running; stop a run first.
 
 The model and its endpoint come from the AI env file (see [AI models](ai-models.md)).
-`--model API:MODEL` overrides it, and arguments after `--` go to `task_screw_assembly.py`.
+`--model API:MODEL` overrides it, and arguments after `--` go to the mission process
+(`python -m long_tamp.mission serve --help` lists them).
 
 ### The chat panel
 

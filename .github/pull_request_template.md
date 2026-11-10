@@ -1,6 +1,6 @@
 <!-- Base branch: `dev` (feature/fix work) or `main` (release PR from dev, or a hotfix).
      Title: Conventional Commits, e.g. "feat(task_planning): check preconditions in TaskStepReady".
-     It becomes the squash commit's subject. -->
+     It heads the merge commit's body (PRs merge with a merge commit, never squash or rebase). -->
 
 Closes #
 
@@ -26,7 +26,7 @@ Closes #
 ## Docs and changelog
 
 - [ ] `CHANGELOG.md` `[Unreleased]` entry, or `skip-changelog` label (reason: …)
-- [ ] Docs updated (`docs/usage/`, `ARCHITECTURE.md`, `mkdocs.yml` nav) or not needed
+- [ ] Docs updated (`docs/usage/`, `docs/architecture.md`, `mkdocs.yml` nav) or not needed
 - [ ] ADR added/updated, or no design decision changed
 
 ## Found along the way / limits

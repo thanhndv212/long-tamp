@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from long_tamp.ai import CallRecord, make_client
 from long_tamp.tasks.task_planning.language import Vocabulary
 from long_tamp.tasks.task_planning.supervisor import (
+    SUPERVISE_ROLE,
     Decision,
     Limits,
     Situation,
@@ -148,6 +149,35 @@ def test_no_valid_decision_escalates_with_a_report(tmp_path):
     report = json.loads((tmp_path / "escalation.json").read_text())
     assert report["stopped"] == "escalate" and report["failure"]["step"] == "p2 A"
     assert "Mission stopped: escalate" in (tmp_path / "escalation.md").read_text()
+
+
+def test_an_escalation_reports_the_fact_history(tmp_path):
+    """#128: a repair loop that spent its retries on a missed grasp hands the
+    supervisor every failure; the report keeps them."""
+    missed = {
+        "step": "p1 A0: grasp",
+        "capability": "grasp",
+        "facts": ["grasp_missed(arm/gripper, p1)"],
+    }
+
+    def situation_with_history(result, goal):
+        s = situation(goal)
+        s.failure, s.failures = missed, [missed] * 3
+        s.message = "p1 A0: grasp: still failing after 2 retries"
+        return s
+
+    out = supervise(
+        Runs(), situation_with_history, "assemble both", GOAL, None,
+        report_dir=tmp_path,
+    )  # fmt: skip
+    assert out.stopped == "escalate: no model to decide"
+    report = json.loads((tmp_path / "escalation.json").read_text())
+    assert [f["facts"] for f in report["failures"]] == [missed["facts"]] * 3
+    md = (tmp_path / "escalation.md").read_text()
+    assert "## Fact history" in md
+    assert md.count("- p1 A0: grasp: grasp_missed(arm/gripper, p1)") == 3
+    prompt = SUPERVISE_ROLE.render(situation_with_history(None, GOAL), [])
+    assert "Every failure so far" in prompt
 
 
 def test_an_abort_stops_with_a_report(tmp_path):

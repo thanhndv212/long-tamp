@@ -48,47 +48,40 @@ from long_tamp.config.yaml_loader import YamlTaskLoader  # noqa: E402
 from long_tamp.tasks import ManipulationTask  # noqa: E402
 from long_tamp.tasks.grasp_sequence import GraspSequencePlanner  # noqa: E402
 from long_tamp.tasks.mission_checkpoint import MissionCheckpoint  # noqa: E402
-from long_tamp.tasks.refiner import GraspSequenceRefiner  # noqa: E402
+from long_tamp.mission import MissionRunner, MissionScene  # noqa: E402
+from long_tamp.mission.runner import parse_injection, write_trajectory  # noqa: E402
+from long_tamp.mission.ui import RESTART, parse_watchdog  # noqa: E402, F401
 from long_tamp.tasks.task_planning import (  # noqa: E402
-    CapabilityRegistry,
     CompositeWorldState,
     GraspTrackerState,
     RecordedFacts,
-    TaskPlan,
-    TaskPlanningSession,
-    parallelize,
 )
 from long_tamp.tasks.task_planning.events import (  # noqa: E402
     JsonlEventWriter,
     make_event,
     plan_event,
 )
-from long_tamp.tasks.task_planning.skills import SkillCommand  # noqa: E402
-from long_tamp.sim.skills import SCREW  # noqa: E402
-from long_tamp.tasks.task_planning.predicates import holds  # noqa: E402
 from long_tamp.execution import (  # noqa: E402
-    ExecutionCommand,
-    ExecutionPolicy,
     MockBackend,
     PathPlaybackBackend,
-    PlanExecutor,
     ProcessBackend,
+    RemoteBackend,
 )
-from screw_domain import (  # noqa: E402
+# Also re-exported: chat_tools, scenarios and screw_bt_session reach the
+# domain's functions through this module.
+from screw_domain import (  # noqa: E402, F401
     LEFT,
     RECORDED_PREDICATES,
     RIGHT,
     blocks_by_label,
     build_plan_document,
-    block_for,
     clamp_seats,
     descriptors,
     goal_vocabulary,
     pddl_problem,
     planned_document,
-    refinement_step,
-    repair_policy,
 )
+from screw_mission import ScrewAssemblyDomain  # noqa: E402
 
 # Planning keeps the fingers frozen open (a grasp is a rigid TCP constraint);
 # how far they close on each handle comes from the grasp planner, see
@@ -192,47 +185,6 @@ def finger_closures():
     )
 
 
-def sample_phases(
-    task: ScrewAssemblyTask, phases: list[dict[str, Any]], label: str, dt: float = 0.05
-) -> list[dict[str, Any]]:
-    """Sample the completed phases' paths every ``dt`` seconds of path time
-    (paths are time-parameterized), for replay.py."""
-    segments = []
-    for phase in phases:
-        if not phase.get("complete", True) or phase.get("skipped"):
-            continue
-        configs: list[list[float]] = []
-        for path in phase.get("paths", []):
-            if path is None:
-                continue
-            if isinstance(path, int):
-                path = task.planner.get_path(path)
-            length = path.length()
-            t0 = path.timeRange().first if hasattr(path, "timeRange") else 0.0
-            n = max(2, int(length / dt) + 1)
-            for i in range(n):
-                q, ok = path.eval(t0 + length * i / (n - 1))
-                if ok:
-                    configs.append([round(float(v), 5) for v in q])
-        if configs:
-            segments.append(
-                {
-                    "block": label,
-                    "gripper": phase.get("gripper"),
-                    "handle": phase.get("handle"),
-                    "configs": configs,
-                }
-            )
-    return segments
-
-
-def write_trajectory(path: Path, segments: list[dict[str, Any]], parts: int) -> None:
-    """Write replay.py's input (atomically: it is rewritten after each block)."""
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps({"parts": parts, "dt": 0.05, "segments": segments}))
-    tmp.replace(path)
-
-
 def home_target(task: ScrewAssemblyTask, q: list[float], arm: str, carried: str | None):
     """``q`` with ``arm`` at its home pose and ``carried`` (held by that arm's
     gripper) moved along, so the target satisfies the held grasp."""
@@ -315,616 +267,56 @@ def run_home_move(
     }
 
 
-def run_block(
-    task: ScrewAssemblyTask,
-    planner: GraspSequencePlanner,
-    ctx: dict[str, Any],
-    index: int,
-    block: dict[str, Any],
-    max_replans: int = 10,
-    verbose: bool = True,
-) -> dict[str, Any]:
-    """Plan one block from ``ctx["q"]``, then log and record it.
-
-    ``ctx`` carries the mission's running state: ``q`` (updated only on
-    success), ``records`` (one per block), ``trajectory``, ``checkpoint``,
-    ``live_viewer`` and ``n_parts``.
-    """
-    q = ctx["q"]
-    checkpoint, trajectory = ctx["checkpoint"], ctx["trajectory"]
-    live_viewer = ctx["live_viewer"]
-    if checkpoint is not None:
-        checkpoint.phase_dump_dir(index, block["label"])
-    t0 = time.time()
-    print(f"\n=== {block['label']} ===", flush=True)
-    if "move" in block:
-        r = run_home_move(task, planner, q, *block["move"], verbose=verbose)
-        phase_results = r.get("phase_results", [])
-    else:
-        refiner = ctx.get("refiner") or GraspSequenceRefiner(
-            planner, q_scene_init=task.q_init, max_replans=max_replans, verbose=verbose
-        )
-        refined = refiner.refine(refinement_step(block), q)
-        r = refined.as_dict()
-        phase_results = refined.phases
-    record = {
-        "label": block["label"],
-        "success": r["success"],
-        "replans": r["replans"],
-        "resumes": r["resumes"],
-        "seconds": round(time.time() - t0, 2),
-        "message": r["message"],
-    }
-    ctx["records"].append(record)
-    if "move" in block:
-        detail = f"{r['resumes']} retries) {r['message']}"
-    else:
-        detail = f"{r['resumes']} resumes, {r['replans']} replans)"
-    print(
-        f"--- {block['label']}: {'ok' if r['success'] else 'FAILED'} "
-        f"({record['seconds']}s, {detail}",
-        flush=True,
-    )
-    if checkpoint is not None:
-        checkpoint.record(
-            index,
-            block["label"],
-            r,
-            record["seconds"],
-            r["final_config"],
-            planner.grasp_tracker.current_grasps,
-        )
-    if r["success"]:
-        if trajectory is not None:
-            trajectory += sample_phases(task, phase_results, block["label"])
-            # After every block, like the run log, so a killed run keeps its
-            # motion and a resume can append to it.
-            if checkpoint is not None:
-                write_trajectory(
-                    checkpoint.dir / "trajectory.json", trajectory, ctx["n_parts"]
-                )
-        if live_viewer is not None:
-            # With a playback backend the backend drives the viewer; record only.
-            live_viewer.completed(phase_results, play=not ctx.get("backend_displays"))
-        ctx["q"] = r["final_config"]
-        ctx["last_phases"] = phase_results
-    return r
+#: ``run_mission`` options that configure the runner, not the run.
+RUNNER_OPTIONS = ("max_replans", "recorded", "verbose")
 
 
-def block_commands(
-    task: ScrewAssemblyTask, label: str, phases: list[dict[str, Any]]
-) -> list[ExecutionCommand]:
-    """The motion a block produced, one command per completed path.
-
-    Driving a screw is a skill: the planned insertion of the driver's tip into
-    a hole (the grasp edge ``_12``, from pregrasp to grasp) is sent as a
-    ``SkillCommand`` for the screw skill. A backend that runs skills (MuJoCo)
-    drives the screw; any other plays the path.
-    """
-    commands = []
-    for phase in phases:
-        if not phase.get("complete", True) or phase.get("skipped"):
-            continue
-        paths = [p for p in phase.get("paths", []) if p is not None]
-        edges = list(phase.get("edges", []))
-        # A resumed phase planned only its last edges: align from the end.
-        edges = (
-            [None] * (len(paths) - len(edges)) + edges[-len(paths) :] if paths else []
-        )
-        for path, edge in zip(paths, edges):
-            if isinstance(path, int):
-                path = task.planner.get_path(path)
-            payload = path
-            hole = phase.get("handle") or ""
-            if (
-                phase.get("gripper") == "driver/tip"
-                and edge is not None
-                and str(edge).endswith("_12")
-            ):
-                payload = SkillCommand(
-                    SCREW,
-                    {"tool": "driver", "part": hole.split("/")[0], "hole": hole},
-                    approach=path,
-                )
-            commands.append(
-                ExecutionCommand(step_id=label, duration=path.length(), payload=payload)
-            )
-    return commands
-
-
-def mission_session(
-    task: ScrewAssemblyTask,
-    planner: GraspSequencePlanner,
-    ctx: dict[str, Any],
-    recorded: RecordedFacts,
-    max_replans: int = 10,
-    verbose: bool = True,
-    document: dict[str, Any] | None = None,
-) -> TaskPlanningSession:
-    """The mission's TaskPlan, bound to this scene (one capability per block kind).
-
-    Every capability runs its block through ``run_block``; a failed block
-    raises, leaving ``ctx["q"]`` unchanged (the transaction contract). The
-    world state is the grasp tracker plus the recorded facts, so a step whose
-    effect already holds (after a resume, or from a scenario start) is
-    skipped.
-    """
-    n_parts = ctx["n_parts"]
-
-    def runner(capability: str):
-        def run(parameters: dict[str, Any]) -> dict[str, Any]:
-            return run_step(capability, parameters)
-
-        return run
-
-    def run_step(capability: str, parameters: dict[str, Any]) -> dict[str, Any]:
-        # The block comes from the step itself, so a planner-built plan (e.g.
-        # part 1 in clamp 2) runs the same way as the hand-written one.
-        block = block_for(capability, parameters)
-        label = block["label"]
-        # Where the step starts (grasps held), to replan it from if the robot
-        # has drifted by the time its motion runs.
-        ctx.setdefault("step_start", {})[label] = {
-            g: h for g, h in planner.grasp_tracker.current_grasps.items() if h
-        }
-        index = ctx.setdefault("block_index", 0)
-        ctx["block_index"] = index + 1
-        binding = {k: v for k, v in parameters.items() if k != "block"}
-        if _injected(ctx, capability, binding):
-            # --inject-failure: fail as if its first phase couldn't be
-            # reached, without planning (the M3 exit test).
-            gripper, handle = block["seq"][0]
-            ctx["failure"] = {
-                "step": label,
-                "capability": capability,
-                "parameters": binding,
-                "facts": [
-                    f"refinement_failed({label.replace(' ', '_')})",
-                    f"cannot_reach({gripper}, {handle})",
-                ],
-            }
-            print(
-                f"\n=== {label} === INJECTED FAILURE: cannot_reach({gripper}, {handle})"
-            )
-            raise RuntimeError(f"{label}: injected failure")
-        r = run_block(
-            task,
-            planner,
-            ctx,
-            index,
-            block,
-            max_replans=max_replans,
-            verbose=verbose,
-        )
-        if not r["success"]:
-            # The transaction contract: a failed block leaves the world as it
-            # was. Undo whatever its phases committed to the grasp tracker.
-            reset = getattr(planner, "reset_grasp_tracker_to_call_start", None)
-            if reset is not None and "seq" in block:
-                reset()
-            ctx["failure"] = {
-                "step": label,
-                "capability": capability,
-                "parameters": binding,
-                "facts": list(r.get("facts", [])),
-            }
-            raise RuntimeError(f"{label}: {r['message']}")
-        executor = ctx.get("executor")
-        if executor is not None:
-            for command in block_commands(task, label, ctx.get("last_phases", [])):
-                executor.submit(command)
-        return {"replans": r["replans"], "resumes": r["resumes"]}
-
-    def on_drift(node: dict[str, Any], observe) -> list[ExecutionCommand]:
-        """The robot drifted before this step's motion: plan the step again
-        from where it is (the grasps it started with, the observed config)."""
-        operation = node["children"][0] if node["type"] == "transaction" else node
-        capability = operation["capability"]
-        parameters = dict(operation.get("parameters", {}))
-        label = block_for(capability, parameters)["label"]
-        MissionCheckpoint.restore_grasps(
-            planner.grasp_tracker, ctx["step_start"][label]
-        )
-        observed = observe(ctx["q"]) if observe is not None else None
-        if observed is None:
-            raise RuntimeError("the backend can't report the observed configuration")
-        # Within the planner's bounds: a simulated finger at -1e-9 rad is
-        # "out of range" to HPP, which then rejects the start configuration.
-        model = task.robot.model()
-        observed = np.clip(observed, model.lowerPositionLimit, model.upperPositionLimit)
-        ctx["q"] = [float(v) for v in observed]
-        print(f"\n=== {label} === the robot drifted: replanning from where it is")
-        executor = ctx["executor"]
-        submitted = len(executor._pending)
-        run_step(capability, parameters)
-        commands = executor._pending[submitted:]
-        del executor._pending[submitted:]
-        return commands
-
-    ctx["on_drift"] = on_drift
-
-    world = CompositeWorldState(GraspTrackerState(planner), recorded)
-
-    def check(descriptor):
-        """A guard condition: true when its literals hold in the world."""
-
-        def evaluate(parameters: dict[str, Any]) -> bool:
-            state = world()
-            return all(
-                holds(literal.ground(parameters), state)
-                for literal in descriptor.precondition_literals
-            )
-
-        return evaluate
-
-    registry = CapabilityRegistry()
-    for name, descriptor in descriptors(n_parts).items():
-        is_guard = name in ("part_done", "all_parts_done")
-        registry.register(descriptor, check(descriptor) if is_guard else runner(name))
-    document = document or build_plan_document(n_parts)
-    if ctx.get("concurrent"):
-        # Independent steps (the other arm's) in parallel lanes (#21).
-        document = parallelize(document, registry)
-    plan = TaskPlan.from_dict(document, registry)
-    return TaskPlanningSession(plan, registry, world_state=world, recorded=recorded)
-
-
-def _injected(ctx: dict[str, Any], capability: str, binding: dict[str, Any]) -> bool:
-    """Whether ``--inject-failure`` targets this step (each spec fires once)."""
-    for spec in ctx.get("inject", []):
-        if spec["fired"] or spec["capability"] != capability:
-            continue
-        if all(str(binding.get(k)) == v for k, v in spec["match"].items()):
-            spec["fired"] = True
-            return True
-    return False
-
-
-#: Exit code asking the launcher (mission_ui.py) for a fresh mission (#114).
-RESTART = 75
-
-
-def parse_watchdog(text: str) -> tuple[float, float]:
-    """``SOFT[,HARD]`` seconds -> (soft, hard); hard defaults to 3 x soft."""
-    parts = [float(v) for v in text.split(",")]
-    soft = parts[0]
-    hard = parts[1] if len(parts) > 1 else 3 * soft
-    if not 0 < soft <= hard:
-        raise ValueError(f"--watchdog {text!r}: need 0 < SOFT <= HARD")
-    return soft, hard
-
-
-def parse_injection(text: str) -> dict[str, Any]:
-    """``capability:key=value,key=value`` -> an injection spec."""
-    capability, _, rest = text.partition(":")
-    match = dict(item.split("=", 1) for item in rest.split(",") if item)
-    return {"capability": capability, "match": match, "fired": False}
-
-
-def run_with_repair(
+def mission_runner(
     task: ScrewAssemblyTask,
     planner: GraspSequencePlanner,
     n_parts: int,
-    q_start: list[float] | None,
-    recorded: RecordedFacts,
-    rounds: int,
-    mission: dict[str, Any],
-    goal: list[str] | None = None,
-    constraints: list[tuple[str, dict[str, str]]] | None = None,
-) -> dict[str, Any]:
-    """Plan, run, and replan around failures (``--replan``, issue #15).
-
-    Every round plans the goal from the current world state with the blocked
-    bindings so far, and runs it from where the last round stopped.
-    """
-    from long_tamp.tasks.task_planning.repair import plan_execute_repair
-
-    state = {"q": q_start, "result": None, "seconds": 0.0, "blocks": [], "skipped": []}
-
-    clamps = clamp_seats(task.task_config.VALID_PAIRS)
-
-    def plan(blocked):
-        return plan_from_goal(
-            n_parts,
-            world_atoms(planner, recorded),
-            blocked=[*(constraints or []), *blocked],
-            clamps=clamps,
-            goal=goal,
-        )
-
-    def execute(document):
-        result = run_mission(
-            task, planner, n_parts, q_start=state["q"], document=document, **mission
-        )
-        state["q"] = result["final_config"]
-        state["seconds"] += result["seconds"]
-        state["blocks"] += result["blocks"]
-        state["skipped"] += result["skipped"]
-        state["result"] = result
-        return result["failure"]
-
-    def on_replan(failure, blocked):
-        print(
-            f"\n=== replanning: {failure['step']} failed "
-            f"({', '.join(failure.get('facts', [])[1:]) or 'no facts'}); "
-            f"blocking {blocked}",
-            flush=True,
-        )
-
-    outcome = plan_execute_repair(
-        plan, execute, repair_policy, max_rounds=rounds, on_replan=on_replan
+    recorded: RecordedFacts | None = None,
+    max_replans: int = 10,
+    verbose: bool = True,
+) -> MissionRunner:
+    """The mission on the generic runner (ADR-0012): the screw domain in
+    this scene. ``recorded`` is the world's recorded facts (default: none
+    yet); pass the same one to every runner of a mission."""
+    domain = ScrewAssemblyDomain(n_parts, clamp_seats(task.task_config.VALID_PAIRS))
+    scene = MissionScene(task, planner, list(task.q_init))
+    return MissionRunner(
+        domain, scene, recorded, max_replans=max_replans, verbose=verbose
     )
-    # No first plan at all: nothing ran.
-    result = dict(state["result"] or {"failure": None, "final_config": state["q"]})
-    result.update(
-        success=outcome.success,
-        repair_message=outcome.message,
-        seconds=round(state["seconds"], 2),
-        blocks=state["blocks"],
-        skipped=state["skipped"],
-        task_replans=len(outcome.rounds) - 1,
-        blocked=outcome.blocked,
-    )
-    if not outcome.success:
-        print(f"\n=== repair gave up: {outcome.message}")
-    return result
 
 
-def run_supervised(
+def split_options(mission: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """``mission`` as (``mission_runner`` options, ``run_mission`` options)."""
+    config = {k: v for k, v in mission.items() if k in RUNNER_OPTIONS}
+    return config, {k: v for k, v in mission.items() if k not in RUNNER_OPTIONS}
+
+
+def run_mission(
     task: ScrewAssemblyTask,
     planner: GraspSequencePlanner,
     n_parts: int,
-    q_start: list[float] | None,
-    recorded: RecordedFacts,
-    rounds: int,
-    mission: dict[str, Any],
-    instruction: str,
-    goal: list[str],
-    constraints: list[tuple[str, dict[str, str]]],
-    client,
-    run_dir: Path,
+    **mission: Any,
 ) -> dict[str, Any]:
-    """Repair loops under the execution supervisor (``--supervise``, #88).
-
-    Each repair loop (``run_with_repair``) handles what the refiner can
-    explain. When one gives up, the supervisor role decides: retry, relax
-    the goal (keep a subset of it), abort, or escalate. Escalation and abort
-    write ``escalation.md`` / ``escalation.json`` to the run folder.
-    """
-    from long_tamp.tasks.task_planning.skeleton import default_planner
-    from long_tamp.tasks.task_planning.supervisor import Limits, Situation, supervise
-
-    clamps = clamp_seats(task.task_config.VALID_PAIRS)
-    where = {"q": q_start}
-    #: What every repair loop ran, for the mission's summary.
-    total = {"seconds": 0.0, "blocks": [], "skipped": [], "loops": 0}
-    task_planner = default_planner("auto")
-
-    def run_repair(current_goal):
-        result = run_with_repair(
-            task,
-            planner,
-            n_parts,
-            where["q"],
-            recorded,
-            rounds,
-            mission,
-            current_goal,
-            constraints,
-        )
-        where["q"] = result.get("final_config") or where["q"]
-        total["seconds"] += result.get("seconds", 0.0)
-        total["blocks"] += result.get("blocks", [])
-        total["skipped"] += result.get("skipped", [])
-        total["loops"] += 1
-        return result
-
-    def situation_of(result, current_goal):
-        state = world_atoms(planner, recorded)
-        return Situation(
-            instruction=instruction,
-            original_goal=goal,
-            goal=current_goal,
-            failure=result.get("failure"),
-            message=result.get("repair_message", ""),
-            blocked=result.get("blocked", []),
-            vocabulary=goal_vocabulary(n_parts, state, clamps),
-        )
-
-    def reachable(candidate):
-        try:
-            task_planner.solve(
-                pddl_problem(
-                    n_parts,
-                    world_atoms(planner, recorded),
-                    constraints,
-                    clamps,
-                    candidate,
-                )
-            )
-        except Exception as error:  # noqa: BLE001 - the planner's verdict
-            return str(error).splitlines()[0][:300] or type(error).__name__
-        return None
-
-    outcome = supervise(
-        run_repair,
-        situation_of,
-        instruction,
-        goal,
-        client,
-        Limits(max_decisions=3, max_tokens=200_000),
-        reachable,
-        report_dir=run_dir,
-    )
-    for i, d in enumerate(outcome.decisions, 1):
-        print(
-            f"\n=== supervisor decision {i}: {d['action']}"
-            + (f" (fallback: {d['fallback']})" if d["fallback"] else "")
-            + f"\n    {d['reason']}"
-            + (f"\n    goal now: {d['goal']}" if d["action"] == "relax_goal" else ""),
-            flush=True,
-        )
-    if outcome.report is not None:
-        print(f"\n=== escalation report: {outcome.report}", flush=True)
-    result = dict(outcome.last)
-    result.update(
-        success=outcome.success,
-        seconds=round(total["seconds"], 2),
-        blocks=total["blocks"],
-        skipped=total["skipped"],
-    )
-    result["supervisor"] = {
-        "original_goal": goal,
-        "final_goal": outcome.goal,
-        "decisions": outcome.decisions,
-        "stopped": outcome.stopped,
-        "repair_loops": total["loops"],
-        "report": str(outcome.report) if outcome.report else None,
-    }
-    return result
+    """Run one TaskPlan of the mission (``MissionRunner.run_mission``: the
+    options ``q_start``, ``document``, ``backend``, ``trajectory``,
+    ``checkpoint`` ...), on a runner configured by ``max_replans``,
+    ``recorded`` and ``verbose`` (``mission_runner``)."""
+    config, options = split_options(mission)
+    return mission_runner(task, planner, n_parts, **config).run_mission(**options)
 
 
-def run_chat(
-    task,
-    planner,
-    n_parts,
-    q_start,
-    recorded,
-    mission,
-    client,
-    events,
-    web=None,
-    watchdog=None,
-):
-    """An operator's chat with a model acting through gated mission tools
-    (``--chat``, #89): reads operator messages from stdin until EOF or
-    "quit", and writes every tool call to the event stream. With ``web`` (the
-    ``--web-port`` viewer), the same chat is also in the viewer's chat panel
-    (#90); after stdin closes, it goes on there until "quit" or Ctrl-C."""
-    from chat_tools import INTRO, MissionChat
+def run_chat(runner, q_start, mission, client, events, web=None, watchdog=None):
+    """The operator chat (``--chat``, #89) on the library's generic chat
+    tools (``long_tamp.mission.chat``, #133)."""
+    from long_tamp.mission.chat import MissionChat
+    from long_tamp.mission.chat import run_chat as chat
 
-    from long_tamp.ai.chat import ChatSession, ChatTurn
-    from long_tamp.viewer import ChatBridge
-
-    work = MissionChat(
-        sys.modules[__name__],
-        task,
-        planner,
-        recorded,
-        n_parts,
-        mission,
-        q_start,
-        client=client,
-    )
-
-    def on_tool(call):
-        events(
-            make_event(
-                "chat",
-                "tool",
-                call.tool,
-                "SUCCESS" if call.ok else "FAILURE",
-                message=call.error,
-                metrics={"arguments": call.arguments},
-            )
-        )
-        if call.tool == "plan" and call.ok and work.document is not None:
-            events(plan_event(work.document, "planned in the chat"))
-
-    session = ChatSession(
-        client, work.tools(), INTRO + "\n\n" + work.domain(), on_tool=on_tool
-    )
-    bridge = ChatBridge(session)
-    if watchdog is not None:  # its decisions show in the chat too (#109)
-        printed = watchdog.on_decision
-
-        def on_decision(watch, decision):
-            if printed is not None:
-                printed(watch, decision)
-            bridge.note(
-                f"watchdog ({decision.by}) on {watch.label}: {decision.action}"
-                + (
-                    f" {decision.wait_s / 60:.1f} min more"
-                    if decision.action == "wait" and decision.wait_s
-                    else ""
-                )
-                + f": {decision.reason}"
-            )
-
-        watchdog.on_decision = on_decision
-
-    def start():
-        """The page's Start button (#104): run the plan, no model involved;
-        the model sees it in the history, like a run it called."""
-        call = session.call("run", {})
-        session.turns.append(
-            ChatTurn(user="(the operator pressed Start mission)", say="", calls=[call])
-        )
-        return call
-
-    bridge.add_action(
-        "start", "Start mission", start, enabled=lambda: work.document is not None
-    )
-    reset = []
-
-    def start_over():
-        """The page's Reset button (#114): end this mission; the launcher
-        (mission_ui.py) starts a fresh one."""
-        reset.append(True)
-        bridge.ended.set()
-        return "resetting: a fresh mission starts in a few seconds"
-
-    bridge.add_action("reset", "Reset mission", start_over)
-    if web is not None:
-        bridge.attach(web)
-        print(f"chat: also in the web viewer, {web.url}", flush=True)
-    echo = not sys.stdin.isatty()  # piped messages: show them in the log
-    print("chat: type an instruction, 'quit' or Ctrl-D to end", flush=True)
-    while True:
-        try:
-            line = input("operator> ")
-        except EOFError:
-            if web is not None and not bridge.ended.is_set():
-                print(
-                    "chat: stdin closed; the chat goes on in the web viewer "
-                    "('quit' there or Ctrl-C ends it)",
-                    flush=True,
-                )
-                try:
-                    bridge.ended.wait()
-                except KeyboardInterrupt:
-                    pass
-                bridge.wait()
-            break
-        if echo:
-            print(line, flush=True)
-        if line.strip().lower() in ("quit", "exit"):
-            break
-        if not line.strip():
-            continue
-        turn = bridge.turn(line.strip())
-        if turn is None:  # the error is in the transcript
-            print(f"  [error] {bridge.transcript()[-1]['text']}", flush=True)
-            continue
-        for call in turn.calls:
-            print(f"  [tool] {call.as_text()[:400]}", flush=True)
-        if turn.error:
-            print(f"  [error] {turn.error}", flush=True)
-        print(f"model> {turn.say}", flush=True)
-    last = work.last or {"success": True, "seconds": 0.0, "failure": None}
-    result = dict(last)
-    result.setdefault("final_config", work.q)
-    result["chat"] = {
-        "turns": [
-            {"user": t.user, "say": t.say, "calls": [c.as_text() for c in t.calls]}
-            for t in session.turns
-        ],
-        "goal": work.goal,
-        "constraints": work.constraints,
-    }
-    if reset:
-        result["reset"] = True
-    return result
+    work = MissionChat(runner, split_options(mission)[1], q_start, client)
+    return chat(work, client, events, web, watchdog)
 
 
 def world_atoms(planner: GraspSequencePlanner, recorded: RecordedFacts) -> list[str]:
@@ -933,203 +325,78 @@ def world_atoms(planner: GraspSequencePlanner, recorded: RecordedFacts) -> list[
     return sorted(str(atom) for atom in state)
 
 
-def understand_instruction(
-    instruction: str,
-    n_parts: int,
-    state: list[str],
-    clamps: list[tuple[str, str]] | None = None,
-    model: str | None = None,
-    on_call=None,
-    client=None,
-) -> tuple[list[str], list[tuple[str, dict[str, str]]]]:
-    """The goal and the constraints in an operator's ``instruction``
-    (``--instruction``; #22, #87), through three model roles on one client
-    (``model``: ``"<api>:<model>"``, default ``anthropic:claude-opus-5-5``):
+#: How far an object must be from where it was planned to be taken where it
+#: is observed [m] (a part knocked out of place, #128).
+MOVED = 0.005
 
-    1. the grounder finds the objects the instruction refers to (fallback:
-       matching their names);
-    2. the goal writer writes the goal, checked against the vocabulary and
-       reachable by the task planner from ``state``;
-    3. the plan reviewer turns what the instruction rules out ("don't use
-       clamp 1") into blocked bindings, kept only if the planner still
-       reaches the goal (fallback: none).
 
-    No role writes steps. ``on_call`` receives each model call's record.
-    """
-    from long_tamp.ai import make_client
-    from long_tamp.tasks.task_planning.language import (
-        ModelGoalWriter,
-        goal_from_instruction,
-        ground_instruction,
-        with_grounding,
-    )
-    from long_tamp.tasks.task_planning.review import ReviewRequest, review_constraints
-    from long_tamp.tasks.task_planning.skeleton import default_planner
+def observed_start(task, planner, planned, observed) -> list[float]:
+    """The configuration to replan from: the arms and the objects where the
+    backend observes them, but a hand that carries something as planned, and
+    what it carries where it was planned in that hand. An observed carried object sits a
+    little off its grasp (contact grasps slip) and an observed closed hand
+    squeezes into it; the planner would keep both, and every later
+    configuration would have a finger in the driver (#128). An object resting
+    in a fixture (a part in the rack) is taken where it is: it may have been
+    knocked out of place, which is what a retry is for."""
+    import pinocchio as pin
 
-    task_planner = default_planner("auto")
+    model = task.robot.model()
+    # Within the planner's bounds: a simulated finger at -1e-9 rad is
+    # "out of range" to HPP, which then rejects the start configuration.
+    observed = np.clip(observed, model.lowerPositionLimit, model.upperPositionLimit)
+    holder = {  # held object -> what holds it (an arm, an object, a fixture)
+        h.split("/")[0]: g.split("/")[0]
+        for g, h in planner.grasp_tracker.current_grasps.items()
+        if h
+    }
+    arms = {
+        name.split("/")[0]: model.parents[jid]  # arm -> its wrist joint
+        for jid, name in enumerate(model.names)
+        if name.endswith("robotiq_85_left_knuckle_joint")
+    }
 
-    def solve(goal, blocked=None):
-        return task_planner.solve(pddl_problem(n_parts, state, blocked, clamps, goal))
-
-    def why_not(goal, blocked=None) -> str | None:
-        try:
-            solve(goal, blocked)
-        except Exception as error:  # noqa: BLE001 - the planner's verdict
-            return str(error).splitlines()[0][:300] or type(error).__name__
+    def arm_of(body: str) -> str | None:
+        """The arm carrying ``body``, through what holds it, if any."""
+        for _ in range(len(holder) + 1):
+            if body in arms:
+                return body
+            if body not in holder:
+                return None
+            body = holder[body]
         return None
 
-    client = client or make_client(model, on_call=on_call)
-    vocabulary = goal_vocabulary(n_parts, state, clamps)
-    t0 = time.time()
-    grounding = ground_instruction(instruction, vocabulary, client)
-    vocabulary = with_grounding(vocabulary, grounding.value)
-    goal = goal_from_instruction(
-        instruction, ModelGoalWriter(client), vocabulary, lambda g: why_not(g)
-    )
-    plan = tuple(
-        f"{cap}({', '.join(f'{k}={v}' for k, v in params.items() if k != 'block')})"
-        for cap, params in solve(goal)
-    )
-    review = review_constraints(
-        ReviewRequest(instruction, vocabulary, descriptors(n_parts), plan),
-        client,
-        replannable=lambda blocked: why_not(goal, blocked),
-    )
-    print(
-        f"instruction {instruction!r} ({client.spec}, {time.time() - t0:.1f}s):\n"
-        f"  refers to: {', '.join(grounding.value.objects) or '-'}"
-        + (f" (fallback: {grounding.fallback})" if grounding.fallback else "")
-        + "\n  goal:\n    "
-        + "\n    ".join(goal)
-        + "\n  constraints: "
-        + (
-            "; ".join(f"no {c}{b}" for c, b in review.value)
-            if review.value
-            else "none" + (f" (fallback: {review.fallback})" if review.fallback else "")
-        ),
-        flush=True,
-    )
-    for name, outcome in (("grounder", grounding), ("plan reviewer", review)):
-        if outcome.fallback and outcome.attempts:
-            print(f"  {name} attempts rejected:", flush=True)
-            for attempt in outcome.attempts:
-                print(f"    {attempt}", flush=True)
-    return goal, list(review.value)
-
-
-def plan_from_goal(
-    n_parts: int,
-    state: list[str],
-    engine: str = "auto",
-    blocked: list[tuple[str, dict[str, str]]] | None = None,
-    clamps: list[tuple[str, str]] | None = None,
-    goal: list[str] | None = None,
-) -> dict[str, Any]:
-    """Plan the mission from ``state`` with a task planner (``--planner up``):
-    the goal (``screw_domain.mission_goal``) as PDDL, a skeleton from Unified
-    Planning, then a TaskPlan document (validated when the session loads it)."""
-    from long_tamp.tasks.task_planning.skeleton import default_planner, planner_name
-
-    t0 = time.time()
-    task_planner = default_planner(engine)
-    name = planner_name(task_planner)
-    steps = task_planner.solve(pddl_problem(n_parts, state, blocked, clamps, goal))
-    print(
-        f"task planner ({name}): {len(steps)} steps in {time.time() - t0:.2f}s",
-        flush=True,
-    )
-    return planned_document(steps, n_parts, state, generator=name)
-
-
-def run_mission(
-    task: ScrewAssemblyTask,
-    planner: GraspSequencePlanner,
-    n_parts: int,
-    max_replans: int = 10,
-    verbose: bool = True,
-    trajectory: list[dict[str, Any]] | None = None,
-    checkpoint: MissionCheckpoint | None = None,
-    q_start: list[float] | None = None,
-    live_viewer=None,
-    recorded: RecordedFacts | None = None,
-    backend=None,
-    on_event=None,
-    document: dict[str, Any] | None = None,
-    inject: list[dict[str, Any]] | None = None,
-    plan_ahead: bool = False,
-    max_drift: float | None = None,
-    concurrent: bool = False,
-    control=None,
-) -> dict[str, Any]:
-    """Run the mission's TaskPlan from ``q_start`` (default: the scene start).
-
-    The plan runs on a ``PlanExecutor``: each step plans its block, then its
-    motion executes on ``backend`` (``None``: planning only, the default).
-
-    Steps run in plan order through a TaskPlanningSession; a step whose
-    effect already holds in the world (grasp tracker + ``recorded`` facts) is
-    skipped, which is how ``--resume`` continues a run. If ``trajectory`` is a
-    list, each completed block's motion is sampled into it; if ``checkpoint``
-    is given, every block is logged to it. ``on_event`` receives the
-    mission's event stream (``long_tamp.tasks.task_planning.events``).
-    ``document`` is the TaskPlan to run (default: the hand-written
-    ``build_plan_document``; see ``plan_from_goal``). ``control`` (an
-    ``ExecutionControl``) pauses, resumes or stops it between steps.
-    """
-    if recorded is None:
-        recorded = RecordedFacts(None, predicates=RECORDED_PREDICATES)
-    ctx: dict[str, Any] = {
-        "q": list(q_start if q_start is not None else task.q_init),
-        "records": [],
-        "trajectory": trajectory,
-        "checkpoint": checkpoint,
-        "live_viewer": live_viewer,
-        "n_parts": n_parts,
-        "backend_displays": getattr(backend, "display", None) is not None,
-        "inject": inject if inject is not None else [],
-        "concurrent": concurrent,
-    }
-    session = mission_session(
-        task, planner, ctx, recorded, max_replans, verbose, document=document
-    )
-    executor = PlanExecutor(
-        session,
-        backend=backend,
-        policy=ExecutionPolicy(max_start_drift=max_drift),
-        control=control,
-        on_skip=lambda label, why: print(f"\n=== {label} === skipped ({why})"),
-        on_event=on_event,
-        on_drift=ctx.get("on_drift"),
-        plan_ahead=plan_ahead,
-        concurrent=concurrent,
-        # merged motion of two lanes: checked for collisions as a whole
-        validate_config=lambda q: planner.config_gen.is_config_valid(list(q))[0],
-    )
-    ctx["executor"] = executor
-    if on_event is not None:
-        on_event(plan_event(session.plan))  # the viewer draws this plan
-    t_mission = time.time()
-    run = executor.run()
-    if not run.success:
-        print(f"\n=== {run.failed_step} stopped the mission: {run.message}")
-    success, skipped = run.success, run.skipped
-    return {
-        "success": success,
-        "seconds": round(time.time() - t_mission, 2),
-        "blocks": ctx["records"],
-        "skipped": skipped,
-        "executed": len(run.executions),
-        "execution": execution_summary(run.executions),
-        "timing": run.timing or None,
-        "final_config": ctx["q"],
-        "failure": (
-            None
-            if run.success
-            else ctx.get("failure")
-            or execution_failure(run)
-            or stopped_failure(run, session)
-        ),
-    }
+    carried = {obj: arm for obj in holder if (arm := arm_of(obj)) is not None}
+    q = [float(v) for v in planned]
+    objects = {f"{o}/root_joint" for o in task.task_config.OBJECTS}
+    for jid in range(1, model.njoints):
+        name, r, nq = model.names[jid], model.idx_qs[jid], model.nqs[jid]
+        body = name.split("/")[0]
+        moved = np.linalg.norm(np.subtract(observed[r : r + 3], planned[r : r + 3]))
+        if name in objects and moved < MOVED:
+            # Where the plan's constraints put it, not 10 µm off in the
+            # simulation: only an object that really moved is re-placed.
+            continue
+        # A hand that carries something stays as planned; an empty one (the
+        # hand a retry just opened) is taken as it is, or the replanned
+        # approach would arrive closed.
+        if body in carried or ("robotiq" in name and body in carried.values()):
+            continue
+        q[r : r + nq] = [float(v) for v in observed[r : r + nq]]
+    # A carried object moves with its arm's wrist, from where it was planned.
+    before, after = model.createData(), model.createData()
+    pin.forwardKinematics(model, before, np.asarray(planned, dtype=float))
+    pin.forwardKinematics(model, after, np.asarray(q, dtype=float))
+    for obj, arm in carried.items():
+        jid = model.getJointId(f"{obj}/root_joint")
+        if jid >= model.njoints:
+            continue
+        wrist = arms[arm]
+        m = after.oMi[wrist] * before.oMi[wrist].inverse()
+        r = model.idx_qs[jid]
+        pose = pin.XYZQUATToSE3(np.asarray(planned[r : r + 7], dtype=float))
+        q[r : r + 7] = [float(v) for v in pin.SE3ToXYZQUAT(m * pose)]
+    return q
 
 
 from long_tamp.visualization.mission_viewer import MissionViewer
@@ -1143,10 +410,13 @@ def make_backend(
     hole_error: tuple[float, float, float] = (0.0, 0.0, 0.0),
     speed: float = math.inf,
     drift: list[tuple[str, str, float]] | None = None,
+    miss: list[tuple[str, str, tuple[float, float, float]]] | None = None,
     grasp: str = "weld",
     record: bool = False,
+    remote: bool = False,
 ):
-    """The execution backend for ``--backend``."""
+    """The execution backend for ``--backend``; with ``remote``, the
+    simulation is served over TCP (``--remote``, ADR-0007) instead of a pipe."""
     if name == "mock":
         return MockBackend(rtf=1000.0)
     if name == "playback":
@@ -1160,13 +430,14 @@ def make_backend(
         # The simulation runs in its own process, like a robot controller:
         # stepping it from a thread would share the planner's interpreter
         # lock (see long_tamp.execution.process).
-        contact = contact_grasps(export) if grasp == "contact" else {}
+        grasps = contact_grasps(export) if grasp == "contact" else weld_grasps(export)
         # A scene in its own process takes the simulated states straight
         # from the simulation's process (#106): what the robot does, not
         # what was planned.
         scene = getattr(live_viewer, "scene", None)
         display = scene.client if scene is not None else None
-        backend = ProcessBackend(  # closed at exit (see main)
+        serve = RemoteBackend.spawn if remote else ProcessBackend
+        backend = serve(  # closed at exit (see main)
             MuJoCoBackend,
             export,
             to_qpos,
@@ -1176,10 +447,11 @@ def make_backend(
             grasp=grasp,
             record=(run_dir or HERE / "runs") / "sim" if record else None,
             display=display,
-            **contact,
+            **grasps,
         )
         backend.display = display  # the planned paths need not be played
-        return DriftInjector(backend, drift) if drift else backend
+        backend = DriftInjector(backend, drift) if drift else backend
+        return MissInjector(backend, miss) if miss else backend
     return None
 
 
@@ -1196,14 +468,13 @@ def robotiq_pads(arm: str) -> dict[str, tuple[tuple, tuple]]:
     }
 
 
-def contact_grasps(export) -> dict[str, Any]:
-    """``--grasp contact``: the MuJoCo backend's fingers, grip table and pads.
+def grip_table(export, closures):
+    """(object root body, arm) -> the finger closure and the expected grasp.
     Each arm has one handle per object, so (object, arm) picks the closure."""
     from long_tamp.sim import GripTable
 
     model = export.load()
-    closures = finger_closures()
-    table = {}
+    table, expected = {}, {}
     for gripper, handle in closures.pairs():
         arm, obj = gripper.split("/")[0], handle.split("/")[0]
         if obj not in export.free_joints:
@@ -1211,11 +482,27 @@ def contact_grasps(export) -> dict[str, Any]:
         joint = model.joint(export.free_joints[obj]).id
         root = model.body(int(model.jnt_bodyid[joint])).name
         table[(root, arm)] = closures.closed_values(gripper, handle)
+        expected[(root, arm)] = closures.expected_grasp(gripper, handle)
+    return GripTable(table, expected)
+
+
+def weld_grasps(export) -> dict[str, Any]:
+    """Weld grasps: no fingers, but a missed one names its gripper and object
+    (``grasp_missed``, ADR-0009) so the repair can retry it (#128)."""
+    return {"expect": grip_table(export, finger_closures()).expect}
+
+
+def contact_grasps(export) -> dict[str, Any]:
+    """``--grasp contact``: the MuJoCo backend's fingers, grip table and pads."""
+    closures = finger_closures()
+    grip = grip_table(export, closures)
     return {
         "fingers": tuple(
             f"{arm}/robotiq_85_left_knuckle_joint" for arm in (LEFT, RIGHT)
         ),
-        "grip": GripTable(table),
+        "grip": grip,
+        "expect": grip.expect,
+        "hands": tuple(closures.bindings.values()),
         "pads": {**robotiq_pads(LEFT), **robotiq_pads(RIGHT)},
     }
 
@@ -1242,67 +529,42 @@ class DriftInjector:
         return getattr(self._backend, name)
 
 
+class MissInjector:
+    """``--inject-miss``: move an object just before a step's motion starts,
+    as if someone took it after it was seen. The step's grasp then closes on
+    nothing and reports ``grasp_missed`` (#127); the repair opens the hand,
+    observes the world and picks the object where it is now (#128)."""
+
+    def __init__(self, backend, miss: list[tuple[str, str, tuple]]):
+        self._backend = backend
+        self._pending = list(miss)
+
+    def start(self, command):
+        for item in list(self._pending):
+            label, obj, delta = item
+            if command.step_id == label:
+                self._backend.displace(obj, delta)
+                self._pending.remove(item)
+                print(f"\n=== {label} === INJECTED MISS: {obj} moved by {delta} m")
+        return self._backend.start(command)
+
+    def __getattr__(self, name):
+        return getattr(self._backend, name)
+
+
+def parse_miss(spec: str) -> tuple[str, str, tuple[float, float, float]]:
+    """``--inject-miss "LABEL:OBJECT:DX,DY,DZ"``."""
+    label, obj, delta = spec.rsplit(":", 2)
+    values = tuple(float(v) for v in delta.split(","))
+    if len(values) != 3:
+        raise ValueError(f"--inject-miss {spec!r}: DX,DY,DZ in metres")
+    return label, obj, values
+
+
 def parse_drift(spec: str) -> tuple[str, str, float]:
     """``--inject-drift "LABEL:JOINT:RAD"``."""
     label, joint, delta = spec.rsplit(":", 2)
     return label, joint, float(delta)
-
-
-def stopped_failure(run, session) -> dict[str, Any] | None:
-    """Where a run ended that neither planning nor execution reported as a
-    failure: a step aborted or stopped (#108). ``step`` is its label."""
-    if run.failed_step is None:
-        return None
-    labels, stack = {}, [session.plan.document["root"]]
-    while stack:
-        node = stack.pop()
-        labels[node["id"]] = node.get("label", node["id"])
-        stack += node.get("children", []) + ([node["child"]] if "child" in node else [])
-    return {
-        "step": labels.get(run.failed_step, run.failed_step),
-        "facts": [],
-        "message": run.message,
-    }
-
-
-def execution_failure(run) -> dict[str, Any] | None:
-    """The failure facts of a step whose execution failed (a skill reporting
-    ``screw_misaligned``, say), in the shape planning failures have."""
-    failed = [e for e in run.executions if e.result.status.value != "success"]
-    if not failed:
-        return None
-    last = failed[-1]
-    return {
-        "step": last.command.step_id,
-        "facts": list(last.result.facts),
-        "message": last.result.message,
-    }
-
-
-def execution_summary(executions) -> dict[str, Any] | None:
-    """What the backend measured over the mission (the MuJoCo backend's
-    tracking error and drift), from ``PlanRun.executions``."""
-    if not executions:
-        return None
-    metrics = [e.result.metrics for e in executions]
-
-    def worst(key):
-        values = [m[key] for m in metrics if key in m]
-        return max(values) if values else None
-
-    return {
-        "commands": len(executions),
-        "failed": sum(1 for e in executions if e.result.status.value != "success"),
-        "sim_seconds": round(sum(m.get("sim_seconds", 0.0) for m in metrics), 2),
-        "max_tracking_error": worst("tracking_error"),
-        "max_drift": worst("drift"),
-        "max_object_drift": worst("object_drift"),
-        "max_start_drift": worst("start_drift"),
-        "screws_driven": sum(
-            1 for e in executions for f in e.result.facts if f.startswith("screwed(")
-        ),
-        "max_screw_lateral_error": worst("lateral_error"),
-    }
 
 
 def main() -> int:
@@ -1343,6 +605,13 @@ def main() -> int:
         "(planning only, the default), mock (instant, for testing the pipeline), "
         "playback (plays the paths in real time, in the viewer if it is on) or "
         "mujoco (simulates them under tracking control; needs the sim extra)",
+    )
+    ap.add_argument(
+        "--remote",
+        action="store_true",
+        help="with --backend mujoco: drive the simulation through the remote "
+        "backend (TCP, as a robot on another host would be; ADR-0007) instead "
+        "of a process pipe",
     )
     ap.add_argument(
         "--grasp",
@@ -1390,6 +659,25 @@ def main() -> int:
         metavar="LABEL:JOINT:RAD",
         help="with --backend mujoco: bump JOINT by RAD just before step LABEL's "
         "motion (repeatable), e.g. 'part1 B: release:ur10_left/elbow_joint:0.2'",
+    )
+    ap.add_argument(
+        "--inject-miss",
+        action="append",
+        default=[],
+        metavar="LABEL:OBJECT:DX,DY,DZ",
+        help="with --backend mujoco: move OBJECT by (DX, DY, DZ) m just before "
+        "step LABEL's motion, so its grasp misses (repeatable), e.g. "
+        "'part1 A0: grasp:part1:0,-0.10,0' (clear of the open fingers, which "
+        "close across y); with --replan the step is retried where the object "
+        "is (#128)",
+    )
+    ap.add_argument(
+        "--grasp-retries",
+        type=int,
+        default=2,
+        metavar="N",
+        help="with --replan: retry a step whose grasp missed up to N times "
+        "(open, observe, replan the pick), then give up (default 2; #128)",
     )
     ap.add_argument(
         "--hole-error",
@@ -1522,6 +810,7 @@ def main() -> int:
     # Recorded facts (screws driven) live in the run folder, next to the
     # checkpoint, so a resumed run knows what earlier attempts achieved.
     recorded = RecordedFacts(run_dir / "facts.json", predicates=RECORDED_PREDICATES)
+    runner = mission_runner(task, planner, n_parts, recorded, args.max_replans)
     if args.resume:
         point = checkpoint.load()
         if point is not None:
@@ -1600,7 +889,9 @@ def main() -> int:
                 speed=args.sim_speed,
                 grasp=args.grasp,
                 record=args.sim_record,
+                remote=args.remote,
                 drift=[parse_drift(spec) for spec in args.inject_drift],
+                miss=[parse_miss(spec) for spec in args.inject_miss],
             ),
             plan_ahead=args.plan_ahead,
             concurrent=args.concurrent,
@@ -1660,72 +951,44 @@ def main() -> int:
             mission["on_event"] = watched
         if args.chat:
             result = run_chat(
-                task,
-                planner,
-                n_parts,
-                q_start,
-                recorded,
-                mission,
-                client,
-                events,
-                web,
-                watchdog,
+                runner, q_start, mission, client, events, web, watchdog
             )
         elif args.instruction:
-            goal, constraints = understand_instruction(
-                args.instruction,
-                n_parts,
-                world_atoms(planner, recorded),
-                clamps=clamp_seats(task.task_config.VALID_PAIRS),
-                client=client,
+            goal, constraints = runner.understand_instruction(
+                args.instruction, client=client
             )
         if args.chat:
             pass  # the chat ran the missions it was asked to
         elif args.supervise:
-            result = run_supervised(
-                task,
-                planner,
-                n_parts,
+            result = runner.run_supervised(
                 q_start,
-                recorded,
                 args.replan or 3,
-                mission,
+                split_options(mission)[1],
                 args.instruction,
                 goal,
                 constraints,
                 client,
                 run_dir,
+                args.grasp_retries,
             )
         elif args.replan:
-            result = run_with_repair(
-                task,
-                planner,
-                n_parts,
+            result = runner.run_with_repair(
                 q_start,
-                recorded,
                 args.replan,
-                mission,
+                split_options(mission)[1],
                 goal,
                 constraints,
+                args.grasp_retries,
             )
         else:
-            result = run_mission(
-                task,
-                planner,
-                n_parts,
+            result = runner.run_mission(
                 q_start=q_start,
                 document=(
-                    plan_from_goal(
-                        n_parts,
-                        world_atoms(planner, recorded),
-                        clamps=clamp_seats(task.task_config.VALID_PAIRS),
-                        goal=goal,
-                        blocked=constraints,
-                    )
+                    runner.plan_from_goal(goal=goal, blocked=constraints)
                     if args.planner == "up"
                     else None
                 ),
-                **mission,
+                **split_options(mission)[1],
             )
     except BaseException:
         if live_viewer is not None:
@@ -1735,7 +998,7 @@ def main() -> int:
     if hasattr(backend, "close"):
         backend.close()  # a simulation process: stop and reap it
     checkpoint.finish(result["success"], result["seconds"])
-    write_trajectory(traj_path, trajectory, n_parts)
+    write_trajectory(traj_path, trajectory, runner.domain.scene_info())
     result["seed"] = args.seed
     result["parts"] = n_parts
     print(
@@ -1748,7 +1011,7 @@ def main() -> int:
     if result.get("reset"):
         if live_viewer is not None:
             live_viewer.close()
-        return RESTART  # mission_ui.py starts a fresh mission
+        return RESTART  # the mission UI launcher starts a fresh mission
     if live_viewer is not None:
         try:
             live_viewer.finish()

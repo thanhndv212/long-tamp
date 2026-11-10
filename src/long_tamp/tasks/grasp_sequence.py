@@ -3676,9 +3676,18 @@ class GraspSequencePlanner:
         timeout_per_edge: float = 60.0,
         max_iterations_per_edge: int = 10000,
         verbose: bool = True,
+        security_margins: Sequence[tuple[str, str, float]] = (),
+        optimizers: Sequence[str] | None = None,
     ) -> dict[str, Any]:
         """Plan free motion for ``gripper``'s arm to an explicit ``q_target``,
         within the current held-grasps state — no grasp/release involved.
+
+        ``security_margins`` are ``(joint, joint, margin)``: the loop edge's
+        path validation then keeps the bodies of the two joints ``margin``
+        apart (``"universe"`` for the environment). ``optimizers`` replaces
+        the backend's optimizer chain for the loop edge: a spline optimizer
+        validates with the problem's validation, not the edge's, and pulls
+        the path back within the margins.
 
         Resolves the graph-lifecycle correctness question noted in an
         earlier version of this method (raising ``NotImplementedError``):
@@ -3727,6 +3736,13 @@ class GraspSequencePlanner:
             }
 
         loop_edge = self.grasp_tracker.get_loop_edge()
+        if security_margins:
+            graph = self.planner.graph
+            transition = graph.getTransition(loop_edge)
+            for first, second, margin in security_margins:
+                graph.setSecurityMarginForTransition(transition, first, second, margin)
+            # Setting a margin invalidates the graph.
+            graph.initialize()
 
         # A live q_current holding an object (Gazebo attach offset, TF pose)
         # misses the graph's grasp constraints by a few mm; the loop edge
@@ -3755,26 +3771,37 @@ class GraspSequencePlanner:
         last_err: Exception | None = None
         path = None
 
-        for attempt in range(self._MAX_COLLISION_RETRIES):
-            try:
-                path, _geometric_path = self.planner.plan_transition_edge(
-                    edge=loop_edge,
-                    q1=q_current,
-                    q2=q_target,
-                )
-                if path is None:
-                    raise RuntimeError(f"Planning failed for edge '{loop_edge}'")
-                last_err = None
-                break
-            except Exception as e:
-                last_err = e
-                if verbose:
-                    logger.warning(
-                        "plan_loop: attempt %d/%d failed: %s",
-                        attempt + 1,
-                        self._MAX_COLLISION_RETRIES,
-                        e,
+        overrides = getattr(self.planner, "_transition_optimizers_by_edge_name", None)
+        previous = None if overrides is None else overrides.get(loop_edge)
+        if optimizers is not None and overrides is not None:
+            overrides[loop_edge] = list(optimizers)
+        try:
+            for attempt in range(self._MAX_COLLISION_RETRIES):
+                try:
+                    path, _geometric_path = self.planner.plan_transition_edge(
+                        edge=loop_edge,
+                        q1=q_current,
+                        q2=q_target,
                     )
+                    if path is None:
+                        raise RuntimeError(f"Planning failed for edge '{loop_edge}'")
+                    last_err = None
+                    break
+                except Exception as e:
+                    last_err = e
+                    if verbose:
+                        logger.warning(
+                            "plan_loop: attempt %d/%d failed: %s",
+                            attempt + 1,
+                            self._MAX_COLLISION_RETRIES,
+                            e,
+                        )
+        finally:
+            if optimizers is not None and overrides is not None:
+                if previous is None:
+                    overrides.pop(loop_edge, None)
+                else:
+                    overrides[loop_edge] = previous
 
         edge_total_time = time.time() - edge_start_time
 

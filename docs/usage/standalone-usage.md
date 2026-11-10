@@ -7,7 +7,7 @@ directly — no ROS 2. For the ROS-free BehaviorTree.CPP integration, see
 This doc describes the **current** API (branch `main`, commit `e1844c9`). The package was
 heavily refactored in 2026-08; if you find older examples elsewhere in the repo that
 contradict this doc, trust this doc and the root [`README.md`](https://github.com/thanhndv212/long-tamp/blob/main/README.md) /
-[`ARCHITECTURE.md`](https://github.com/thanhndv212/long-tamp/blob/main/ARCHITECTURE.md).
+[`architecture.md`](../architecture.md).
 
 > **Stale references to ignore.** `src/long_tamp/__init__.py`'s docstring mentions
 > `TaskOrchestrator`, `TaskBuilder`, `PlanningBridge` — these classes don't exist. Use *this*
@@ -265,6 +265,7 @@ in `planning/planner.py` are the usual entry points.
 | Script | Use it to learn |
 |---|---|
 | `script/twin/task_lift_ball.py` | bimanual grasp + lift, YAML config, factory-mode graph |
+| `script/drawer/task_drawer.py` | an articulated object: open and close a cabinet drawer with `grasp`/`plan_loop`/`release` |
 | `script/templates/task_my_task.py` | minimal single-robot template to copy for a new task |
 
 A long-horizon, multi-phase, checkpoint/resume/replay mission (chaining many phases with
@@ -284,6 +285,31 @@ drives grasp legality), `arm_groups`, `freeze_joints`, `environment_contacts`, `
 `.task_config` (dynamic config object), `.build_initial_config()`. Real example:
 `script/twin/config/twin_lift_ball_config.yaml` (multi-arm). Template:
 `script/templates/task_config_template.yaml`.
+
+An articulated object (a cabinet, a microwave, a stove knob) is declared `root: anchor`
+under `objects`. It's fixed at its `initial_pose_xyzquat` (or `initial_pose_xyzrpy`)
+instead of getting a free-flyer root. Its prismatic and revolute joints are its
+configuration: `joints: {cabinet/drawer: 0.0}` gives initial values, by full or local name.
+A joint left out starts at 0, clamped into its URDF limits. Continuous joints are rejected.
+
+```yaml
+objects:
+  cabinet:
+    root: anchor
+    initial_pose_xyzquat: [0.75, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+    joints: {cabinet/drawer: 0.0}
+    handles: [cabinet/handle]   # on the drawer's link, in the SRDF
+    contact_surfaces: []
+```
+
+With no contact surfaces, the constraint-graph factory locks the object's joints whenever
+none of its handles is grasped, at the value they were left at. It frees them while a
+gripper holds a handle, so a `plan_loop` in the grasp state moves the drawer with the hand.
+All of the object's joints are freed while any of its handles is held. A cabinet with
+several drawers should therefore freeze the ones not being moved (`freeze_joints`).
+`task_config.ARTICULATED_JOINTS` lists the initial values (`{object: {"object/joint":
+value}}`). `ManipulationTask.setup` writes each one at its joint's rank in `q_init`. Real
+example: `script/drawer/config/drawer_config.yaml`.
 
 The older dataclass style (`config/base_config.py` → `BaseTaskConfig`) still works but isn't
 recommended for new tasks — YAML needs no Python changes to add a robot/object.

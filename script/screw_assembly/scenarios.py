@@ -74,6 +74,7 @@ SCENARIOS: dict[str, dict[str, Any]] = {
 def run_scenario(name: str, seed: int, max_replans: int = 10) -> dict[str, Any]:
     """Set up ``name`` in a fresh scene and run the mission from it."""
     import task_screw_assembly as T
+    from long_tamp.mission import MissionRun
     from long_tamp.tasks.task_planning import RecordedFacts
     from long_tamp.tasks.task_planning.predicates import Literal
 
@@ -83,27 +84,19 @@ def run_scenario(name: str, seed: int, max_replans: int = 10) -> dict[str, Any]:
     n_parts = sum(1 for o in task.task_config.OBJECTS if o.startswith("part"))
     blocks = T.blocks_by_label(n_parts)
     index = {label: i for i, label in enumerate(blocks)}
-    ctx: dict[str, Any] = {
-        "q": list(task.q_init),
-        "records": [],
-        "trajectory": None,
-        "checkpoint": None,
-        "live_viewer": None,
-        "n_parts": n_parts,
-    }
+    recorded = RecordedFacts(None, predicates=T.RECORDED_PREDICATES)
+    runner = T.mission_runner(task, planner, n_parts, recorded, max_replans)
+    run = MissionRun(q=list(task.q_init))
     t0 = time.time()
     for label in spec["setup"]:
-        r = T.run_block(task, planner, ctx, index[label], blocks[label])
+        step = runner.domain.step_of(blocks[label])
+        r = runner.refine(run, index[label], step)
         if not r["success"]:
             return {"scenario": name, "seed": seed, "pass": False,
                     "reason": f"setup block {label!r} failed: {r['message']}"}  # fmt: skip
     setup_seconds = round(time.time() - t0, 2)
-    recorded = RecordedFacts(None, predicates=T.RECORDED_PREDICATES)
     recorded.apply([Literal.parse(fact) for fact in spec["facts"]])
-    result = T.run_mission(
-        task, planner, n_parts, max_replans=max_replans, q_start=ctx["q"],
-        recorded=recorded,
-    )  # fmt: skip
+    result = runner.run_mission(q_start=run.q)
     planned = [b["label"] for b in result["blocks"]]
     redone = [
         label for label in spec["setup"] if label in planned and "home" not in label

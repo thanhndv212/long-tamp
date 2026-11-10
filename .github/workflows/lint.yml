@@ -52,6 +52,54 @@ jobs:
       - run: python -m pytest tests/ -q --timeout=300 --timeout-method=thread
       - run: python script/validate_standalone_install.py
 
+  behaviortree:
+    # The C++ side of the BehaviorTree.CPP path: the node library, the plugin, the
+    # host, and the CTests that need no HPP scene (fake session, fault paths, plugin
+    # loading, event-stream parity with the Python runner). examples/behaviortree is
+    # configured on its own (no HPP C++ packages), against the released
+    # BehaviorTree.CPP from the ROS 2 apt repository. Building it from source is turned
+    # off, so a missing package fails here. The runner is pinned to 24.04 because ROS 2
+    # Jazzy packages target it (ubuntu-latest moves to Ubuntu 26 on 2026-10-19).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ROS_DISTRO: jazzy
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install BehaviorTree.CPP (ROS 2 apt package)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh api repos/ros-infrastructure/ros-apt-source/releases/latest -q .tag_name)
+          codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+          curl -fsSL -o /tmp/ros2-apt-source.deb \
+            "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${tag}/ros2-apt-source_${tag}.${codename}_all.deb"
+          sudo dpkg -i /tmp/ros2-apt-source.deb
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends "ros-${ROS_DISTRO}-behaviortree-cpp"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      # The embedded Python imports long_tamp (base install: no HPP needed).
+      - run: python -m pip install -e .
+      - name: Configure
+        # behaviortree_cpp's CMake config pulls in ament_cmake, which imports
+        # ament_package from Python3_EXECUTABLE: give setup-python's 3.12 (same minor
+        # as Jazzy's) the ROS site-packages.
+        env:
+          PYTHONPATH: /opt/ros/${{ env.ROS_DISTRO }}/lib/python3.12/site-packages
+        run: >-
+          cmake -S examples/behaviortree -B build-bt -DBUILD_TESTING=ON
+          -DLONG_TAMP_FETCH_BEHAVIORTREE_CPP=OFF
+          -DCMAKE_PREFIX_PATH="/opt/ros/${ROS_DISTRO}"
+          -DPython3_EXECUTABLE="$(which python)"
+      - run: cmake --build build-bt --parallel
+      - name: Test
+        run: |
+          export LD_LIBRARY_PATH="/opt/ros/${ROS_DISTRO}/lib:${LD_LIBRARY_PATH}"
+          ctest --test-dir build-bt -R taskplan_bt --output-on-failure --timeout 300
+
   docs:
     runs-on: ubuntu-latest
     timeout-minutes: 10

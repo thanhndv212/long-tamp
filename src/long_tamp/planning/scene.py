@@ -46,6 +46,7 @@ class SceneBuilder:
         """
         self.backend = backend.lower()
         self.loaded_objects = []
+        self.freeflyer_objects = []
 
         if FILE_PATHS is None:
             raise ValueError(
@@ -111,16 +112,27 @@ class SceneBuilder:
     def load_environment(
         self, environment_names: List[str], pose=None
     ) -> "SceneBuilder":
-        """Load the environment (dispenser, ground, etc.)."""
+        """Load the environment (dispenser, ground, etc.).
+
+        ``FILE_PATHS["environment"][name]`` is a URDF path, or
+        ``{"urdf": ..., "srdf": ...}`` for an environment with contact
+        surfaces."""
         logger.info("Loading environment (%s)...", environment_names)
         for id, env_name in enumerate(environment_names):
             if env_name in self.FILE_PATHS["environment"]:
                 logger.debug("Loading environment: %s", env_name)
                 logger.debug("  from: %s", self.FILE_PATHS["environment"][env_name])
+                paths = self.FILE_PATHS["environment"][env_name]
+                kwargs = {}
+                if isinstance(paths, dict):
+                    if paths.get("srdf"):
+                        kwargs["srdf_path"] = paths["srdf"]
+                    paths = paths["urdf"]
                 self.planner.load_environment(
                     name=env_name,
-                    urdf_path=self.FILE_PATHS["environment"][env_name],
+                    urdf_path=paths,
                     pose=pose[id] if pose is not None else None,
+                    **kwargs,
                 )
             else:
                 logger.warning("Unknown environment: %s", env_name)
@@ -142,22 +154,32 @@ class SceneBuilder:
             obj_config = self.FILE_PATHS["objects"][obj_name]
 
             # Handle both old format (string) and new format (dict)
+            root_joint_type = "freeflyer"
+            kwargs = {}
             if isinstance(obj_config, str):
                 # Old format: just URDF path
                 urdf_path = obj_config
                 srdf_path = None
             else:
-                # New format: dict with urdf and srdf
+                # New format: dict with urdf and srdf, and for an articulated
+                # object fixed in the scene (a cabinet, a microwave) an
+                # "anchor" root placed at an xyzquat "pose".
                 urdf_path = obj_config.get("urdf", obj_config)
                 srdf_path = obj_config.get("srdf")
+                root_joint_type = obj_config.get("root_joint_type", "freeflyer")
+                if obj_config.get("pose"):
+                    kwargs["pose"] = xyzquat_to_se3(obj_config["pose"])
 
             self.planner.load_object(
                 name=obj_name,
                 urdf_path=urdf_path,
                 srdf_path=srdf_path,
-                root_joint_type="freeflyer",
+                root_joint_type=root_joint_type,
+                **kwargs,
             )
             self.loaded_objects.append(obj_name)
+            if root_joint_type == "freeflyer":
+                self.freeflyer_objects.append(obj_name)
 
         return self
 
@@ -175,8 +197,10 @@ class SceneBuilder:
         for joint_name, bounds in robot_bounds.items():
             self.planner.set_joint_bounds(joint_name, bounds)
 
+        # An anchored object has no root_joint; its joints keep their URDF
+        # limits unless the config names them.
         bounds = self.joint_bounds.freeflyer_bounds()
-        for obj_name in self.loaded_objects:
+        for obj_name in self.freeflyer_objects:
             joint_name = f"{obj_name}/root_joint"
             self.planner.set_joint_bounds(joint_name, bounds)
 
