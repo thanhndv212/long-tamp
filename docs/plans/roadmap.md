@@ -10,6 +10,12 @@ behind it is in the ADRs ([adr/](../adr/README.md)); the process is in
 overview; issue status on GitHub is authoritative. Tick an item here when its issue
 closes.
 
+**Versions:** the version in a milestone's title is a target. Each milestone whose gate
+passes is the next minor release, in the order the gates pass; when milestones finish out
+of order, the next one released takes the next minor and the targets after it shift
+(re-planned on 2026-11-10: M8 finished before M7, so M8 is 0.9.0 and M7 0.10.0, and M11
+was split into the benchmark, M11, and the SO-101 sim showcase, M12).
+
 ## Direction
 
 Today the task level is written by hand and `task_planning/` compiles a hand-written plan
@@ -153,20 +159,22 @@ within its limits with an escalation report.
 - [x] [#109](https://github.com/thanhndv212/long-tamp/issues/109) Step watchdog (model or rule)
 - [x] [#114](https://github.com/thanhndv212/long-tamp/issues/114) Reset mission button
 
-## Hardware showcase track (M7–M11)
+## Hardware showcase track (M7–M12)
 
 After 0.8.0, the goal is to show all of long_tamp on a physical robot, a low-cost SO-101
 arm (soarm_tamp, [roadmap](https://github.com/thanhndv212/soarm_tamp/blob/main/docs/roadmap.md),
 [tracker](https://github.com/thanhndv212/soarm_tamp/issues/32)): instruction → goal → plan →
 refinement → execution on the arm, with a camera keeping the world state current, recovery
 from disturbances, and open VLM/VLA models adopted wherever they measurably do better.
-These five milestones are the library side. Each is built and tested in simulation first,
+These six milestones are the library side. Each is built and tested in simulation first,
 and none is SO-101-specific; screw assembly stays the reference track (ADR-0003).
 
-M8 is the gate for the missions: M9, M10 (except #147) and M11's #150 can start alongside M7 and
-M8, and M11 gives a sim showcase before the real-arm one. The open benchmark (#156–#163) is the
-exception: its env server needs M7's remote backend (#125), its first runs need M8, and it
-brings one new library feature, articulated objects (#161).
+M8 is the gate for the missions: M9 and M10 (except #147) can start alongside M7 and M8, and
+M12 gives a sim showcase before the real-arm one. The open benchmark (M11, #156–#163) grew
+ahead of the rest: its env server needs M7's remote backend (#125), its first runs need M8,
+and it brought one new library feature, articulated objects (#161). Its Ideal condition is
+in; the other five conditions wait on M9's simulated camera (#151) and M10's goal writer
+(#145).
 
 ```mermaid
 flowchart LR
@@ -174,8 +182,8 @@ flowchart LR
   M8[M8 mission runtime ✓]
   M9[M9 perceived world state]
   M10[M10 open VLM/VLA<br/>incl. #145 goal writer]
-  CAM["#151 sim camera"]
-  SIM["#152 SO-101 stacking in sim"]
+  CAM["#151 sim camera (M9)"]
+  SIM["#152 SO-101 stacking in sim (M12)"]
   R1["#156 env server ✓"]
   R2["#157 scene exporter ✓"]
   R3["#158 grasps (18/25)"]
@@ -186,6 +194,7 @@ flowchart LR
   R8["#163 continuous variant + tables<br/>(row C on Ideal)"]
   R9["#186 mission per rollout<br/>(row D on Ideal)"]
   X["#154 M11 exit"]
+  X2["#214 M12 exit"]
   S1[S1 SO-101 backend]
   S2[S2 vision]
   S3[S3 stacking domain]
@@ -207,7 +216,7 @@ flowchart LR
   R6 --> X
   R8 --> X
   M8 --> SIM
-  SIM --> X
+  SIM --> X2
   M7 --> S1
   S1 --> S3
   S2 --> S3
@@ -222,14 +231,17 @@ flowchart LR
   R4 --> R9
   M8 --> R9
   R9 --> X
+  CAM --> X2
+  X2 --> S6
+  M9 --> CAM
   classDef hw fill:#ffe0b2,stroke:#e65100,stroke-width:2px,color:#000
   classDef bench fill:#bbdefb,stroke:#0d47a1,stroke-width:2px,color:#000
   class S1,S2,S3,S4,S5,S6 hw
   class R1,R2,R3,R4,R5,R6,R7,R8,R9,X bench
   classDef done fill:#c8e6c9,stroke:#1b5e20,stroke-width:3px,color:#000
   classDef partial fill:#f1f8e9,stroke:#1b5e20,stroke-width:2px,stroke-dasharray:5 3,color:#000
-  class M8,R1,R2,R4,R5,R6 done
-  class M7,R3,R8,R9 partial
+  class M8,R1,R2,R4,R5,R6,R8,R9 done
+  class M7,R3 partial
   linkStyle 16,17,18,22,23,25 stroke:#e65100,stroke-width:3px
   linkStyle 0,1,2,3,5,6,7,10,11,12,13,26,27,29 stroke:#0d47a1,stroke-width:3px
 ```
@@ -237,12 +249,12 @@ flowchart LR
 Orange: the real-hardware path on the SO-101 (soarm_tamp S1–S6, see its
 [delivery plan](https://github.com/thanhndv212/soarm_tamp/blob/main/docs/roadmap.md#delivery-plan)).
 Blue: the simulated benchmark path (RoboCerebra, #156–#163 and #186, closing M11 with #154).
-Uncoloured nodes are the library milestones and sim pieces both paths build on.
-Green with ✓: done. Pale green, dashed: partly done (M7 waits on its real-robot exit run,
-#158 has handles for every class, but the pick checker passes for 18 of 25 (5 more held), and rows C and D
-are in on Ideal only, the other conditions waiting on #162).
+Uncoloured nodes are the library milestones and the sim showcase (M12, closing with #214).
+Green: done. Pale green, dashed: partly done (M7 waits on its real-robot exit run;
+#158 has handles for every class, but the pick checker passes for 18 of 25, with 5 more held).
+Rows C and D are in on Ideal only; the other conditions wait on #162.
 
-## M7 — Hardware execution: remote backends and grippers (0.9.0)
+## M7 — Hardware execution: remote backends and grippers (0.10.0)
 
 [Milestone 7](https://github.com/thanhndv212/long-tamp/milestone/7)
 
@@ -258,9 +270,9 @@ Run missions on a robot driven from another host (a container and a USB-attached
 
 **Exit test:** a mission runs through `RemoteBackend` on the SO-101 (cube pick-and-place, 10 runs, soarm_tamp S1) and the screw assembly runs through it in MuJoCo.
 
-## M8 — Mission runtime as a library (0.10.0)
+## M8 — Mission runtime as a library (0.9.0)
 
-**Done; milestone closed 2026-10-27, not yet released.**
+**Done; milestone closed 2026-10-27. Next release, 0.9.0** (with the RoboCerebra Ideal results of M11 so far).
 
 [Milestone 8](https://github.com/thanhndv212/long-tamp/milestone/8)
 
@@ -287,6 +299,7 @@ Object poses from sensors feed the predicates and the planning scene, and an obj
 - [ ] [#138](https://github.com/thanhndv212/long-tamp/issues/138) Planning scene from observed poses
 - [ ] [#139](https://github.com/thanhndv212/long-tamp/issues/139) Object drift check and replan
 - [ ] [#140](https://github.com/thanhndv212/long-tamp/issues/140) Reconcile observation with belief
+- [ ] [#151](https://github.com/thanhndv212/long-tamp/issues/151) Simulated camera, rendered views and marker poses (moved from M11: the exit test below needs it)
 - [ ] [#141](https://github.com/thanhndv212/long-tamp/issues/141) M9 exit test, object moved mid-mission in MuJoCo
 
 **Exit test:** with a simulated camera in MuJoCo, an object moved mid-mission triggers a replan; 10/10 seeds complete or escalate cleanly.
@@ -307,17 +320,15 @@ Images in the gateway, local open models, VLM roles and learned-policy skills, p
 
 **Exit test:** a benchmark report in MuJoCo with an adoption decision per role (keeping the baseline is a valid outcome).
 
-## M11 — Simulation showcase and open benchmark
+## M11 — Open benchmark: RoboCerebra (0.13.0)
 
 [Milestone 11](https://github.com/thanhndv212/long-tamp/milestone/11)
 
-The sim half of the showcase, ahead of the real arm: the SO-101 stacking mission end to end in MuJoCo (language goals, simulated camera, disturbances, recovery), runnable by anyone without the hardware, plus an adapter to an open simulated benchmark so long_tamp is measured against published methods. The stacking domain is written once here and reused on the real arm by soarm_tamp S3. Gated on M8; the benchmark also needs #125.
+An adapter to an open simulated benchmark, so long_tamp is measured against published methods. Gated on M8 and #125. Until 2026-11-10 this milestone also held the SO-101 sim showcase; that is now M12.
 
 - [x] [#150](https://github.com/thanhndv212/long-tamp/issues/150) Choose the open simulated benchmark
-- [ ] [#151](https://github.com/thanhndv212/long-tamp/issues/151) Simulated camera, rendered views and marker poses
-- [ ] [#152](https://github.com/thanhndv212/long-tamp/issues/152) SO-101 tabletop stacking in MuJoCo
 - [ ] [#153](https://github.com/thanhndv212/long-tamp/issues/153) Open benchmark adapter and baseline runs
-- [ ] [#154](https://github.com/thanhndv212/long-tamp/issues/154) M11 exit test, sim showcase and benchmark results
+- [ ] [#154](https://github.com/thanhndv212/long-tamp/issues/154) M11 exit test, RoboCerebra results for all six conditions
 
 **Benchmark: RoboCerebra** (NeurIPS 2025 D&B, chosen in #150; comparison in [sim-benchmark-selection.md](sim-benchmark-selection.md)). It is long-horizon (about 9
 subtasks per task) and scores random disturbances and plan–observation mismatch, which is
@@ -329,15 +340,15 @@ planner-based entry has been published. #153 is split into:
 - [x] [#156](https://github.com/thanhndv212/long-tamp/issues/156) R1 Env server behind the remote backend protocol (needs #125)
 - [x] [#157](https://github.com/thanhndv212/long-tamp/issues/157) R2 MuJoCo model → URDF/SRDF scene exporter
 - [ ] [#158](https://github.com/thanhndv212/long-tamp/issues/158) R3 Grasp handle library for the benchmark's object classes
-      (handles for all 25 classes; 14 of 25 picked and 4 more held but unregistrable, PR #180)
+      (handles for all 25 classes; 18 of 25 picked and 5 more held; the plate's edge pinch is past 150 steps and moka_pot has no handle that plans)
 - [x] [#159](https://github.com/thanhndv212/long-tamp/issues/159) R4 Goal translator, in-hand start state, OSC_POSE tracker; Ideal subset (needs M8)
 - [x] [#160](https://github.com/thanhndv212/long-tamp/issues/160) R5 Pour action
 - [x] [#161](https://github.com/thanhndv212/long-tamp/issues/161) R6 Articulated objects: drawers, doors, knobs
       (rows A, C and D on Ideal: R12–R14, every fixture step supported)
 - [ ] [#162](https://github.com/thanhndv212/long-tamp/issues/162) R7 Disturbance, mismatch and mix conditions (needs #151, #145)
-- [ ] [#163](https://github.com/thanhndv212/long-tamp/issues/163) R8 Continuous variant and results tables
+- [x] [#163](https://github.com/thanhndv212/long-tamp/issues/163) R8 Continuous variant and results tables
       (row C on Ideal in: 83.0% by Eq. 1; the other conditions wait on #162)
-- [ ] [#186](https://github.com/thanhndv212/long-tamp/issues/186) R9 Whole-task planning on `long_tamp.mission` (row D)
+- [x] [#186](https://github.com/thanhndv212/long-tamp/issues/186) R9 Whole-task planning on `long_tamp.mission` (row D)
       (row D on Ideal in: 81.2% by Eq. 1; follow-ups #187 place on an object done, #188 flat-object grasp, #189 held start in collision, #190 tracker stall)
 
 The first number to publish is the Ideal condition on pick/in/on subtasks (#156 → #159, about
@@ -362,7 +373,18 @@ unsupported: row A passes 713 of 760 segments (93.8%), row C completes 83.0% and
 `…-r13-ideal-hpp-continuous.json`, `…-r14-ideal-hpp-mission.json`; these also take in
 #158, #188, #190, #194 and #195). The other five conditions (#162) are the critical path to the full table.
 
-**Exit test:** 20 SO-101 sim missions from language instructions with the simulated camera and injected disturbances complete or escalate cleanly; RoboCerebra results for all six conditions committed with seeds (privileged state, simulated camera, continuous variant); a recorded video.
+**Exit test:** RoboCerebra results for all six conditions committed with seeds (rows A privileged state, B simulated camera, C continuous variant), each with an assumptions table and compared with the published numbers.
+
+## M12 — SO-101 simulation showcase (0.14.0)
+
+[Milestone 12](https://github.com/thanhndv212/long-tamp/milestone/12)
+
+The sim half of the showcase, ahead of the real arm: the SO-101 stacking mission end to end in MuJoCo (language goals, simulated camera, disturbances, recovery), runnable by anyone without the hardware. The stacking domain is written once here and reused on the real arm by soarm_tamp S3. Split out of M11 on 2026-11-10. Needs M9 (#151, #141); uses M10's roles where they are in, rule fallbacks otherwise, so it may well pass before M10 and M11 (see **Versions** above).
+
+- [ ] [#152](https://github.com/thanhndv212/long-tamp/issues/152) SO-101 tabletop stacking in MuJoCo
+- [ ] [#214](https://github.com/thanhndv212/long-tamp/issues/214) M12 exit test, 20 SO-101 sim missions and a video
+
+**Exit test:** 20 SO-101 sim missions from language instructions with the simulated camera and injected disturbances complete or escalate cleanly; a recorded video.
 
 ## Backlog (not scheduled)
 
