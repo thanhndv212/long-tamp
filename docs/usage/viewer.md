@@ -241,6 +241,16 @@ handler)`. The server binds to `127.0.0.1` by default because the control and ch
 robot. Pass `host="0.0.0.0"` only on a network you trust: the server has no
 authentication.
 
+A `POST` must carry `Content-Type: application/json`, and a browser's `Origin` header must
+name the viewer itself. A web page from another site therefore cannot post to the viewer
+behind the operator's back. Bound to `127.0.0.1`, the server also answers only to
+`localhost`, `127.0.0.1` or `[::1]` in the `Host` header. From a script:
+
+```bash
+curl -X POST -H 'Content-Type: application/json' \
+     -d '{"action": "pause"}' http://localhost:8090/api/control
+```
+
 ## The 3D scene in its own process
 
 HPP planning holds Python's interpreter lock for seconds at a time. A Viser server in the

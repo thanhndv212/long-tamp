@@ -127,8 +127,13 @@ class JsonlEventWriter:
 
     def __init__(self, target: str | Path | IO[str]) -> None:
         if isinstance(target, (str, Path)):
+            # A run killed mid-write leaves a line without its newline: start
+            # on a fresh one, so only that line is lost (#219).
+            torn = _ends_mid_line(Path(target))
             self._file: IO[str] = open(target, "a", encoding="utf-8")
             self._owned = True
+            if torn:
+                self._file.write("\n")
         else:
             self._file, self._owned = target, False
 
@@ -148,9 +153,27 @@ class JsonlEventWriter:
 
 
 def read_events(path: str | Path) -> list[dict[str, Any]]:
-    """The events in a JSONL file (blank lines ignored)."""
+    """The events in a JSONL file. Blank lines are ignored, and so is a line
+    that is not JSON: what a killed run leaves of its last event."""
+    events = []
     with open(path, encoding="utf-8") as f:
-        return [json.loads(line) for line in f if line.strip()]
+        for line in f:
+            if not line.strip():
+                continue
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return events
+
+
+def _ends_mid_line(path: Path) -> bool:
+    try:
+        with open(path, "rb") as f:
+            f.seek(-1, 2)
+            return f.read(1) != b"\n"
+    except OSError:  # missing or empty
+        return False
 
 
 __all__ = [

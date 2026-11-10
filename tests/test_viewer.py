@@ -195,6 +195,19 @@ def test_the_tail_leaves_a_partly_written_line_for_later(tmp_path):
     assert tail.since(1) == [{"b": 2}]
 
 
+def test_the_tail_skips_a_torn_line(tmp_path):
+    # A mission killed mid-write and resumed leaves one line that is not
+    # JSON; the events around it are still served, once each (#219).
+    path = tmp_path / "events.jsonl"
+    path.write_text('{"a": 1}\n{"plan": {"root"\n{"b": 2}\n')
+    tail = EventTail(path)
+    assert tail.since(0) == [{"a": 1}, {"b": 2}]
+    assert tail.since(0) == [{"a": 1}, {"b": 2}]
+    with open(path, "a") as f:
+        f.write('{"c": 3}\n')
+    assert tail.since(2) == [{"c": 3}]
+
+
 def _get(url):
     with urllib.request.urlopen(url, timeout=5) as r:
         return r.status, r.read().decode()
@@ -232,6 +245,71 @@ def test_the_live_server_serves_the_page_events_and_control(run_dir):
         assert _post(url + "api/control", b'{"action": "jump"}')[0] == 400
         assert _post(url + "api/control", b"not json")[0] == 400
         assert _post(url + "api/nothing", b"{}")[0] == 404
+
+
+def _post_raw(url, body, headers):
+    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=5) as r:
+            return r.status, json.loads(r.read())
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read())
+
+
+@pytest.mark.parametrize("separate_process", [False, True])
+def test_a_post_from_another_site_is_refused(run_dir, separate_process):
+    # What a page on another site can send without a preflight (a form or
+    # text/plain body) must not reach the control route (#219).
+    control = ExecutionControl()
+    stop = b'{"action": "stop"}'
+    json_type = {"Content-Type": "application/json"}
+    with ViewerServer(
+        run_dir / "events.jsonl",
+        port=0,
+        control=control,
+        separate_process=separate_process,
+    ) as server:
+        url = server.url + "api/control"
+        own = f"http://localhost:{server.port}"
+        for headers in (
+            {"Content-Type": "text/plain"},
+            {"Content-Type": "application/x-www-form-urlencoded"},
+            {**json_type, "Origin": "http://evil.example"},
+            {**json_type, "Origin": f"http://evil.example:{server.port}"},
+            {**json_type, "Origin": "null"},
+            # DNS rebinding: another site's name resolving to this machine
+            {**json_type, "Host": f"evil.example:{server.port}"},
+        ):
+            status, body = _post_raw(url, stop, headers)
+            assert status in (403, 415), headers
+            assert "error" in body
+        assert not control.stopped
+        # the page itself: same origin, JSON
+        status, body = _post_raw(
+            url, b'{"action": "pause"}', {**json_type, "Origin": own}
+        )
+        assert status == 200 and control.paused
+        status, _ = _post_raw(
+            url,
+            b'{"action": "resume"}',
+            {"Content-Type": "application/json; charset=utf-8"},
+        )
+        assert status == 200 and not control.paused
+
+
+def test_a_bad_content_length_is_a_bad_request(run_dir):
+    import http.client
+
+    with ViewerServer(
+        run_dir / "events.jsonl", port=0, control=ExecutionControl()
+    ) as server:
+        connection = http.client.HTTPConnection("127.0.0.1", server.port, timeout=5)
+        connection.putrequest("POST", "/api/control")
+        connection.putheader("Content-Type", "application/json")
+        connection.putheader("Content-Length", "many")
+        connection.endheaders()
+        assert connection.getresponse().status == 400
+        connection.close()
 
 
 def test_the_live_server_has_no_control_route_without_a_control(run_dir):

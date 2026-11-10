@@ -71,8 +71,12 @@ class EventTail:
             data = f.read()
         end = data.rfind(b"\n") + 1
         for line in data[:end].splitlines():
-            if line.strip():
+            if not line.strip():
+                continue
+            try:
                 self._events.append(json.loads(line))
+            except ValueError:  # a line torn by a kill: skip it, keep going
+                continue
         self._offset += end
 
 
@@ -223,6 +227,40 @@ class ViewerServer:
         }
 
 
+_LOOPBACK = ("127.0.0.1", "::1", "localhost")
+
+
+def _hostname(netloc: str) -> str:
+    return (urlparse("//" + netloc).hostname or "").lower()
+
+
+def _refusal(method: str, headers: Any, bound: str) -> tuple[int, dict] | None:
+    """Why this request is refused, as (status, body), or None.
+
+    The control routes can stop a robot, and a browser lets any page post to
+    localhost. So a POST must be one that only this page can send:
+
+    - JSON by Content-Type, which a browser never sends across sites without
+      asking first (a preflight this server does not answer);
+    - from this page, when the browser says where it comes from (Origin).
+
+    And a server bound to loopback answers only to a loopback name: another
+    site's name pointed at 127.0.0.1 (DNS rebinding) is refused.
+    """
+    host = headers.get("Host")
+    if host and bound in _LOOPBACK and _hostname(host) not in _LOOPBACK:
+        return 403, {"error": f"this viewer is local: not served as {host}"}
+    if method != "POST":
+        return None
+    kind = (headers.get("Content-Type") or "").split(";")[0].strip().lower()
+    if kind != "application/json":
+        return 415, {"error": "POST a body with Content-Type: application/json"}
+    origin = headers.get("Origin")
+    if origin is not None and urlparse(origin).netloc.lower() != (host or "").lower():
+        return 403, {"error": f"not this viewer's page: {origin}"}
+    return None
+
+
 def _handler(server: ViewerServer) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args: Any) -> None:  # quiet: polled often
@@ -244,10 +282,19 @@ def _handler(server: ViewerServer) -> type[BaseHTTPRequestHandler]:
             if method == "GET" and url.path in ("/", "/index.html"):
                 self._send(200, server.page().encode(), "text/html; charset=utf-8")
                 return
+            refusal = _refusal(method, self.headers, self.server.server_address[0])
+            if refusal is not None:
+                self._json(*refusal)
+                return
             handler = server._routes.get((method, url.path))
             raw = None
             if method == "POST":
-                raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                try:
+                    length = int(self.headers.get("Content-Length", 0))
+                except ValueError:
+                    self._json(400, {"error": "Content-Length is not a number"})
+                    return
+                raw = self.rfile.read(max(length, 0))
             proxy = getattr(server, "proxy", None)  # the front process
             if handler is None and proxy is not None and url.path.startswith("/api/"):
                 code, answer = proxy(method, self.path, raw)

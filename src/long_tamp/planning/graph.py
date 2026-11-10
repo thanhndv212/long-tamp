@@ -603,19 +603,7 @@ class GraphBuilder:
                 chosen_mode = "factory"
 
         if chosen_mode == "factory":
-            contact_surfaces = list(
-                getattr(task_cls, "CONTACT_SURFACES_PER_OBJECT", [])
-            )
-            env_contacts = list(getattr(task_cls, "ENVIRONMENT_CONTACTS", []))
-            return self.create_factory_graph(
-                grippers=list(getattr(task_cls, "GRIPPERS", [])),
-                objects=list(getattr(task_cls, "OBJECTS", [])),
-                handles_per_object=task_cls.get_handles_per_object(),
-                contact_surfaces_per_object=(contact_surfaces or None),
-                environment_contacts=(env_contacts or None),
-                rules=None,
-                valid_pairs=dict(getattr(task_cls, "VALID_PAIRS", {})) or None,
-            )
+            return self.create_factory_graph(task_cls)
 
         if chosen_mode == "manual":
             return self.build_manual_graph_from_task(task_cls, name=name)
