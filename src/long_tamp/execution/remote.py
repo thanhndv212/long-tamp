@@ -300,6 +300,20 @@ def serve_backend(
                     if once:
                         return
                     continue
+                if not isinstance(request, dict):
+                    # valid JSON, but not a request: this client goes, the
+                    # server stays (#219)
+                    try:
+                        send_frame(
+                            client,
+                            {"ok": False, "error": "a request must be an object"},
+                        )
+                    except OSError:
+                        pass
+                    drop("sent a frame that is not a request")
+                    if once:
+                        return
+                    continue
                 last_seen = time.monotonic()
                 op = request.get("op")
                 if op == "bye":

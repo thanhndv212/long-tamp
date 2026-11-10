@@ -376,6 +376,17 @@ def test_a_lost_server_is_a_disconnected_failure():
         client.close()
 
 
+def test_a_frame_that_is_not_a_request_drops_the_client_not_the_server():
+    with served(MockBackend()) as port:
+        with socket.create_connection(("127.0.0.1", port)) as sock:
+            remote.send_frame(sock, ["start"])  # JSON, but not an object
+            reply = remote.recv_frame(sock)
+            assert not reply["ok"] and "request" in reply["error"]
+        # still serving (#219)
+        with RemoteBackend(port=port) as client:
+            assert client.connected
+
+
 def test_a_version_mismatch_is_refused():
     with served(MockBackend()) as port:
         with socket.create_connection(("127.0.0.1", port)) as sock:
