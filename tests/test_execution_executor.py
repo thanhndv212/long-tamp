@@ -344,6 +344,28 @@ def test_plan_ahead_stops_on_a_failed_motion():
     assert "stalled" in run.message
 
 
+class _CrashingBackend(MockBackend):
+    """Raises from ``poll`` instead of reporting a failure, as a
+    ``RemoteBackend`` does when the served backend's ``poll`` raised."""
+
+    def poll(self):
+        raise RuntimeError("remote backend: poll: ValueError: bad state")
+
+
+def test_a_motion_that_crashes_under_plan_ahead_records_nothing():
+    # The worker thread dies of the exception: the step must not be committed
+    # as if its motion had run (#219).
+    backend = _CrashingBackend()
+    executor, recorded = _screw_plan(backend)
+    executor.plan_ahead = True
+    run = executor.run()
+    assert not run.success
+    assert run.failed_step == "screw-1"
+    assert "backend error" in run.message and "bad state" in run.message
+    assert recorded() == frozenset()
+    assert backend.cancelled  # whatever it was doing, it is told to stop
+
+
 def test_a_step_planned_ahead_sees_its_predecessors_pending_effects():
     from long_tamp.tasks.task_planning import RecordedFacts
 

@@ -431,7 +431,21 @@ class PlanExecutor:
         node: dict[str, Any],
         commands: list[ExecutionCommand],
     ) -> None:
-        self._in_flight = (nodes, node, self._execute(node, commands) or None)
+        # An exception must reach the mission thread as a failure: a worker
+        # that just died would leave no error, and the step would be recorded
+        # as executed (#219).
+        try:
+            error = self._execute(node, commands) or None
+        except Exception as raised:  # noqa: BLE001 - reported by _join
+            error = (
+                "execution failed (backend error): "
+                f"{type(raised).__name__}: {raised}"
+            )
+            try:
+                self.backend.cancel()
+            except Exception:  # noqa: BLE001 - already failing; best effort
+                pass
+        self._in_flight = (nodes, node, error)
 
     def _join(self) -> tuple[str, str] | None:
         """Wait for the motion in flight; commit its step, or return
