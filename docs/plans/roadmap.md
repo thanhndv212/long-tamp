@@ -272,7 +272,7 @@ Run missions on a robot driven from another host (a container and a USB-attached
 
 ## M8 — Mission runtime as a library (0.9.0)
 
-**Done; milestone closed 2026-10-27. Next release, 0.9.0** (with the RoboCerebra Ideal results of M11 so far).
+**Released as 0.9.0 on 2026-11-10** (with M7's library work and the RoboCerebra Ideal results of M11 so far).
 
 [Milestone 8](https://github.com/thanhndv212/long-tamp/milestone/8)
 

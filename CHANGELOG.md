@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-10
+
+The mission runtime as a library (M8), and long_tamp on an open benchmark.
+
+- **Write your own mission:** the mission loop, operator chat and mission UI that lived in
+  the screw-assembly example are now `long_tamp.mission`, behind a `MissionDomain`
+  interface (ADR-0011, ADR-0012). A template domain and a tutorial show how to plug in a
+  new robot and task; the screw assembly runs on it unchanged (V3 gate 10/10).
+- **Robots on another host:** a remote execution backend over TCP, gripper models beyond
+  symmetric parallel jaws, grasp verification as facts, and repair from a missed grasp
+  (M7's library work; its real-robot exit run is still to come).
+- **RoboCerebra:** an env server, a scene exporter to URDF/SRDF, grasp handles for its
+  object classes, pour, articulated objects (drawers, doors, knobs) and whole-task planning
+  on `long_tamp.mission`. On the Ideal condition (10 cases × 10 seeds), row C completes
+  83.0% of the tasks' key state changes by the paper's Eq. 1 and row D 81.2%, against 25.16
+  for the published GT plan + OpenVLA baseline.
+- **Articulated objects** in the library: anchored objects with prismatic and revolute
+  joints, loaded from the task YAML.
+
 ### Added
 
 - Articulated objects (#161): a YAML object declared `root: anchor` is loaded fixed at its
@@ -1263,7 +1282,9 @@ First public release, on PyPI as `long-tamp`.
   in ~18s as the *second* phase of a multi-grasp sequence but failed 6/6 draws when built as
   the *only* phase of a single-gripper session. Not root-caused.
 
-[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/thanhndv212/long-tamp/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/thanhndv212/long-tamp/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/thanhndv212/long-tamp/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/thanhndv212/long-tamp/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/thanhndv212/long-tamp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/thanhndv212/long-tamp/compare/v0.4.0...v0.5.0
