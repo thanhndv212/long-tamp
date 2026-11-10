@@ -188,6 +188,9 @@ class BaseTaskConfig(ABC):
     # Valid gripper-handle pairs (for setPossibleGrasps)
     VALID_PAIRS: Dict[str, List[str]] = {}
 
+    # Factory rules (for setRules); when set, they replace VALID_PAIRS
+    RULES: Optional[list] = None
+
     # Arm groups for auto-freeze (populated from YAML arm_groups section)
     # ARM_GROUPS: raw arm group data {arm_name: {joint_keyword, grippers}}
     # GRIPPER_TO_ARM_KEYWORD: {full_gripper_name: joint_keyword | [joint_keyword, ...]}
