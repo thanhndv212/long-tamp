@@ -8,6 +8,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The live viewer refuses a `POST` that its own page could not have sent (#219): the body
+  must be `Content-Type: application/json` (else 415), and an `Origin` header must name the
+  viewer itself (else 403). A server bound to loopback also answers only to `localhost`,
+  `127.0.0.1` or `[::1]` in `Host` (else 403). Before, any web page open in the operator's
+  browser could post `stop` or a chat message to `localhost:8090`. The page already sent
+  JSON; a script posting to `/api/control` or `/api/chat` must set the header.
+
+### Fixed
+
+- `PlanExecutor(plan_ahead=True)`: a backend that raised during a motion (a `RemoteBackend`
+  whose served backend raised, for one) killed the motion's thread, and the step was then
+  recorded as executed and the plan went on. The exception is now a failed step
+  ("execution failed (backend error): ..."), the backend is told to cancel, and nothing is
+  recorded (#219).
+- A mission killed while writing an event left a line without its end in `events.jsonl`.
+  The resumed run appended its first event to that line, `read_events` then raised on the
+  file, and the live viewer answered 500 to every poll. `JsonlEventWriter` now starts on a
+  new line, and `read_events` and the viewer skip a line that is not JSON (#219).
+- `serve_backend` stopped serving when a client sent a frame that was JSON but not an
+  object. It now answers with an error, drops that client and keeps serving (#219).
+- `GraphBuilder.build_graph_for_task(task, mode="factory")` raised `TypeError`: it called
+  `create_factory_graph` with arguments that function no longer takes. It now passes the
+  task config. `BaseTaskConfig` gains `RULES = None`, which `create_factory_graph` reads
+  and only YAML-loaded configs had (#219).
+
 ## [0.9.0] - 2026-11-10
 
 The mission runtime as a library (M8), and long_tamp on an open benchmark.
