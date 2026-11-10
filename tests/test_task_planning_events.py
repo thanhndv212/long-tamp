@@ -113,6 +113,21 @@ def test_jsonl_writer_round_trips(tmp_path):
     assert json.loads(stream.getvalue()) == events[0]
 
 
+def test_a_line_torn_by_a_kill_costs_only_itself(tmp_path):
+    # A mission killed while a long line was being flushed leaves it without
+    # its newline. The resumed run's first event must not be appended to it,
+    # and the stream stays readable (#219).
+    path = tmp_path / "events.jsonl"
+    path.write_text('{"seq": 1}\n{"plan": {"root": [')
+    with JsonlEventWriter(path) as write:
+        write({"seq": 2})
+    assert path.read_text() == '{"seq": 1}\n{"plan": {"root": [\n{"seq": 2}\n'
+    assert read_events(path) == [{"seq": 1}, {"seq": 2}]
+    with JsonlEventWriter(path) as write:  # a clean file gets no blank line
+        write({"seq": 3})
+    assert path.read_text().endswith('{"seq": 2}\n{"seq": 3}\n')
+
+
 def test_the_executor_adds_motion_events_with_metrics():
     session = create_fake_session("{}")
     events = []
