@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - run: pip install --upgrade pip && pip install ruff black
+      - run: pip install --upgrade pip && pip install ruff==0.6.9 black==24.8.0
       # Enforcing: real errors (pyflakes F-codes: undefined/unused names, etc.) and
       # formatting. These are kept clean in the tree, so a failure here is a genuine
       # regression and blocks the workflow.
@@ -31,7 +31,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - run: pip install --upgrade pip && pip install ruff
+      - run: pip install --upgrade pip && pip install ruff==0.6.9
       # Advisory: the full ruff style set still carries debt (RUF012 mutable class
       # defaults, RUF013 implicit-optional, ambiguous unicode, …). Reported, not blocking.
       # Burn it down, then fold rules into the enforcing `lint` job.
@@ -47,7 +47,7 @@ jobs:
         with:
           python-version: "3.12"
       # Verify the base install independently of the native HPP extra.
-      - run: pip install --upgrade pip && pip install -e ".[dev,planning,sim]" pytest-timeout
+      - run: pip install --upgrade pip && pip install -e ".[dev,planning,sim]"
       - run: python -c "import long_tamp; print(long_tamp.get_available_backends())"
       - run: python -m pytest tests/ -q --timeout=300 --timeout-method=thread
       - run: python script/validate_standalone_install.py

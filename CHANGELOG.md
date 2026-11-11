@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Packaging and CI (#221): the version is written once, in `src/long_tamp/version.py`;
+  `pyproject.toml` and `long_tamp.__version__` read it, and a test fails if `package.xml`
+  differs. The `dev` extra pins `black==24.8.0` and `ruff==0.6.9`, the versions of
+  pre-commit, and the CI lint jobs install the same (a test compares them). It gains
+  `pytest-timeout` and no longer installs Sphinx: the docs toolchain is the `docs` extra.
+  Python 3.12 is listed among the supported versions, the `Documentation` link points at
+  `docs/` in the repository, and the unused `.gitlab-ci.yml` is removed.
 - The live viewer refuses a `POST` that its own page could not have sent (#219): the body
   must be `Content-Type: application/json` (else 415), and an `Origin` header must name the
   viewer itself (else 403). A server bound to loopback also answers only to `localhost`,

@@ -28,7 +28,8 @@ Advanced Usage:
     from long_tamp.visualization import visualize_constraint_graph
 """
 
-__version__ = "0.9.0"
+from long_tamp.version import __version__
+
 __author__ = "Thanh Nguyen"
 __email__ = "dvtnguyen@laas.fr"
 __license__ = "MIT"
