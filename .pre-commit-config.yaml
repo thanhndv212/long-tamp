@@ -5,7 +5,6 @@ repos:
     rev: v0.6.9
     hooks:
       - id: ruff
-        args: [--select, F]
         files: ^src/
   - repo: https://github.com/psf/black
     rev: 24.8.0
