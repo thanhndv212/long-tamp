@@ -97,7 +97,7 @@ Open the PR **against `dev`** with the template (`Closes #<issue>`). The merge c
 drive-to-green procedure are in `.claude/skills/dev-maintain-release-workflow/SKILL.md`
 and apply to everyone:
 
-- every required check green on the current head (`lint`,
+- every required check green on the current head (`lint`, `types`,
   `test-standalone`, `test-hpp`, `distribution`, `docs`, `changelog`);
 - no conflict with `dev`, every review thread answered, no "changes requested";
 - the validation evidence the issue asked for is in the PR;

@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Types (#228): CI runs `mypy` as a blocking job (`types`). 83 of the 122 modules are
+  checked; the 39 that had errors are listed in `pyproject.toml` and are taken out as they
+  are fixed. `mypy` is pinned in the `dev` extra.
 - Lint (#226): `src` is clean under the project's whole ruff rule set (about 600 findings
   cleared: annotation spellings, import order, `noqa` comments that suppressed nothing),
   and CI and pre-commit now run that set as a blocking check, where only pyflakes errors
@@ -32,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The live viewer's page loader passed two segments to one `joinpath`, which the resource
+  API of Python 3.10 and 3.11 does not accept for every loader (#228).
 - `PlanExecutor(plan_ahead=True)`: a backend that raised during a motion (a `RemoteBackend`
   whose served backend raised, for one) killed the motion's thread, and the step was then
   recorded as executed and the plan went on. The exception is now a failed step
