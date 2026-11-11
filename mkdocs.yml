@@ -99,6 +99,7 @@ nav:
           - "0010 Missed-grasp repair": adr/0010-missed-grasp-repair.md
           - "0011 Mission domains": adr/0011-mission-domain.md
           - "0012 Mission runner": adr/0012-mission-runner.md
+          - "0013 Splitting the two large classes": adr/0013-splitting-the-two-large-classes.md
   - Plans:
       - Roadmap: plans/roadmap.md
       - "Simulation benchmark selection": plans/sim-benchmark-selection.md
