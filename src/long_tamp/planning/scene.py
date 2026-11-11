@@ -229,9 +229,14 @@ class SceneBuilder:
         Args:
             obstacle_name: Name of the obstacle body
             joint_name: Name of the joint
-            remove_collision: Remove from collision checking
-            remove_distance: Remove from distance checking
+            remove_collision: Remove the pairs from collision checking.
+                With False nothing is removed.
+            remove_distance: No effect. HPP checks collisions and distances
+                on one list of pairs, so there is no distance check to
+                remove on its own.
         """
+        if not self._removes_collisions(remove_collision, remove_distance):
+            return self
         logger.info("Disabling collision: %s <-> %s", obstacle_name, joint_name)
         # Remove pairs from the pinocchio GeometryModel directly.
         # ground and objects are loaded INTO the device geomModel so
@@ -293,6 +298,21 @@ class SceneBuilder:
         )
         return self
 
+    @staticmethod
+    def _removes_collisions(remove_collision: bool, remove_distance: bool) -> bool:
+        """Whether a disable call has anything to remove, saying so if not."""
+        if remove_collision:
+            return True
+        if remove_distance:
+            logger.warning(
+                "remove_distance=True without remove_collision removes "
+                "nothing: HPP checks collisions and distances on one list "
+                "of pairs."
+            )
+        else:
+            logger.info("remove_collision=False: no collision pair removed")
+        return False
+
     def disable_collisions_between_subtrees(
         self,
         robot_frame_or_joint: str,
@@ -314,7 +334,12 @@ class SceneBuilder:
                 If a frame/link is provided, it is converted to its parent joint.
             obstacle_root_joint: Root joint of the obstacle/object (e.g.
                 `tool_holder/root_joint`). Child joints are included.
+            remove_collision: Remove the pairs from collision checking.
+                With False nothing is removed.
+            remove_distance: No effect (see `disable_collision_pair`).
         """
+        if not self._removes_collisions(remove_collision, remove_distance):
+            return self
         logger.info(
             "Disabling collisions (subtrees): %s <-> %s",
             robot_frame_or_joint,
@@ -438,20 +463,50 @@ class SceneBuilder:
     def move_obstacle(
         self, obstacle_name: str, position: list[float], orientation: list[float]
     ) -> "SceneBuilder":
-        """
-        Move an object to a specified position and orientation.
+        """Move a loaded environment (or another fixed model) to a new pose.
+
+        The pose is the model's root pose in the world, as `load_environment`
+        takes it: moving to the pose it was loaded at changes nothing.
+        Collision checking sees the move at once, for configurations and
+        for the paths of a graph already built.
+
+        The model's contact surfaces do not move, nor do constraints already
+        built from its frames: reload the scene to place objects on, or grasp
+        handles of, a moved model.
+
         Args:
-            object_name: Name of the object to move
-            position: [x, y, z] position
-            orientation: [qx, qy, qz, qw] quaternion orientation
+            obstacle_name: Name the model was loaded under (``"ground"``).
+            position: [x, y, z] position.
+            orientation: [qx, qy, qz, qw] quaternion orientation.
+
+        Raises:
+            ValueError: No model was loaded under ``obstacle_name``.
         """
-        # PYHPP-GAP: pyhpp Problem has no moveObstacle binding.
-        # Obstacle placement must be set before building the problem
-        # via the pinocchio model's placement map.
-        logger.warning(
-            "[PYHPP-GAP] move_obstacle(%r) is not yet implemented for PyHPP.",
-            obstacle_name,
-        )
+        device = self.planner.device
+        pose = xyzquat_to_se3([*position, *orientation])
+        # Not a placement written by hand: HPP caches geometry placements
+        # per configuration in a pool of device data, and only this call
+        # rebuilds the pool. A hand-written placement is ignored the next
+        # time the same configuration is checked.
+        try:
+            device.setRobotRootPosition(obstacle_name, pose)
+        except ValueError as exc:
+            raise ValueError(
+                f"Cannot move {obstacle_name!r}: no model loaded under that "
+                f"name ({exc})"
+            ) from exc
+        surfaces = [
+            name
+            for name in device.contactSurfaceNames()
+            if name.startswith(obstacle_name + "/")
+        ]
+        if surfaces:
+            logger.warning(
+                "Moved %r, but its contact surfaces stay where they were: %s",
+                obstacle_name,
+                ", ".join(surfaces),
+            )
+        logger.info("Moved %r to %s %s", obstacle_name, position, orientation)
         return self
 
     def get_instances(self) -> tuple[Any, Any, Any]:

@@ -360,7 +360,7 @@ class GraphBuilder:
 
         return self.graph
 
-    def _prepapre_factory_inputs(self, config):
+    def _prepare_factory_inputs(self, config):
         """Prepare and validate factory inputs from config.
 
         Args:
@@ -435,7 +435,7 @@ class GraphBuilder:
         )
 
         # Prepare valid factory inputs
-        config = self._prepapre_factory_inputs(config)
+        config = self._prepare_factory_inputs(config)
 
         # Set grippers
         self.factory.setGrippers(config.GRIPPERS)
