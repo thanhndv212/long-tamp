@@ -589,7 +589,7 @@ class ManipulationTask(ABC):
 
     @staticmethod
     def _ordered_config_keys(
-        cfgs: dict[str, Any], preferred_configs: list[str]
+        cfgs: dict[str, Any], preferred_configs: Sequence[str]
     ) -> list[str]:
         # Always plan from q_init to q_goal.
         if "q_init" not in cfgs or "q_goal" not in cfgs:
@@ -873,7 +873,7 @@ class ManipulationTask(ABC):
         self,
         visualize: bool = True,
         solve: bool = False,
-        preferred_configs: list[str] = [],
+        preferred_configs: Sequence[str] = (),
         max_iterations: int = 1000,
         solve_mode: str = "manipulation-planner",
         transition_edges: Sequence[str] | None = None,
