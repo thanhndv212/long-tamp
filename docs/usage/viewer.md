@@ -268,6 +268,14 @@ scene.play(frames, dt=1/30)   # queued, played at its pace; returns at once
 scene.client.frame(t, q)      # a stream stamped with (simulated) time
 ```
 
+The scene listens on this machine only (`127.0.0.1`), in its own process or in the
+mission's: Viser has no authentication, and anyone who reaches the port sees the cell and
+can move the camera and the GUI controls. To show it elsewhere, pass `host=` to
+`SceneProcess` or `MissionViewer` (`--host` for `replay.py`), or set
+`LONG_TAMP_VIEWER_HOST` for a whole run; the argument wins over the variable. A container
+on host networking needs neither: its `localhost` is the host's. On a bridge network,
+publish the port and set `LONG_TAMP_VIEWER_HOST=0.0.0.0`.
+
 - **`MissionViewer(separate_process=True)`** sends each planned path as frames, with the
   gripper closing and opening, and doesn't wait for them to play. This is the screw
   assembly's default; `--viewer-in-process` restores the old way.

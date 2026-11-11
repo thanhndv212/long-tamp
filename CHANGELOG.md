@@ -32,11 +32,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `127.0.0.1` or `[::1]` in `Host` (else 403). Before, any web page open in the operator's
   browser could post `stop` or a chat message to `localhost:8090`. The page already sent
   JSON; a script posting to `/api/control` or `/api/chat` must set the header.
+- The Viser scene listens on `127.0.0.1` by default (#223), where `SceneProcess`,
+  `MissionViewer` and `script/screw_assembly/replay.py` bound `0.0.0.0` and showed an
+  unauthenticated scene to the whole network. Pass `host=` (`--host` for `replay.py`) or
+  set `LONG_TAMP_VIEWER_HOST` to serve it elsewhere; a container on a bridge network
+  needs `LONG_TAMP_VIEWER_HOST=0.0.0.0`, one on host networking needs nothing.
 
 ### Fixed
 
 - The live viewer's page loader passed two segments to one `joinpath`, which the resource
   API of Python 3.10 and 3.11 does not accept for every loader (#228).
+- A task whose `VALID_PAIRS` allows no grasp now says so (#225). `{}` is the default, of
+  `BaseTaskConfig` and of a YAML task with no `valid_pairs:`, and the factory reads it as
+  "no gripper may grasp anything": the graph held the `free` state alone, without a word,
+  and the mission failed later as if planning had. `ManipulationTask.create_graph` and
+  `GraphBuilder.build_graph_for_task` log a warning; the graphs built are unchanged, and
+  phase graphs, which pass empty pairs on purpose, stay quiet.
 - `PlanExecutor(plan_ahead=True)`: a backend that raised during a motion (a `RemoteBackend`
   whose served backend raised, for one) killed the motion's thread, and the step was then
   recorded as executed and the plan went on. The exception is now a failed step
