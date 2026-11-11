@@ -30,7 +30,6 @@ import threading
 from collections.abc import Sequence
 from typing import Any
 
-
 #: Overrides the address the scene servers listen on, e.g. ``0.0.0.0`` in a
 #: container on a bridge network, where the host cannot reach its loopback.
 HOST_VARIABLE = "LONG_TAMP_VIEWER_HOST"
