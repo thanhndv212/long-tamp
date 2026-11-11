@@ -12,7 +12,7 @@ import json
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 # ---------------------------------------------------------------------------
 # Serialisation helpers
@@ -322,7 +322,7 @@ class RunLogger:
         exc_type: Any,
         exc_val: Any,
         exc_tb: Any,
-    ) -> bool:
+    ) -> Literal[False]:
         self.close()
         return False  # Do not suppress exceptions
 

@@ -62,7 +62,7 @@ def get_path_files(
         >>> files = get_path_files("/tmp/grasp_sequence_paths")
         >>> print(f"Found {len(files['native'])} native, {len(files['json'])} JSON")
     """
-    result = {"native": [], "json": []}
+    result: dict[str, list[str]] = {"native": [], "json": []}
 
     if not os.path.isdir(directory):
         return result
