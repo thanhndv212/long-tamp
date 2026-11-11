@@ -22,9 +22,9 @@ import numpy as np
 from long_tamp.grasping import (
     PANDA_HAND,
     Box,
+    GraspableObject,
     GraspPlanner,
     GraspPlannerParams,
-    GraspableObject,
     load_urdf_primitives,
     pose_to_xyzquat,
     xyzquat_to_pose,

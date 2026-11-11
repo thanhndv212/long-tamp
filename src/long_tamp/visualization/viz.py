@@ -7,10 +7,14 @@ Both gepetto-viewer (CORBA) and pyhpp_viser (browser-based) viewers are
 supported transparently — functions detect the viewer type at call time.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
+
+import numpy as np
+from pinocchio import Quaternion
 
 from long_tamp.logging import get_logger
 from long_tamp.planning.graph import GraphBuilder
+from long_tamp.utils import se3_to_xyzquat, xyzquat_to_se3
 
 logger = get_logger("visualization.viz")
 
@@ -24,11 +28,6 @@ def print_joint_info(robot):
     for i, joint in enumerate(joints):
         print(f"  {i:3d}. {joint} (config rank: {ranks[joint]})")
 
-
-import numpy as np
-from pinocchio import Quaternion
-
-from long_tamp.utils import se3_to_xyzquat, xyzquat_to_se3
 
 # ---------------------------------------------------------------------------
 # Viewer-type detection helpers
@@ -47,7 +46,7 @@ def _is_viser_viewer(viewer) -> bool:
 
 # Registry: {node_name: viser_frame_handle} for viser viewers.
 # Used by clear_* functions to remove previously added frames/meshes.
-_VISER_FRAME_REGISTRY: Dict[str, Any] = {}
+_VISER_FRAME_REGISTRY: dict[str, Any] = {}
 
 
 def _viser_xyzquat_to_wxyz(pose: list) -> tuple:
@@ -224,7 +223,7 @@ def _compute_arrow_orientation_gepetto(direction: np.ndarray) -> Quaternion:
 def displayHandle(
     viewer,
     handle_name: str,
-    frame_color: Optional[List[float]] = None,
+    frame_color: list[float] | None = None,
     axis_radius: float = 0.005,
     axis_length: float = 0.015,
 ) -> bool:
@@ -281,7 +280,7 @@ def displayHandle(
 def displayGripper(
     viewer,
     gripper_name: str,
-    frame_color: Optional[List[float]] = None,
+    frame_color: list[float] | None = None,
     axis_radius: float = 0.005,
     axis_length: float = 0.015,
 ) -> bool:
@@ -335,10 +334,10 @@ def displayGripper(
 def displayHandleApproach(
     viewer,
     handle_name: str,
-    arrow_color: Optional[List[float]] = None,
+    arrow_color: list[float] | None = None,
     arrow_length: float = 0.15,
     arrow_radius: float = 0.008,
-    approach_direction: Optional[List[float]] = None,
+    approach_direction: list[float] | None = None,
 ) -> bool:
     """
     Display approach direction arrow for a handle.
@@ -414,10 +413,10 @@ def displayHandleApproach(
 def displayGripperApproach(
     viewer,
     gripper_name: str,
-    arrow_color: Optional[List[float]] = None,
+    arrow_color: list[float] | None = None,
     arrow_length: float = 0.15,
     arrow_radius: float = 0.008,
-    approach_direction: Optional[List[float]] = None,
+    approach_direction: list[float] | None = None,
 ) -> bool:
     """
     Display approach direction arrow for a gripper.
@@ -491,12 +490,12 @@ def displayGripperApproach(
 
 def visualize_all_handles(
     viewer,
-    handle_names: List[str],
+    handle_names: list[str],
     show_approach: bool = True,
-    frame_color: Optional[List[float]] = None,
+    frame_color: list[float] | None = None,
     axis_radius: float = 0.005,
     axis_length: float = 0.015,
-    arrow_color: Optional[List[float]] = None,
+    arrow_color: list[float] | None = None,
     arrow_length: float = 0.15,
     arrow_radius: float = 0.008,
 ) -> int:
@@ -558,15 +557,15 @@ def visualize_all_handles(
 
 def visualize_all_grippers(
     viewer,
-    gripper_names: List[str],
+    gripper_names: list[str],
     show_approach: bool = True,
-    frame_color: Optional[List[float]] = None,
+    frame_color: list[float] | None = None,
     axis_radius: float = 0.005,
     axis_length: float = 0.015,
-    arrow_color: Optional[List[float]] = None,
+    arrow_color: list[float] | None = None,
     arrow_length: float = 0.15,
     arrow_radius: float = 0.008,
-    approach_direction: Optional[List[float]] = None,
+    approach_direction: list[float] | None = None,
 ) -> int:
     """
     Display multiple grippers at once.
@@ -766,10 +765,10 @@ def visualize_constraint_graph(
     output_path: str = "constraint_graph",
     include_subgraph: bool = True,
     show_png: bool = False,
-    states_dict: Optional[Dict] = None,
-    edges_dict: Optional[Dict] = None,
-    edge_topology: Optional[Dict[str, Tuple[str, str]]] = None,
-) -> Optional[str]:
+    states_dict: dict | None = None,
+    edges_dict: dict | None = None,
+    edge_topology: dict[str, tuple[str, str]] | None = None,
+) -> str | None:
     """
     Visualize constraint graph structure using NetworkX and Graphviz.
 
@@ -904,11 +903,11 @@ def visualize_constraint_graph(
 
 def visualize_constraint_graph_interactive(
     graph_builder: "GraphBuilder",
-    window_size: Tuple[int, int] = (1200, 800),
-    neighborhood_hops: Optional[int] = None,
+    window_size: tuple[int, int] = (1200, 800),
+    neighborhood_hops: int | None = None,
     show_window: bool = True,
     blocking: bool = False,
-) -> Optional[Any]:
+) -> Any | None:
     """
     Create an interactive constraint graph visualization using graph-tool.
 

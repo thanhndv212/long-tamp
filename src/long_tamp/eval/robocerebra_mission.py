@@ -47,12 +47,12 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from itertools import pairwise
 from typing import Any
 
 import numpy as np
 
 from long_tamp.execution import ExecutionCommand, ExecutionStatus, Feedback
-
 from long_tamp.mission.domain import BaseMissionDomain, MissionScene, Move
 from long_tamp.mission.goals import grasped
 from long_tamp.mission.template import KinematicPlanner
@@ -301,7 +301,7 @@ class RoboCerebraDomain(BaseMissionDomain):
     def static_facts(self) -> tuple[str, ...]:
         facts = [f"gripper({self.gripper})"]
         stages = self.stages()
-        facts += [f"next({a}, {b})" for a, b in zip(stages, stages[1:])]
+        facts += [f"next({a}, {b})" for a, b in pairwise(stages)]
         facts += [f"rest({obj}, {stage(0)})" for obj in self.others]
         for obj, specs in self.chains.items():
             if obj in self.given_up:

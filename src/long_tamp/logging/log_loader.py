@@ -32,12 +32,13 @@ Quick-start::
 
 import json
 import os
-from typing import Any, Dict, Generator, List
+from collections.abc import Generator
+from typing import Any
 
 
 def iter_events(
     jsonl_path: str,
-) -> Generator[Dict[str, Any], None, None]:
+) -> Generator[dict[str, Any], None, None]:
     """Iterate over events in a JSONL run log file.
 
     Args:
@@ -57,7 +58,7 @@ def iter_events(
                     continue
 
 
-def load_run_log(path: str) -> Dict[str, Any]:
+def load_run_log(path: str) -> dict[str, Any]:
     """Load a run log file into a structured dict.
 
     Accepts either a ``*.jsonl`` streaming log (parsed event by event) or a
@@ -82,7 +83,7 @@ def load_run_log(path: str) -> Dict[str, Any]:
         with open(path, encoding="utf-8") as f:
             return json.load(f)
 
-    result: Dict[str, Any] = {"events": [], "phase_results": []}
+    result: dict[str, Any] = {"events": [], "phase_results": []}
     for rec in iter_events(path):
         result["events"].append(rec)
         et = rec.get("event")
@@ -95,7 +96,7 @@ def load_run_log(path: str) -> Dict[str, Any]:
     return result
 
 
-def get_replay_config(path: str) -> Dict[str, Any]:
+def get_replay_config(path: str) -> dict[str, Any]:
     """Extract the parameters needed to replay a run from a log file.
 
     Args:
@@ -111,7 +112,7 @@ def get_replay_config(path: str) -> Dict[str, Any]:
           all ``plan_sequence()`` call parameters.
     """
     run_log = load_run_log(path)
-    replay: Dict[str, Any] = {}
+    replay: dict[str, Any] = {}
 
     run_start = run_log.get("run_start", {})
     if run_start:
@@ -142,7 +143,7 @@ def get_replay_config(path: str) -> Dict[str, Any]:
     return replay
 
 
-def list_runs(log_dir: str) -> List[str]:
+def list_runs(log_dir: str) -> list[str]:
     """List all run log files (``*.jsonl``) in *log_dir*.
 
     Args:

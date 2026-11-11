@@ -50,8 +50,8 @@ Example:
     >>> factory.generate()  # Creates only 2 states + waypoints
 """
 
-from functools import lru_cache
-from typing import Iterable, Optional, Sequence, Tuple
+from collections.abc import Iterable, Sequence
+from functools import cache
 
 from long_tamp.logging import get_logger
 
@@ -78,7 +78,7 @@ from .sequential_grasp_filter import (
 
 logger = get_logger("planning.sequential_graph_factory")
 
-GraspsT = Tuple[Optional[int], ...]
+GraspsT = tuple[int | None, ...]
 
 
 class PrunedRecursionMixin:
@@ -107,7 +107,7 @@ class PrunedRecursionMixin:
     subtrees that could never produce one are skipped.
     """
 
-    _target_grasps: Tuple[GraspsT, ...] = ()
+    _target_grasps: tuple[GraspsT, ...] = ()
 
     def __init__(self, *args, **kwargs):
         # Memoizes partial grasp assignments already walked by `_recurse`,
@@ -116,7 +116,7 @@ class PrunedRecursionMixin:
         self._visitedGrasps = set()
         super().__init__(*args, **kwargs)
 
-    def set_target_grasps(self, targets: Iterable[Sequence[Optional[int]]]) -> None:
+    def set_target_grasps(self, targets: Iterable[Sequence[int | None]]) -> None:
         """Register the only grasp tuples worth walking toward.
 
         Args:
@@ -163,7 +163,7 @@ class PrunedRecursionMixin:
                 ish = self.handles.index(h)
                 # Suppression below keeps this line byte-identical to
                 # upstream, so the copy stays diffable against pyhpp's.
-                nGrasps = grasps[:isg] + (ish,) + grasps[isg + 1 :]  # noqa: RUF005
+                nGrasps = grasps[:isg] + (ish,) + grasps[isg + 1 :]
 
                 # The one addition to the upstream algorithm.
                 if not self._may_reach_target(nGrasps):
@@ -187,7 +187,7 @@ class PrunedRecursionMixin:
                     self._recurse(ngrippers, nhandles, nGrasps, depth + 2)
 
 
-@lru_cache(maxsize=None)
+@cache
 def pruned_factory_class(base: type) -> type:
     """Return ``base`` with `PrunedRecursionMixin` woven in.
 
@@ -238,8 +238,8 @@ class SequentialConstraintGraphFactory(PrunedRecursionMixin, ConstraintGraphFact
     def __init__(
         self,
         graph,
-        current_grasps: Tuple[Optional[int], ...],
-        next_grasp: Tuple[int, int],
+        current_grasps: tuple[int | None, ...],
+        next_grasp: tuple[int, int],
     ):
         """Initialize sequential factory.
 

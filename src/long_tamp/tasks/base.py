@@ -8,7 +8,8 @@ Provides ManipulationTask base class with common structure.
 import logging
 import re
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 from long_tamp.logging import get_logger
 from long_tamp.planning import (
@@ -33,11 +34,11 @@ class ManipulationTask(ABC):
     def __init__(
         self,
         joint_bounds=None,
-        FILE_PATHS: Optional[Dict[str, Any]] = None,
+        FILE_PATHS: dict[str, Any] | None = None,
         task_name: str = "Manipulation Task",
         backend: str = "pyhpp",
         viewer_type: str = "auto",
-        log_dir: Optional[str] = "auto",
+        log_dir: str | None = "auto",
         log_level: str = "INFO",
     ):
         """
@@ -115,23 +116,23 @@ class ManipulationTask(ABC):
             except Exception:
                 self.run_logger = None  # Never crash on logger init
 
-    def get_robot_names(self) -> List[str]:
+    def get_robot_names(self) -> list[str]:
         return self.task_config.ROBOT_NAMES
 
-    def get_composite_names(self) -> List[str]:
+    def get_composite_names(self) -> list[str]:
         return self.task_config.ROBOT_NAMES
 
-    def get_object_names(self) -> List[str]:
+    def get_object_names(self) -> list[str]:
         return self.task_config.OBJECTS
 
-    def get_environment_names(self) -> List[str]:
+    def get_environment_names(self) -> list[str]:
         return self.task_config.ENVIRONMENT_NAMES
 
-    def get_joint_groups(self) -> List[str]:
+    def get_joint_groups(self) -> list[str]:
         """Return joint groups from configuration."""
         return self.task_config.ROBOTS
 
-    def get_objects(self) -> List[str]:
+    def get_objects(self) -> list[str]:
         """Return list of objects from configuration."""
         return self.task_config.OBJECTS
 
@@ -230,7 +231,7 @@ class ManipulationTask(ABC):
         if self.graph_builder is not None:
             self.graph_builder.set_pyhpp_constraints(self.pyhpp_constraints)
 
-    def create_graph(self, graph_constraints: Optional[List[str]] = None):
+    def create_graph(self, graph_constraints: list[str] | None = None):
         """Create and configure constraint graph."""
         robot = self.robot
         problem = self.ps
@@ -263,7 +264,7 @@ class ManipulationTask(ABC):
         pass
 
     @abstractmethod
-    def build_initial_config(self) -> List[float]:
+    def build_initial_config(self) -> list[float]:
         """Build the initial configuration. Must be implemented by subclass."""
         raise NotImplementedError(
             "Subclass must implement build_initial_config(). "
@@ -271,7 +272,7 @@ class ManipulationTask(ABC):
             "and objects."
         )
 
-    def generate_configurations(self, q_init: List[float]) -> Dict[str, List[float]]:
+    def generate_configurations(self, q_init: list[float]) -> dict[str, list[float]]:
         """
         Generate all intermediate configurations.
         Only required when using the base run() pipeline.
@@ -283,7 +284,7 @@ class ManipulationTask(ABC):
         self,
         validation_step: float = 0.01,
         projector_step: float = 0.1,
-        freeze_joint_substrings: Optional[List[str]] = None,
+        freeze_joint_substrings: list[str] | None = None,
         skip_graph: bool = False,
     ):
         """
@@ -366,7 +367,7 @@ class ManipulationTask(ABC):
 
         logger.info("✓ Task setup complete")
 
-    def _place_articulated_joints(self, q: List[float]) -> List[float]:
+    def _place_articulated_joints(self, q: list[float]) -> list[float]:
         """Write each anchored object's initial joint values at their ranks.
 
         ``task_config.ARTICULATED_JOINTS`` (``{object: {"object/joint":
@@ -469,8 +470,8 @@ class ManipulationTask(ABC):
                 self.planner.configure_time_parameterization_method(**tp_kwargs)
 
     def _setup_locked_joint_constraints(
-        self, freeze_joint_substrings: Optional[List[str]] = None
-    ) -> Optional[List[str]]:
+        self, freeze_joint_substrings: list[str] | None = None
+    ) -> list[str] | None:
         """Create locked joint constraints if requested (factory mode only).
 
         In manual mode, tasks typically handle joint freezing at config
@@ -519,7 +520,7 @@ class ManipulationTask(ABC):
         return graph_constraints
 
     def _finalize_graph_setup(
-        self, graph_constraints: Optional[List[str]], skip_graph: bool
+        self, graph_constraints: list[str] | None, skip_graph: bool
     ) -> None:
         """Finalize graph setup: either skip (grasp-sequence mode) or build.
 
@@ -559,7 +560,7 @@ class ManipulationTask(ABC):
                 backend=self.backend,
             )
 
-    def _build_reference_config_for_locking(self) -> Optional[List[float]]:
+    def _build_reference_config_for_locking(self) -> list[float] | None:
         """Build a reference config for locked joint constraints.
 
         Uses robot's current/neutral config before config_gen is available.
@@ -588,8 +589,8 @@ class ManipulationTask(ABC):
 
     @staticmethod
     def _ordered_config_keys(
-        cfgs: Dict[str, Any], preferred_configs: List[str]
-    ) -> List[str]:
+        cfgs: dict[str, Any], preferred_configs: list[str]
+    ) -> list[str]:
         # Always plan from q_init to q_goal.
         if "q_init" not in cfgs or "q_goal" not in cfgs:
             return []
@@ -620,8 +621,8 @@ class ManipulationTask(ABC):
 
     @staticmethod
     def _parse_factory_waypoints(
-        cfgs: Dict[str, Any],
-    ) -> Tuple[List[str], List[List[float]]]:
+        cfgs: dict[str, Any],
+    ) -> tuple[list[str], list[list[float]]]:
         """Parse factory waypoint keys q_wp_<i>_<edgeName>.
 
         Returns:
@@ -630,7 +631,7 @@ class ManipulationTask(ABC):
         if "q_init" not in cfgs or "q_goal" not in cfgs:
             return [], []
 
-        items: List[Tuple[int, str, str]] = []
+        items: list[tuple[int, str, str]] = []
         for k in cfgs.keys():
             m = re.match(r"^q_wp_(\d+)_(.+)$", k)
             if m:
@@ -657,11 +658,11 @@ class ManipulationTask(ABC):
 
     def _compute_transition_inputs(
         self,
-        cfgs: Dict[str, Any],
-        transition_edges: Optional[Sequence[str]],
-        transition_waypoints: Optional[Sequence[Sequence[float]]],
+        cfgs: dict[str, Any],
+        transition_edges: Sequence[str] | None,
+        transition_waypoints: Sequence[Sequence[float]] | None,
         generate_waypoints_via_edges: bool,
-    ) -> Tuple[List[str], List[List[float]]]:
+    ) -> tuple[list[str], list[list[float]]]:
         """Compute (edges, waypoints) for transition-planner mode."""
         # 1) Explicit waypoints take precedence.
         if transition_waypoints is not None:
@@ -729,8 +730,8 @@ class ManipulationTask(ABC):
         self,
         path_index: int,
         record: bool,
-        video_name: Optional[str],
-        output_dir: Optional[str],
+        video_name: str | None,
+        output_dir: str | None,
         framerate: int,
     ) -> None:
         logger.info("7. Playing solution path...")
@@ -750,7 +751,7 @@ class ManipulationTask(ABC):
         except Exception as e:
             logger.warning("Path playback failed: %s", e)
 
-    def _build_result(self, configs: Dict[str, Any], **extra: Any) -> Dict[str, Any]:
+    def _build_result(self, configs: dict[str, Any], **extra: Any) -> dict[str, Any]:
         result = {
             "configs": configs,
             "planner": self.planner,
@@ -764,9 +765,9 @@ class ManipulationTask(ABC):
 
     def _solve_transition_planner(
         self,
-        configs: Dict[str, Any],
-        transition_edges: Optional[Sequence[str]],
-        transition_waypoints: Optional[Sequence[Sequence[float]]],
+        configs: dict[str, Any],
+        transition_edges: Sequence[str] | None,
+        transition_waypoints: Sequence[Sequence[float]] | None,
         generate_waypoints_via_edges: bool,
     ) -> int:
         """Solve via transition-planner: resolve edges/waypoints, apply
@@ -816,10 +817,10 @@ class ManipulationTask(ABC):
 
     def _solve_manipulation_planner(
         self,
-        configs: Dict[str, Any],
-        seq: List[str],
+        configs: dict[str, Any],
+        seq: list[str],
         max_iterations: int,
-    ) -> Tuple[List[int], bool]:
+    ) -> tuple[list[int], bool]:
         """Solve by iterating seq pairwise via the manipulation-planner.
 
         Returns (path_ids, success): path_ids is the per-segment path id
@@ -830,7 +831,7 @@ class ManipulationTask(ABC):
         single `success` bool isn't sufficient on its own (the len(seq)==2
         vs len(seq)>2 playback-gating difference this preserves).
         """
-        path_ids: List[int] = []
+        path_ids: list[int] = []
         for i in range(len(seq) - 1):
             a, b = seq[i], seq[i + 1]
             seg = f"{i + 1}/{len(seq) - 1}"
@@ -872,17 +873,17 @@ class ManipulationTask(ABC):
         self,
         visualize: bool = True,
         solve: bool = False,
-        preferred_configs: List[str] = [],
+        preferred_configs: list[str] = [],
         max_iterations: int = 1000,
         solve_mode: str = "manipulation-planner",
-        transition_edges: Optional[Sequence[str]] = None,
-        transition_waypoints: Optional[Sequence[Sequence[float]]] = None,
+        transition_edges: Sequence[str] | None = None,
+        transition_waypoints: Sequence[Sequence[float]] | None = None,
         generate_waypoints_via_edges: bool = False,
         record: bool = True,
-        output_dir: Optional[str] = None,
-        video_name: Optional[str] = None,
+        output_dir: str | None = None,
+        video_name: str | None = None,
         framerate: int = 25,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Run the complete task workflow.
 

@@ -13,7 +13,6 @@ import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
@@ -67,7 +66,7 @@ class VideoRecorder:
     def __init__(
         self,
         viewer,
-        output_dir: Optional[str] = None,
+        output_dir: str | None = None,
         framerate: int = 25,
         frame_extension: str = "png",
         video_extension: str = "mp4",
@@ -103,7 +102,7 @@ class VideoRecorder:
         return _is_viser_viewer(self.viewer)
 
     def start_recording(
-        self, video_name: Optional[str] = None, path_id: Optional[int] = None
+        self, video_name: str | None = None, path_id: int | None = None
     ) -> str:
         """
         Start video recording by initiating frame capture (gepetto only).
@@ -183,8 +182,8 @@ class VideoRecorder:
         self,
         path,
         speed: float = 1.0,
-        video_name: Optional[str] = None,
-        path_id: Optional[int] = None,
+        video_name: str | None = None,
+        path_id: int | None = None,
         width: int = 800,
         height: int = 600,
     ) -> str:
@@ -341,8 +340,8 @@ def record_path_playback(
     viewer,
     path_player_or_path,
     path_id: int,
-    video_name: Optional[str] = None,
-    output_dir: Optional[str] = None,
+    video_name: str | None = None,
+    output_dir: str | None = None,
     framerate: int = 25,
     dt: float = 0.01,
     speed: float = 1.0,

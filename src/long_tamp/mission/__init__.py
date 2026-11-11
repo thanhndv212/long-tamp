@@ -10,6 +10,7 @@
   ``understand_instruction``; ADR-0012).
 """
 
+from .chat import MissionChat, run_chat
 from .domain import (
     HELD_PREDICATES,
     BaseMissionDomain,
@@ -34,7 +35,6 @@ from .goals import (
     object_of,
     placed_at,
 )
-from .chat import MissionChat, run_chat
 from .runner import MissionRun, MissionRunner, execution_summary, parse_injection
 
 __all__ = [

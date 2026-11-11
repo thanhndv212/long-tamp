@@ -7,7 +7,6 @@ by specific task configurations.
 
 from abc import ABC
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -67,10 +66,10 @@ class Defaults:
     @classmethod
     def freeflyer_bounds(
         cls,
-        x: Tuple[float, float] = (-2.0, 2.0),
-        y: Tuple[float, float] = (-3.0, 3.0),
-        z: Tuple[float, float] = (-2.0, 2.0),
-    ) -> List[float]:
+        x: tuple[float, float] = (-2.0, 2.0),
+        y: tuple[float, float] = (-3.0, 3.0),
+        z: tuple[float, float] = (-2.0, 2.0),
+    ) -> list[float]:
         """Get freeflyer bounds as flat list [xmin, xmax, ymin, ymax, ...]."""
         qb = cls.QUATERNION_BOUNDS
         return [x[0], x[1], y[0], y[1], z[0], z[1], qb, qb, qb, qb, qb, qb, qb, qb]
@@ -99,15 +98,15 @@ class ModelPaths:
 class TransformConfig:
     """Transformation configuration (position + quaternion)."""
 
-    position: List[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
-    quaternion: List[float] = field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0])
+    position: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
+    quaternion: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0])
 
-    def as_xyzquat(self) -> List[float]:
+    def as_xyzquat(self) -> list[float]:
         """Return as [x, y, z, qx, qy, qz, qw]."""
         return self.position + self.quaternion
 
     @classmethod
-    def from_xyzquat(cls, xyzquat: List[float]) -> "TransformConfig":
+    def from_xyzquat(cls, xyzquat: list[float]) -> "TransformConfig":
         """Create from [x, y, z, qx, qy, qz, qw] list."""
         return cls(position=xyzquat[:3], quaternion=xyzquat[3:])
 
@@ -123,10 +122,10 @@ class ConstraintDef:
 
     type: str  # "grasp", "placement", "complement"
     name: str
-    gripper: Optional[str] = None  # For grasp constraints
-    obj: Optional[str] = None  # Object joint name
-    transform: Optional[List[float]] = None  # XYZQUAT
-    mask: List[bool] = field(default_factory=lambda: Defaults.MASK_ALL)
+    gripper: str | None = None  # For grasp constraints
+    obj: str | None = None  # Object joint name
+    transform: list[float] | None = None  # XYZQUAT
+    mask: list[bool] = field(default_factory=lambda: Defaults.MASK_ALL)
 
 
 @dataclass
@@ -138,7 +137,7 @@ class EdgeDef:
     to_state: str
     containing_state: str
     weight: float = 1.0
-    path_constraints: List[str] = field(default_factory=list)
+    path_constraints: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -146,7 +145,7 @@ class StateDef:
     """Definition of a graph state."""
 
     name: str
-    constraints: List[str] = field(default_factory=list)
+    constraints: list[str] = field(default_factory=list)
     is_waypoint: bool = False
     priority: int = 0
 
@@ -168,46 +167,46 @@ class BaseTaskConfig(ABC):
     # ==========================================================================
 
     # Model paths
-    PATHS: Dict[str, Dict] = {}
+    PATHS: dict[str, dict] = {}
 
     # Robot configuration
-    ROBOT_NAMES: List[str] = []
-    ENVIRONMENT_NAMES: List[str] = []
-    OBJECTS: List[str] = []
+    ROBOT_NAMES: list[str] = []
+    ENVIRONMENT_NAMES: list[str] = []
+    OBJECTS: list[str] = []
 
     # ==========================================================================
     # Manipulation Configuration (Override in subclass)
     # ==========================================================================
 
     # Grippers and handles for factory mode
-    GRIPPERS: List[str] = []
-    HANDLES_PER_OBJECT: List[List[str]] = []
-    CONTACT_SURFACES_PER_OBJECT: List[List[str]] = []
-    ENVIRONMENT_CONTACTS: List[str] = []
+    GRIPPERS: list[str] = []
+    HANDLES_PER_OBJECT: list[list[str]] = []
+    CONTACT_SURFACES_PER_OBJECT: list[list[str]] = []
+    ENVIRONMENT_CONTACTS: list[str] = []
 
     # Valid gripper-handle pairs (for setPossibleGrasps)
-    VALID_PAIRS: Dict[str, List[str]] = {}
+    VALID_PAIRS: dict[str, list[str]] = {}
 
     # Factory rules (for setRules); when set, they replace VALID_PAIRS
-    RULES: Optional[list] = None
+    RULES: list | None = None
 
     # Arm groups for auto-freeze (populated from YAML arm_groups section)
     # ARM_GROUPS: raw arm group data {arm_name: {joint_keyword, grippers}}
     # GRIPPER_TO_ARM_KEYWORD: {full_gripper_name: joint_keyword | [joint_keyword, ...]}
     # ALL_ARM_KEYWORDS: ordered list of joint keywords
-    ARM_GROUPS: Dict = {}
-    GRIPPER_TO_ARM_KEYWORD: Dict[str, Union[str, List[str]]] = {}
-    ALL_ARM_KEYWORDS: List[str] = []
+    ARM_GROUPS: dict = {}
+    GRIPPER_TO_ARM_KEYWORD: dict[str, str | list[str]] = {}
+    ALL_ARM_KEYWORDS: list[str] = []
     # JOINT_GROUPS (optional): {joint_keyword: [joint names]}, used to
     # restrict TOPPRA time parameterization to the unfrozen arms' joints
-    JOINT_GROUPS: Dict[str, List[str]] = {}
+    JOINT_GROUPS: dict[str, list[str]] = {}
 
     # ==========================================================================
     # Initial Configuration (Override in subclass)
     # ==========================================================================
 
-    INITIAL_ROBOT_CONFIG: List[float] = []
-    INITIAL_OBJECT_CONFIGS: Dict[str, List[float]] = {}
+    INITIAL_ROBOT_CONFIG: list[float] = []
+    INITIAL_OBJECT_CONFIGS: dict[str, list[float]] = {}
 
     # ==========================================================================
     # Planning Parameters (Use defaults or override)
@@ -235,16 +234,16 @@ class BaseTaskConfig(ABC):
     # Graph Definition (Override in subclass)
     # ==========================================================================
 
-    STATES: Dict[str, StateDef] = {}
-    EDGES: Dict[str, EdgeDef] = {}
-    CONSTRAINTS: List[ConstraintDef] = []
+    STATES: dict[str, StateDef] = {}
+    EDGES: dict[str, EdgeDef] = {}
+    CONSTRAINTS: list[ConstraintDef] = []
 
     # ==========================================================================
     # Helper Methods
     # ==========================================================================
 
     @classmethod
-    def get_full_initial_config(cls) -> List[float]:
+    def get_full_initial_config(cls) -> list[float]:
         """Build full initial configuration from robot and object configs."""
         config = list(cls.INITIAL_ROBOT_CONFIG)
         for obj_name in cls.OBJECTS:
@@ -253,7 +252,7 @@ class BaseTaskConfig(ABC):
         return config
 
     @classmethod
-    def get_handles_per_object(cls) -> List[List[str]]:
+    def get_handles_per_object(cls) -> list[list[str]]:
         """
         Get handles per object.
 
@@ -263,7 +262,7 @@ class BaseTaskConfig(ABC):
             return cls.HANDLES_PER_OBJECT
 
         # Infer from VALID_PAIRS
-        handles_by_object: Dict[str, List[str]] = {}
+        handles_by_object: dict[str, list[str]] = {}
         for gripper, handles in cls.VALID_PAIRS.items():
             for handle in handles:
                 obj_name = handle.split("/")[0]
@@ -275,22 +274,22 @@ class BaseTaskConfig(ABC):
         return [handles_by_object.get(obj, []) for obj in cls.OBJECTS]
 
     @classmethod
-    def get_constraint_defs(cls) -> List[ConstraintDef]:
+    def get_constraint_defs(cls) -> list[ConstraintDef]:
         """Return constraint definitions for this task."""
         return cls.CONSTRAINTS
 
     @classmethod
-    def get_state_names(cls) -> List[str]:
+    def get_state_names(cls) -> list[str]:
         """Get list of state names."""
         return list(cls.STATES.keys())
 
     @classmethod
-    def get_edge_names(cls) -> List[str]:
+    def get_edge_names(cls) -> list[str]:
         """Get list of edge names."""
         return list(cls.EDGES.keys())
 
     @classmethod
-    def validate(cls) -> List[str]:
+    def validate(cls) -> list[str]:
         """Validate configuration, return list of warnings/errors."""
         errors = []
 
@@ -318,7 +317,7 @@ class BaseTaskConfig(ABC):
 # =============================================================================
 
 
-def merge_configs(base: Dict, override: Dict) -> Dict:
+def merge_configs(base: dict, override: dict) -> dict:
     """Deep merge two configuration dictionaries."""
     result = base.copy()
     for key, value in override.items():

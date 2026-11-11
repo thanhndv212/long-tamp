@@ -12,7 +12,6 @@ structured logger operates independently and does not require this module.
 import logging
 import os
 import sys
-from typing import Optional
 
 _LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 _LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -20,11 +19,11 @@ _LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 def configure_logging(
     level: int = logging.INFO,
-    log_dir: Optional[str] = None,
-    run_id: Optional[str] = None,
+    log_dir: str | None = None,
+    run_id: str | None = None,
     console: bool = True,
-    console_level: Optional[int] = None,
-    file_level: Optional[int] = None,
+    console_level: int | None = None,
+    file_level: int | None = None,
 ) -> logging.Logger:
     """Configure the ``long_tamp`` root logger.
 
@@ -80,7 +79,7 @@ def configure_logging(
     return logger
 
 
-def get_logger(name: Optional[str] = None) -> logging.Logger:
+def get_logger(name: str | None = None) -> logging.Logger:
     """Return a logger under the ``long_tamp`` namespace.
 
     Args:

@@ -5,7 +5,7 @@ Scene setup utilities for manipulation tasks.
 Provides SceneBuilder for loading robots, environment, and objects.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from long_tamp.logging import get_logger
 from long_tamp.planning import create_planner
@@ -31,8 +31,8 @@ class SceneBuilder:
     def __init__(
         self,
         joint_bounds=None,
-        FILE_PATHS: Optional[Dict[str, Any]] = None,
-        planner: Optional[Any] = None,
+        FILE_PATHS: dict[str, Any] | None = None,
+        planner: Any | None = None,
         backend: str = "pyhpp",
         viewer_type: str = "auto",
     ):
@@ -79,7 +79,7 @@ class SceneBuilder:
             raise ValueError(f"Unknown backend: {backend}. Use 'pyhpp'")
 
     def load_robot(
-        self, composite_names: List[str], robot_names: List[str]
+        self, composite_names: list[str], robot_names: list[str]
     ) -> "SceneBuilder":
         """Load one or more robots into the scene.
 
@@ -110,7 +110,7 @@ class SceneBuilder:
         return self
 
     def load_environment(
-        self, environment_names: List[str], pose=None
+        self, environment_names: list[str], pose=None
     ) -> "SceneBuilder":
         """Load the environment (dispenser, ground, etc.).
 
@@ -138,7 +138,7 @@ class SceneBuilder:
                 logger.warning("Unknown environment: %s", env_name)
         return self
 
-    def load_objects(self, object_names: List[str]) -> "SceneBuilder":
+    def load_objects(self, object_names: list[str]) -> "SceneBuilder":
         """
         Load multiple objects.
 
@@ -436,7 +436,7 @@ class SceneBuilder:
         return self
 
     def move_obstacle(
-        self, obstacle_name: str, position: List[float], orientation: List[float]
+        self, obstacle_name: str, position: list[float], orientation: list[float]
     ) -> "SceneBuilder":
         """
         Move an object to a specified position and orientation.
@@ -454,7 +454,7 @@ class SceneBuilder:
         )
         return self
 
-    def get_instances(self) -> Tuple[Any, Any, Any]:
+    def get_instances(self) -> tuple[Any, Any, Any]:
         """
         Get planner, robot, and problem solver instances.
 
@@ -467,13 +467,13 @@ class SceneBuilder:
 
     def build(
         self,
-        robot_names: List[str],
-        composite_names: List[str],
-        environment_names: List[str],
-        object_names: List[str],
+        robot_names: list[str],
+        composite_names: list[str],
+        environment_names: list[str],
+        object_names: list[str],
         validation_step: float = 0.01,
         projector_step: float = 0.1,
-    ) -> Tuple[Any, Any, Any]:
+    ) -> tuple[Any, Any, Any]:
         """
         Complete scene setup with default configuration.
 

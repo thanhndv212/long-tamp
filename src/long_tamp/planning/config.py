@@ -7,7 +7,7 @@ Provides ConfigGenerator for generating and validating configurations.
 
 import time
 from collections import deque
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -28,8 +28,8 @@ logger = get_logger("planning.config")
 def bfs_edge_path(
     start_state: str,
     goal_state: str,
-    edge_topology: Dict[str, Tuple[str, str]],
-) -> List[str]:
+    edge_topology: dict[str, tuple[str, str]],
+) -> list[str]:
     """Find a directed edge-name path from start_state to goal_state.
 
     Args:
@@ -41,13 +41,13 @@ def bfs_edge_path(
         List of edge names forming a path. Empty if no path exists.
     """
 
-    adjacency: Dict[str, List[Tuple[str, str]]] = {}
+    adjacency: dict[str, list[tuple[str, str]]] = {}
     for edge_name, (src, dst) in edge_topology.items():
         adjacency.setdefault(src, []).append((dst, edge_name))
 
     queue: deque[str] = deque([start_state])
-    prev_state: Dict[str, str] = {}
-    prev_edge: Dict[str, str] = {}
+    prev_state: dict[str, str] = {}
+    prev_edge: dict[str, str] = {}
     visited = {start_state}
 
     while queue:
@@ -65,7 +65,7 @@ def bfs_edge_path(
     if goal_state not in visited:
         return []
 
-    edges: List[str] = []
+    edges: list[str] = []
     cur = goal_state
     while cur != start_state:
         edges.append(prev_edge[cur])
@@ -76,12 +76,12 @@ def bfs_edge_path(
 
 def freeze_joints_by_substrings(
     robot,
-    q: List[float],
-    q_ref: List[float],
-    joint_substrings: List[str],
+    q: list[float],
+    q_ref: list[float],
+    joint_substrings: list[str],
     *,
     backend: str = "pyhpp",
-) -> List[float]:
+) -> list[float]:
     """Keep joint values constant for joints whose names match substrings.
 
     Intended use: tasks that do not use some robot groups (e.g. an idle second arm)
@@ -132,19 +132,19 @@ class ConfigGenerator:
         # Joints a caller (GraspSequencePlanner, per-phase "frozen arms")
         # wants held at their q_from value across every random-restart
         # attempt -- see set_frozen_joints().
-        self.frozen_joint_names: List[str] = []
+        self.frozen_joint_names: list[str] = []
         # Attempt breakdown of the most recent failed generate_via_edge()
         # call: {"edge_name", "attempts", "solver_failed",
         # "collision_invalid"}. Zero collision_invalid means no attempt even
         # satisfied the constraints -- the target is unreachable from this
         # commitment, not merely obstructed.
-        self.last_edge_failure: Optional[Dict[str, Any]] = None
+        self.last_edge_failure: dict[str, Any] | None = None
         # PyHPP shooter for random configurations
         self._shooter = None
         if self.backend == "pyhpp":
             self._shooter = self.ps.configurationShooter()
 
-    def set_frozen_joints(self, joint_names: Optional[List[str]]) -> None:
+    def set_frozen_joints(self, joint_names: list[str] | None) -> None:
         """Set which joints' q_from value should survive into every
         random-restart seed during generate_via_edge().
 
@@ -179,8 +179,8 @@ class ConfigGenerator:
         self.graph = new_graph
 
     def is_config_valid(
-        self, q: List[float], verbose: bool = False
-    ) -> Tuple[bool, str]:
+        self, q: list[float], verbose: bool = False
+    ) -> tuple[bool, str]:
         """
         Check if a configuration is valid (collision-free and within bounds).
 
@@ -207,10 +207,10 @@ class ConfigGenerator:
     def project_on_node(
         self,
         node_name: str,
-        q: List[float],
-        config_label: Optional[str] = None,
+        q: list[float],
+        config_label: str | None = None,
         verbose: bool = True,
-    ) -> Tuple[bool, List[float]]:
+    ) -> tuple[bool, list[float]]:
         """
         Project configuration onto node constraints.
 
@@ -284,12 +284,12 @@ class ConfigGenerator:
     def generate_via_edge(
         self,
         edge_name: str,
-        q_from: List[float],
-        config_label: Optional[str] = None,
+        q_from: list[float],
+        config_label: str | None = None,
         verbose: bool = True,
-        q_hint: Optional[List[float]] = None,
-        timeout: Optional[float] = 30.0,
-    ) -> Tuple[bool, Optional[List[float]]]:
+        q_hint: list[float] | None = None,
+        timeout: float | None = 30.0,
+    ) -> tuple[bool, list[float] | None]:
         """
         Generate target configuration by shooting random configs along edge.
 
@@ -411,10 +411,10 @@ class ConfigGenerator:
     def _generate_candidate_config(
         self,
         edge_name: str,
-        q_from: List[float],
-        q_hint: Optional[List[float]],
+        q_from: list[float],
+        q_hint: list[float] | None,
         use_hint: bool,
-    ) -> Tuple[bool, Optional[List[float]], Any]:
+    ) -> tuple[bool, list[float] | None, Any]:
         """Generate one candidate target config via `edge_name`'s
         `generateTargetConfig`, backend-dispatched.
 
@@ -485,7 +485,7 @@ class ConfigGenerator:
         return res, config, err
 
     def _check_config_finite(
-        self, config: Optional[List[float]], edge_name: str, attempt_idx: int
+        self, config: list[float] | None, edge_name: str, attempt_idx: int
     ) -> bool:
         """Debug-log `config` and check it contains no NaN/inf values.
 

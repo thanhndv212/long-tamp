@@ -2,8 +2,6 @@
 Transformation and configuration utilities for long_tamp.
 """
 
-from typing import List, Optional, Union
-
 import numpy as np
 from pinocchio import SE3, Quaternion
 from pinocchio.rpy import rpyToMatrix
@@ -191,11 +189,11 @@ class ConfigBuilder:
         """Initialize configuration builder."""
         self.parts = []
 
-    def add_joint_config(self, values: Union[List, np.ndarray]):
+    def add_joint_config(self, values: list | np.ndarray):
         """Add joint configuration values."""
         self.parts.append(np.array(values))
 
-    def add_freeflyer_config(self, xyzquat: Union[List, np.ndarray]):
+    def add_freeflyer_config(self, xyzquat: list | np.ndarray):
         """Add freeflyer configuration [x, y, z, qx, qy, qz, qw]."""
         if len(xyzquat) != 7:
             raise ValueError("Freeflyer config must have 7 values")
@@ -222,9 +220,9 @@ class BoundsManager:
 
     @staticmethod
     def freeflyer_bounds(
-        translation_bounds: Optional[List] = None,
-        quaternion_bounds: Optional[List] = None,
-    ) -> List:
+        translation_bounds: list | None = None,
+        quaternion_bounds: list | None = None,
+    ) -> list:
         """Create bounds for a freeflyer joint."""
         if translation_bounds is None:
             translation_bounds = [(-2.0, 2.0), (-3.0, 3.0), (-2.0, 2.0)]
@@ -241,12 +239,12 @@ class BoundsManager:
         return bounds
 
     @staticmethod
-    def revolute_bounds(min_angle: float = -np.pi, max_angle: float = np.pi) -> List:
+    def revolute_bounds(min_angle: float = -np.pi, max_angle: float = np.pi) -> list:
         """Create bounds for a revolute joint."""
         return [min_angle, max_angle]
 
     @staticmethod
-    def prismatic_bounds(min_pos: float = -1.0, max_pos: float = 1.0) -> List:
+    def prismatic_bounds(min_pos: float = -1.0, max_pos: float = 1.0) -> list:
         """Create bounds for a prismatic joint."""
         return [min_pos, max_pos]
 

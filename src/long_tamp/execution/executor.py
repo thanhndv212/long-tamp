@@ -37,7 +37,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from . import activity
 from long_tamp.tasks.task_planning.events import (
     DRIFT_ROLE,
     MOTION_ROLE,
@@ -47,6 +46,8 @@ from long_tamp.tasks.task_planning.events import (
 )
 from long_tamp.tasks.task_planning.runner import PlanRun, run_plan
 
+from . import activity
+from .concurrent import merge_lanes
 from .contract import (
     ExecutionBackend,
     ExecutionCommand,
@@ -54,7 +55,6 @@ from .contract import (
     ExecutionResult,
     ExecutionStatus,
 )
-from .concurrent import merge_lanes
 from .control import ExecutionControl
 from .sampled import sampled
 from .supervisor import run_command

@@ -12,7 +12,7 @@ import json
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Serialisation helpers
@@ -72,7 +72,7 @@ def _make_serializable(obj: Any) -> Any:
     return str(obj)
 
 
-def _serialize_task_config(config: Any) -> Dict[str, Any]:
+def _serialize_task_config(config: Any) -> dict[str, Any]:
     """Serialise a task config class or instance to a plain dict.
 
     Handles both the class-level-attributes config pattern and regular
@@ -81,7 +81,7 @@ def _serialize_task_config(config: Any) -> Dict[str, Any]:
     if config is None:
         return {}
 
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
 
     # Class-level attributes (a common task config pattern)
     src = config if isinstance(config, type) else type(config)
@@ -140,7 +140,7 @@ class RunLogger:
     ``run_<YYYYMMDD_HHMMSS>_<run_id>.{jsonl,json,_replay.yaml}``
     """
 
-    def __init__(self, log_dir: str, run_id: Optional[str] = None) -> None:
+    def __init__(self, log_dir: str, run_id: str | None = None) -> None:
         """Create a RunLogger.
 
         Args:
@@ -187,7 +187,7 @@ class RunLogger:
         if self._closed:
             return
         try:
-            record: Dict[str, Any] = {
+            record: dict[str, Any] = {
                 "event": event,
                 "run_id": self.run_id,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -203,7 +203,7 @@ class RunLogger:
     def log_task_config(
         self,
         task_config: Any,
-        setup_params: Optional[Dict[str, Any]] = None,
+        setup_params: dict[str, Any] | None = None,
         backend: str = "",
         task_name: str = "",
     ) -> None:
@@ -227,7 +227,7 @@ class RunLogger:
             task_name=task_name,
         )
 
-    def snapshot(self) -> Dict[str, Any]:
+    def snapshot(self) -> dict[str, Any]:
         """Return a dict summarising all events logged so far.
 
         Top-level keys:
@@ -237,7 +237,7 @@ class RunLogger:
           ``run_start``, ``config_snapshot``, ``run_end``.
         - ``phase_results``: List of ``phase_end`` records in order.
         """
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "run_id": self.run_id,
             "events": list(self._events),
             "phase_results": [],
@@ -269,7 +269,7 @@ class RunLogger:
         except ImportError:
             return
 
-        replay: Dict[str, Any] = {"run_id": self.run_id}
+        replay: dict[str, Any] = {"run_id": self.run_id}
         for rec in self._events:
             et = rec.get("event")
             if et == "run_start":

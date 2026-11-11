@@ -6,7 +6,7 @@ implement to ensure interchangeability.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional
+from typing import Any
 
 import numpy as np
 
@@ -119,10 +119,10 @@ class BackendBase(ABC):
         self,
         robot_name: str,
         urdf_path: str,
-        srdf_path: Optional[str] = None,
+        srdf_path: str | None = None,
         root_joint_type: str = "anchor",
-        composite_name: Optional[str] = None,
-        pose: Optional[Any] = None,
+        composite_name: str | None = None,
+        pose: Any | None = None,
     ) -> Any:
         """Load robot model.
 
@@ -180,7 +180,7 @@ class BackendBase(ABC):
         pass
 
     @abstractmethod
-    def set_joint_bounds(self, joint_name: str, bounds: List[float]) -> None:
+    def set_joint_bounds(self, joint_name: str, bounds: list[float]) -> None:
         """Set bounds for a joint.
 
         Args:
@@ -238,7 +238,7 @@ class BackendBase(ABC):
         to_state: str,
         name: str,
         weight: int = 1,
-        containing_state: Optional[str] = None,
+        containing_state: str | None = None,
     ) -> int:
         """Create an edge (transition) in the constraint graph.
 
@@ -292,7 +292,7 @@ class BackendBase(ABC):
         pass
 
     @abstractmethod
-    def get_path(self, index: int = 0) -> Optional[Any]:
+    def get_path(self, index: int = 0) -> Any | None:
         """Get computed path.
 
         Args:
@@ -323,7 +323,7 @@ class BackendBase(ABC):
     # =========================================================================
 
     @abstractmethod
-    def visualize(self, q: Optional[np.ndarray] = None) -> None:
+    def visualize(self, q: np.ndarray | None = None) -> None:
         """Visualize a configuration.
 
         Args:
@@ -450,8 +450,8 @@ class BackendBase(ABC):
         name: str,
         gripper: str,
         tool: str,
-        transform: List[float],
-        mask: List[bool],
+        transform: list[float],
+        mask: list[bool],
     ) -> Any:
         """Create a grasp (relative transformation) constraint.
 
@@ -470,7 +470,7 @@ class BackendBase(ABC):
 
     @abstractmethod
     def create_placement_constraint(
-        self, ps, name: str, tool: str, world_pose: List[float], mask: List[bool]
+        self, ps, name: str, tool: str, world_pose: list[float], mask: list[bool]
     ) -> Any:
         """Create a placement (absolute transformation) constraint.
 
@@ -492,8 +492,8 @@ class BackendBase(ABC):
         ps,
         base_name: str,
         tool: str,
-        world_pose: List[float],
-        complement_mask: List[bool],
+        world_pose: list[float],
+        complement_mask: list[bool],
     ) -> Any:
         """Create a complement (free-DOF) constraint.
 
@@ -513,7 +513,7 @@ class BackendBase(ABC):
 
     @abstractmethod
     def create_locked_joint_constraints(
-        self, ps, robot, q_ref: List[float], patterns: List[str]
+        self, ps, robot, q_ref: list[float], patterns: list[str]
     ) -> tuple:
         """Create locked joint constraints for joints matching name patterns.
 
