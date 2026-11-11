@@ -4,7 +4,8 @@
     python3 task_screw_assembly.py --seed 10 --trajectory traj.json   # record
     python3 replay.py traj.json --port 8081 --loop                     # replay
 
-Loads the scene only (no planning), serves viser on 0.0.0.0:PORT and plays
+Loads the scene only (no planning), serves viser on localhost:PORT (another
+address with ``--host`` or ``$LONG_TAMP_VIEWER_HOST``) and plays
 the recorded frames at their recorded timing (``--speed`` scales it). HPP's
 paths keep the Robotiq fingers open (a grasp is a rigid TCP constraint), so
 the fingers are closed and opened here as an overlay: closed from each arm
@@ -28,6 +29,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("trajectory", type=Path)
     ap.add_argument("--port", type=int, default=8081)
+    ap.add_argument(
+        "--host",
+        help="address to listen on (default: $LONG_TAMP_VIEWER_HOST, else 127.0.0.1)",
+    )
     ap.add_argument("--speed", type=float, default=1.0)
     ap.add_argument("--loop", action="store_true", help="replay forever")
     args = ap.parse_args()
@@ -40,7 +45,11 @@ def main() -> int:
     task, _ = T.setup()
     closures = T.finger_closures()
     viewer = Viewer(task.planner.device, task.planner.problem)
-    viewer.start(host="0.0.0.0", port=args.port, open=False)
+    from long_tamp.visualization.scene import default_host
+
+    host = args.host or default_host()
+    shown = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host
+    viewer.start(host=host, port=args.port, open=False)
     server = viewer.viewer
 
     @server.on_client_connect
@@ -70,7 +79,7 @@ def main() -> int:
     n_frames = sum(len(s["configs"]) for s in segments)
     print(
         f"replaying {n_frames} frames, {len(segments)} segments "
-        f"(~{n_frames * frame_dt:.0f} s) at http://0.0.0.0:{args.port}",
+        f"(~{n_frames * frame_dt:.0f} s) at http://{shown}:{args.port}",
         flush=True,
     )
     time.sleep(3.0)  # let a browser connect before the first frame

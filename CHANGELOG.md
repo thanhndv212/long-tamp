@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `127.0.0.1` or `[::1]` in `Host` (else 403). Before, any web page open in the operator's
   browser could post `stop` or a chat message to `localhost:8090`. The page already sent
   JSON; a script posting to `/api/control` or `/api/chat` must set the header.
+- The Viser scene listens on `127.0.0.1` by default (#223), where `SceneProcess`,
+  `MissionViewer` and `script/screw_assembly/replay.py` bound `0.0.0.0` and showed an
+  unauthenticated scene to the whole network. Pass `host=` (`--host` for `replay.py`) or
+  set `LONG_TAMP_VIEWER_HOST` to serve it elsewhere; a container on a bridge network
+  needs `LONG_TAMP_VIEWER_HOST=0.0.0.0`, one on host networking needs nothing.
 
 ### Fixed
 
