@@ -31,6 +31,18 @@ from collections.abc import Sequence
 from typing import Any
 
 
+#: Overrides the address the scene servers listen on, e.g. ``0.0.0.0`` in a
+#: container on a bridge network, where the host cannot reach its loopback.
+HOST_VARIABLE = "LONG_TAMP_VIEWER_HOST"
+
+
+def default_host() -> str:
+    """Where a scene server listens when its caller does not say:
+    ``$LONG_TAMP_VIEWER_HOST``, else this machine only (127.0.0.1). The scene
+    has no authentication, so showing it to a network is a choice (#223)."""
+    return os.environ.get(HOST_VARIABLE, "").strip() or "127.0.0.1"
+
+
 def _floats(q: Any) -> list[float]:
     return [float(v) for v in q]
 
@@ -103,13 +115,14 @@ class SceneProcess:
 
     ``camera`` is ``(position, look_at)`` for new clients. ``collisions``
     also sends the collision model (large; the viewer can then show it).
+    ``host`` is the address it listens on (``default_host()`` when None).
     """
 
     def __init__(
         self,
         robot: Any,
         port: int = 8081,
-        host: str = "0.0.0.0",
+        host: str | None = None,
         camera: tuple[Sequence[float], Sequence[float]] | None = None,
         collisions: bool = False,
     ) -> None:
@@ -121,7 +134,7 @@ class SceneProcess:
             pickle.dump(models, f)
         settings = {
             "models": self._models_path,
-            "host": host,
+            "host": host or default_host(),
             "port": port,
             "camera": [list(camera[0]), list(camera[1])] if camera else None,
             "parent": os.getpid(),

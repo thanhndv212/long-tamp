@@ -165,7 +165,25 @@ def test_viewer_never_waits_for_a_browser_by_default(monkeypatch):
     started = []
     task = _fake_viser(monkeypatch, started)
     module.MissionViewer(task, 8081, [0.0])
-    assert started == [{"host": "0.0.0.0", "port": 8081, "open": False}]
+    assert started == [{"host": "127.0.0.1", "port": 8081, "open": False}]
+
+
+def test_the_scene_is_served_to_this_machine_unless_asked_otherwise(monkeypatch):
+    # No authentication: showing the scene to a network is a choice (#223).
+    started = []
+    task = _fake_viser(monkeypatch, started)
+    monkeypatch.delenv("LONG_TAMP_VIEWER_HOST", raising=False)
+    module.MissionViewer(task, 8081, [0.0])
+    module.MissionViewer(task, 8081, [0.0], host="0.0.0.0")
+    monkeypatch.setenv("LONG_TAMP_VIEWER_HOST", "172.17.0.2")  # a bridge network
+    module.MissionViewer(task, 8081, [0.0])
+    module.MissionViewer(task, 8081, [0.0], host="10.0.0.5")  # the argument wins
+    assert [s["host"] for s in started] == [
+        "127.0.0.1",
+        "0.0.0.0",
+        "172.17.0.2",
+        "10.0.0.5",
+    ]
 
 
 def test_opening_a_browser_is_opt_in(monkeypatch):
