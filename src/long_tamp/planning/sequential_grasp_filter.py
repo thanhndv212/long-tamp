@@ -42,14 +42,12 @@ Example:
         - 2 states per phase (current + next), ~8-12 edges per phase
 """
 
-from typing import Dict, List, Optional, Tuple
-
 
 def grasps_dict_to_tuple(
-    grasps_dict: Dict[str, Optional[str]],
-    grippers: List[str],
-    handles: List[str],
-) -> Tuple[Optional[int], ...]:
+    grasps_dict: dict[str, str | None],
+    grippers: list[str],
+    handles: list[str],
+) -> tuple[int | None, ...]:
     """Convert grasp dictionary to tuple of handle indices.
 
     Args:
@@ -84,10 +82,10 @@ def grasps_dict_to_tuple(
 
 
 def grasps_tuple_to_dict(
-    grasps_tuple: Tuple[Optional[int], ...],
-    grippers: List[str],
-    handles: List[str],
-) -> Dict[str, Optional[str]]:
+    grasps_tuple: tuple[int | None, ...],
+    grippers: list[str],
+    handles: list[str],
+) -> dict[str, str | None]:
     """Convert grasp tuple to dictionary of gripper-handle pairs.
 
     Args:
@@ -118,10 +116,10 @@ def grasps_tuple_to_dict(
 
 
 def next_grasp_to_indices(
-    next_grasp: Tuple[str, Optional[str]],
-    grippers: List[str],
-    handles: List[str],
-) -> Tuple[int, Optional[int]]:
+    next_grasp: tuple[str, str | None],
+    grippers: list[str],
+    handles: list[str],
+) -> tuple[int, int | None]:
     """Convert (gripper_name, handle_name) to (gripper_idx, handle_idx).
 
     Supports release transitions by accepting ``None`` as handle_name.
@@ -204,10 +202,10 @@ class SequentialGraspFilter:
 
     def __init__(
         self,
-        grippers: List[str],
-        handles: List[str],
-        current_grasps: Dict[str, Optional[str]],
-        next_grasp: Tuple[str, str],
+        grippers: list[str],
+        handles: list[str],
+        current_grasps: dict[str, str | None],
+        next_grasp: tuple[str, str],
     ):
         """Initialize sequential grasp filter.
 
@@ -236,7 +234,7 @@ class SequentialGraspFilter:
         next_list[gripper_idx] = handle_idx  # None for release
         self.next_grasps = tuple(next_list)
 
-    def __call__(self, grasps: Tuple[Optional[int], ...]) -> bool:
+    def __call__(self, grasps: tuple[int | None, ...]) -> bool:
         """Check if grasp state is allowed in sequential planning.
 
         Args:
@@ -278,10 +276,10 @@ class SequentialTransitionFilter:
 
     def __init__(
         self,
-        grippers: List[str],
-        handles: List[str],
-        current_grasps: Dict[str, Optional[str]],
-        next_grasp: Tuple[str, str],
+        grippers: list[str],
+        handles: list[str],
+        current_grasps: dict[str, str | None],
+        next_grasp: tuple[str, str],
     ):
         """Initialize sequential transition filter.
 
@@ -301,8 +299,8 @@ class SequentialTransitionFilter:
 
     def is_allowed(
         self,
-        state_from_grasps: Tuple[Optional[int], ...],
-        state_to_grasps: Tuple[Optional[int], ...],
+        state_from_grasps: tuple[int | None, ...],
+        state_to_grasps: tuple[int | None, ...],
     ) -> bool:
         """Check if transition between states is allowed.
 

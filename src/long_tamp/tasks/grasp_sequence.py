@@ -13,7 +13,8 @@ import json
 import os
 import signal
 import time
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from long_tamp.logging import get_logger
 from long_tamp.planning.config import ConfigGenerator
@@ -561,7 +562,7 @@ class GraspSequencePlanner:
                 )
             elif hasattr(self.config_gen, "update_graph"):
                 self.config_gen.update_graph(new_graph)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - a check that can't run
             raise RuntimeError(
                 f"Auto-release of '{self.grasp_tracker.current_grasps[gripper]}' "
                 f"from '{gripper}': Failed to build release graph: {e}"
@@ -586,7 +587,7 @@ class GraspSequencePlanner:
             return True, ""
         try:
             return checker(list(q))
-        except Exception as e:  # noqa: BLE001 - a check that can't run
+        except Exception as e:
             return True, f"not checked: {e}"
 
     def _project_onto_release_source_state(
@@ -697,8 +698,9 @@ class GraspSequencePlanner:
             time, t_plan1 is the total edge_21 retry-loop time, and plan_err_21
             is the last plan exception (None on success).
         """
-        import numpy as np
         import time
+
+        import numpy as np
 
         if verbose:
             logger.info("Planning release edge: %s", edge_21)
@@ -804,8 +806,9 @@ class GraspSequencePlanner:
             accumulated across all attempts, and error is the last
             exception/RuntimeError (None on success).
         """
-        import numpy as np
         import time
+
+        import numpy as np
 
         q_result = None
         path = None

@@ -30,9 +30,9 @@ from .config import (
     DEFAULT_MODEL,
     ModelSpec,
     configure,
+    default_model,
     host_endpoint,
     load_env_file,
-    default_model,
     parse_model,
 )
 

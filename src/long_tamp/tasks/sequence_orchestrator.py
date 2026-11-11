@@ -44,7 +44,8 @@ an unvalidated random one.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING, Any
 
 from long_tamp.logging import get_logger
 
@@ -55,7 +56,7 @@ logger = get_logger("tasks.sequence_orchestrator")
 
 
 def run_sequence(
-    seq_planner: "GraspSequencePlanner",
+    seq_planner: GraspSequencePlanner,
     grasp_sequence: Sequence[tuple[str, str | None]],
     q_init: Sequence[float],
     verbose: bool = True,
@@ -302,7 +303,7 @@ def _failure(
     message: str,
     phase_results: list[dict[str, Any]],
     q_current: list[float],
-    seq_planner: "GraspSequencePlanner",
+    seq_planner: GraspSequencePlanner,
     failed_phase_idx: int,
 ) -> dict[str, Any]:
     return {

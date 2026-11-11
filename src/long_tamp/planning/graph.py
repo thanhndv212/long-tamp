@@ -7,7 +7,7 @@ Provides GraphBuilder for creating constraint graphs on the PyHPP backend.
 
 from __future__ import annotations
 
-from typing import Any, Type, Union
+from typing import Any
 
 import numpy as np
 
@@ -604,7 +604,7 @@ class GraphBuilder:
     # Task-config-driven entrypoints
     # ---------------------------------------------------------------------
 
-    TaskConfigT = Union[Type[BaseTaskConfig], BaseTaskConfig]
+    TaskConfigT = type[BaseTaskConfig] | BaseTaskConfig
 
     @staticmethod
     def _as_task_config(task: TaskConfigT) -> type[BaseTaskConfig]:

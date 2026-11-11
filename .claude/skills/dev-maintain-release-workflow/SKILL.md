@@ -98,10 +98,10 @@ including agent-authored ones; nothing is pushed to `dev` or `main` directly. An
      reply on each thread and resolve it. Larger asks (multi-file refactors, API changes,
      open-ended design) go to the maintainer as a proposal before any push.
    Before each push, run the same checks CI enforces (`pre-commit run -a`, which runs
-   `ruff check --select F src` and `black --check src`; `mkdocs build --strict` if docs
+   `ruff check src` and `black --check src`; `mkdocs build --strict` if docs
    changed; the tests of the touched modules) and re-read the diff.
 4. **Merge** once all of these hold: every required CI check is green on the current
-   head (`lint`, `lint-style` (advisory), `test-standalone`, `test-hpp`, `distribution`,
+   head (`lint`, `test-standalone`, `test-hpp`, `distribution`,
    `docs`, `changelog`, GitGuardian; the `nightly-*` jobs are skipped on PRs), the
    validation evidence the issue asked for is in the PR, the PR is mergeable with no
    conflict, no review thread is left unanswered, and no reviewer has requested changes.
@@ -175,8 +175,7 @@ wheel validation, without source-install `PYTHONPATH` or `LD_LIBRARY_PATH` entri
 
 ## CI
 
-- Enforcing lint: `ruff check --select F src`, `black --check src`.
-- Advisory lint: the full `ruff check src` style set remains non-blocking.
+- Enforcing lint: `ruff check src` (the rule set in `pyproject.toml`), `black --check src`.
 - Base-install tests: `[dev]`, without HPP, plus the standalone config smoke.
 - Wheel tests, example scene checks, nightly mission and distribution checks:
   `.github/workflows/pypi.yml`.

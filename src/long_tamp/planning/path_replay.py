@@ -28,6 +28,7 @@ import json
 import os
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
+from itertools import pairwise
 from typing import Any
 
 from long_tamp.logging import get_logger
@@ -302,7 +303,7 @@ def validate(
         # Worst sampling step inside the segment. Always measured -- it is
         # the only number that says whether dt is fine enough for the
         # motion, and no seam check can see it.
-        for a, b in zip(waypoints, waypoints[1:]):
+        for a, b in pairwise(waypoints):
             step = _canonical_delta(a, b, quats)
             if step > report.worst_step:
                 report.worst_step = step

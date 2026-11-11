@@ -18,8 +18,9 @@ implementation exists.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Protocol
 
 from .block_recovery import make_lookahead_hints_factory, run_block_with_recovery
 

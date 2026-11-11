@@ -8,7 +8,8 @@ to show current robot state in the constraint graph.
 
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from collections.abc import Callable
+from typing import Any
 
 # graph-tool imports
 try:
@@ -42,9 +43,9 @@ class LiveConstraintGraphVisualizer:
     def __init__(
         self,
         graph_builder: GraphBuilder,
-        window_size: Tuple[int, int] = (1200, 800),
+        window_size: tuple[int, int] = (1200, 800),
         update_interval: float = 0.05,
-        neighborhood_hops: Optional[int] = None,
+        neighborhood_hops: int | None = None,
     ):
         """
         Initialize live graph visualizer.
@@ -67,30 +68,30 @@ class LiveConstraintGraphVisualizer:
         self.neighborhood_hops = neighborhood_hops
 
         # graph-tool graph
-        self.gt_graph: Optional[gt.Graph] = None
-        self.window: Optional[GraphWindow] = None
-        self.pos: Optional[gt.VertexPropertyMap] = None
+        self.gt_graph: gt.Graph | None = None
+        self.window: GraphWindow | None = None
+        self.pos: gt.VertexPropertyMap | None = None
 
         # Property maps for visualization
-        self.vertex_text: Optional[gt.VertexPropertyMap] = None
-        self.vertex_fill_color: Optional[gt.VertexPropertyMap] = None
-        self.vertex_halo: Optional[gt.VertexPropertyMap] = None
-        self.vertex_halo_color: Optional[gt.VertexPropertyMap] = None
-        self.vertex_size: Optional[gt.VertexPropertyMap] = None
-        self.edge_color: Optional[gt.EdgePropertyMap] = None
-        self.edge_pen_width: Optional[gt.EdgePropertyMap] = None
-        self.edge_text: Optional[gt.EdgePropertyMap] = None
+        self.vertex_text: gt.VertexPropertyMap | None = None
+        self.vertex_fill_color: gt.VertexPropertyMap | None = None
+        self.vertex_halo: gt.VertexPropertyMap | None = None
+        self.vertex_halo_color: gt.VertexPropertyMap | None = None
+        self.vertex_size: gt.VertexPropertyMap | None = None
+        self.edge_color: gt.EdgePropertyMap | None = None
+        self.edge_pen_width: gt.EdgePropertyMap | None = None
+        self.edge_text: gt.EdgePropertyMap | None = None
 
         # State name -> vertex index mapping
-        self.state_to_vertex: Dict[str, int] = {}
-        self.vertex_to_state: Dict[int, str] = {}
+        self.state_to_vertex: dict[str, int] = {}
+        self.vertex_to_state: dict[int, str] = {}
         # Edge name -> edge descriptor mapping
-        self.edge_name_to_edge: Dict[str, Any] = {}
+        self.edge_name_to_edge: dict[str, Any] = {}
 
         # Current highlight state
-        self.current_state: Optional[str] = None
-        self.current_edge: Optional[str] = None
-        self.traversed_edges: List[str] = []
+        self.current_state: str | None = None
+        self.current_edge: str | None = None
+        self.traversed_edges: list[str] = []
 
         # Threading for non-blocking updates
         self._update_lock = threading.Lock()
@@ -215,7 +216,7 @@ class LiveConstraintGraphVisualizer:
                 return parts[0][:15] + "|" + parts[-1][-10:]
         return edge_name[:27] + "..."
 
-    def _get_state_color(self, state_name: str) -> List[float]:
+    def _get_state_color(self, state_name: str) -> list[float]:
         """Get color for a state based on its type."""
         state_lower = state_name.lower()
         if "free" in state_lower:
@@ -446,9 +447,9 @@ class LivePathPlayer:
         self,
         path_player,  # Original PathPlayer
         graph_builder: GraphBuilder,
-        visualizer: Optional[LiveConstraintGraphVisualizer] = None,
-        state_callback: Optional[Callable[[str], None]] = None,
-        edge_callback: Optional[Callable[[str, bool], None]] = None,
+        visualizer: LiveConstraintGraphVisualizer | None = None,
+        state_callback: Callable[[str], None] | None = None,
+        edge_callback: Callable[[str, bool], None] | None = None,
     ):
         """
         Initialize live path player.
@@ -471,13 +472,13 @@ class LivePathPlayer:
             visualizer.highlight_edge if visualizer else lambda e, t: None
         )
 
-        self._last_state: Optional[str] = None
-        self._current_edge: Optional[str] = None
+        self._last_state: str | None = None
+        self._current_edge: str | None = None
 
     def play_with_visualization(
         self,
         path_id: int,
-        edge_name: Optional[str] = None,
+        edge_name: str | None = None,
         dt: float = 0.01,
         speed: float = 1.0,
     ) -> None:
@@ -546,9 +547,9 @@ class LivePathPlayer:
 
     def _detect_state(
         self,
-        q: List[float],
-        states: Dict[str, int],
-    ) -> Optional[str]:
+        q: list[float],
+        states: dict[str, int],
+    ) -> str | None:
         """
         Detect current state from configuration.
 

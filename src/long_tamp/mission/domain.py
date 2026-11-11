@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Protocol, Union, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from long_tamp.tasks.refiner import RefinementStep
 from long_tamp.tasks.task_planning.capabilities import (
@@ -83,7 +83,7 @@ class Move:
 
 
 #: What one transaction is refined as.
-MissionStep = Union[RefinementStep, Move]
+MissionStep = RefinementStep | Move
 
 
 @dataclass(frozen=True)

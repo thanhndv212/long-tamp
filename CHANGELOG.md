@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Lint (#226): `src` is clean under the project's whole ruff rule set (about 600 findings
+  cleared: annotation spellings, import order, `noqa` comments that suppressed nothing),
+  and CI and pre-commit now run that set as a blocking check, where only pyflakes errors
+  blocked and the rest was an advisory job. No behaviour change. Three rules are switched
+  off with their reason in `pyproject.toml`; `RUF005` because its rewrite of `a + [x]`
+  would turn NumPy additions into concatenations.
 - Packaging and CI (#221): the version is written once, in `src/long_tamp/version.py`;
   `pyproject.toml` and `long_tamp.__version__` read it, and a test fails if `package.xml`
   differs. The `dev` extra pins `black==24.8.0` and `ruff==0.6.9`, the versions of

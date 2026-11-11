@@ -5,12 +5,14 @@ These exist for IDE completion and documentation.  They are NOT enforced at
 runtime; ``RunLogger.log()`` accepts arbitrary keyword arguments.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 try:
     from typing import Literal, TypedDict
 except ImportError:  # Python < 3.8
-    from typing_extensions import Literal, TypedDict  # type: ignore[assignment]
+    from typing import Literal  # type: ignore[assignment]
+
+    from typing_extensions import TypedDict
 
 
 # ---------------------------------------------------------------------------
@@ -36,8 +38,8 @@ class ConfigSnapshotEvent(TypedDict):
     event: Literal["config_snapshot"]
     run_id: str
     timestamp: str
-    task_config: Dict[str, Any]  # Serialised BaseTaskConfig fields
-    setup_params: Dict[str, Any]  # validation_step, skip_graph, …
+    task_config: dict[str, Any]  # Serialised BaseTaskConfig fields
+    setup_params: dict[str, Any]  # validation_step, skip_graph, …
     backend: str
     task_name: str
 
@@ -52,8 +54,8 @@ class RunEndEvent(TypedDict):
     total_time: float
     total_planning_time: float
     phase_count: int
-    final_config: Optional[List[float]]
-    error: Optional[str]
+    final_config: list[float] | None
+    error: str | None
 
 
 # ---------------------------------------------------------------------------
@@ -67,8 +69,8 @@ class SequenceStartEvent(TypedDict):
     event: Literal["sequence_start"]
     run_id: str
     timestamp: str
-    grasp_sequence: List[List[Optional[str]]]  # [[gripper, handle|None], …]
-    q_init: List[float]
+    grasp_sequence: list[list[str | None]]  # [[gripper, handle|None], …]
+    q_init: list[float]
     validate: bool
     max_iterations_per_edge: int
     timeout_per_edge: float
@@ -85,9 +87,9 @@ class PhaseStartEvent(TypedDict):
     timestamp: str
     phase: int  # 1-based
     gripper: str
-    handle: Optional[str]
-    q_start: List[float]
-    held_grasps: Dict[str, str]
+    handle: str | None
+    q_start: list[float]
+    held_grasps: dict[str, str]
 
 
 class PhaseEndEvent(TypedDict):
@@ -98,15 +100,15 @@ class PhaseEndEvent(TypedDict):
     timestamp: str
     phase: int
     gripper: str
-    handle: Optional[str]
+    handle: str | None
     success: bool
     phase_time: float
     phase_gen_time: float
     phase_plan_time: float
-    final_config: Optional[List[float]]
-    state_after: Optional[str]
-    saved_files: List[str]
-    error: Optional[str]
+    final_config: list[float] | None
+    state_after: str | None
+    saved_files: list[str]
+    error: str | None
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +125,7 @@ class EdgeStartEvent(TypedDict):
     phase: int
     edge_idx: int
     edge_name: str
-    q_from: List[float]
+    q_from: list[float]
 
 
 class EdgeEndEvent(TypedDict):
@@ -139,5 +141,5 @@ class EdgeEndEvent(TypedDict):
     gen_time: float
     plan_time: float
     total_time: float
-    q_to: Optional[List[float]]
-    error: Optional[str]
+    q_to: list[float] | None
+    error: str | None

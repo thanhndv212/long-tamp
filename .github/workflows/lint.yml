@@ -17,26 +17,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install --upgrade pip && pip install ruff==0.6.9 black==24.8.0
-      # Enforcing: real errors (pyflakes F-codes: undefined/unused names, etc.) and
-      # formatting. These are kept clean in the tree, so a failure here is a genuine
-      # regression and blocks the workflow.
-      - run: ruff check --select F src
-      - run: black --check src
-
-  lint-style:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-      - run: pip install --upgrade pip && pip install ruff==0.6.9
-      # Advisory: the full ruff style set still carries debt (RUF012 mutable class
-      # defaults, RUF013 implicit-optional, ambiguous unicode, …). Reported, not blocking.
-      # Burn it down, then fold rules into the enforcing `lint` job.
+      # The project's whole rule set (pyproject.toml, [tool.ruff.lint]) and the
+      # formatting. The tree is clean on both (#226), so a failure is a regression.
       - run: ruff check src
-        continue-on-error: true
+      - run: black --check src
 
   test-standalone:
     runs-on: ubuntu-latest

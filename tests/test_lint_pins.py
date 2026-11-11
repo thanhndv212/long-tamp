@@ -35,3 +35,14 @@ def test_the_dev_extra_installs_the_pre_commit_versions():
     dev = project["project"]["optional-dependencies"]["dev"]
     for tool, version in pins.items():
         assert f"{tool}=={version}" in dev
+
+
+def test_ci_and_pre_commit_run_the_whole_rule_set():
+    # #226: the tree is clean under [tool.ruff.lint]; a narrower selection in
+    # either place would let the debt grow back unseen.
+    workflow = (ROOT / ".github" / "workflows" / "lint.yml").read_text()
+    assert re.search(r"run: ruff check src\s*$", workflow, re.M)
+    assert "continue-on-error" not in workflow.split("test-standalone:")[0]
+    hook = (ROOT / ".pre-commit-config.yaml").read_text()
+    ruff_hook = hook.split("id: ruff")[1].split("- repo:")[0]
+    assert "--select" not in ruff_hook

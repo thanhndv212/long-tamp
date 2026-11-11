@@ -4,7 +4,8 @@ PyHPP backend implementation for manipulation planning.
 This backend uses hpp-python for direct Python bindings to HPP.
 """
 
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 from pinocchio import SE3
@@ -140,7 +141,7 @@ class PyHPPBackend(BackendBase):
         self._path_optimizers = []  # List of path optimizer instances
 
         # Stored paths (local path ids, indices into self._stored_paths)
-        self._stored_paths: List[Any] = []
+        self._stored_paths: list[Any] = []
 
         # TransitionPlanner (edge-scoped planning)
         self._transition_planner = None
@@ -149,12 +150,12 @@ class PyHPPBackend(BackendBase):
         # Base iterations for RRT*
         self._transition_max_iterations = 10000
         # (projector_type, step). If None, fall back to problem.pathProjector()
-        self._transition_path_projector: Optional[Tuple[str, float]] = (
+        self._transition_path_projector: tuple[str, float] | None = (
             "Progressive",
             0.2,
         )
         # Per-edge optimizer list (edge_name -> optimizer names)
-        self._transition_optimizers_by_edge_name: Dict[str, List[str]] = {}
+        self._transition_optimizers_by_edge_name: dict[str, list[str]] = {}
 
         # Optimizer profiles for different edge types
         # Transit edges (free motion): Use graph-aware shortcut (best available in PyHPP)
@@ -197,7 +198,7 @@ class PyHPPBackend(BackendBase):
         self._toppra_interpolation: str = "hermite"  # or "constant_acceleration"
         self._toppra_gridpoint_method: str = "param_space"  # or "time_space"
         # Joints to enforce limits on (None = all joints)
-        self._toppra_active_joints: Optional[List[str]] = None
+        self._toppra_active_joints: list[str] | None = None
 
         # RandomShortcut: number of shortcut attempts per optimization pass.
         # HPP core default is 5; increasing to 50 gives much better convergence.
@@ -219,7 +220,7 @@ class PyHPPBackend(BackendBase):
         self._distance_scale_factor = 0.5
         # Inner planner type (PYHPP-GAP: pyhpp HPPTransitionPlanner has no
         # setInnerPlannerType binding; stored for forward-compatibility only)
-        self._transition_inner_planner_type: Optional[str] = None
+        self._transition_inner_planner_type: str | None = None
 
         # Configuration options for path validation and projection
         self._use_pathvalidation = True
@@ -315,7 +316,7 @@ class PyHPPBackend(BackendBase):
         # Problem::isConfigValid in hpp-python/src/pyhpp/core/problem.cc.
         # Tallied here so the final warning can point at *which* pair is
         # actually blocking, instead of just the bare attempt count.
-        failure_counts: Dict[str, int] = {}
+        failure_counts: dict[str, int] = {}
         for attempt in range(max_attempts):
             try:
                 valid, report = self.problem.isConfigValid(q)
@@ -349,10 +350,10 @@ class PyHPPBackend(BackendBase):
         self,
         robot_name: str,
         urdf_path: str,
-        srdf_path: Optional[str] = None,
+        srdf_path: str | None = None,
         root_joint_type: str = "anchor",
-        composite_name: str = None,
-        pose: Optional[SE3] = None,
+        composite_name: str | None = None,
+        pose: SE3 | None = None,
     ):
         """Load robot using PyHPP.
 
@@ -416,8 +417,8 @@ class PyHPPBackend(BackendBase):
         self,
         name: str,
         urdf_path: str,
-        pose: Optional[SE3] = None,
-        srdf_path: Optional[str] = None,
+        pose: SE3 | None = None,
+        srdf_path: str | None = None,
     ):
         """Load environment model.
 
@@ -449,9 +450,9 @@ class PyHPPBackend(BackendBase):
         self,
         name: str,
         urdf_path: str,
-        srdf_path: Optional[str] = None,
+        srdf_path: str | None = None,
         root_joint_type: str = "freeflyer",
-        pose: Optional[SE3] = None,
+        pose: SE3 | None = None,
     ):
         """Load manipulable object.
 
@@ -482,7 +483,7 @@ class PyHPPBackend(BackendBase):
 
         return name
 
-    def set_joint_bounds(self, joint_name: str, bounds: List[float]):
+    def set_joint_bounds(self, joint_name: str, bounds: list[float]):
         """Set joint bounds."""
         if self.device is None:
             raise RuntimeError("Must load robot first")
@@ -530,7 +531,7 @@ class PyHPPBackend(BackendBase):
         to_state: str,
         name: str,
         weight: int = 1,
-        containing_state: Optional[str] = None,
+        containing_state: str | None = None,
     ) -> int:
         """Create an edge manually.
 
@@ -628,7 +629,7 @@ class PyHPPBackend(BackendBase):
             logger.warning("Planning failed: %s", e)
             return False
 
-    def get_path(self, index: int = 0) -> Optional[Any]:
+    def get_path(self, index: int = 0) -> Any | None:
         """Get a stored path by id (or fallback to last computed path)."""
         if self._stored_paths:
             if index < 0:
@@ -698,7 +699,7 @@ class PyHPPBackend(BackendBase):
                     "or gepetto-viewer-corba."
                 )
 
-    def visualize(self, q: Optional[np.ndarray] = None):
+    def visualize(self, q: np.ndarray | None = None):
         """Visualize configuration.
 
         Auto-initialises the viewer on first call if ``setup_viewer()`` has
@@ -890,7 +891,7 @@ class PyHPPBackend(BackendBase):
         directory: str,
         pattern: str = "phase_*.path",
         sort: bool = True,
-    ) -> List[int]:
+    ) -> list[int]:
         """Load multiple paths from a directory.
 
         Args:
@@ -925,7 +926,7 @@ class PyHPPBackend(BackendBase):
     # Graph Metadata Extraction
     # =========================================================================
 
-    def extract_graph_metadata(self) -> Dict[str, Any]:
+    def extract_graph_metadata(self) -> dict[str, Any]:
         """Extract constraint graph metadata for serialization.
 
         Returns a dictionary containing graph structure information that can
@@ -1013,7 +1014,7 @@ class PyHPPBackend(BackendBase):
         path_vector: Any,
         filename: str,
         num_samples: int = 100,
-        edge_name: Optional[str] = None,
+        edge_name: str | None = None,
     ) -> None:
         """Save a path as waypoints in JSON format (portable across sessions).
 
@@ -1203,7 +1204,7 @@ class PyHPPBackend(BackendBase):
         except Exception as e:
             raise RuntimeError(f"Failed to load path from waypoints: {e}") from e
 
-    def _validate_graph_metadata(self, saved_metadata: Dict[str, Any]) -> None:
+    def _validate_graph_metadata(self, saved_metadata: dict[str, Any]) -> None:
         """Validate current graph matches saved metadata.
 
         Args:
@@ -1518,7 +1519,7 @@ class PyHPPBackend(BackendBase):
             opt_instance = self._create_path_optimizer_instance("RandomShortcut")
         self._path_optimizers.append(opt_instance)
 
-    def _path_optimizer_factories(self) -> Dict[str, Any]:
+    def _path_optimizer_factories(self) -> dict[str, Any]:
         """Factories for string-based path optimizer selection."""
         if self.problem is None:
             raise RuntimeError("Must create problem first")
@@ -1579,7 +1580,7 @@ class PyHPPBackend(BackendBase):
 
     def _compute_planning_budget(
         self, q1: Sequence[float], q2: Sequence[float]
-    ) -> Tuple[float, int]:
+    ) -> tuple[float, int]:
         """Compute timeout and max_iterations based on distance.
 
         Returns:
@@ -1653,17 +1654,17 @@ class PyHPPBackend(BackendBase):
     def configure_transition_planner(
         self,
         *,
-        inner_planner_type: Optional[str] = None,
-        time_out: Optional[float] = None,
-        max_iterations: Optional[int] = None,
-        path_projector: Optional[Tuple[str, float]] = None,
-        enable_distance_tuning: Optional[bool] = None,
-        distance_scale_factor: Optional[float] = None,
-        random_shortcut_loops: Optional[int] = None,
-        spline_zero_derivatives_at_state: Optional[bool] = None,
-        path_optimizer_timeout: Optional[float] = None,
-        spline_optimizer: Optional[bool] = None,
-        qp_max_iterations: Optional[int] = None,
+        inner_planner_type: str | None = None,
+        time_out: float | None = None,
+        max_iterations: int | None = None,
+        path_projector: tuple[str, float] | None = None,
+        enable_distance_tuning: bool | None = None,
+        distance_scale_factor: float | None = None,
+        random_shortcut_loops: int | None = None,
+        spline_zero_derivatives_at_state: bool | None = None,
+        path_optimizer_timeout: float | None = None,
+        spline_optimizer: bool | None = None,
+        qp_max_iterations: int | None = None,
     ) -> None:
         """Configure defaults for TransitionPlanner edge-scoped planning.
 
@@ -1759,9 +1760,9 @@ class PyHPPBackend(BackendBase):
 
     def configure_time_parameterization(
         self,
-        order: Optional[int] = None,
-        max_acceleration: Optional[float] = None,
-        safety: Optional[float] = None,
+        order: int | None = None,
+        max_acceleration: float | None = None,
+        safety: float | None = None,
     ) -> None:
         """Configure time parameterization parameters.
 
@@ -1784,15 +1785,15 @@ class PyHPPBackend(BackendBase):
 
     def configure_time_parameterization_method(
         self,
-        method: Optional[str] = None,
+        method: str | None = None,
         *,
-        toppra_velocity_scale: Optional[float] = None,
-        toppra_effort_scale: Optional[float] = None,
-        toppra_solver: Optional[int] = None,
-        toppra_N: Optional[int] = None,
-        toppra_interpolation: Optional[str] = None,
-        toppra_gridpoint_method: Optional[str] = None,
-        toppra_active_joints: Optional[List[str]] = None,
+        toppra_velocity_scale: float | None = None,
+        toppra_effort_scale: float | None = None,
+        toppra_solver: int | None = None,
+        toppra_N: int | None = None,
+        toppra_interpolation: str | None = None,
+        toppra_gridpoint_method: str | None = None,
+        toppra_active_joints: list[str] | None = None,
     ) -> None:
         """Select time parameterization method and TOPPRA-specific parameters.
 
@@ -1828,7 +1829,7 @@ class PyHPPBackend(BackendBase):
         if toppra_active_joints is not None:
             self._toppra_active_joints = list(toppra_active_joints) or None
 
-    def set_toppra_active_joints(self, joints: Optional[List[str]]) -> None:
+    def set_toppra_active_joints(self, joints: list[str] | None) -> None:
         """Dynamically set TOPPRA active joints for the current phase.
 
         Called per-phase by the planner to restrict TOPPRA's velocity/acceleration
@@ -2066,7 +2067,7 @@ class PyHPPBackend(BackendBase):
         """Forget cached TransitionPlanner object (best-effort cleanup)."""
         self._transition_planner = None
 
-    def _resolve_transition(self, edge: Union[int, str, Any]) -> Any:
+    def _resolve_transition(self, edge: int | str | Any) -> Any:
         if self.graph is None:
             raise RuntimeError("Graph not initialized")
         if isinstance(edge, int):
@@ -2085,7 +2086,7 @@ class PyHPPBackend(BackendBase):
 
     def set_transition_optimizers(
         self,
-        edge: Union[str, Any],
+        edge: str | Any,
         optimizers: Sequence[str],
         *,
         clear_existing: bool = True,
@@ -2100,9 +2101,7 @@ class PyHPPBackend(BackendBase):
         else:
             self._transition_optimizers_by_edge_name[edge_name].extend(opts)
 
-    def clear_transition_optimizers(
-        self, edge: Optional[Union[str, Any]] = None
-    ) -> None:
+    def clear_transition_optimizers(self, edge: str | Any | None = None) -> None:
         """Clear per-edge transition optimizer lists."""
         if edge is None:
             self._transition_optimizers_by_edge_name.clear()
@@ -2174,13 +2173,13 @@ class PyHPPBackend(BackendBase):
         # whether to skip tp.timeParameterization()).
         self._active_optimizer_names = list(optimizer_names)
 
-    def _get_active_optimizer_names(self) -> List[str]:
+    def _get_active_optimizer_names(self) -> list[str]:
         """Return the optimizer names used for the current edge."""
         return getattr(self, "_active_optimizer_names", [])
 
     def plan_transition_edge(
         self,
-        edge: Union[str, Any],
+        edge: str | Any,
         q1: Sequence[float],
         q2: Sequence[float],
         *,
@@ -2188,7 +2187,7 @@ class PyHPPBackend(BackendBase):
         reset_roadmap: bool = True,
         time_parameterize: bool = True,
         store: bool = True,
-    ) -> Tuple[Union[int, Any], Any]:
+    ) -> tuple[int | Any, Any]:
         """Plan a transition along a specific graph edge.
 
         PYHPP-GAP: Requires graph.applyLeafConstraints() binding — the
@@ -2572,14 +2571,14 @@ class PyHPPBackend(BackendBase):
 
     def plan_transition_sequence(
         self,
-        edges: Sequence[Union[str, Any]],
+        edges: Sequence[str | Any],
         waypoints: Sequence[Sequence[float]],
         *,
         validate: bool = True,
         reset_roadmap: bool = True,
         time_parameterize: bool = True,
         store: bool = True,
-    ) -> Union[int, Any]:
+    ) -> int | Any:
         """Plan a multi-edge transition sequence and concatenate results.
 
         IMPORTANT: Each waypoint is re-projected onto its edge's constraint leaf
@@ -2591,7 +2590,7 @@ class PyHPPBackend(BackendBase):
                 f"{len(waypoints)} and {len(edges)}"
             )
 
-        pv_total: Optional[Any] = None
+        pv_total: Any | None = None
 
         # Pre-project all waypoints onto their respective edge leaves
         # to ensure constraint consistency across the sequence
@@ -2732,7 +2731,7 @@ class PyHPPBackend(BackendBase):
         self,
         path_vector: Any,
         graph_builder=None,
-        edge_name: Optional[str] = None,
+        edge_name: str | None = None,
         visualizer=None,
         speed: float = 1.0,
     ) -> int:
@@ -2775,8 +2774,8 @@ class PyHPPBackend(BackendBase):
     def play_and_record_path(
         self,
         path_index: int = 0,
-        video_name: Optional[str] = None,
-        output_dir: Optional[str] = None,
+        video_name: str | None = None,
+        output_dir: str | None = None,
         framerate: int = 25,
         dt: float = 0.01,
         speed: float = 1.0,
@@ -2825,12 +2824,12 @@ class PyHPPBackend(BackendBase):
     def play_and_record_path_vector(
         self,
         path_vector: Any,
-        video_name: Optional[str] = None,
-        output_dir: Optional[str] = None,
+        video_name: str | None = None,
+        output_dir: str | None = None,
         framerate: int = 25,
         dt: float = 0.01,
         speed: float = 1.0,
-    ) -> Tuple[int, str]:
+    ) -> tuple[int, str]:
         """Store a PathVector, play it, and record to video.
 
         Returns:

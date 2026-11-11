@@ -9,7 +9,8 @@ This module contains two layers:
     naming helpers and optional enumeration of expected factory names.
 """
 
-from typing import Any, Dict, Iterable, List
+from collections.abc import Iterable
+from typing import Any
 
 from long_tamp.logging import get_logger
 
@@ -94,8 +95,8 @@ class ConstraintBuilder:
         name: str,
         gripper: str,
         tool: str,
-        transform: List[float],
-        mask: List[bool] = None,
+        transform: list[float],
+        mask: list[bool] | None = None,
         robot=None,
         backend: str = "pyhpp",
         backend_obj=None,
@@ -182,8 +183,8 @@ class ConstraintBuilder:
         ps,
         name: str,
         tool: str,
-        world_pose: List[float],
-        mask: List[bool],
+        world_pose: list[float],
+        mask: list[bool],
         robot=None,
         backend: str = "pyhpp",
         backend_obj=None,
@@ -262,8 +263,8 @@ class ConstraintBuilder:
         ps,
         base_name: str,
         tool: str,
-        world_pose: List[float],
-        complement_mask: List[bool],
+        world_pose: list[float],
+        complement_mask: list[bool],
         robot=None,
         backend: str = "pyhpp",
         backend_obj=None,
@@ -340,7 +341,7 @@ class ConstraintBuilder:
         constraint_defs: Iterable[tuple],
         robot=None,
         backend: str = "pyhpp",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create constraints from a list of (type, name, args) definitions.
 
         Args:
@@ -358,7 +359,7 @@ class ConstraintBuilder:
         Returns:
             Dict mapping constraint names to constraint objects.
         """
-        constraints: Dict[str, Any] = {}
+        constraints: dict[str, Any] = {}
 
         for ctype, name, args in constraint_defs:
             if ctype == "grasp":
@@ -406,8 +407,8 @@ class ConstraintBuilder:
     def create_locked_joint_constraints(
         ps,
         robot,
-        q_ref: List[float],
-        patterns: List[str],
+        q_ref: list[float],
+        patterns: list[str],
         backend: str = "pyhpp",
     ) -> tuple:
         """Create locked joint constraints for freezing joints.
@@ -441,7 +442,7 @@ class ConstraintBuilder:
 
         model = robot.model()
         locked_constraints = []
-        frozen_names: List[str] = []
+        frozen_names: list[str] = []
 
         for jn in robot.getJointNames():
             if not any(p in jn.lower() for p in patterns_l):
@@ -544,7 +545,7 @@ class FactoryConstraintRegistry:
         self._backend_obj = backend_obj
         # Store constraint objects.
         # Pass this dict to ConstraintGraphFactory(graph, constraints=...)
-        self.constraints: Dict[str, Any] = {}
+        self.constraints: dict[str, Any] = {}
 
     # --- Internal helpers ----------------------------------------------
 
@@ -591,8 +592,8 @@ class FactoryConstraintRegistry:
         self,
         gripper: str,
         handle: str,
-        transform: List[float],
-        mask: List[bool] = None,
+        transform: list[float],
+        mask: list[bool] | None = None,
     ) -> str:
         """Register a grasp constraint with factory naming.
 
@@ -626,8 +627,8 @@ class FactoryConstraintRegistry:
         self,
         gripper: str,
         handle: str,
-        transform: List[float],
-        mask: List[bool] = None,
+        transform: list[float],
+        mask: list[bool] | None = None,
     ) -> str:
         """Register a pregrasp constraint with factory naming.
 
@@ -660,8 +661,8 @@ class FactoryConstraintRegistry:
     def register_placement(
         self,
         obj: str,
-        world_pose: List[float],
-        mask: List[bool],
+        world_pose: list[float],
+        mask: list[bool],
     ) -> str:
         """Register a placement constraint with factory naming.
 
@@ -692,8 +693,8 @@ class FactoryConstraintRegistry:
     def register_placement_complement(
         self,
         obj: str,
-        world_pose: List[float],
-        complement_mask: List[bool],
+        world_pose: list[float],
+        complement_mask: list[bool],
     ) -> str:
         """Register a placement complement constraint with factory naming.
 
@@ -726,8 +727,8 @@ class FactoryConstraintRegistry:
         self,
         gripper: str,
         handle: str,
-        transform: List[float],
-        complement_mask: List[bool],
+        transform: list[float],
+        complement_mask: list[bool],
     ) -> str:
         """Register a grasp complement constraint with factory naming.
 
@@ -761,8 +762,8 @@ class FactoryConstraintRegistry:
         self,
         gripper: str,
         handle: str,
-        transform: List[float],
-        mask: List[bool] = None,
+        transform: list[float],
+        mask: list[bool] | None = None,
     ) -> str:
         """Register a grasp hold constraint with factory naming.
 
@@ -797,8 +798,8 @@ class FactoryConstraintRegistry:
     def register_placement_hold(
         self,
         obj: str,
-        world_pose: List[float],
-        mask: List[bool],
+        world_pose: list[float],
+        mask: list[bool],
     ) -> str:
         """Register a placement hold constraint with factory naming.
 
@@ -834,14 +835,14 @@ class FactoryConstraintRegistry:
         """Get constraint object by factory name (PyHPP only)."""
         return self.constraints.get(name)
 
-    def get_all_constraints(self) -> Dict[str, Any]:
+    def get_all_constraints(self) -> dict[str, Any]:
         """Get all registered constraint objects.
 
         Pass this to ConstraintGraphFactory(graph, constraints=...).
         """
         return dict(self.constraints)
 
-    def get_factory_constraints_arg(self) -> Dict[str, Any]:
+    def get_factory_constraints_arg(self) -> dict[str, Any]:
         """Get the constraints argument for ConstraintGraphFactory.
 
         Usage:
@@ -855,10 +856,10 @@ class FactoryConstraintRegistry:
 
     def register_from_defs(
         self,
-        constraint_defs: List[tuple],
+        constraint_defs: list[tuple],
         obj_name: str,
         skip_placement: bool = False,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """Register constraints from get_constraint_defs() with factory naming.
 
         Maps constraint definitions to factory naming conventions:
@@ -896,7 +897,7 @@ class FactoryConstraintRegistry:
             #     "placement/complement": "place_tool_holder/complement",
             # }
         """
-        name_map: Dict[str, str] = {}
+        name_map: dict[str, str] = {}
 
         for ctype, user_name, args in constraint_defs:
             if ctype == "grasp":
