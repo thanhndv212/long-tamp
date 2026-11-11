@@ -16,7 +16,8 @@ from .config import ViewerConfig
 def _static(name: str) -> str:
     return (
         resources.files("long_tamp.viewer")
-        .joinpath("static", name)
+        .joinpath("static")
+        .joinpath(name)
         .read_text(encoding="utf-8")
     )
 

@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Types (#228): CI runs `mypy` as a blocking job (`types`). 83 of the 122 modules are
+  checked; the 39 that had errors are listed in `pyproject.toml` and are taken out as they
+  are fixed. `mypy` is pinned in the `dev` extra.
 - Lint (#226): `src` is clean under the project's whole ruff rule set (about 600 findings
   cleared: annotation spellings, import order, `noqa` comments that suppressed nothing),
   and CI and pre-commit now run that set as a blocking check, where only pyflakes errors
@@ -37,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The live viewer's page loader passed two segments to one `joinpath`, which the resource
+  API of Python 3.10 and 3.11 does not accept for every loader (#228).
 - A task whose `VALID_PAIRS` allows no grasp now says so (#225). `{}` is the default, of
   `BaseTaskConfig` and of a YAML task with no `valid_pairs:`, and the factory reads it as
   "no gripper may grasp anything": the graph held the `free` state alone, without a word,

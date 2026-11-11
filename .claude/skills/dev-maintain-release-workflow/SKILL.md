@@ -101,7 +101,7 @@ including agent-authored ones; nothing is pushed to `dev` or `main` directly. An
    `ruff check src` and `black --check src`; `mkdocs build --strict` if docs
    changed; the tests of the touched modules) and re-read the diff.
 4. **Merge** once all of these hold: every required CI check is green on the current
-   head (`lint`, `test-standalone`, `test-hpp`, `distribution`,
+   head (`lint`, `types`, `test-standalone`, `test-hpp`, `distribution`,
    `docs`, `changelog`, GitGuardian; the `nightly-*` jobs are skipped on PRs), the
    validation evidence the issue asked for is in the PR, the PR is mergeable with no
    conflict, no review thread is left unanswered, and no reviewer has requested changes.
@@ -176,6 +176,8 @@ wheel validation, without source-install `PYTHONPATH` or `LD_LIBRARY_PATH` entri
 ## CI
 
 - Enforcing lint: `ruff check src` (the rule set in `pyproject.toml`), `black --check src`.
+- Types: `mypy` (configuration in `pyproject.toml`). Modules that had errors when the check
+  was introduced are listed there under `ignore_errors`; fix one, take it out, never add one.
 - Base-install tests: `[dev]`, without HPP, plus the standalone config smoke.
 - Wheel tests, example scene checks, nightly mission and distribution checks:
   `.github/workflows/pypi.yml`.
