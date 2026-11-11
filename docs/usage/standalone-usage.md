@@ -75,6 +75,19 @@ version:
 You will almost always work at the **Task** / **GraspSequencePlanner** level; the layers below
 are what those two orchestrate.
 
+Three helpers of the lower layers, for a scene that changes or a robot that is only partly used:
+
+- `SceneBuilder.move_obstacle(name, position, quaternion)` moves a loaded environment to a
+  new root pose. Collision checking sees it at once, also on a graph already built. Its
+  contact surfaces and the constraints built from its frames stay where they were: reload the
+  scene to place objects on a moved model.
+- `SceneBuilder.disable_collision_pair` and `disable_collisions_between_subtrees` remove
+  collision pairs; with `remove_collision=False` they remove nothing. `remove_distance` has
+  no effect, HPP keeping one list of pairs for both checks.
+- `planning.freeze_joints_by_substrings(robot, q, q_ref, ["panda_right"])` returns `q` with
+  the matching joints set as in `q_ref`, to keep an idle arm where it is in a sampled
+  configuration.
+
 ## 5. Quickstart — minimal task
 
 Two ways to define a task; **YAML is recommended** for all new work.
