@@ -1,10 +1,12 @@
 [build-system]
-requires = ["setuptools>=45", "wheel"]
+requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "long-tamp"
-version = "0.9.0"
+# The version is written once, in src/long_tamp/version.py (and in package.xml
+# for ROS, which tests/test_version.py keeps in step).
+dynamic = ["version"]
 description = "Long-TAMP - Manipulation Planning Framework"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -23,6 +25,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering",
 ]
 
@@ -103,14 +106,16 @@ sim = [
     "pycollada>=0.8",
 ]
 
+# black and ruff are pinned to the versions of .pre-commit-config.yaml and the
+# CI lint job (tests/test_lint_pins.py), so a check passes or fails the same
+# everywhere. The docs toolchain is the [docs] extra below.
 dev = [
     "pytest>=6.0",
     "pytest-cov",
-    "black",
-    "ruff",
+    "pytest-timeout",
+    "black==24.8.0",
+    "ruff==0.6.9",
     "mypy",
-    "sphinx",
-    "sphinx-rtd-theme",
 ]
 
 # MkDocs site over docs/ — `mkdocs serve` / `mkdocs build` (see mkdocs.yml).
@@ -126,12 +131,15 @@ all = [
 
 [project.urls]
 Homepage = "https://github.com/thanhndv212/long-tamp"
-Documentation = "https://long-tamp.readthedocs.io"
+Documentation = "https://github.com/thanhndv212/long-tamp/tree/main/docs"
 Repository = "https://github.com/thanhndv212/long-tamp"
 Issues = "https://github.com/thanhndv212/long-tamp/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "long_tamp.version.__version__"}
 
 [tool.setuptools.package-data]
 long_tamp = ["py.typed", "viewer/static/*"]

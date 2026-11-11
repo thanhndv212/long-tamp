@@ -120,8 +120,8 @@ Never skip, disable or quarantine a test to get green.
 Each completed milestone is a minor release (`0.x.0`). Patch releases (`0.x.y`) carry
 fixes only. In order:
 
-1. On `dev` (through a PR): bump the version (`pyproject.toml`, `version.py`,
-   `__init__.py`, `package.xml`) and move `CHANGELOG` `[Unreleased]` into a dated section.
+1. On `dev` (through a PR): bump the version (`src/long_tamp/version.py`, and
+   `package.xml` for ROS; a test fails if they differ) and move `CHANGELOG` `[Unreleased]` into a dated section.
 2. Release PR `dev → main`, with the milestone's V3 (and V4) result files linked; merge it
    with a **merge commit**.
 3. Tag `vX.Y.Z` on `main`. That runs `release.yml`; approve the `pypi` deployment.
