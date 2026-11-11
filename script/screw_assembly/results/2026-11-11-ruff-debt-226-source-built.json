@@ -1,0 +1,96 @@
+{
+ "parts": [
+  4
+ ],
+ "completed": 10,
+ "attempted": 10,
+ "replanning_blocks": 0,
+ "planning_blocks": 140,
+ "recovered_failures": 16,
+ "failure_episodes": 16,
+ "seconds_median": 899.07,
+ "seconds_min": 637.48,
+ "seconds_max": 1240.07,
+ "seeds": [
+  {
+   "seed": 1,
+   "success": true,
+   "seconds": 864.55,
+   "blocks": 19,
+   "resumes": 6,
+   "replans": 0
+  },
+  {
+   "seed": 2,
+   "success": true,
+   "seconds": 1002.58,
+   "blocks": 19,
+   "resumes": 9,
+   "replans": 0
+  },
+  {
+   "seed": 3,
+   "success": true,
+   "seconds": 1240.07,
+   "blocks": 19,
+   "resumes": 3,
+   "replans": 0
+  },
+  {
+   "seed": 4,
+   "success": true,
+   "seconds": 1013.74,
+   "blocks": 19,
+   "resumes": 0,
+   "replans": 0
+  },
+  {
+   "seed": 5,
+   "success": true,
+   "seconds": 933.46,
+   "blocks": 19,
+   "resumes": 5,
+   "replans": 0
+  },
+  {
+   "seed": 6,
+   "success": true,
+   "seconds": 762.59,
+   "blocks": 19,
+   "resumes": 1,
+   "replans": 0
+  },
+  {
+   "seed": 7,
+   "success": true,
+   "seconds": 686.48,
+   "blocks": 19,
+   "resumes": 2,
+   "replans": 0
+  },
+  {
+   "seed": 8,
+   "success": true,
+   "seconds": 637.48,
+   "blocks": 19,
+   "resumes": 1,
+   "replans": 0
+  },
+  {
+   "seed": 9,
+   "success": true,
+   "seconds": 864.67,
+   "blocks": 19,
+   "resumes": 0,
+   "replans": 0
+  },
+  {
+   "seed": 10,
+   "success": true,
+   "seconds": 1090.28,
+   "blocks": 19,
+   "resumes": 0,
+   "replans": 0
+  }
+ ]
+}
