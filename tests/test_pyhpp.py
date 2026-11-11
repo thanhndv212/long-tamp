@@ -11,7 +11,10 @@ import numpy as np
 from unittest.mock import MagicMock
 
 try:
-    from long_tamp.backends.pyhpp import PyHPPBackend as PyHPPManipulationPlanner, HAS_PYHPP
+    from long_tamp.backends.pyhpp import (
+        PyHPPBackend as PyHPPManipulationPlanner,
+        HAS_PYHPP,
+    )
 except ImportError:
     HAS_PYHPP = False
 
@@ -19,12 +22,12 @@ except ImportError:
 @pytest.mark.skipif(not HAS_PYHPP, reason="PyHPP backend not available")
 class TestPyHPPBackend:
     """Tests for PyHPP backend implementation."""
-    
+
     def test_import(self):
         """Test importing PyHPP planner."""
         planner = PyHPPManipulationPlanner()
         assert planner is not None
-    
+
     def test_initialization(self):
         """Test PyHPP planner initialization."""
         planner = PyHPPManipulationPlanner()
@@ -33,16 +36,15 @@ class TestPyHPPBackend:
         assert planner.graph is None
         assert planner.viewer is None
         assert planner.path is None
-    
+
     def test_robot_loading(self):
         """Test robot loading."""
         planner = PyHPPManipulationPlanner()
-        
+
         # Load robot (will fail without proper URDF, but tests API)
         try:
             device = planner.load_robot(
-                name="test_robot",
-                urdf_path="package://test/robot.urdf"
+                name="test_robot", urdf_path="package://test/robot.urdf"
             )
             assert device is not None
             assert planner.device is not None
@@ -50,93 +52,92 @@ class TestPyHPPBackend:
         except Exception:
             # Expected if URDF not found
             pass
-    
+
     def test_environment_loading(self):
         """Test environment loading."""
         planner = PyHPPManipulationPlanner()
-        
+
         try:
             # Need robot first
             planner.load_robot("test", "package://test/robot.urdf")
-            
+
             # Load environment
             env = planner.load_environment(
-                name="test_env",
-                urdf_path="package://test/env.urdf"
+                name="test_env", urdf_path="package://test/env.urdf"
             )
             assert env is not None
         except Exception:
             # Expected if URDFs not found
             pass
-    
+
     def test_object_loading(self):
         """Test object loading."""
         planner = PyHPPManipulationPlanner()
-        
+
         try:
             planner.load_robot("test", "package://test/robot.urdf")
-            
+
             # Load object
             obj = planner.load_object(
                 name="test_obj",
                 urdf_path="package://test/obj.urdf",
-                root_joint_type="freeflyer"
+                root_joint_type="freeflyer",
             )
             assert obj is not None
         except Exception:
             # Expected if URDFs not found
             pass
-    
+
     def test_config_setting(self):
         """Test configuration setting."""
         planner = PyHPPManipulationPlanner()
-        
+
         try:
             planner.load_robot("test", "package://test/robot.urdf")
-            
+
             # Test setting initial config
             q_init = np.zeros(10)
             planner.set_initial_config(q_init)
-            
+
             # Test adding goal config
             q_goal = np.ones(10)
             planner.add_goal_config(q_goal)
         except Exception:
             # Expected if robot loading failed
             pass
-    
+
     def test_joint_bounds(self):
         """Test setting joint bounds."""
         planner = PyHPPManipulationPlanner()
-        
+
         try:
             planner.load_robot("test", "package://test/robot.urdf")
-            
+
             # Test setting bounds
             bounds = [-1.0, 1.0, -2.0, 2.0]
             planner.set_joint_bounds("test_joint", bounds)
         except Exception:
             # Expected if robot loading failed
             pass
-    
+
     def test_visualization_methods(self):
         """Test visualization methods exist."""
         planner = PyHPPManipulationPlanner()
-        
+
         # Check methods exist
-        assert hasattr(planner, 'visualize')
-        assert hasattr(planner, 'play_path')
-        assert hasattr(planner, 'get_path')
-    
+        assert hasattr(planner, "visualize")
+        assert hasattr(planner, "play_path")
+        assert hasattr(planner, "get_path")
+
     def test_accessor_methods(self):
         """Test accessor methods."""
         planner = PyHPPManipulationPlanner()
-        
+
         # Test getters
         assert planner.get_robot() is None
         assert planner.get_problem() is None
         assert planner.get_graph() is None
-    
+
     def test_solve_without_setup(self):
         """Test that solve fails gracefully without setup."""
         planner = PyHPPManipulationPlanner()
@@ -361,6 +362,37 @@ class TestTryDirectPath:
 
         assert result == "raw_path"
 
+    def test_shortcut_only_chain_is_skipped_on_a_direct_path(self):
+        # A shortcut cannot shorten the steering method's own direct path.
+        planner = PyHPPManipulationPlanner()
+        planner._active_optimizer_names = ["ManipulationRandomShortcut"]
+        tp = MagicMock()
+        path = MagicMock(spec=["numberPaths"])
+        tp.directPath.return_value = (True, path, "ok")
+
+        result = planner._try_direct_path(
+            tp, "edge12", np.array([0.0]), np.array([1.0]), True, "forward grasp"
+        )
+
+        assert result is path
+        tp.optimizePath.assert_not_called()
+
+    def test_chain_with_a_spline_optimizer_still_runs_on_a_direct_path(self):
+        planner = PyHPPManipulationPlanner()
+        planner._active_optimizer_names = [
+            "GraphRandomShortcut",
+            "SplineGradientBased_bezier3",
+        ]
+        tp = MagicMock()
+        tp.directPath.return_value = (True, "raw_path", "ok")
+        tp.optimizePath.return_value = "optimized_path"
+
+        result = planner._try_direct_path(
+            tp, "Loop | f", np.array([0.0]), np.array([1.0]), True, "transit"
+        )
+
+        assert result == "optimized_path"
+
     def test_directpath_failure_returns_none(self):
         planner = PyHPPManipulationPlanner()
         tp = MagicMock()
@@ -400,6 +432,65 @@ class TestComputeOrPlanPath:
 
         assert result == "optimized_path"
         tp.planPath.assert_not_called()
+
+    def test_planner_runs_without_optimizers_then_one_pass(self):
+        # HPP's computePath ends with optimizePath: with the optimizers left
+        # on, the chain ran twice per planned edge.
+        planner = PyHPPManipulationPlanner()
+        planner._active_optimizer_names = ["A", "B"]
+        planner._create_path_optimizer_instance = lambda name: f"opt:{name}"
+        tp = MagicMock()
+        tp.computePath.return_value = "raw_path"
+        tp.optimizePath.return_value = "optimized_path"
+
+        result = planner._compute_or_plan_path(
+            tp, np.array([0.0]), np.array([1.0]), True, "edge01", True
+        )
+
+        assert result == "optimized_path"
+        names = [c[0] for c in tp.method_calls]
+        assert names == [
+            "clearPathOptimizers",
+            "computePath",
+            "addPathOptimizer",
+            "addPathOptimizer",
+            "optimizePath",
+        ]
+        assert [c.args[0] for c in tp.addPathOptimizer.call_args_list] == [
+            "opt:A",
+            "opt:B",
+        ]
+        tp.optimizePath.assert_called_once_with("raw_path")
+
+    def test_optimizers_are_put_back_when_planning_fails(self):
+        planner = PyHPPManipulationPlanner()
+        planner._active_optimizer_names = ["A"]
+        planner._create_path_optimizer_instance = lambda name: f"opt:{name}"
+        tp = MagicMock()
+        tp.computePath.side_effect = RuntimeError("no path")
+
+        with pytest.raises(RuntimeError, match="computePath failed"):
+            planner._compute_or_plan_path(
+                tp, np.array([0.0]), np.array([1.0]), True, "edge01", True
+            )
+
+        tp.addPathOptimizer.assert_called_once_with("opt:A")
+        tp.optimizePath.assert_not_called()
+
+    def test_binding_without_clear_keeps_the_planner_optimizers(self):
+        planner = PyHPPManipulationPlanner()
+        planner._active_optimizer_names = ["A"]
+        tp = MagicMock()
+        tp.clearPathOptimizers.side_effect = AttributeError("no such method")
+        tp.computePath.return_value = "computed_path"
+        tp.optimizePath.return_value = "optimized_path"
+
+        result = planner._compute_or_plan_path(
+            tp, np.array([0.0]), np.array([1.0]), True, "edge01", True
+        )
+
+        assert result == "optimized_path"
+        tp.addPathOptimizer.assert_not_called()
 
     def test_compute_path_type_error_falls_back_to_plan_path(self):
         planner = PyHPPManipulationPlanner()
@@ -451,7 +542,6 @@ class TestComputeOrPlanPath:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-
 
 
 @pytest.mark.skipif(not HAS_PYHPP, reason="PyHPP backend not available")
@@ -523,6 +613,7 @@ class TestOptimizePathIfBetter:
 
     def test_an_unmeasurable_input_keeps_the_optimized_path(self):
         """Nothing to compare against -- defer to the optimizer."""
+
         class NoLength:
             pass
 
