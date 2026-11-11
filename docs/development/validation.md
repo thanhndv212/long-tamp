@@ -9,7 +9,7 @@ change is measured against a known-good baseline instead of judged by eye.
 
 | Level | What | Where | Time |
 |---|---|---|---|
-| **V0** local | `ruff check --select F src`, `black --check src`, tests of the touched modules (`pre-commit run -a` covers the lint part) | your machine | minutes |
+| **V0** local | `ruff check src`, `black --check src`, tests of the touched modules (`pre-commit run -a` covers the lint part) | your machine | minutes |
 | **V1** CI | lint, base-install tests, wheel tests, distribution, docs build, changelog check | GitHub Actions, every push/PR | ~20 min |
 | **V2** smoke mission | one-part screw assembly, seed 1, plus the seeded grasp/release check on the screw cell | `gh workflow run pypi.yml --ref <branch>` (the `nightly-*` jobs) | ~20 min |
 | **V3** batch gate | 10 seeds × 4 parts, `summarize.py --gate` against the baseline | the baseline's environment (see below) | 1.5–4 h |
