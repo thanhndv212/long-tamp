@@ -40,6 +40,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Planning helpers that did nothing (#229). `SceneBuilder.move_obstacle` moves a loaded
+  environment (it logged a warning and returned): collision checking sees the new pose at
+  once, on configurations and on the paths of a graph already built; contact surfaces do not
+  follow, and the call says which. `freeze_joints_by_substrings` copies the matching joints
+  from the reference configuration (it returned its input). `disable_collision_pair` and
+  `disable_collisions_between_subtrees` honour `remove_collision=False` (they removed the
+  pairs whatever it said); `remove_distance` is documented as having no effect.
+  `GraphBuilder.build_graph_for_task` is now tested on a real graph. `ManipulationTask.run`
+  no longer has a list as a default argument.
 - The live viewer's page loader passed two segments to one `joinpath`, which the resource
   API of Python 3.10 and 3.11 does not accept for every loader (#228).
 - A task whose `VALID_PAIRS` allows no grasp now says so (#225). `{}` is the default, of

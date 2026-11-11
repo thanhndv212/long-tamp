@@ -82,17 +82,42 @@ def freeze_joints_by_substrings(
     *,
     backend: str = "pyhpp",
 ) -> list[float]:
-    """Keep joint values constant for joints whose names match substrings.
+    """Return ``q`` with the matching joints set to their value in ``q_ref``.
 
-    Intended use: tasks that do not use some robot groups (e.g. an idle second arm)
-    can keep them fixed during projection/shooting to avoid drift.
+    For a task that leaves part of the robot alone (an idle second arm): a
+    sampled or projected configuration keeps that part where the reference
+    has it. A joint matches when its name contains one of
+    ``joint_substrings``; all its configuration values are copied, so a
+    free-flyer or a continuous joint is copied whole.
 
-    Note: pinocchio model joint iteration would be needed to look up joint
-    configuration ranks (model.names, joints[i].idx_q, joints[i].nq). This is
-    not yet implemented; the function returns ``q`` unchanged.
-    PYHPP-GAP: implement via device.model() when needed.
+    Args:
+        robot: The HPP device, or its pinocchio model.
+        q: The configuration to correct. Not modified.
+        q_ref: The configuration the frozen joints are read from.
+        joint_substrings: Substrings of the names of the joints to freeze.
+        backend: Unused; kept for callers that pass it.
+
+    Raises:
+        ValueError: ``q`` or ``q_ref`` is not as long as the model's
+            configuration.
     """
-    return q
+    if not joint_substrings:
+        return list(q)
+    model = robot.model() if callable(getattr(robot, "model", None)) else robot
+    if len(q) != model.nq or len(q_ref) != model.nq:
+        raise ValueError(
+            f"q has {len(q)} values and q_ref {len(q_ref)}; "
+            f"the model's configuration has {model.nq}"
+        )
+    frozen = list(q)
+    # Joint 0 is the universe: it has no configuration.
+    for joint_id in range(1, model.njoints):
+        name = model.names[joint_id]
+        if any(part in name for part in joint_substrings):
+            joint = model.joints[joint_id]
+            first = joint.idx_q
+            frozen[first : first + joint.nq] = q_ref[first : first + joint.nq]
+    return frozen
 
 
 class ConfigGenerator:
