@@ -9,10 +9,9 @@ description: Development, maintenance, and PyPI release workflow for long_tamp. 
 
 `long_tamp` is a long-horizon, multi-arm TAMP library being spun out of `agimus_spacelab`
 (the private, SpaceLab-specific repo it was extracted from) as a standalone open-source
-project, to be released on PyPI. This skill covers the day-to-day workflow: branching and
-commit conventions (carried over from `agimus_spacelab`, which has the longer track
-record), what to do while both repos are maintained in parallel, testing (needs the
-HPP native stack — see the note below), and the PyPI release process.
+project, released on PyPI. This skill covers the day-to-day workflow: branching and
+commit conventions, testing (needs the HPP native stack — see the note below), and the
+PyPI release process.
 
 On Linux, `pip install -e ".[hpp,dev]"` installs the HPP 9.0.2+ wheels and
 development dependencies. See `docs/plans/pypi-install-roadmap.md` for validation
@@ -20,8 +19,7 @@ and `docs/INSTALL.md` for the source-build fallback on unsupported platforms.
 
 ## When to Use
 
-Any time you're about to commit, branch, cut a release, or are unsure whether a change
-belongs in `long_tamp`, `agimus_spacelab`, both, or neither.
+Any time you're about to commit, branch, open or merge a pull request, or cut a release.
 
 ## Feature lifecycle, tracker and validation
 
@@ -185,55 +183,19 @@ wheel validation, without source-install `PYTHONPATH` or `LD_LIBRARY_PATH` entri
 - Publication: `.github/workflows/release.yml`, after a matching version tag and
   maintainer configuration of the `pypi` environment and PyPI trusted publisher.
 
-## Parallel maintenance with `agimus_spacelab` (through end of September 2026)
+## No SpaceLab-mission content
 
-**This section has an expiry.** `agimus_spacelab` is maintained only through end of
-September 2026, after which this whole dual-maintenance dance stops applying — re-read
-the actual state of both repos before trusting this section past that date, don't just
-follow it on autopilot.
-
-Until then, both repos are developed in parallel, and most feature/fix work should be
-**mirrored or ported to the other repo** — with one explicit exception:
-
-- **`task_planning/` (the TaskPlan IR → compiler → BehaviorTree.CPP path) is
-  `long_tamp`-only.** Never port it back to `agimus_spacelab`. It's the new,
-  forward-looking architecture that supersedes `agimus_spacelab`'s legacy, proprietary DBT
-  mission-executive path (`ros2_ws_agimusxads` / `spacelab_bt_ros` / `libDBT.so`) — porting
-  it back would reintroduce exactly the coupling the open-source split exists to avoid.
-- **Everything else** (`backends/`, `planning/`, `tasks/` excluding `task_planning/`,
-  generic `config/`/`logging/`/`visualization/`/`utils/`/`cli/` fixes) — when you land a
-  fix or feature in one repo, check whether the same code exists in the other and port it
-  over. The two package trees are structurally near-identical (`long_tamp` is a straight
-  rename of `agimus_spacelab`'s tree at the point of the split, with SpaceLab-mission
-  content and CORBA removed), so most patches apply directly or with light adaptation.
-- **SpaceLab-mission-specific work** (`script/spacelab/`, the screwdriving mission, and
-  anything that only makes sense against that proprietary scene) stays in `agimus_spacelab`
-  only — it was deliberately excluded from `long_tamp`'s tree and history (see
-  `research-vault/agimus-spacelab/agimus-spacelab-opensource-release.md` in the workspace
-  vault for the full reasoning) and must not be reintroduced.
-
-### The `spacelab-example` branch — does not exist in `long_tamp`
-
-Earlier notes here (and in the vault) claimed `long_tamp`'s GitHub repo carried a
-`spacelab-example` branch with a full working SpaceLab BT.CPP integration, kept private for
-validation. **That was wrong, corrected 2026-09-02.** Verified directly:
-`git ls-remote origin spacelab-example` against `long_tamp`'s actual GitHub remote returns
-nothing — `origin` has only `main`. What existed was a local-only, unpushed branch in one
-working copy, pointing at a commit that's genuinely part of `agimus_spacelab`'s own history
-(where the real `spacelab-example` branch lives). It's been deleted from the `long_tamp`
-working copy; nothing to clean up on GitHub since it was never pushed there.
-
-The from-scratch `script/screw_assembly/` example now provides the long-horizon,
-multi-phase validation of `GraspSequencePlanner`, lookahead and checkpointing. See
-Phase 4 in `research-vault/agimus-spacelab/agimus-spacelab-opensource-release.md`: a
-from-scratch generic long-horizon example (fictional mission, no SpaceLab content) is the
-tracked way to close that gap, not porting or referencing anything from `agimus_spacelab`.
+`long_tamp` was extracted from `agimus_spacelab`, a private, SpaceLab-specific repo whose
+maintenance ended in September 2026. Nothing is ported between the two any more.
+SpaceLab-mission content (`script/spacelab/`, part and gripper names of the real mission,
+its checkpoints and fixtures) was removed from this tree and its history on purpose, and
+must not come back. `script/screw_assembly/` is the long-horizon reference mission.
 
 ## Release process (PyPI)
 
 First release: `0.1.0` (2026-09-27, see `docs/plans/release-0.1.0.md`). When cutting one:
 
-1. **Version**: `pyproject.toml`'s `[project] version` follows semver. `0.x` while the API
+1. **Version**: `src/long_tamp/version.py` (and `package.xml`) follows semver. `0.x` while the API
    is still moving (per the `Development Status :: 3 - Alpha` classifier already in
    `pyproject.toml`); bump to `1.0.0` once the public API (documented in
    `docs/usage/standalone-usage.md` and `docs/architecture.md`) is considered stable.
@@ -283,8 +245,6 @@ First release: `0.1.0` (2026-09-27, see `docs/plans/release-0.1.0.md`). When cut
 
 | Rationalization | Reality |
 |---|---|
-| "I'll port this to agimus_spacelab later" | Later becomes never once the two trees drift. Port in the same session, or note it explicitly (e.g., a memory/vault entry) if truly deferred. |
-| "This task_planning/ fix is small, agimus_spacelab could use it too" | No — task_planning/ is long_tamp-only, full stop, regardless of size. It supersedes the DBT path there; porting it back reintroduces the coupling the split was for. |
 | "I'll port `agimus_spacelab`'s `script/spacelab/` (or its `spacelab-example` branch) into `long_tamp`, just scoped to `script/`" | That reintroduces exactly what the filter-repo history rewrite was done to remove — the mission-specific content (real part/gripper/handle names, the actual assembly sequence) isn't confined to config, it's baked into the Python itself. Build a from-scratch generic example instead (see Phase 4 in the vault note); don't port. |
 | "Lint is green, so tests pass" | Check the PyPI-wheel test job separately; lint does not exercise planning. |
 | "I'll just `make install` so the container picks up my change" | That puts a frozen copy on `PYTHONPATH` that shadows the editable install. Use `pip install --no-deps -e .` for Python work; CMake install is only for downstream CMake consumers (see "Installing `long_tamp` for development"). |
@@ -301,10 +261,6 @@ Before landing a change:
 - [ ] Roadmap item ticked in `docs/plans/roadmap.md` if this PR completes one; ADR
       added/superseded if a design decision changed
 - [ ] `pytest tests/ -q` run in an HPP-enabled environment (not just lint)
-- [ ] If the change touches `backends/`, `planning/`, `tasks/` (outside `task_planning/`),
-      `config/`, `logging/`, `visualization/`, `utils/`, or `cli/` — considered whether it
-      should be ported to `agimus_spacelab` too (through end of Sept 2026)
-- [ ] If the change touches `task_planning/` — confirmed it stays `long_tamp`-only
 - [ ] No SpaceLab-mission-specific content reintroduced (script paths, part/gripper naming
       tied to the real mission, checkpoint/fixture data) — see
       `research-vault/agimus-spacelab/agimus-spacelab-opensource-release.md` for what that
