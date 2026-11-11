@@ -22,6 +22,21 @@ jobs:
       - run: ruff check src
       - run: black --check src
 
+  types:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      # The same extras as test-standalone: mypy reads the types of the packages
+      # that are installed (numpy, mujoco), so the set decides the result.
+      - run: pip install --upgrade pip && pip install -e ".[dev,planning,sim]"
+      # Configuration and the list of modules not yet checked: pyproject.toml,
+      # [tool.mypy]. Every other module must be clean.
+      - run: mypy
+
   test-standalone:
     runs-on: ubuntu-latest
     timeout-minutes: 20

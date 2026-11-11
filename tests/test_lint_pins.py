@@ -46,3 +46,15 @@ def test_ci_and_pre_commit_run_the_whole_rule_set():
     hook = (ROOT / ".pre-commit-config.yaml").read_text()
     ruff_hook = hook.split("id: ruff")[1].split("- repo:")[0]
     assert "--select" not in ruff_hook
+
+
+def test_the_modules_mypy_skips_all_exist():
+    # #228: the list of modules whose errors are not reported only shrinks. A
+    # module that was renamed or removed must leave it, or the entry would
+    # silently cover whatever takes the name next.
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    (override,) = project["tool"]["mypy"]["overrides"]
+    assert override["ignore_errors"] is True
+    for module in override["module"]:
+        assert (ROOT / "src" / (module.replace(".", "/") + ".py")).is_file(), module
+    assert len(override["module"]) <= 39  # the count at introduction

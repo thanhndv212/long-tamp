@@ -115,7 +115,7 @@ dev = [
     "pytest-timeout",
     "black==24.8.0",
     "ruff==0.6.9",
-    "mypy",
+    "mypy==2.4.1",
 ]
 
 # MkDocs site over docs/ — `mkdocs serve` / `mkdocs build` (see mkdocs.yml).
@@ -170,6 +170,59 @@ ignore = [
 # Config classes are namespaces of class-level defaults: a subclass overrides an
 # attribute, nothing mutates one in place.
 "src/long_tamp/config/base_config.py" = ["RUF012"]
+
+[tool.mypy]
+files = ["src/long_tamp"]
+# pyhpp, pinocchio, mujoco and the like ship no type information.
+ignore_missing_imports = true
+
+# Modules with errors when the check was introduced (#228). They are parsed, and
+# other modules still see their signatures, but their own errors are not
+# reported. The list only shrinks: fix a module, take it out. A new module is
+# never added. tasks.grasp_sequence and backends.pyhpp wait for their split.
+[[tool.mypy.overrides]]
+module = [
+    "long_tamp.ai.config",
+    "long_tamp.backends.pyhpp",
+    "long_tamp.config.base_config",
+    "long_tamp.config.yaml_loader",
+    "long_tamp.eval.robocerebra",
+    "long_tamp.eval.robocerebra_grasps",
+    "long_tamp.eval.robocerebra_plan",
+    "long_tamp.eval.robocerebra_policy",
+    "long_tamp.eval.robocerebra_runner",
+    "long_tamp.execution.executor",
+    "long_tamp.execution.playback",
+    "long_tamp.execution.remote",
+    "long_tamp.execution.watchdog",
+    "long_tamp.grasping.geometry",
+    "long_tamp.grasping.gripper",
+    "long_tamp.planning.config",
+    "long_tamp.planning.constraints",
+    "long_tamp.planning.graph",
+    "long_tamp.planning.grasp_state",
+    "long_tamp.planning.scene",
+    "long_tamp.planning.sequential_grasp_filter",
+    "long_tamp.sim.backend",
+    "long_tamp.sim.mjcf",
+    "long_tamp.sim.skills",
+    "long_tamp.tasks.base",
+    "long_tamp.tasks.block_recovery",
+    "long_tamp.tasks.grasp_sequence",
+    "long_tamp.tasks.sequence_orchestrator",
+    "long_tamp.tasks.task_planning.host",
+    "long_tamp.tasks.task_planning.model",
+    "long_tamp.tasks.task_planning.session",
+    "long_tamp.tasks.task_planning.skeleton",
+    "long_tamp.tasks.task_planning.supervisor",
+    "long_tamp.tasks.task_planning.visualize",
+    "long_tamp.viewer.front",
+    "long_tamp.viewer.server",
+    "long_tamp.visualization.live_graph_viz",
+    "long_tamp.visualization.scene",
+    "long_tamp.visualization.video_recorder",
+]
+ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
