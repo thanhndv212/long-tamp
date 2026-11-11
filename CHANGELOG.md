@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A task whose `VALID_PAIRS` allows no grasp now says so (#225). `{}` is the default, of
+  `BaseTaskConfig` and of a YAML task with no `valid_pairs:`, and the factory reads it as
+  "no gripper may grasp anything": the graph held the `free` state alone, without a word,
+  and the mission failed later as if planning had. `ManipulationTask.create_graph` and
+  `GraphBuilder.build_graph_for_task` log a warning; the graphs built are unchanged, and
+  phase graphs, which pass empty pairs on purpose, stay quiet.
 - `PlanExecutor(plan_ahead=True)`: a backend that raised during a motion (a `RemoteBackend`
   whose served backend raised, for one) killed the motion's thread, and the step was then
   recorded as executed and the plan went on. The exception is now a failed step
