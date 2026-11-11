@@ -362,37 +362,6 @@ class TestTryDirectPath:
 
         assert result == "raw_path"
 
-    def test_shortcut_only_chain_is_skipped_on_a_direct_path(self):
-        # A shortcut cannot shorten the steering method's own direct path.
-        planner = PyHPPManipulationPlanner()
-        planner._active_optimizer_names = ["ManipulationRandomShortcut"]
-        tp = MagicMock()
-        path = MagicMock(spec=["numberPaths"])
-        tp.directPath.return_value = (True, path, "ok")
-
-        result = planner._try_direct_path(
-            tp, "edge12", np.array([0.0]), np.array([1.0]), True, "forward grasp"
-        )
-
-        assert result is path
-        tp.optimizePath.assert_not_called()
-
-    def test_chain_with_a_spline_optimizer_still_runs_on_a_direct_path(self):
-        planner = PyHPPManipulationPlanner()
-        planner._active_optimizer_names = [
-            "GraphRandomShortcut",
-            "SplineGradientBased_bezier3",
-        ]
-        tp = MagicMock()
-        tp.directPath.return_value = (True, "raw_path", "ok")
-        tp.optimizePath.return_value = "optimized_path"
-
-        result = planner._try_direct_path(
-            tp, "Loop | f", np.array([0.0]), np.array([1.0]), True, "transit"
-        )
-
-        assert result == "optimized_path"
-
     def test_directpath_failure_returns_none(self):
         planner = PyHPPManipulationPlanner()
         tp = MagicMock()

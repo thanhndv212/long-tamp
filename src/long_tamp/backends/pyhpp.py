@@ -2438,25 +2438,12 @@ class PyHPPBackend(BackendBase):
             success, path, status = tp.directPath(q1_arr, q2_arr, bool(validate))
             if success:
                 logger.debug("directPath succeeded")
-                if self._only_shortcut_optimizers():
-                    # A shortcut replaces a stretch of the path by the
-                    # steering method's direct connection, and this path
-                    # already is that connection: nothing to gain (0 of 68
-                    # shortened on a profiled mission, at about 1 s each).
-                    logger.debug("Direct path, shortcut optimizers skipped")
-                    return self._as_path_vector(path)
                 return self._optimize_path_if_better(tp, path, edge_label)
             logger.debug("directPath failed: %s", status)
         except Exception as exc:
             # directPath failed, will fall back to planPath
             logger.debug("directPath threw exception: %s", exc)
         return None
-
-    def _only_shortcut_optimizers(self) -> bool:
-        """True when the edge being planned has optimizers and every one of
-        them is a shortcut optimizer."""
-        names = self._get_active_optimizer_names()
-        return bool(names) and all("Shortcut" in name for name in names)
 
     def _optimize_path_if_better(self, tp: Any, path: Any, label: str) -> Any:
         """Run the edge's optimizer chain, keeping the result only if it helped.

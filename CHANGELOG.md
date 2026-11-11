@@ -14,9 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `computePath` already ends with `optimizePath`, and the backend ran the chain again on
   the result: a second pass per edge, and a "keep it only if shorter" check that compared
   two optimized paths. The planner now returns the raw path and one guarded pass follows.
-  A chain of shortcut optimizers only is skipped on a direct path, which it cannot
-  shorten. On the profiled four-part mission (seed 4) the two cost 278 s and 76 s of
-  772 s.
+  On the profiled four-part mission (seed 4) the second passes took 278 s of 772 s.
 - Types (#228): CI runs `mypy` as a blocking job (`types`). 83 of the 122 modules are
   checked; the 39 that had errors are listed in `pyproject.toml` and are taken out as they
   are fixed. `mypy` is pinned in the `dev` extra.
