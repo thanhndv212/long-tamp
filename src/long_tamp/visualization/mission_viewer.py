@@ -29,12 +29,16 @@ class MissionViewer:
         fps=30.0,
         open_browser=False,
         separate_process=False,
+        host=None,
     ):
         """Serve the scene on ``port`` and show ``initial``.
 
         Never waits for a browser: with ``open_browser=True`` pyhpp_viser
         also opens one and blocks until a client connects, which never
         happens on a headless machine (#29), so it is opt-in.
+
+        ``host``: the address the scene listens on; by default this machine
+        only, or ``$LONG_TAMP_VIEWER_HOST`` (``scene.default_host``).
 
         ``separate_process``: serve it from its own process
         (``SceneProcess``, #106), so it stays live while HPP plans (planning
@@ -54,14 +58,20 @@ class MissionViewer:
         if separate_process:
             from .scene import SceneProcess
 
-            self.scene = SceneProcess(self.backend.device, port, camera=camera)
+            self.scene = SceneProcess(
+                self.backend.device, port, host=host, camera=camera
+            )
             self.scene.show(initial)
             print(f"Viser: {self.scene.url} (own process)", flush=True)
             return
         from pyhpp_viser import Viewer
 
         self.backend.viewer = Viewer(self.backend.device, self.backend.problem)
-        self.backend.viewer.start(host="0.0.0.0", port=port, open=open_browser)
+        from long_tamp.visualization.scene import default_host
+
+        self.backend.viewer.start(
+            host=host or default_host(), port=port, open=open_browser
+        )
 
         @self.backend.viewer.viewer.on_client_connect
         def aim(client):

@@ -38,6 +38,41 @@ except ImportError:
     PyHPPRule = None
 
 
+def allows_no_grasp(config) -> bool:
+    """Whether the factory would refuse every grasp for ``config``.
+
+    ``VALID_PAIRS`` has two "nothing listed" values with opposite meanings:
+    ``None`` puts no restriction (any gripper may grasp any handle), while an
+    empty dict, or one with only empty lists, allows no grasp at all and the
+    graph holds the ``free`` state alone. ``RULES`` replace the pairs.
+
+    Only the factory reads ``None`` that way: ``BaseTaskConfig.validate``,
+    ``get_handles_per_object`` and the YAML loader iterate the dict, so
+    ``None`` is not a supported setting for a whole task yet.
+    """
+    if getattr(config, "RULES", None) is not None:
+        return False
+    pairs = getattr(config, "VALID_PAIRS", None)
+    return pairs is not None and not any(pairs.values())
+
+
+def warn_if_no_grasp(config) -> None:
+    """Say so when a task's own config allows no grasp (#225): ``{}`` is the
+    default of ``BaseTaskConfig`` and of a YAML file without ``valid_pairs:``,
+    and the graph it gives looks like a planning failure later on.
+
+    For a task's config only. A phase graph passes empty pairs on purpose
+    (``plan_loop`` with nothing held), so ``create_factory_graph`` stays quiet.
+    """
+    if allows_no_grasp(config):
+        logger.warning(
+            "VALID_PAIRS allows no grasp (%r): the graph will hold the 'free' "
+            "state only. List the handles each gripper may grasp "
+            "(valid_pairs: in a YAML task).",
+            getattr(config, "VALID_PAIRS", None),
+        )
+
+
 class GraphBuilder:
     """
     Builder class for creating constraint graphs on the PyHPP backend.
@@ -603,6 +638,7 @@ class GraphBuilder:
                 chosen_mode = "factory"
 
         if chosen_mode == "factory":
+            warn_if_no_grasp(task_cls)
             return self.create_factory_graph(task_cls)
 
         if chosen_mode == "manual":

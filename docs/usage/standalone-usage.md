@@ -299,6 +299,12 @@ drives grasp legality), `arm_groups`, `freeze_joints`, `environment_contacts`, `
 `script/twin/config/twin_lift_ball_config.yaml` (multi-arm). Template:
 `script/templates/task_config_template.yaml`.
 
+`valid_pairs` must list something. Left out, it is `{}`, which the graph factory reads as "no
+gripper may grasp anything": the graph then holds the `free` state alone, and
+`create_graph` logs a warning that says so. Only an explicit `VALID_PAIRS = None` on a
+class-based config removes the restriction for the factory (any gripper, any handle), and the
+rest of the library does not support it yet.
+
 An articulated object (a cabinet, a microwave, a stove knob) is declared `root: anchor`
 under `objects`. It's fixed at its `initial_pose_xyzquat` (or `initial_pose_xyzrpy`)
 instead of getting a free-flyer root. Its prismatic and revolute joints are its

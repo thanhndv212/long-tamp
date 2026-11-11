@@ -19,6 +19,7 @@ from long_tamp.planning import (
     GraphBuilder,
     SceneBuilder,
 )
+from long_tamp.planning.graph import warn_if_no_grasp
 
 logger = get_logger("tasks.base")
 
@@ -244,6 +245,7 @@ class ManipulationTask(ABC):
         self.graph_builder.set_pyhpp_constraints(self.pyhpp_constraints)
 
         if self.use_factory:
+            warn_if_no_grasp(self.task_config)
             # Pass pre-registered constraints to factory
             return self.graph_builder.create_factory_graph(
                 self.task_config,
