@@ -1,6 +1,6 @@
 # 0013. Splitting `grasp_sequence.py` and `pyhpp.py`; exceptions and logging
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-11
 - Issues/PRs: #234 (this), #233 (the profile that found a doubled optimizer pass in
   `pyhpp.py`)
