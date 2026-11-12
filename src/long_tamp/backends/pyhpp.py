@@ -203,10 +203,8 @@ class PyHPPBackend(BackendBase):
         # RandomShortcut: number of shortcut attempts per optimization pass.
         # HPP core default is 5; increasing to 50 gives much better convergence.
         self._random_shortcut_loops: int = 50
-        # Wall-clock cap per path-optimizer pass. A path can be optimized
-        # twice (inside TransitionPlanner.computePath, then again when
-        # comparing against the unoptimized path), so a short retract that
-        # the spline optimizer can't improve costs 2x this.
+        # Wall-clock cap per path-optimizer pass. Each planned path gets one
+        # pass (see _compute_or_plan_path).
         self._path_optimizer_timeout: float = 30.0
         # SplineGradientBased: whether to enforce zero velocity at state junctions.
         # Setting False allows the spline optimizer to carry momentum through waypoints.
@@ -2159,6 +2157,14 @@ class PyHPPBackend(BackendBase):
             optimizer_names = self._transition_default_optimizers
             logger.debug("Using default optimizers")
 
+        self._add_path_optimizers(tp, optimizer_names)
+
+        # Store the active optimizer names for later use (e.g., to decide
+        # whether to skip tp.timeParameterization()).
+        self._active_optimizer_names = list(optimizer_names)
+
+    def _add_path_optimizers(self, tp: Any, optimizer_names: Sequence[str]) -> None:
+        """Append one fresh instance of each named optimizer to ``tp``."""
         for opt_name in optimizer_names:
             opt_instance = self._create_path_optimizer_instance(opt_name)
             if opt_instance is None:
@@ -2168,10 +2174,6 @@ class PyHPPBackend(BackendBase):
                 )
             tp.addPathOptimizer(opt_instance)
             logger.debug("Added optimizer: %s", opt_name)
-
-        # Store the active optimizer names for later use (e.g., to decide
-        # whether to skip tp.timeParameterization()).
-        self._active_optimizer_names = list(optimizer_names)
 
     def _get_active_optimizer_names(self) -> list[str]:
         """Return the optimizer names used for the current edge."""
@@ -2533,7 +2535,44 @@ class PyHPPBackend(BackendBase):
         case fall back to the older planPath API (goals as rows), which
         exists across both old and new hpp-python versions, so this keeps
         working regardless of which hpp-python build is installed.
+
+        Both calls end with ``optimizePath`` inside HPP, so the planner's
+        optimizers are taken off for the call and put back after it: the
+        raw path comes out, and :meth:`_optimize_path_if_better` runs the
+        chain once, comparing the raw path with the optimized one.  Left
+        on, every planned edge paid for the chain twice and the comparison
+        was between two optimized paths.
         """
+        raw = self._clear_path_optimizers(tp)
+        try:
+            pv = self._plan_raw_path(
+                tp, q1_arr, q2_arr, reset_roadmap, edge_name, skip_direct_path
+            )
+        finally:
+            if raw:
+                self._add_path_optimizers(tp, self._get_active_optimizer_names())
+        return self._optimize_path_if_better(tp, pv, edge_name)
+
+    @staticmethod
+    def _clear_path_optimizers(tp: Any) -> bool:
+        """Empty ``tp``'s optimizer list; False if the binding can't."""
+        try:
+            tp.clearPathOptimizers()
+        except Exception as exc:  # noqa: BLE001 - binding-dependent
+            logger.debug("clearPathOptimizers unavailable: %s", exc)
+            return False
+        return True
+
+    def _plan_raw_path(
+        self,
+        tp: Any,
+        q1_arr: np.ndarray,
+        q2_arr: np.ndarray,
+        reset_roadmap: bool,
+        edge_name: str,
+        skip_direct_path: bool,
+    ) -> Any:
+        """computePath, or planPath on a build without it."""
         try:
             logger.debug("Falling back to computePath")
             # computePath convention: goals as columns (configSize x numGoals).
@@ -2567,7 +2606,7 @@ class PyHPPBackend(BackendBase):
                 f"{edge_name}: {exc}"
             )
 
-        return self._optimize_path_if_better(tp, pv, edge_name)
+        return pv
 
     def plan_transition_sequence(
         self,

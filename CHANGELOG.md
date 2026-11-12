@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Path optimization (#233): each planned edge runs its optimizer chain once. HPP's
+  `computePath` already ends with `optimizePath`, and the backend ran the chain again on
+  the result: a second pass per edge, and a "keep it only if shorter" check that compared
+  two optimized paths. The planner now returns the raw path and one guarded pass follows.
+  On the profiled four-part mission (seed 4) the second passes took 278 s of 772 s.
 - Types (#228): CI runs `mypy` as a blocking job (`types`). 83 of the 122 modules are
   checked; the 39 that had errors are listed in `pyproject.toml` and are taken out as they
   are fixed. `mypy` is pinned in the `dev` extra.
